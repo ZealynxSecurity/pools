@@ -46,4 +46,16 @@ contract MockMiner {
       nextOwner = address(0);
     }
   }
+
+  function withdrawBalance(uint256 amountRequested) external {
+    require(msg.sender == currentOwner);
+    uint256 bal = address(this).balance;
+    uint256 maxSend = bal - amountLocked();
+    require(amountRequested <= maxSend);
+    if (amountRequested == 0) {
+      payable(address(currentOwner)).transfer(maxSend);
+    } else {
+      payable(address(currentOwner)).transfer(amountRequested);
+    }
+  }
 }

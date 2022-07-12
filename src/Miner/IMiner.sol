@@ -9,6 +9,8 @@ interface FILMiner {
   function withdrawBalance(uint256 amount) external returns (uint256);
   // used for pledging collateral
   function applyRewards(uint256 reward, uint256 penalty) external;
+	// just used for simulating rewards
+	function lockRewards(uint256 _lockStart, uint256 _unlockDuration,  uint256 _unlockAmount) external;
 }
 
 /**
