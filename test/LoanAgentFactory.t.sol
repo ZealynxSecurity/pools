@@ -3,10 +3,10 @@ pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
 
-contract ContractTest is Test {
+contract LoanAgentFactoryTest is Test {
     function setUp() public {}
 
-    function testExample() public {
+    function testCreateLoanAgent() public {
         assertTrue(true);
     }
 }
