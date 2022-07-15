@@ -21,7 +21,8 @@ contract TToken is ERC20 {
     _mint(_address, amount);
   }
 
-  function burn(uint256 amount) external {
-    _burn(msg.sender, amount);
+  function burn(address account, uint256 amount) external {
+    require(msg.sender == minter);
+    _burn(account, amount);
   }
 }

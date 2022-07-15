@@ -67,7 +67,7 @@ contract TTokenTest is Test {
       uint256 newTokens = 1000;
       tToken.setMinter(address(this));
       tToken.mint(address(this), newTokens);
-      tToken.burn(500);
+      tToken.burn(address(this), 500);
       assertEq(tToken.balanceOf(address(this)), 500);
     }
 }
