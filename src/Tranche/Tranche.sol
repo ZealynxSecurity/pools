@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "src/TToken/TToken.sol";
 
 // everybody can mint from this tranche an equal amount of credit! yay!
+// TODO: change to pool
 contract Tranche {
   uint256 public initialTokenPrice;
   address public tToken;

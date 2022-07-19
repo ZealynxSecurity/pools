@@ -3,9 +3,6 @@ pragma solidity ^0.8.15;
 
 // this v1 loan agent is configured to pay off all loans before allowing the owner of the loan agent to take any rewards home
 interface LoanAgent {
-  // The loan agent must call assign, which calls changeOwnerAddress on the miner actor to confirm the proposed ownership change
-  // @dev - note - the current miner's owner must call changeOwnerAddress on the miner actor with the loan agent's address before calling assign
-  function assign(address miner) external;
   // withdraws any available balance from the miner by calling withdrawBalance
   // will return 0 if any unpaid loans are still active
   function withdrawBalance() external returns (uint256);

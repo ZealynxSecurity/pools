@@ -64,8 +64,8 @@ contract TrancheTest is Test {
     function testTakeLoan() public {
         mockStake();
         uint256 loanAmount = 2 ether;
-        uint256 repay = mockLoan(loanAmount);
-        assertEq(tranche.repaymentAmount(loanAmount), repay);
+        uint256 repayAmount = mockLoan(loanAmount);
+        assertEq(tranche.repaymentAmount(loanAmount), repayAmount);
         assertEq(address(alice).balance, loanAmount);
     }
 

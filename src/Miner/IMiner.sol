@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-interface FILMiner {
+interface IMiner {
+	function currentOwner() external view returns (address);
+  function nextOwner() external view returns (address);
   // If changeOwnerAddress is called by the current owner, its a proposal to change owner to newOwner
   // If changeOwnerAddress is called by the proposed next owner, its a confirmation accepting the change of ownership
   function changeOwnerAddress(address newOwner) external;
@@ -10,7 +12,7 @@ interface FILMiner {
   // used for pledging collateral
   function applyRewards(uint256 reward, uint256 penalty) external;
 	// just used for simulating rewards
-	function lockRewards(uint256 _lockStart, uint256 _unlockDuration,  uint256 _unlockAmount) external;
+	function lockBalance(uint256 _lockStart, uint256 _unlockDuration,  uint256 _unlockAmount) external;
 }
 
 /**

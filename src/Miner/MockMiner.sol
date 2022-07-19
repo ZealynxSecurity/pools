@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-contract MockMiner {
+import "./IMiner.sol";
+
+contract MockMiner is IMiner {
   address public currentOwner;
   address public nextOwner;
   uint256 public lockStart;
   uint256 public unlockDuration;
   uint256 public unlockAmount;
+  uint256 public pledgedAmount;
 
   constructor() payable {
     currentOwner = msg.sender;
@@ -47,15 +50,23 @@ contract MockMiner {
     }
   }
 
-  function withdrawBalance(uint256 amountRequested) external {
+  function withdrawBalance(uint256 amountRequested) external returns (uint256) {
     require(msg.sender == currentOwner);
     uint256 bal = address(this).balance;
     uint256 maxSend = bal - amountLocked();
     require(amountRequested <= maxSend);
     if (amountRequested == 0) {
       payable(address(currentOwner)).transfer(maxSend);
+      return maxSend;
     } else {
       payable(address(currentOwner)).transfer(amountRequested);
+      return amountRequested;
     }
+  }
+
+  // used for pledging collateral
+  function applyRewards(uint256 reward, uint256 penalty) external {
+    pledgedAmount += reward;
+    pledgedAmount -= penalty;
   }
 }
