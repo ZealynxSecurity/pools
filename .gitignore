@@ -8,4 +8,4 @@ out/
 /broadcast/*/31337/
 
 # Generated files
-types/
+generated/
