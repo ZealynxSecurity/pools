@@ -58,7 +58,7 @@ contract PoolTest is Test {
     function mockLoan(uint256 loanAmount) public returns (uint256) {
         // alice is a miner who wants to take loan
         vm.prank(alice);
-        return pool.takeLoan(alice, loanAmount);
+        return pool.takeLoan(loanAmount);
     }
 
     function testTakeLoan() public {

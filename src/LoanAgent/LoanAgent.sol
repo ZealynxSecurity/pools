@@ -2,15 +2,21 @@
 pragma solidity ^0.8.15;
 
 import "src/MockMiner.sol";
+import "src/Pool.sol";
+import "src/LoanAgent/ILoanAgent.sol";
 
-contract LoanAgent {
+contract LoanAgent is ILoanAgent {
   address public miner;
   address public owner;
+  address public pool;
   bool public active = false;
 
-  constructor(address _miner) {
+  constructor(address _miner, address _pool) {
     miner = _miner;
+    pool = _pool;
   }
+
+  receive() external payable {}
 
   // this function does two things:
   // 1. it sets the miner's owner addr to be the loan agent
@@ -33,6 +39,18 @@ contract LoanAgent {
 
     IMiner(miner).changeOwnerAddress(newOwner);
     active = false;
+  }
+
+  function withdrawBalance() external returns (uint256) {
+    return IMiner(miner).withdrawBalance(0);
+  }
+
+  function takeLoan(uint256 amount) external returns (uint256) {
+    return IPool(pool).takeLoan(amount);
+  }
+
+  function paydownDebt() external returns (uint256) {
+    return IPool(pool).paydownDebt{value: address(this).balance}(address(this));
   }
 }
 

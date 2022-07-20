@@ -4,8 +4,23 @@ pragma solidity ^0.8.15;
 import "forge-std/Test.sol";
 import "src/PoolToken.sol";
 
+interface IPool {
+  function initialTokenPrice() external view returns (uint256);
+  function tokenPrice() external view returns (uint256);
+  function staked() external view returns (uint256);
+  function rewards() external view returns (uint256);
+  function assets() external view returns (uint256);
+  function owed() external view returns (uint256);
+  function repaymentAmount(uint256 amount) external view returns (uint256);
+  function poolToken() external view returns (address);
+  function stake(address _staker) external payable returns (uint256);
+  function paydownDebt(address _borrower) external payable returns (uint256);
+  function exit(address exitTo, uint256 tokenAmount) external returns (uint256);
+  function takeLoan(uint256 amount) external returns (uint256);
+}
+
 // everybody can mint an equal amount of credit from this pool (dumb pool)
-contract Pool {
+contract Pool is IPool {
   uint256 public initialTokenPrice;
   address public poolToken;
 
@@ -13,6 +28,7 @@ contract Pool {
   uint256 public rewards = 0;
   uint256 public assets = 0;
   uint256 public owed = 0;
+  uint256 public fixedCreditAmount = 1 ether;
 
   uint256 public costOfCapital = 10;
 
@@ -54,16 +70,19 @@ contract Pool {
     return valInFil;
   }
 
-  function takeLoan(address _borrower, uint256 amount) external returns(uint256) {
-    require(amount <= staked + rewards);
+  function takeLoan(uint256 amount) external returns(uint256) {
+    if (amount > staked + rewards) {
+      return 0;
+    }
+    require(_loans[msg.sender] == 0);
     require(address(this).balance >= amount);
-    require(_loans[_borrower] == 0);
+
     uint256 repay = repaymentAmount(amount);
     owed += repay;
-    _loans[_borrower] = repay;
+    _loans[msg.sender] = repay;
     assets += repay - amount;
 
-    payable(address(_borrower)).transfer(amount);
+    payable(address(msg.sender)).transfer(amount);
 
     return repay;
   }
@@ -76,5 +95,4 @@ contract Pool {
     _loans[_borrower] -= msg.value;
     return _loans[_borrower];
   }
-
 }
