@@ -4,7 +4,7 @@ pragma solidity ^0.8.15;
 import "forge-std/Test.sol";
 import "src/LoanAgent/LoanAgent.sol";
 import "src/LoanAgent/LoanAgentFactory.sol";
-import 'src/Miner/MockMiner.sol';
+import 'src/MockMiner.sol';
 
 contract LoanAgentTest is Test {
     address bob = address(0x1);

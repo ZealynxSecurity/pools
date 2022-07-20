@@ -2,48 +2,48 @@
 pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
-import "src/Tranche/Tranche.sol";
-import "src/TToken/TToken.sol";
+import "src/Pool.sol";
+import "src/PoolToken.sol";
 
 /**
- The stupid, simple tranche
+ The stupid, simple pool
  - Everyone can take a loan if they currently have no loans owed
  - The price is calculated by current ((stake + expected rewards) / total shares)
  - The price does not change (yet) based on finding out about a defaulted loan
 
  */
-contract TrancheTest is Test {
+contract PoolTest is Test {
     address bob = address(0x1);
     address alice = address(0x2);
 
     uint256 initialTokenPrice = 1 ether;
 
-    TToken tToken;
-    Tranche tranche;
+    PoolToken poolToken;
+    Pool pool;
     function setUp() public {
-        tToken = new TToken();
-        tranche = new Tranche(initialTokenPrice, address(tToken));
-        tToken.setMinter(address(tranche));
+        poolToken = new PoolToken();
+        pool = new Pool(initialTokenPrice, address(poolToken));
+        poolToken.setMinter(address(pool));
         vm.deal(bob, 10 ether);
     }
 
-    // when no contributions are made and no rewards are earned, the tranche should have a fixed buy-in token price
+    // when no contributions are made and no rewards are earned, the pool should have a fixed buy-in token price
     function testInitialTokenPrice() public {
-        assertEq(tranche.initialTokenPrice(), initialTokenPrice);
+        assertEq(pool.initialTokenPrice(), initialTokenPrice);
     }
 
     // a wallet should be able to contribute FIL and receive tokens back at the initialTokenPrice
     function testInitialStake() public {
         uint256 stakeAmount = 10 ether;
         vm.startPrank(bob);
-        uint256 tokensMinted = tranche.stake{value: stakeAmount}(bob);
-        uint256 tokenBalance = tToken.balanceOf(bob);
+        uint256 tokensMinted = pool.stake{value: stakeAmount}(bob);
+        uint256 tokenBalance = poolToken.balanceOf(bob);
         assertEq(tokensMinted, tokenBalance);
     }
 
     function testRepaymentAmount() public {
         uint256 loanAmount = 10 ether;
-        uint256 loanAmountWRepayment = tranche.repaymentAmount(loanAmount);
+        uint256 loanAmountWRepayment = pool.repaymentAmount(loanAmount);
         assertEq(loanAmountWRepayment, 11 ether);
     }
 
@@ -51,21 +51,21 @@ contract TrancheTest is Test {
         // bob is the investor, stakes 10 FIL
         uint256 stakeAmount = 10 ether;
         vm.startPrank(bob);
-        tranche.stake{value: stakeAmount}(bob);
+        pool.stake{value: stakeAmount}(bob);
         vm.stopPrank();
     }
 
     function mockLoan(uint256 loanAmount) public returns (uint256) {
         // alice is a miner who wants to take loan
         vm.prank(alice);
-        return tranche.takeLoan(alice, loanAmount);
+        return pool.takeLoan(alice, loanAmount);
     }
 
     function testTakeLoan() public {
         mockStake();
         uint256 loanAmount = 2 ether;
         uint256 repayAmount = mockLoan(loanAmount);
-        assertEq(tranche.repaymentAmount(loanAmount), repayAmount);
+        assertEq(pool.repaymentAmount(loanAmount), repayAmount);
         assertEq(address(alice).balance, loanAmount);
     }
 
@@ -74,18 +74,18 @@ contract TrancheTest is Test {
         uint256 loanAmount = 2 ether;
         uint256 paybackAmount = 1 ether;
         mockLoan(loanAmount);
-        uint256 remainingPaybackAmount = tranche.paydownDebt{value: paybackAmount}(alice);
-        assertEq(tranche.repaymentAmount(loanAmount) - paybackAmount, remainingPaybackAmount);
+        uint256 remainingPaybackAmount = pool.paydownDebt{value: paybackAmount}(alice);
+        assertEq(pool.repaymentAmount(loanAmount) - paybackAmount, remainingPaybackAmount);
     }
 
     function testTokenPriceChange() public {
-        uint256 initialPrice = tranche.tokenPrice();
+        uint256 initialPrice = pool.tokenPrice();
         mockStake();
-        uint256 postStakePrice = tranche.tokenPrice();
+        uint256 postStakePrice = pool.tokenPrice();
         assertEq(initialPrice, postStakePrice);
         uint256 loanAmount = 2 ether;
         mockLoan(loanAmount);
-        uint256 postLoanPrice = tranche.tokenPrice();
+        uint256 postLoanPrice = pool.tokenPrice();
         // price goes up when a loan gets taken
         assertGt(postLoanPrice, initialPrice);
     }
@@ -96,11 +96,11 @@ contract TrancheTest is Test {
         mockStake();
         uint256 loanAmount = 2 ether;
         mockLoan(loanAmount);
-        tranche.paydownDebt{value: 2.2 ether}(alice);
-        assertEq(tranche.owed(), 0);
+        pool.paydownDebt{value: 2.2 ether}(alice);
+        assertEq(pool.owed(), 0);
 
         vm.startPrank(bob);
-        uint256 filReturns = tranche.exit(redmond, tToken.balanceOf(bob));
+        uint256 filReturns = pool.exit(redmond, poolToken.balanceOf(bob));
         assertEq(redmond.balance, filReturns);
     }
 }

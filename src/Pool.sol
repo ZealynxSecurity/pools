@@ -2,13 +2,12 @@
 pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
-import "src/TToken/TToken.sol";
+import "src/PoolToken.sol";
 
-// everybody can mint from this tranche an equal amount of credit! yay!
-// TODO: change to pool
-contract Tranche {
+// everybody can mint an equal amount of credit from this pool (dumb pool)
+contract Pool {
   uint256 public initialTokenPrice;
-  address public tToken;
+  address public poolToken;
 
   uint256 public staked = 0;
   uint256 public rewards = 0;
@@ -20,9 +19,9 @@ contract Tranche {
   mapping(address => uint256) public _stakes;
   mapping(address => uint256) public _loans;
 
-  constructor(uint256 _initialTokenPrice, address _tToken) {
+  constructor(uint256 _initialTokenPrice, address _poolToken) {
     initialTokenPrice = _initialTokenPrice;
-    tToken = _tToken;
+    poolToken = _poolToken;
   }
 
   function repaymentAmount(uint256 amount) public view returns (uint256) {
@@ -31,13 +30,13 @@ contract Tranche {
 
   function tokenPrice() public view returns (uint256) {
     if (assets == 0) return initialTokenPrice;
-    return (assets)/TToken(tToken).totalSupply();
+    return (assets)/PoolToken(poolToken).totalSupply();
   }
 
   function stake(address _staker) external payable returns(uint256) {
     require(msg.value > 0);
     uint256 tokensToMint = msg.value / tokenPrice();
-    TToken(tToken).mint(_staker, tokensToMint);
+    PoolToken(poolToken).mint(_staker, tokensToMint);
     staked += msg.value;
     assets += msg.value;
     return tokensToMint;
@@ -45,12 +44,12 @@ contract Tranche {
 
   // burns your tokens for FIL at the current buy-in token price
   function exit(address exitTo, uint256 tokenAmount) public returns (uint256) {
-    require(tokenAmount <= TToken(tToken).balanceOf(msg.sender));
+    require(tokenAmount <= PoolToken(poolToken).balanceOf(msg.sender));
     // TODO: do this in the uniswap-y way where you take the tokenPrice at the end (or the geometric mean)
     uint256 valInFil = tokenPrice() * tokenAmount;
     // TODO: don't use the balance (we need to keep track of how much FIL we have on hand)
     require(address(this).balance >= valInFil);
-    TToken(tToken).burn(msg.sender, tokenAmount);
+    PoolToken(poolToken).burn(msg.sender, tokenAmount);
     payable(exitTo).transfer(valInFil);
     return valInFil;
   }

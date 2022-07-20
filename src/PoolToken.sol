@@ -3,11 +3,11 @@ pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract TToken is ERC20 {
+contract PoolToken is ERC20 {
   address public deployer;
   address public minter;
 
-  constructor() ERC20("tToken", "TTK"){
+  constructor() ERC20("PoolToken", "P0GLIF"){
     deployer = msg.sender;
   }
 

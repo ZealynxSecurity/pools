@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "src/Miner/IMiner.sol";
+import "src/MockMiner.sol";
 
 contract LoanAgent {
   address public miner;
