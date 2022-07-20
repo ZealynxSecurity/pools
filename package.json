@@ -1,0 +1,24 @@
+{
+  "name": "gcred-contracts",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "typechain --target=ethers-v5 \"./out/**/*.json\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/glif-confidential/gcred.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Schwartz10/glif-confidential/issues"
+  },
+  "homepage": "https://github.com/Schwartz10/glif-confidential#readme",
+  "devDependencies": {
+    "@typechain/ethers-v5": "^10.1.0",
+    "typechain": "^8.1.0"
+  }
+}

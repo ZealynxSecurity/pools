@@ -1,5 +1,9 @@
 .PHONY: test
 
+build:
+	forge build
+	npm run build
+
 test:
 	forge test -vvv
 
