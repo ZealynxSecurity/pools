@@ -5,17 +5,23 @@ import "forge-std/Test.sol";
 import "src/LoanAgent/LoanAgent.sol";
 import "src/LoanAgent/LoanAgentFactory.sol";
 import "src/MockMiner.sol";
-import "src/Pool.sol";
+import "src/Pool/Pool.sol";
+import "src/Pool/PoolFactory.sol";
 
 contract LoanAgentBasicTest is Test {
     address bob = address(0x1);
     address alice = address(0x2);
 
+    string poolName = "FIRST POOL NAME";
+
     MockMiner miner;
     LoanAgentFactory loanAgentFactory;
+    PoolFactory poolFactory;
     function setUp() public {
-        PoolToken poolToken = new PoolToken();
-        Pool pool = new Pool(1 ether, address(poolToken));
+        poolFactory = new PoolFactory();
+        Pool pool = new Pool(1 ether, poolName);
+        poolFactory.create(address(pool));
+
         loanAgentFactory = new LoanAgentFactory(address(pool));
         miner = new MockMiner();
         miner.changeOwnerAddress(alice);
@@ -120,16 +126,17 @@ contract LoanAgentBasicTest is Test {
 contract LoanAgentTest is Test {
     address bob = address(0x1);
     address alice = address(0x2);
+    string poolName = "FIRST POOL NAME";
 
     MockMiner miner;
     LoanAgentFactory loanAgentFactory;
     LoanAgent loanAgent;
-    PoolToken poolToken;
+    PoolFactory poolFactory;
     Pool pool;
     function setUp() public {
-        poolToken = new PoolToken();
-        pool = new Pool(1 ether, address(poolToken));
-        poolToken.setMinter(address(pool));
+        poolFactory = new PoolFactory();
+        pool = new Pool(1 ether, poolName);
+        poolFactory.create(address(pool));
         // bob is the investor, stakes 10 FIL
         vm.deal(bob, 11 ether);
         uint256 stakeAmount = 10 ether;
@@ -137,7 +144,7 @@ contract LoanAgentTest is Test {
         pool.stake{value: stakeAmount}(bob);
         vm.stopPrank();
 
-        loanAgentFactory = new LoanAgentFactory(address(pool));
+        loanAgentFactory = new LoanAgentFactory(address(poolFactory));
         miner = new MockMiner();
         miner.changeOwnerAddress(alice);
         vm.startPrank(alice);
@@ -160,7 +167,7 @@ contract LoanAgentTest is Test {
         assertEq(prevBalance, 0);
         uint256 loanAmount = 1 ether;
         vm.startPrank(alice);
-        loanAgent.takeLoan(loanAmount);
+        loanAgent.takeLoan(loanAmount, pool.id());
         uint256 currBalance = address(loanAgent).balance;
         assertGt(currBalance, prevBalance);
         assertEq(prevBalance, 0);
@@ -170,9 +177,9 @@ contract LoanAgentTest is Test {
     function testPaydownDebt() public {
         uint256 loanAmount = 1 ether;
         vm.startPrank(alice);
-        loanAgent.takeLoan(loanAmount);
+        loanAgent.takeLoan(loanAmount, pool.id());
         uint256 owed = pool._loans(address(loanAgent));
-        uint256 paydown = loanAgent.paydownDebt();
+        uint256 paydown = loanAgent.paydownDebt(pool.id());
 
         uint256 leftOver = pool._loans(address(loanAgent));
         assertEq(owed - leftOver, pool.repaymentAmount(loanAmount) - paydown);

@@ -2,24 +2,27 @@
 pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
-import "src/PoolToken.sol";
+import "src/Pool/PoolToken.sol";
 
 contract PoolTokenTest is Test {
     address bob = address(0x1);
     address alice = address(0x2);
     address redmond = address(0x3);
 
+    string name = "PoolToken";
+    string symbol = "P0GLIF";
+
     PoolToken poolToken;
     function setUp() public {
-        poolToken = new PoolToken();
+        poolToken = new PoolToken(name, symbol, address(0));
     }
 
     function testName() public {
-        assertEq(poolToken.name(), "PoolToken");
+        assertEq(poolToken.name(), name);
     }
 
     function testSymbol() public {
-      assertEq(poolToken.symbol(), "P0GLIF");
+      assertEq(poolToken.symbol(), symbol);
     }
 
     function testMinter() public {

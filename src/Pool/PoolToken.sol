@@ -7,7 +7,8 @@ contract PoolToken is ERC20 {
   address public deployer;
   address public minter;
 
-  constructor() ERC20("PoolToken", "P0GLIF"){
+  constructor(string memory _name, string memory _symbol, address _minter) ERC20(_name, _symbol){
+    minter = _minter;
     deployer = msg.sender;
   }
 

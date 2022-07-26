@@ -2,9 +2,12 @@
 pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
-import "src/PoolToken.sol";
+import "src/Pool/PoolToken.sol";
+
 
 interface IPool {
+  function name() external view returns (string memory);
+  function id() external view returns (uint256);
   function initialTokenPrice() external view returns (uint256);
   function tokenPrice() external view returns (uint256);
   function staked() external view returns (uint256);
@@ -12,6 +15,7 @@ interface IPool {
   function assets() external view returns (uint256);
   function owed() external view returns (uint256);
   function repaymentAmount(uint256 amount) external view returns (uint256);
+  function initialize(address _poolToken, uint256 _poolID) external;
   function poolToken() external view returns (address);
   function stake(address _staker) external payable returns (uint256);
   function paydownDebt(address _borrower) external payable returns (uint256);
@@ -21,7 +25,9 @@ interface IPool {
 
 // everybody can mint an equal amount of credit from this pool (dumb pool)
 contract Pool is IPool {
+  string public name;
   uint256 public initialTokenPrice;
+  uint256 public id;
   address public poolToken;
 
   uint256 public staked = 0;
@@ -35,9 +41,14 @@ contract Pool is IPool {
   mapping(address => uint256) public _stakes;
   mapping(address => uint256) public _loans;
 
-  constructor(uint256 _initialTokenPrice, address _poolToken) {
+  constructor(uint256 _initialTokenPrice, string memory _name) {
     initialTokenPrice = _initialTokenPrice;
+    name = _name;
+  }
+
+  function initialize(address _poolToken, uint256 _poolID) external {
     poolToken = _poolToken;
+    id = _poolID;
   }
 
   function repaymentAmount(uint256 amount) public view returns (uint256) {

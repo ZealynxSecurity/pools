@@ -2,8 +2,9 @@
 pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
-import "src/Pool.sol";
-import "src/PoolToken.sol";
+import "src/Pool/Pool.sol";
+import "src/Pool/PoolToken.sol";
+import "src/Pool/PoolFactory.sol";
 
 /**
  The stupid, simple pool
@@ -16,14 +17,17 @@ contract PoolTest is Test {
     address bob = address(0x1);
     address alice = address(0x2);
 
+    string poolName = "FIRST POOL NAME";
     uint256 initialTokenPrice = 1 ether;
 
-    PoolToken poolToken;
+    PoolFactory poolFactory;
     Pool pool;
+    PoolToken poolToken;
     function setUp() public {
-        poolToken = new PoolToken();
-        pool = new Pool(initialTokenPrice, address(poolToken));
-        poolToken.setMinter(address(pool));
+        poolFactory = new PoolFactory();
+        pool = new Pool(initialTokenPrice, poolName);
+        (, address poolTokenAddress) = poolFactory.create(address(pool));
+        poolToken = PoolToken(poolTokenAddress);
         vm.deal(bob, 10 ether);
     }
 

@@ -2,18 +2,19 @@
 pragma solidity ^0.8.15;
 
 import "src/MockMiner.sol";
-import "src/Pool.sol";
+import "src/Pool/Pool.sol";
 import "src/LoanAgent/ILoanAgent.sol";
+import "src/Pool/PoolFactory.sol";
 
 contract LoanAgent is ILoanAgent {
   address public miner;
   address public owner;
-  address public pool;
+  address public poolFactory;
   bool public active = false;
 
-  constructor(address _miner, address _pool) {
+  constructor(address _miner, address _poolFactory) {
     miner = _miner;
-    pool = _pool;
+    poolFactory = _poolFactory;
   }
 
   receive() external payable {}
@@ -45,12 +46,19 @@ contract LoanAgent is ILoanAgent {
     return IMiner(miner).withdrawBalance(0);
   }
 
-  function takeLoan(uint256 amount) external returns (uint256) {
-    return IPool(pool).takeLoan(amount);
+  function getPool(uint256 poolID) internal view returns (IPool) {
+    require(poolID <= IPoolFactory(poolFactory).allPoolsLength(), "Invalid pool ID");
+    address pool = IPoolFactory(poolFactory).allPools(poolID);
+    return IPool(pool);
   }
 
-  function paydownDebt() external returns (uint256) {
-    return IPool(pool).paydownDebt{value: address(this).balance}(address(this));
+  function takeLoan(uint256 amount, uint256 poolID) external returns (uint256) {
+    return getPool(poolID).takeLoan(amount);
+  }
+
+  // TODO: payoff order fifo (dont pass poolID)
+  function paydownDebt(uint256 poolID) external returns (uint256) {
+    return getPool(poolID).paydownDebt{value: address(this).balance}(address(this));
   }
 }
 

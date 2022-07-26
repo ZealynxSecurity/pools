@@ -10,7 +10,7 @@ interface ILoanAgent {
   // 1. exchanges tTokens owned by loan agent for FIL via the Swap actor
   // 2. sends received FIL to the miner actor
   // 3. pledges received FIL as the miner actor (calls applyReward on the miner)
-  function takeLoan(uint256 amount) external returns (uint256);
+  function takeLoan(uint256 amount, uint256 poolID) external returns (uint256);
   // calls withdrawBalance on the miner to take earned FIL and pay down loan amount
-  function paydownDebt() external returns (uint256);
+  function paydownDebt(uint256 poolID) external returns (uint256);
 }
