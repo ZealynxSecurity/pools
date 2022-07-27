@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import "@openzeppelin/contracts/utils/structs/DoubleEndedQueue.sol";
 import "src/MockMiner.sol";
 import "src/Pool/Pool.sol";
 import "src/LoanAgent/ILoanAgent.sol";
@@ -10,6 +11,9 @@ contract LoanAgent is ILoanAgent {
   address public miner;
   address public owner;
   address public poolFactory;
+  uint256[] public loans;
+  DoubleEndedQueue.Bytes32Deque public queue;
+
   bool public active = false;
 
   constructor(address _miner, address _poolFactory) {
@@ -53,6 +57,7 @@ contract LoanAgent is ILoanAgent {
   }
 
   function takeLoan(uint256 amount, uint256 poolID) external returns (uint256) {
+
     return getPool(poolID).takeLoan(amount);
   }
 

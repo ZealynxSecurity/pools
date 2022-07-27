@@ -3,6 +3,10 @@ pragma solidity ^0.8.15;
 
 import "src/LoanAgent/LoanAgent.sol";
 
+interface ILoanAgentFactory {
+  function create(address _miner) external returns (address);
+}
+
 contract LoanAgentFactory {
   address public pool;
   mapping(address => address) public loanAgents;

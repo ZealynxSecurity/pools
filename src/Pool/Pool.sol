@@ -38,7 +38,6 @@ contract Pool is IPool {
 
   uint256 public costOfCapital = 10;
 
-  mapping(address => uint256) public _stakes;
   mapping(address => uint256) public _loans;
 
   constructor(uint256 _initialTokenPrice, string memory _name) {
