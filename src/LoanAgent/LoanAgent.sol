@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "@openzeppelin/contracts/utils/structs/DoubleEndedQueue.sol";
 import "src/MockMiner.sol";
 import "src/Pool/Pool.sol";
 import "src/LoanAgent/ILoanAgent.sol";
@@ -11,9 +10,6 @@ contract LoanAgent is ILoanAgent {
   address public miner;
   address public owner;
   address public poolFactory;
-  uint256[] public loans;
-  DoubleEndedQueue.Bytes32Deque public queue;
-
   bool public active = false;
 
   constructor(address _miner, address _poolFactory) {
@@ -37,10 +33,19 @@ contract LoanAgent is ILoanAgent {
     active = true;
   }
 
-  // TODO: should not allow ownership revocation if active loans exist for this loan agent
+  function isDebtor() public view returns (bool) {
+    for (uint256 i = 0; i < IPoolFactory(poolFactory).allPoolsLength(); ++i) {
+      if (Pool(IPoolFactory(poolFactory).allPools(i))._loans(address(this)) > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function revokeMinerOwnership(address newOwner) external {
     require(owner == msg.sender, "Only LoanAgent owner can call revokeOwnership");
     require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
+    require(!isDebtor(), "Cannot revoke miner ownership with outstanding loans");
 
     IMiner(miner).changeOwnerAddress(newOwner);
     active = false;
@@ -57,13 +62,13 @@ contract LoanAgent is ILoanAgent {
   }
 
   function takeLoan(uint256 amount, uint256 poolID) external returns (uint256) {
-
     return getPool(poolID).takeLoan(amount);
   }
 
-  // TODO: payoff order fifo (dont pass poolID)
-  function paydownDebt(uint256 poolID) external returns (uint256) {
-    return getPool(poolID).paydownDebt{value: address(this).balance}(address(this));
+  function paydownDebt(uint256 amount, uint256 poolID) external returns (uint256) {
+    require(address(this).balance >= amount && amount >= 0, "Invalid amount passed to paydownDebt");
+    if (amount == 0) amount = address(this).balance;
+    return getPool(poolID).paydownDebt{value: amount}(address(this));
   }
 }
 
