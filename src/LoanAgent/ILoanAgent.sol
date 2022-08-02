@@ -12,5 +12,5 @@ interface ILoanAgent {
   // 3. pledges received FIL as the miner actor (calls applyReward on the miner)
   function takeLoan(uint256 amount, uint256 poolID) external returns (uint256);
   // calls withdrawBalance on the miner to take earned FIL and pay down loan amount
-  function paydownDebt(uint256 poolID) external returns (uint256);
+  function paydownDebt(uint256 amount, uint256 poolID) external returns (uint256);
 }

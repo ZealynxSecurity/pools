@@ -109,6 +109,20 @@ contract IntegrationTest is BaseTest {
 
     // one miner should be able to pay down loans from multiple pools
     function testMultiLoanPaydown() public {
-      assertTrue(true);
+      // take out 2 loans for 1 eth each
+      vm.startPrank(miner1Owner);
+      uint256 loanAmount = 1 ether;
+      loanAgent1.takeLoan(loanAmount, pool1.id());
+      loanAgent1.takeLoan(loanAmount, pool2.id());
+      assertGt(pool1._loans(address(loanAgent1)), 0);
+      assertGt(pool2._loans(address(loanAgent1)), 0);
+
+      // paydown
+      loanAgent1.paydownDebt(loanAmount, pool1.id());
+      loanAgent1.paydownDebt(loanAmount, pool2.id());
+      uint256 p1RepayAmt = pool1.repaymentAmount(loanAmount);
+      uint256 p2RepayAmt = pool2.repaymentAmount(loanAmount);
+      assertEq(pool1._loans(address(loanAgent1)), p1RepayAmt - loanAmount);
+      assertEq(pool2._loans(address(loanAgent1)), p2RepayAmt - loanAmount);
     }
 }

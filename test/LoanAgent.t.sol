@@ -179,7 +179,7 @@ contract LoanAgentTest is Test {
         vm.startPrank(alice);
         loanAgent.takeLoan(loanAmount, pool.id());
         uint256 owed = pool._loans(address(loanAgent));
-        uint256 paydown = loanAgent.paydownDebt(pool.id());
+        uint256 paydown = loanAgent.paydownDebt(0, pool.id());
 
         uint256 leftOver = pool._loans(address(loanAgent));
         assertEq(owed - leftOver, pool.repaymentAmount(loanAmount) - paydown);
