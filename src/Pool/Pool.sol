@@ -18,9 +18,13 @@ interface IPool {
   function initialize(address _poolToken, uint256 _poolID) external;
   function poolToken() external view returns (address);
   function stake(address _staker) external payable returns (uint256);
-  function paydownDebt(address _borrower) external payable returns (uint256);
+  function paydownDebt(address loanAgent) external payable returns (uint256);
   function exit(address exitTo, uint256 tokenAmount) external returns (uint256);
   function takeLoan(uint256 amount) external returns (uint256);
+  function paymentInterval() external returns (uint256);
+  function getPaymentDeadlineEpoch(address loanAgent) external returns (uint256, uint256);
+  function getNextPaymentAmount(address loanAgent) external returns (uint256);
+  function getPenalty(address loanAgent) external returns (uint256);
 }
 
 // everybody can mint an equal amount of credit from this pool (dumb pool)
@@ -39,6 +43,13 @@ contract Pool is IPool {
   uint256 public costOfCapital = 10;
 
   mapping(address => uint256) public _loans;
+  mapping(address => uint256) public _loanStartEpochs;
+
+  uint256 private _day = 24 * 60 * 2;
+  // ~540 days is defualt sector (we think?) so this is default loan duration
+  uint256 public loanDurationInEpochs = 540 * _day;
+  // must make payment (at a minimum) once per week
+  uint256 public paymentInterval = 7 * _day;
 
   constructor(uint256 _initialTokenPrice, string memory _name) {
     initialTokenPrice = _initialTokenPrice;
@@ -91,18 +102,31 @@ contract Pool is IPool {
     owed += repay;
     _loans[msg.sender] = repay;
     assets += repay - amount;
+    _loanStartEpochs[msg.sender] = block.number;
 
     payable(address(msg.sender)).transfer(amount);
 
     return repay;
   }
 
-  function paydownDebt(address _borrower) external payable returns(uint256) {
+  function paydownDebt(address loanAgent) external payable returns(uint256) {
     // TODO: think about a more intelligent way to handle over payments
-    require(msg.value > 0 && msg.value <= _loans[_borrower]);
+    require(msg.value > 0 && msg.value <= _loans[loanAgent]);
     rewards += msg.value;
     owed -= msg.value;
-    _loans[_borrower] -= msg.value;
-    return _loans[_borrower];
+    _loans[loanAgent] -= msg.value;
+    return _loans[loanAgent];
+  }
+
+  function getPaymentDeadlineEpoch(address loanAgent) external returns (uint256, uint256) {
+
+  }
+
+  function getNextPaymentAmount(address loanAgent) external returns (uint256) {
+
+  }
+
+  function getPenalty(address loanAgent) external returns (uint256) {
+
   }
 }

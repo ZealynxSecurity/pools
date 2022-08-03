@@ -61,6 +61,7 @@ contract LoanAgent is ILoanAgent {
     return IPool(pool);
   }
 
+  // TODO: if the loan agent is in the penalty for any pool, do not allow another loan
   function takeLoan(uint256 amount, uint256 poolID) external returns (uint256) {
     return getPool(poolID).takeLoan(amount);
   }
