@@ -4,3 +4,6 @@
 [submodule "lib/openzeppelin-contracts"]
 	path = lib/openzeppelin-contracts
 	url = https://github.com/openzeppelin/openzeppelin-contracts
+[submodule "lib/ERC4626"]
+	path = lib/ERC4626
+	url = https://github.com/Fei-Protocol/ERC4626
