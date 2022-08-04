@@ -7,3 +7,6 @@
 [submodule "lib/ERC4626"]
 	path = lib/ERC4626
 	url = https://github.com/Fei-Protocol/ERC4626
+[submodule "lib/solmate"]
+	path = lib/solmate
+	url = https://github.com/transmissions11/solmate
