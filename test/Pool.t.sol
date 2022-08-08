@@ -127,20 +127,20 @@ contract PoolTest is Test {
         // check that the nextPaymentDeadlineEpoch increases
     }
 
-    function testRepayment() public {
-        mockStake();
-        uint256 loanAmount = 1 ether;
-        mockLoan(loanAmount);
-        uint256 paymentInterval = pool.paymentInterval();
-        // tell us the next epoch we need to make our next payment by to avoid penalties
-        (uint256 nextPaymentDeadlineEpoch, uint256 epochsLeft) = pool.getPaymentDeadlineEpoch(alice);
-        // tell us the minimum payment amount we need to make by the deadline epoch to avoid penalties
-        uint256 nextPaymentAmount = pool.getNextPaymentAmount(alice);
-        // roll blocks up to (but not past) the deadline epoch
-        vm.roll(paymentInterval - 5);
-        // make sure we don't have any penalties
-        uint256 penaltyAmount = pool.getPenalty(alice);
-        // paydown min amount
-        pool.paydownDebt{value: nextPaymentAmount}(alice);
-    }
+    // function testRepayment() public {
+    //     mockStake();
+    //     uint256 loanAmount = 1 ether;
+    //     mockLoan(loanAmount);
+    //     uint256 paymentInterval = pool.paymentInterval();
+    //     // tell us the next epoch we need to make our next payment by to avoid penalties
+    //     (uint256 nextPaymentDeadlineEpoch, uint256 epochsLeft) = pool.getPaymentDeadlineEpoch(alice);
+    //     // tell us the minimum payment amount we need to make by the deadline epoch to avoid penalties
+    //     uint256 nextPaymentAmount = pool.getNextPaymentAmount(alice);
+    //     // roll blocks up to (but not past) the deadline epoch
+    //     vm.roll(paymentInterval - 5);
+    //     // make sure we don't have any penalties
+    //     uint256 penaltyAmount = pool.getPenalty(alice);
+    //     // paydown min amount
+    //     pool.paydownDebt{value: nextPaymentAmount}(alice);
+    // }
 }
