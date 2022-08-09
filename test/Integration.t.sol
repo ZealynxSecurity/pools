@@ -15,6 +15,7 @@ contract IntegrationTest is BaseTest {
     address investor2 = address(0x11);
     address miner1Owner = address(0x20);
     address miner2Owner = address(0x21);
+    address treasury = address(0x30);
 
     string poolName1 = "POOL_1";
     string poolName2 = "POOL_2";
@@ -37,7 +38,7 @@ contract IntegrationTest is BaseTest {
 
         wFil = new WFIL();
         // create 2 pools
-        poolFactory = new PoolFactory(wFil);
+        poolFactory = new PoolFactory(wFil, treasury);
         pool1 = poolFactory.createSimpleInterestPool(poolName1, poolBaseInterestRate);
         pool2 = poolFactory.createSimpleInterestPool(poolName2, poolBaseInterestRate);
 

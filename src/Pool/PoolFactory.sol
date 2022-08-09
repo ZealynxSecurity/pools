@@ -12,11 +12,13 @@ interface IPoolFactory {
 }
 
 contract PoolFactory is Ownable, IPoolFactory {
-  address[] public allPools;
   ERC20 public asset;
+  address[] public allPools;
+  address public treasury;
 
-  constructor(ERC20 _asset) {
+  constructor(ERC20 _asset, address _treasury) {
     asset = _asset;
+    treasury = _treasury;
   }
 
   function createSymbol() internal view returns (string memory) {
@@ -33,7 +35,7 @@ contract PoolFactory is Ownable, IPoolFactory {
   }
 
   function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external onlyOwner returns (IPool4626 pool) {
-    IPool4626 pool = new SimpleInterestPool(asset, name, createSymbol(), allPools.length, baseInterestRate);
+    IPool4626 pool = new SimpleInterestPool(asset, name, createSymbol(), allPools.length, baseInterestRate, treasury);
     allPools.push(address(pool));
   }
 }

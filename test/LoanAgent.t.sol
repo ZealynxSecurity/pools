@@ -12,6 +12,7 @@ import "src/WFIL.sol";
 contract LoanAgentBasicTest is Test {
     address bob = address(0x1);
     address alice = address(0x2);
+    address treasury = address(0x3);
 
     string poolName = "Test simple interest pool";
     uint256 baseInterestRate = 20e18;
@@ -22,7 +23,7 @@ contract LoanAgentBasicTest is Test {
     ERC20 wFil;
     function setUp() public {
         wFil = new WFIL();
-        poolFactory = new PoolFactory(wFil);
+        poolFactory = new PoolFactory(wFil, treasury);
         IPool4626 pool = poolFactory.createSimpleInterestPool(poolName, baseInterestRate);
 
         loanAgentFactory = new LoanAgentFactory(address(pool));
@@ -129,6 +130,7 @@ contract LoanAgentBasicTest is Test {
 contract LoanAgentTest is Test {
     address bob = address(0x1);
     address alice = address(0x2);
+    address treasury = address(0x3);
     string poolName = "FIRST POOL NAME";
     uint256 baseInterestRate = 20e18;
 
@@ -140,7 +142,7 @@ contract LoanAgentTest is Test {
     ERC20 wFil;
     function setUp() public {
         wFil = new WFIL();
-        poolFactory = new PoolFactory(wFil);
+        poolFactory = new PoolFactory(wFil, treasury);
         pool = poolFactory.createSimpleInterestPool(poolName, baseInterestRate);
         // bob is the investor, stakes 10 FIL
         vm.deal(bob, 11e18);

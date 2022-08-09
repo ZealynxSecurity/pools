@@ -7,7 +7,7 @@ import "src/WFIL.sol";
 
 contract SimpleInterestPoolStakingTest is Test {
   address alice = address(0xABCD);
-
+  address treasury = address(0x30);
   string poolName = "TEST 20% Simple Interest Pool";
   string poolSymbol = "p0GCRED";
 
@@ -15,7 +15,7 @@ contract SimpleInterestPoolStakingTest is Test {
   IPool4626 simpleInterestPool;
   function setUp() public {
     wFil = new WFIL();
-    simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, 20e18);
+    simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, 20e18, treasury);
 
     vm.deal(alice, 10e18);
     vm.prank(alice);
@@ -451,6 +451,7 @@ contract SimpleInterestPoolStakingTest is Test {
 contract SimpleInterestPoolLendingTest is Test {
   address alice = address(0xABCD);
   address miner = address(0xCCCC);
+  address treasury = address(0x30);
 
   string poolName = "TEST 20% Simple Interest Pool";
   string poolSymbol = "p0GCRED";
@@ -462,7 +463,7 @@ contract SimpleInterestPoolLendingTest is Test {
   IPool4626 simpleInterestPool;
   function setUp() public {
     wFil = new WFIL();
-    simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, interestBaseRate);
+    simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, interestBaseRate, treasury);
 
     vm.deal(alice, 1000000e18);
     vm.prank(alice);

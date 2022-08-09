@@ -29,9 +29,15 @@ abstract contract IPool4626 is ERC4626 {
     using SafeTransferLib for ERC20;
     using FixedPointMathLib for uint256;
 
+    address public treasury;
+
     uint256 public id;
     uint256 public interestRate;
     uint256 public loanPeriods = 1555200;
+    uint256 public fee = 0.025e18; // 2.5%
+
+    uint256 public feesCollected = 0;
+    uint256 public feeFlushAmt = 1e18;
 
     mapping(address => Loan) private _loans;
 
@@ -41,11 +47,13 @@ abstract contract IPool4626 is ERC4626 {
         string memory _symbol,
         uint256 _id,
         // interest rate in percentages (e.g. 55 => 5.5% interest)
-        uint256 _interestRate
+        uint256 _interestRate,
+        address _treasury
     ) ERC4626(_asset, _name, _symbol) {
         id = _id;
         // TODO: https://github.com/glif-confidential/gcred-contracts/issues/20
         interestRate = _interestRate.divWadUp(100e18);
+        treasury = _treasury;
     }
 
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/19
@@ -55,6 +63,10 @@ abstract contract IPool4626 is ERC4626 {
 
     function getLoan(address borrower) public view returns (Loan memory loan) {
         return _loans[borrower];
+    }
+
+    function getFee(uint256 amount) public view returns (uint256) {
+        return fee.mulWadUp(amount);
     }
     /*////////////////////////////////////////////////////////
                       Pool Borrowing Functions
@@ -77,17 +89,29 @@ abstract contract IPool4626 is ERC4626 {
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/1
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/21
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/16
-    function borrow(uint256 amount, address loanAgent) public virtual {
+    function borrow(uint256 amount, address loanAgent) public virtual returns (uint256 interest) {
         require(amount <= totalAssets(), "Amount to borrow must be less than this pool's liquid totalAssets");
-        uint256 interest = amount.mulWadUp(interestRate);
+        interest = amount.mulWadUp(interestRate);
         _loans[loanAgent] = Loan(block.number, loanPeriods, amount, interest, 0);
         asset.safeTransfer(loanAgent, amount);
     }
 
     function repay(uint256 amount, address loanAgent, address payee) public virtual {
-        asset.safeTransferFrom(payee, address(this), amount);
         Loan storage loan = _loans[loanAgent];
         loan.totalPaid += amount;
+
+        asset.safeTransferFrom(payee, address(this), amount);
+        if (feesCollected + getFee(amount) > feeFlushAmt) {
+            flush();
+        } else {
+            feesCollected += getFee(amount);
+        }
+    }
+
+    function flush() public virtual {
+        uint256 flushAmount = feesCollected;
+        feesCollected = 0;
+        asset.transfer(treasury, flushAmount);
     }
 }
 
