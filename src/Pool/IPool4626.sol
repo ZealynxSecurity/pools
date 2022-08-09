@@ -79,13 +79,18 @@ abstract contract IPool4626 is ERC4626 {
         return totalLoanValue(_loan).divWadUp(_loan.periods * 1e18);
     }
 
-    function loanBalance(address borrower) public view returns (uint256 owed) {
+    function loanBalance(address borrower) public view returns (uint256) {
         Loan memory loan = getLoan(borrower);
+        if (loan.startEpoch == 0) {
+            return 0;
+        }
         uint256 currentPeriod = block.number - loan.startEpoch;
         uint256 amountShouldHavePaid = (currentPeriod * 1e18).mulWadUp(pmtPerEpoch(loan));
         if (amountShouldHavePaid > loan.totalPaid) {
-            owed = amountShouldHavePaid - loan.totalPaid;
+            return amountShouldHavePaid - loan.totalPaid;
         }
+
+        return 0;
     }
 
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/1

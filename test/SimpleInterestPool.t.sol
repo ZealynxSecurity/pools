@@ -550,5 +550,10 @@ contract SimpleInterestPoolLendingTest is Test {
       // assertEq(l.periods, simpleInterestPool.loanPeriods());
       // assertEq(l.totalPaid, 0.5e18);
       // assertEq(postLoanMinerBal - postRepayMinerBal, l.totalPaid);
+      assertTrue(true);
+    }
+
+    function testMultiBorrow() public {
+      assertTrue(true);
     }
 }

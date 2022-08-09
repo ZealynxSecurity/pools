@@ -8,12 +8,12 @@ interface ILoanAgentFactory {
 }
 
 contract LoanAgentFactory {
-  address public pool;
+  address public poolFactory;
   mapping(address => address) public loanAgents;
   mapping(address => address) public activeMiners;
 
-  constructor(address _pool) {
-    pool = _pool;
+  constructor(address _poolFactory) {
+    poolFactory = _poolFactory;
   }
 
   function create(address _miner) public returns (address) {
@@ -22,7 +22,7 @@ contract LoanAgentFactory {
       return activeMiners[_miner];
     }
 
-    LoanAgent loanAgent = new LoanAgent(_miner, pool);
+    LoanAgent loanAgent = new LoanAgent(_miner, poolFactory);
     loanAgents[address(loanAgent)] = _miner;
     activeMiners[_miner] = address(loanAgent);
     return address(loanAgent);
