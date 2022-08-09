@@ -70,8 +70,8 @@ contract LoanAgent is ILoanAgent {
 
   function repay(uint256 amount, uint256 poolID) external {
     require(owner == msg.sender, "Only LoanAgent owner can call repay");
-    require(address(this).balance >= amount && amount >= 0, "Invalid amount passed to paydownDebt");
-    if (amount == 0) amount = address(this).balance;
+    require(getPool(poolID).asset().balanceOf(address(this)) >= amount && amount >= 0, "Invalid amount passed to paydownDebt");
+    if (amount == 0) amount = getPool(poolID).asset().balanceOf(address(this));
     IPool4626 pool = getPool(poolID);
     pool.asset().approve(address(pool), amount);
     pool.repay(amount, address(this), address(this));

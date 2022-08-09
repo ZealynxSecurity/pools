@@ -35,7 +35,7 @@ contract PoolFactory is Ownable, IPoolFactory {
   }
 
   function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external onlyOwner returns (IPool4626 pool) {
-    IPool4626 pool = new SimpleInterestPool(asset, name, createSymbol(), allPools.length, baseInterestRate, treasury);
+    pool = new SimpleInterestPool(asset, name, createSymbol(), allPools.length, baseInterestRate, treasury);
     allPools.push(address(pool));
   }
 }

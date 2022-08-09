@@ -543,12 +543,12 @@ contract SimpleInterestPoolLendingTest is Test {
       assertEq(postLoanMinerBal - postRepayMinerBal, l.totalPaid);
     }
 
-    // function testRepayFull() public {
-    //   Loan memory l = simpleInterestPool.getLoan(address(miner));
-    //   assertEq(l.principal, 0);
-    //   assertEq(l.interest, 0);
-    //   // assertEq(l.periods, simpleInterestPool.loanPeriods());
-    //   // assertEq(l.totalPaid, 0.5e18);
-    //   // assertEq(postLoanMinerBal - postRepayMinerBal, l.totalPaid);
-    // }
+    function testRepayFull() public {
+      Loan memory l = simpleInterestPool.getLoan(address(miner));
+      assertEq(l.principal, 0);
+      assertEq(l.interest, 0);
+      // assertEq(l.periods, simpleInterestPool.loanPeriods());
+      // assertEq(l.totalPaid, 0.5e18);
+      // assertEq(postLoanMinerBal - postRepayMinerBal, l.totalPaid);
+    }
 }
