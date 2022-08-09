@@ -4,9 +4,9 @@ pragma solidity ^0.8.15;
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import "./IPOOL4626.sol";
+import "./IPool4626.sol";
 
-contract SimpleInterestPool is IPOOL4626 {
+contract SimpleInterestPool is IPool4626 {
     using SafeTransferLib for ERC20;
     using FixedPointMathLib for uint256;
 
@@ -16,5 +16,5 @@ contract SimpleInterestPool is IPOOL4626 {
         string memory _symbol,
         uint256 poolID,
         uint256 baseRate
-    ) IPOOL4626(_asset, _name, _symbol, poolID, baseRate) {}
+    ) IPool4626(_asset, _name, _symbol, poolID, baseRate) {}
 }

@@ -2,9 +2,10 @@
 pragma solidity ^0.8.15;
 
 import "src/MockMiner.sol";
-import "src/Pool/Pool.sol";
 import "src/LoanAgent/ILoanAgent.sol";
 import "src/Pool/PoolFactory.sol";
+import "src/Pool/IPool4626.sol";
+import "solmate/tokens/ERC20.sol";
 
 contract LoanAgent is ILoanAgent {
   address public miner;
@@ -35,7 +36,7 @@ contract LoanAgent is ILoanAgent {
 
   function isDebtor() public view returns (bool) {
     for (uint256 i = 0; i < IPoolFactory(poolFactory).allPoolsLength(); ++i) {
-      if (Pool(IPoolFactory(poolFactory).allPools(i))._loans(address(this)) > 0) {
+      if (IPool4626(IPoolFactory(poolFactory).allPools(i)).loanBalance(address(this)) > 0) {
         return true;
       }
     }
@@ -55,21 +56,25 @@ contract LoanAgent is ILoanAgent {
     return IMiner(miner).withdrawBalance(0);
   }
 
-  function getPool(uint256 poolID) internal view returns (IPool) {
+  function getPool(uint256 poolID) internal view returns (IPool4626) {
     require(poolID <= IPoolFactory(poolFactory).allPoolsLength(), "Invalid pool ID");
     address pool = IPoolFactory(poolFactory).allPools(poolID);
-    return IPool(pool);
+    return IPool4626(pool);
   }
 
   // TODO: if the loan agent is in the penalty for any pool, do not allow another loan
-  function takeLoan(uint256 amount, uint256 poolID) external returns (uint256) {
-    return getPool(poolID).takeLoan(amount);
+  function borrow(uint256 amount, uint256 poolID) external {
+    require(owner == msg.sender, "Only LoanAgent owner can call borrow");
+    getPool(poolID).borrow(amount, address(this));
   }
 
-  function paydownDebt(uint256 amount, uint256 poolID) external returns (uint256) {
+  function repay(uint256 amount, uint256 poolID) external {
+    require(owner == msg.sender, "Only LoanAgent owner can call repay");
     require(address(this).balance >= amount && amount >= 0, "Invalid amount passed to paydownDebt");
     if (amount == 0) amount = address(this).balance;
-    return getPool(poolID).paydownDebt{value: amount}(address(this));
+    IPool4626 pool = getPool(poolID);
+    pool.asset().approve(address(pool), amount);
+    pool.repay(amount, address(this), address(this));
   }
 }
 

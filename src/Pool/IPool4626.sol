@@ -25,7 +25,7 @@ struct Loan {
 
 /// @title ERC4626 interface
 /// See: https://eips.ethereum.org/EIPS/eip-4626
-abstract contract IPOOL4626 is ERC4626 {
+abstract contract IPool4626 is ERC4626 {
     using SafeTransferLib for ERC20;
     using FixedPointMathLib for uint256;
 
@@ -67,10 +67,11 @@ abstract contract IPOOL4626 is ERC4626 {
         return totalLoanValue(_loan).divWadUp(_loan.periods * 1e18);
     }
 
-    function loanBalance(Loan memory _loan) public view returns (uint256 amount) {
-        uint256 currentPeriod = block.number - _loan.startEpoch;
-        uint256 amountShouldHavePaid = (currentPeriod * 1e18).mulWadUp(pmtPerEpoch(_loan));
-        return amountShouldHavePaid - _loan.totalPaid;
+    function loanBalance(address borrower) public view returns (uint256 amount) {
+        Loan memory loan = getLoan(borrower);
+        uint256 currentPeriod = block.number - loan.startEpoch;
+        uint256 amountShouldHavePaid = (currentPeriod * 1e18).mulWadUp(pmtPerEpoch(loan));
+        return amountShouldHavePaid - loan.totalPaid;
     }
 
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/1

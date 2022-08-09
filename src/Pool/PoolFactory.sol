@@ -3,17 +3,21 @@ pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "src/Pool/PoolToken.sol";
-import "src/Pool/Pool.sol";
+import "src/Pool/SimpleInterestPool.sol";
 
 interface IPoolFactory {
   function allPools(uint256 poolID) external view returns (address);
   function allPoolsLength() external view returns (uint256);
-  function create(address pool) external returns (uint256, address);
+  function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external returns (IPool4626);
 }
 
-contract PoolFactory is Ownable {
+contract PoolFactory is Ownable, IPoolFactory {
   address[] public allPools;
+  ERC20 public asset;
+
+  constructor(ERC20 _asset) {
+    asset = _asset;
+  }
 
   function createSymbol() internal view returns (string memory) {
     bytes memory b;
@@ -28,15 +32,8 @@ contract PoolFactory is Ownable {
     return allPools.length;
   }
 
-  function create(address pool) external onlyOwner returns (uint256 poolID, address poolTokenAddress) {
-    poolID = allPools.length;
-    PoolToken poolToken = new PoolToken(
-      IPool(address(pool)).name(),
-      createSymbol(),
-      address(pool)
-    );
-    poolTokenAddress = address(poolToken);
-    IPool(address(pool)).initialize(address(poolToken), poolID);
+  function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external onlyOwner returns (IPool4626 pool) {
+    IPool4626 pool = new SimpleInterestPool(asset, name, createSymbol(), allPools.length, baseInterestRate);
     allPools.push(address(pool));
   }
 }

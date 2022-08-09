@@ -12,7 +12,7 @@ contract SimpleInterestPoolStakingTest is Test {
   string poolSymbol = "p0GCRED";
 
   WFIL wFil;
-  IPOOL4626 simpleInterestPool;
+  IPool4626 simpleInterestPool;
   function setUp() public {
     wFil = new WFIL();
     simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, 20e18);
@@ -459,7 +459,7 @@ contract SimpleInterestPoolLendingTest is Test {
   uint256 borrowAmount = 100000e18;
 
   WFIL wFil;
-  IPOOL4626 simpleInterestPool;
+  IPool4626 simpleInterestPool;
   function setUp() public {
     wFil = new WFIL();
     simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, interestBaseRate);
@@ -494,7 +494,7 @@ contract SimpleInterestPoolLendingTest is Test {
       assertEq(l.principal + l.interest, loanVal);
       uint256 pmtPerEpoch = simpleInterestPool.pmtPerEpoch(l);
       assertGt(pmtPerEpoch, 0);
-      uint256 loanBalance = simpleInterestPool.loanBalance(l);
+      uint256 loanBalance = simpleInterestPool.loanBalance(address(miner));
       assertEq(loanBalance, 0);
     }
 
@@ -508,11 +508,11 @@ contract SimpleInterestPoolLendingTest is Test {
 
       Loan memory l = simpleInterestPool.getLoan(address(miner));
       uint256 pmtPerEpoch = simpleInterestPool.pmtPerEpoch(l);
-      uint256 loanBalance = simpleInterestPool.loanBalance(l);
+      uint256 loanBalance = simpleInterestPool.loanBalance(address(miner));
       assertEq(loanBalance, 0);
 
       vm.roll(l.startEpoch + 1);
-      uint256 loanBalanceLater = simpleInterestPool.loanBalance(l);
+      uint256 loanBalanceLater = simpleInterestPool.loanBalance(address(miner));
 
       assertEq(loanBalanceLater, pmtPerEpoch);
     }
