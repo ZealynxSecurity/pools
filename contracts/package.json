@@ -11,7 +11,9 @@
     "build": "yarn build:contracts && yarn build:types",
     "clean:types": "rm -rf dist",
     "test": "forge test -vvv",
-    "test:watch": "forge test -w -vvv"
+    "test:watch": "forge test -w -vvv",
+    "test:contract": "forge test -vvv --match-contract",
+    "test:watch:contract": "forge test -w -vvv --match-contract"
   },
   "devDependencies": {
     "@typechain/ethers-v5": "^10.1.0",

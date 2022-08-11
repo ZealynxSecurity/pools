@@ -543,17 +543,60 @@ contract SimpleInterestPoolLendingTest is Test {
       assertEq(postLoanMinerBal - postRepayMinerBal, l.totalPaid);
     }
 
-    function testRepayFull() public {
-      Loan memory l = simpleInterestPool.getLoan(address(miner));
-      assertEq(l.principal, 0);
-      assertEq(l.interest, 0);
-      // assertEq(l.periods, simpleInterestPool.loanPeriods());
-      // assertEq(l.totalPaid, 0.5e18);
-      // assertEq(postLoanMinerBal - postRepayMinerBal, l.totalPaid);
-      assertTrue(true);
-    }
+    // function testRepayFull() public {
+    //   Loan memory l = simpleInterestPool.getLoan(address(miner));
+    //   assertEq(l.principal, 0);
+    //   assertEq(l.interest, 0);
+    //   // assertEq(l.periods, simpleInterestPool.loanPeriods());
+    //   // assertEq(l.totalPaid, 0.5e18);
+    //   // assertEq(postLoanMinerBal - postRepayMinerBal, l.totalPaid);
+    //   assertTrue(true);
+    // }
 
     function testMultiBorrow() public {
-      assertTrue(true);
+      uint256 borrowAmount1 = 1000e18;
+      uint256 borrowAmount2 = 5000e18;
+      vm.startPrank(alice);
+      wFil.approve(address(simpleInterestPool), aliceUnderlyingAmount);
+      simpleInterestPool.deposit(aliceUnderlyingAmount, alice);
+      vm.stopPrank();
+
+      uint256 prevMinerBal = wFil.balanceOf(miner);
+      uint256 blockNum = block.number;
+      simpleInterestPool.borrow(borrowAmount1, miner);
+      uint256 postMinerBal = wFil.balanceOf(miner);
+
+      assertEq(postMinerBal - prevMinerBal, borrowAmount1);
+
+      Loan memory l = simpleInterestPool.getLoan(address(miner));
+      assertEq(l.principal, borrowAmount1);
+      assertEq(l.interest, FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount1), "it should report the correct interest amount owed on the loan");
+      assertEq(l.periods, simpleInterestPool.loanPeriods());
+      assertEq(l.totalPaid, 0);
+      assertEq(l.startEpoch, blockNum);
+
+      uint256 loanVal = simpleInterestPool.totalLoanValue(l);
+      assertEq(l.principal + l.interest, loanVal);
+      uint256 pmtPerEpoch = simpleInterestPool.pmtPerEpoch(l);
+      assertGt(pmtPerEpoch, 0);
+      uint256 loanBalance = simpleInterestPool.loanBalance(address(miner));
+      assertEq(loanBalance, 0);
+
+      // borrow again
+      prevMinerBal = wFil.balanceOf(miner);
+      simpleInterestPool.borrow(borrowAmount2, miner);
+      postMinerBal = wFil.balanceOf(miner);
+
+      assertEq(postMinerBal - prevMinerBal, borrowAmount2, "Miner balance should increase by borrowAmount2");
+
+      uint256 combinedInterest =
+        FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount2) + FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount1);
+
+      l = simpleInterestPool.getLoan(address(miner));
+      assertEq(l.principal, borrowAmount1 + borrowAmount2, "Expected principal to increase to include both loan amounts");
+      assertEq(l.interest, combinedInterest, "it should report the correct interest amount owed on the loan");
+      assertEq(l.periods, simpleInterestPool.loanPeriods());
+      assertEq(l.totalPaid, 0);
+      assertEq(l.startEpoch, blockNum);
     }
 }

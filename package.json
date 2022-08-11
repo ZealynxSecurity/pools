@@ -6,7 +6,7 @@
   "scripts": {
     "build:contracts": "yarn workspace gcred-contracts build",
     "build": "run-s build:*",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "yarn workspaces run test",
     "test:contracts": "forge test --root ./contracts"
   },
   "repository": {

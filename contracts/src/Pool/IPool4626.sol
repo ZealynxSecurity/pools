@@ -41,6 +41,32 @@ abstract contract IPool4626 is ERC4626 {
 
     mapping(address => Loan) private _loans;
 
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    event Borrow(
+        address indexed caller,
+        address indexed loanAgent,
+        uint256 loanAmount,
+        uint256 loanInterest,
+        uint256 totalLoanAmount,
+        uint256 totalLoanInterest
+    );
+
+    event Repay(
+        address indexed caller,
+        address indexed pool,
+        address indexed loanAgent,
+        uint256 amount
+    );
+
+    event Flush(
+        address indexed pool,
+        address indexed treasury,
+        uint256 amount
+    );
+
     constructor(
         ERC20 _asset,
         string memory _name,
@@ -98,26 +124,38 @@ abstract contract IPool4626 is ERC4626 {
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/16
     function borrow(uint256 amount, address loanAgent) public virtual returns (uint256 interest) {
         require(amount <= totalAssets(), "Amount to borrow must be less than this pool's liquid totalAssets");
-        interest = amount.mulWadUp(interestRate);
-        _loans[loanAgent] = Loan(block.number, loanPeriods, amount, interest, 0);
+        uint256 newInterest = amount.mulWadUp(interestRate);
+        interest = _loans[loanAgent].interest + newInterest;
+        uint256 principal = _loans[loanAgent].principal + amount;
+        _loans[loanAgent] = Loan(
+            block.number,
+            loanPeriods,
+            principal,
+            interest,
+            _loans[loanAgent].totalPaid
+        );
+
+        emit Borrow(msg.sender, loanAgent, amount, newInterest, principal, interest);
         asset.safeTransfer(loanAgent, amount);
     }
 
     function repay(uint256 amount, address loanAgent, address payee) public virtual {
         Loan storage loan = _loans[loanAgent];
         loan.totalPaid += amount;
-
-        asset.safeTransferFrom(payee, address(this), amount);
         if (feesCollected + getFee(amount) > feeFlushAmt) {
             flush();
         } else {
             feesCollected += getFee(amount);
         }
+
+        emit Repay(msg.sender, address(this), loanAgent, amount);
+        asset.safeTransferFrom(payee, address(this), amount);
     }
 
     function flush() public virtual {
         uint256 flushAmount = feesCollected;
         feesCollected = 0;
+        emit Flush(address(this), treasury, flushAmount);
         asset.transfer(treasury, flushAmount);
     }
 }
