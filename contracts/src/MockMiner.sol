@@ -62,18 +62,22 @@ contract MockMiner is IMiner {
     }
   }
 
-  function withdrawBalance(uint256 amountRequested) external returns (uint256) {
+  function withdrawBalance(uint256 amountRequested) external returns (uint256 amount) {
+    // check
     require(msg.sender == currentOwner);
     uint256 bal = address(this).balance;
     uint256 maxSend = bal - amountLocked();
     require(amountRequested <= maxSend);
+
+    // effect
     if (amountRequested == 0) {
-      payable(address(currentOwner)).transfer(maxSend);
-      return maxSend;
+      amount = maxSend;
     } else {
-      payable(address(currentOwner)).transfer(amountRequested);
-      return amountRequested;
+      amount = amountRequested;
     }
+
+    // interact
+    payable(address(currentOwner)).transfer(amount);
   }
 
   // used for pledging collateral

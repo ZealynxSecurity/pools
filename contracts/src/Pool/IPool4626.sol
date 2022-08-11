@@ -123,7 +123,10 @@ abstract contract IPool4626 is ERC4626 {
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/21
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/16
     function borrow(uint256 amount, address loanAgent) public virtual returns (uint256 interest) {
+        // check
         require(amount <= totalAssets(), "Amount to borrow must be less than this pool's liquid totalAssets");
+
+        // effect
         uint256 newInterest = amount.mulWadUp(interestRate);
         interest = _loans[loanAgent].interest + newInterest;
         uint256 principal = _loans[loanAgent].principal + amount;
@@ -134,12 +137,14 @@ abstract contract IPool4626 is ERC4626 {
             interest,
             _loans[loanAgent].totalPaid
         );
-
         emit Borrow(msg.sender, loanAgent, amount, newInterest, principal, interest);
+
+        // interact
         asset.safeTransfer(loanAgent, amount);
     }
 
     function repay(uint256 amount, address loanAgent, address payee) public virtual {
+        // effect
         Loan storage loan = _loans[loanAgent];
         loan.totalPaid += amount;
         if (feesCollected + getFee(amount) > feeFlushAmt) {
@@ -147,15 +152,19 @@ abstract contract IPool4626 is ERC4626 {
         } else {
             feesCollected += getFee(amount);
         }
-
         emit Repay(msg.sender, address(this), loanAgent, amount);
+
+        // interact
         asset.safeTransferFrom(payee, address(this), amount);
     }
 
     function flush() public virtual {
+        // effect
         uint256 flushAmount = feesCollected;
         feesCollected = 0;
         emit Flush(address(this), treasury, flushAmount);
+
+        // interact
         asset.transfer(treasury, flushAmount);
     }
 }

@@ -49,8 +49,8 @@ contract LoanAgent is ILoanAgent {
     require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
     require(!isDebtor(), "Cannot revoke miner ownership with outstanding loans");
 
-    IMiner(miner).changeOwnerAddress(newOwner);
     active = false;
+    IMiner(miner).changeOwnerAddress(newOwner);
   }
 
   function withdrawBalance() external returns (uint256) {
