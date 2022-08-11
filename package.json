@@ -1,13 +1,14 @@
 {
-  "name": "gcred-contracts",
-  "version": "1.0.0",
+  "name": "gcred",
+  "version": "0.0.0",
+  "private": true,
   "description": "",
   "scripts": {
-    "build:contracts": "forge build",
-    "build:types": "mkdir -p generated && typechain --target=ethers-v5 \"./out/**/*.json\" --out-dir ./generated",
-    "build": "npm run clean && run-s build:*",
-    "clean": "rimraf ./out && rimraf ./generated",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:contracts": "forge build --root ./foundry",
+    "build:types": "scripts/build_types.sh",
+    "build": "run-s build:*",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:contracts": "forge test --root ./foundry"
   },
   "repository": {
     "type": "git",
@@ -21,9 +22,10 @@
   },
   "homepage": "https://github.com/Schwartz10/glif-confidential#readme",
   "devDependencies": {
-    "@typechain/ethers-v5": "^10.1.0",
     "npm-run-all2": "^6.0.1",
-    "rimraf": "^3.0.2",
-    "typechain": "^8.1.0"
-  }
+    "rimraf": "^3.0.2"
+  },
+  "workspaces": [
+    "contracts"
+  ]
 }

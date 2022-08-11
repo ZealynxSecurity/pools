@@ -1,0 +1,25 @@
+{
+  "name": "gcred-contracts",
+  "version": "0.0.0",
+  "description": "Typescript functions for interacting with gcred contracts",
+  "main": "index.js",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build:types": "mkdir -p typechain && typechain --target=ethers-v5 ./out/**/*.json --out-dir typechain/",
+    "clean:types": "rm -rf dist",
+    "test": "forge test -vvv",
+    "test:watch": "forge test -w -vvv"
+  },
+  "devDependencies": {
+    "@typechain/ethers-v5": "^10.1.0",
+    "typechain": "^8.1.0"
+  },
+  "dependencies": {
+    "@ethersproject/providers": "^5.6.8",
+    "ethers": "^5.6.9"
+  },
+  "files": [
+    "typechain"
+  ]
+}
