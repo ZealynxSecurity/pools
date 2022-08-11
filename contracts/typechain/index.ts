@@ -49,6 +49,8 @@ export type { AnvilDeploy } from "./Contract.s.sol/AnvilDeploy";
 export { AnvilDeploy__factory } from "./factories/Contract.s.sol/AnvilDeploy__factory";
 export type { ContractScript } from "./Contract.s.sol/ContractScript";
 export { ContractScript__factory } from "./factories/Contract.s.sol/ContractScript__factory";
+export type { DemoDeploy } from "./Contract.s.sol/DemoDeploy";
+export { DemoDeploy__factory } from "./factories/Contract.s.sol/DemoDeploy__factory";
 export { DoubleEndedQueue__factory } from "./factories/DoubleEndedQueue__factory";
 export { ERC20__factory } from "./factories/ERC20__factory";
 export { ERC4626__factory } from "./factories/ERC4626__factory";

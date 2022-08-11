@@ -4,11 +4,10 @@
   "private": true,
   "description": "",
   "scripts": {
-    "build:contracts": "forge build --root ./foundry",
-    "build:types": "scripts/build_types.sh",
+    "build:contracts": "yarn workspace gcred-contracts build",
     "build": "run-s build:*",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "test:contracts": "forge test --root ./foundry"
+    "test:contracts": "forge test --root ./contracts"
   },
   "repository": {
     "type": "git",

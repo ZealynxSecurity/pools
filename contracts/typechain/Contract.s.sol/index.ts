@@ -3,3 +3,4 @@
 /* eslint-disable */
 export type { AnvilDeploy } from "./AnvilDeploy";
 export type { ContractScript } from "./ContractScript";
+export type { DemoDeploy } from "./DemoDeploy";
