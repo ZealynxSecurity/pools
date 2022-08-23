@@ -187,7 +187,8 @@ contract LoanAgentTest is Test {
           ),
           loanAmount
         ), "Loan agent's principal should be the loan amount after borrowing.");
-        assertGt(pool.loanBalance(address(loanAgent)), 0, "Loan agent's balance should be greater than 0 as epochs pass.");
+        (uint256 bal, ) = pool.loanBalance(address(loanAgent));
+        assertGt(bal, 0, "Loan agent's balance should be greater than 0 as epochs pass.");
     }
 
     function testRepay() public {
@@ -196,9 +197,20 @@ contract LoanAgentTest is Test {
         loanAgent.borrow(loanAmount, pool.id());
         // roll 100 epochs forward so we have a balance
         vm.roll(pool.getLoan(address(loanAgent)).startEpoch + 100);
-        uint256 owed = pool.loanBalance(address(loanAgent));
+        (uint256 owed, ) = pool.loanBalance(address(loanAgent));
         loanAgent.repay(owed, pool.id());
-        uint256 leftOver = pool.loanBalance(address(loanAgent));
+        (uint256 leftOver, ) = pool.loanBalance(address(loanAgent));
         assertEq(leftOver, 0, "Loan balance should be 0 after `repay`ing the loanBalance amount");
+    }
+
+    function testFailBorrowInPenalty() public {
+        uint256 loanAmount = 1e18;
+        vm.startPrank(alice);
+        loanAgent.borrow(loanAmount, pool.id());
+
+        vm.roll(pool.gracePeriod() + 2);
+        bool inPenalty = loanAgent.hasPenalties();
+        assertTrue(inPenalty);
+        loanAgent.borrow(loanAmount, pool.id());
     }
 }

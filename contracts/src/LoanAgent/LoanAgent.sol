@@ -37,7 +37,18 @@ contract LoanAgent is ILoanAgent {
 
   function isDebtor() public view returns (bool) {
     for (uint256 i = 0; i < IPoolFactory(poolFactory).allPoolsLength(); ++i) {
-      if (IPool4626(IPoolFactory(poolFactory).allPools(i)).loanBalance(address(this)) > 0) {
+      (uint256 bal,) = IPool4626(IPoolFactory(poolFactory).allPools(i)).loanBalance(address(this));
+      if (bal > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function hasPenalties() public view returns (bool) {
+    for (uint256 i = 0; i < IPoolFactory(poolFactory).allPoolsLength(); ++i) {
+      (,uint256 penalty) = IPool4626(IPoolFactory(poolFactory).allPools(i)).loanBalance(address(this));
+      if (penalty > 0) {
         return true;
       }
     }
@@ -63,9 +74,9 @@ contract LoanAgent is ILoanAgent {
     return IPool4626(pool);
   }
 
-  // TODO: if the loan agent is in the penalty for any pool, do not allow another loan
   function borrow(uint256 amount, uint256 poolID) external {
     require(owner == msg.sender, "Only LoanAgent owner can call borrow");
+    require(!hasPenalties(), "Cannot borrow while loanAgent is in any pool's  penalty zone.");
     getPool(poolID).borrow(amount, address(this));
   }
 

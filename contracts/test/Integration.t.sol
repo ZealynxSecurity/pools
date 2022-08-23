@@ -92,7 +92,8 @@ contract IntegrationTest is BaseTest {
           loanAmount
         )
       );
-      assertGt(pool1.loanBalance(address(loanAgent1)), 0, "Loan agent's loan balance should be >0 after the start epoch");
+      (uint256 bal, ) = pool1.loanBalance(address(loanAgent1));
+      assertGt(bal, 0, "Loan agent's loan balance should be >0 after the start epoch");
 
       // take a loan from pool 2
       loanAgent1.borrow(loanAmount, pool2.id());
@@ -110,7 +111,8 @@ contract IntegrationTest is BaseTest {
           loanAmount
         )
       );
-      assertGt(pool2.loanBalance(address(loanAgent1)), 0, "Loan agent's loan balance should be >0 after the start epoch");
+      (uint256 bal2, ) = pool2.loanBalance(address(loanAgent1));
+      assertGt(bal2, 0, "Loan agent's loan balance should be >0 after the start epoch");
     }
 
     // one miner should be able to pay down loans from multiple pools
@@ -127,8 +129,10 @@ contract IntegrationTest is BaseTest {
       loanAgent1.repay(loanAmount, pool1.id());
       loanAgent1.repay(loanAmount, pool2.id());
 
-      assertEq(pool1.loanBalance(address(loanAgent1)), 0);
-      assertEq(pool2.loanBalance(address(loanAgent1)), 0);
+      (uint256 bal1, ) = pool1.loanBalance(address(loanAgent1));
+      (uint256 bal2, ) = pool2.loanBalance(address(loanAgent1));
+      assertEq(bal1, 0);
+      assertEq(bal2, 0);
     }
 
     function testGlifFee() public {

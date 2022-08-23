@@ -34,10 +34,14 @@ abstract contract IPool4626 is ERC4626 {
     uint256 public id;
     uint256 public interestRate;
     uint256 public loanPeriods = 1555200;
-    uint256 public fee = 0.025e18; // 2.5%
 
+    uint256 public fee = 0.025e18; // 2.5%
     uint256 public feesCollected = 0;
     uint256 public feeFlushAmt = 1e18;
+
+    // the borrower must make a payment every 86400 epochs, minimum
+    uint256 public gracePeriod = 86400;
+    uint256 public penaltyFee = 0.05e18; // 5%
 
     mapping(address => Loan) private _loans;
 
@@ -105,18 +109,27 @@ abstract contract IPool4626 is ERC4626 {
         return totalLoanValue(_loan).divWadUp(_loan.periods * 1e18);
     }
 
-    function loanBalance(address borrower) public view returns (uint256) {
+    function loanBalance(address borrower) public view returns (uint256 bal, uint256 penalty) {
         Loan memory loan = getLoan(borrower);
         if (loan.startEpoch == 0) {
-            return 0;
+            return (0, 0);
         }
         uint256 currentPeriod = block.number - loan.startEpoch;
-        uint256 amountShouldHavePaid = (currentPeriod * 1e18).mulWadUp(pmtPerEpoch(loan));
-        if (amountShouldHavePaid > loan.totalPaid) {
-            return amountShouldHavePaid - loan.totalPaid;
+        uint256 totalOwed = (currentPeriod * 1e18).mulWadUp(pmtPerEpoch(loan));
+
+        if (totalOwed <= loan.totalPaid) {
+            return (0, 0);
         }
 
-        return 0;
+        bal = totalOwed - loan.totalPaid;
+        penalty = 0;
+        uint256 maxBalBeforePenalty = (gracePeriod * 1e18).mulWadUp(pmtPerEpoch(loan));
+
+        if (bal <= maxBalBeforePenalty) {
+            return (bal, penalty);
+        }
+        // we are in the penalty zone
+        penalty = penaltyFee.mulWadUp((bal - maxBalBeforePenalty) * 1e18);
     }
 
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/1

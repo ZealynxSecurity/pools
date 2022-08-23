@@ -495,7 +495,7 @@ contract SimpleInterestPoolLendingTest is Test {
       assertEq(l.principal + l.interest, loanVal);
       uint256 pmtPerEpoch = simpleInterestPool.pmtPerEpoch(l);
       assertGt(pmtPerEpoch, 0);
-      uint256 loanBalance = simpleInterestPool.loanBalance(address(miner));
+      (uint256 loanBalance, ) = simpleInterestPool.loanBalance(address(miner));
       assertEq(loanBalance, 0);
     }
 
@@ -509,11 +509,11 @@ contract SimpleInterestPoolLendingTest is Test {
 
       Loan memory l = simpleInterestPool.getLoan(address(miner));
       uint256 pmtPerEpoch = simpleInterestPool.pmtPerEpoch(l);
-      uint256 loanBalance = simpleInterestPool.loanBalance(address(miner));
+      (uint256 loanBalance, ) = simpleInterestPool.loanBalance(address(miner));
       assertEq(loanBalance, 0);
 
       vm.roll(l.startEpoch + 1);
-      uint256 loanBalanceLater = simpleInterestPool.loanBalance(address(miner));
+      (uint256 loanBalanceLater, ) = simpleInterestPool.loanBalance(address(miner));
 
       assertEq(loanBalanceLater, pmtPerEpoch);
     }
@@ -579,7 +579,7 @@ contract SimpleInterestPoolLendingTest is Test {
       assertEq(l.principal + l.interest, loanVal);
       uint256 pmtPerEpoch = simpleInterestPool.pmtPerEpoch(l);
       assertGt(pmtPerEpoch, 0);
-      uint256 loanBalance = simpleInterestPool.loanBalance(address(miner));
+      (uint256 loanBalance, ) = simpleInterestPool.loanBalance(address(miner));
       assertEq(loanBalance, 0);
 
       // borrow again
@@ -598,5 +598,19 @@ contract SimpleInterestPoolLendingTest is Test {
       assertEq(l.periods, simpleInterestPool.loanPeriods());
       assertEq(l.totalPaid, 0);
       assertEq(l.startEpoch, blockNum);
+    }
+
+    function testPenalty() public {
+      vm.startPrank(alice);
+      wFil.approve(address(simpleInterestPool), aliceUnderlyingAmount);
+      simpleInterestPool.deposit(aliceUnderlyingAmount, alice);
+      vm.stopPrank();
+
+      simpleInterestPool.borrow(100000e18, miner);
+      vm.roll(simpleInterestPool.gracePeriod() + 2);
+
+      (uint256 loanBalance, uint256 penalty) = simpleInterestPool.loanBalance(address(miner));
+      assertGt(loanBalance, 0, "Should have non zero balance");
+      assertGt(penalty, 0, "Should have non zero penalty.");
     }
 }
