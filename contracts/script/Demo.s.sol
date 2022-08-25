@@ -3,24 +3,72 @@ pragma solidity ^0.8.15;
 
 import "forge-std/Script.sol";
 import "../src/MockMiner.sol";
+import "../src/LoanAgent/ILoanAgent.sol";
+import "../src/LoanAgent/LoanAgentFactory.sol";
+import "../src/LoanAgent/LoanAgent.sol";
+import "../src/LoanAgent/LoanAgentFactory.sol";
+import "../src/MockMiner.sol";
+import "../src/WFIL.sol";
+import "../src/Pool/PoolFactory.sol";
+import "../src/Pool/IPool4626.sol";
 
 // used for deploying GCRED to anvil for local testing and development
-contract DemoDeploy is Script {
-    function deployMiners() public {
+contract MockMinerDeploy is Script {
+    function run() public {
+        address loanAgentFactory = vm.envAddress("LOAN_AGENT_FACTORY_ADDR");
+        vm.startBroadcast();
+        MockMiner miner = new MockMiner();
+        // give miner some fake rewards
+        vm.deal(address(miner), 10*1e18);
+        miner.lockBalance(block.number, 100, 10*1e18);
+        // create a loan agent for miner
+        LoanAgent loanAgent = LoanAgent(
+            payable(
+            ILoanAgentFactory(loanAgentFactory).create(address(miner))
+            ));
+        // propose the change owner to the loan agent
+        miner.changeOwnerAddress(address(loanAgent));
+        // confirm change owner address (loanAgent1 now owns miner)
+        loanAgent.claimOwnership();
+        vm.stopBroadcast();
+    }
+}
 
+contract LoanAgentFactoryDeploy is Script {
+    function run() public {
+        vm.startBroadcast();
+        vm.stopBroadcast();
+    }
+}
+
+contract DemoDeploy is Script {
+    LoanAgentFactory loanAgentFactory;
+    function setUpMiner() public {
+        MockMiner miner = new MockMiner();
+        // give miner some fake rewards
+        vm.deal(address(miner), 10*1e18);
+        miner.lockBalance(block.number, 100, 10*1e18);
+        // create a loan agent for miner
+        LoanAgent loanAgent = LoanAgent(
+            payable(loanAgentFactory.create(address(miner)))
+        );
+        // propose the change owner to the loan agent
+        miner.changeOwnerAddress(address(loanAgent));
+        // confirm change owner address (loanAgent1 now owns miner)
+        loanAgent.claimOwnership();
     }
 
     function run() public {
-        vm.broadcast();
-        string memory mnemonic = vm.envString("MNEMONIC");
-        console.log(mnemonic);
-        uint256 deployerPk = vm.deriveKey(mnemonic, 0);
-        address deployerAddr = vm.addr(deployerPk);
+        vm.startBroadcast();
+        address treasury = address(msg.sender);
+        WFIL wFil = new WFIL();
+        // create 2 pools
+        PoolFactory poolFactory = new PoolFactory(wFil, treasury);
 
+        loanAgentFactory = new LoanAgentFactory(address(poolFactory));
 
-
-        console.log("deployerAddr", deployerAddr);
-        MockMiner miner = new MockMiner();
+        setUpMiner();
+        setUpMiner();
         vm.stopBroadcast();
     }
 }

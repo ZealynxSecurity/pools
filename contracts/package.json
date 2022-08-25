@@ -10,7 +10,9 @@
     "build:types": "mkdir -p typechain && typechain --target=ethers-v5 ./out/**/*.json --out-dir typechain/",
     "build": "yarn build:contracts && yarn build:types",
     "clean:types": "rm -rf dist",
-    "deploy:contracts:local": "source .env.local && forge script script/Demo.s.sol --fork-url $FORK_URL --private-keys $MINER1_PRIVATE_KEY --broadcast -vvvv",
+    "deploy:mockMiners": "source .env.local && cross-env MINER_INDEX=1 forge script script/Demo.s.sol --fork-url $FORK_URL --mnemonic-paths mnemonic --mnemonic-indexes 1 --target-contract MockMinerDeploy --broadcast -vvvv",
+    "deploy:loanAgentFactory": "source .env.local && cross-env MINER_INDEX=1 forge script script/Demo.s.sol --fork-url $FORK_URL --mnemonic-paths mnemonic --mnemonic-indexes 1 --target-contract LoanAgentFactoryDeploy --broadcast -vvvv",
+    "deploy:contracts:local": "source .env.local && forge script script/Demo.s.sol --fork-url $FORK_URL --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --target-contract DemoDeploy --broadcast -vvvv",
     "start:node": "anvil",
     "test": "forge test -vvv",
     "test:watch": "forge test -w -vvv",
@@ -19,6 +21,7 @@
   },
   "devDependencies": {
     "@typechain/ethers-v5": "^10.1.0",
+    "cross-env": "^7.0.3",
     "npm-run-all2": "^6.0.2",
     "typechain": "^8.1.0"
   },
