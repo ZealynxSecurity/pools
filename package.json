@@ -6,8 +6,10 @@
   "scripts": {
     "build:contracts": "yarn workspace gcred-contracts build",
     "build": "run-s build:*",
-    "copy:contracts": "yarn workspace gcred-demo clean:contracts && mkdir -p apps/demo && cp -a contracts/typechain apps/demo/",
-    "demo": "yarn workspace gcred-contracts deploy:contracts:local",
+    "copy:assets": "mkdir -p apps/demo && cp -a contracts/typechain apps/demo/ && cp -a contracts/generated apps/demo/",
+    "demo:contracts": "yarn workspace gcred-contracts demo:local",
+    "demo:frontend": "",
+    "demo": "run-s demo:*",
     "test": "yarn workspaces run test",
     "test:contracts": "forge test --root ./contracts"
   },

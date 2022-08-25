@@ -2,5 +2,3 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { DemoDeploy } from "./DemoDeploy";
-export type { LoanAgentFactoryDeploy } from "./LoanAgentFactoryDeploy";
-export type { MockMinerDeploy } from "./MockMinerDeploy";

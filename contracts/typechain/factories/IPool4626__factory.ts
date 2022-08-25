@@ -4,10 +4,7 @@
 
 import { Contract, Signer, utils } from "ethers";
 import type { Provider } from "@ethersproject/providers";
-import type {
-  IPOOL4626,
-  IPOOL4626Interface,
-} from "../../IPool4626.sol/IPOOL4626";
+import type { IPool4626, IPool4626Interface } from "../IPool4626";
 
 const _abi = [
   {
@@ -1150,15 +1147,15 @@ const _abi = [
   },
 ];
 
-export class IPOOL4626__factory {
+export class IPool4626__factory {
   static readonly abi = _abi;
-  static createInterface(): IPOOL4626Interface {
-    return new utils.Interface(_abi) as IPOOL4626Interface;
+  static createInterface(): IPool4626Interface {
+    return new utils.Interface(_abi) as IPool4626Interface;
   }
   static connect(
     address: string,
     signerOrProvider: Signer | Provider
-  ): IPOOL4626 {
-    return new Contract(address, _abi, signerOrProvider) as IPOOL4626;
+  ): IPool4626 {
+    return new Contract(address, _abi, signerOrProvider) as IPool4626;
   }
 }

@@ -25,7 +25,7 @@ import type {
   TypedListener,
   OnEvent,
   PromiseOrValue,
-} from "../common";
+} from "./common";
 
 export type LoanStruct = {
   startEpoch: PromiseOrValue<BigNumberish>;
@@ -49,7 +49,7 @@ export type LoanStructOutput = [
   totalPaid: BigNumber;
 };
 
-export interface IPOOL4626Interface extends utils.Interface {
+export interface IPool4626Interface extends utils.Interface {
   functions: {
     "DOMAIN_SEPARATOR()": FunctionFragment;
     "allowance(address,address)": FunctionFragment;
@@ -541,12 +541,12 @@ export type WithdrawEvent = TypedEvent<
 
 export type WithdrawEventFilter = TypedEventFilter<WithdrawEvent>;
 
-export interface IPOOL4626 extends BaseContract {
+export interface IPool4626 extends BaseContract {
   connect(signerOrProvider: Signer | Provider | string): this;
   attach(addressOrName: string): this;
   deployed(): Promise<this>;
 
-  interface: IPOOL4626Interface;
+  interface: IPool4626Interface;
 
   queryFilter<TEvent extends TypedEvent>(
     event: TypedEventFilter<TEvent>,

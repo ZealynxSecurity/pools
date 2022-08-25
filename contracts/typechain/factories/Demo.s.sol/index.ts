@@ -2,5 +2,3 @@
 /* tslint:disable */
 /* eslint-disable */
 export { DemoDeploy__factory } from "./DemoDeploy__factory";
-export { LoanAgentFactoryDeploy__factory } from "./LoanAgentFactoryDeploy__factory";
-export { MockMinerDeploy__factory } from "./MockMinerDeploy__factory";
