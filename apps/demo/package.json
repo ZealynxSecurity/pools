@@ -1,5 +1,5 @@
 {
-  "name": "staker",
+  "name": "gcred-demo",
   "version": "0.0.0",
   "engines": {
     "node": ">=16.0.0"
@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "next -p 3005",
     "build": "next build",
+    "clean:contracts": "rimraf typechain",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "lint-fix": "npm run lint -- --fix",
     "start": "next start",
@@ -55,6 +56,7 @@
     "jest-environment-jsdom": "^28.1.1",
     "jest-styled-components": "7.0.8",
     "prettier": "2.7.1",
+    "rimraf": "^3.0.2",
     "ts-jest": "^28.0.5",
     "typescript": "^4.7.3",
     "whatwg-fetch": "^3.6.2"

@@ -3,9 +3,9 @@ cache/
 out/
 
 # Ignores development broadcast logs
-!/broadcast
-/broadcast/*
-/broadcast/*/31337/
+!/contracts/broadcast
+/contracts/broadcast/*
+/contracts/broadcast/*/31337/
 
 # Generated files
 generated/

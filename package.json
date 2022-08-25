@@ -6,7 +6,8 @@
   "scripts": {
     "build:contracts": "yarn workspace gcred-contracts build",
     "build": "run-s build:*",
-    "copy:contracts": "mkdir -p apps/demo/generated && cp -a contracts/typechain apps/demo/generated/",
+    "copy:contracts": "yarn workspace gcred-demo clean:contracts && mkdir -p apps/demo && cp -a contracts/typechain apps/demo/",
+    "demo": "yarn workspace gcred-contracts deploy:contracts:local",
     "test": "yarn workspaces run test",
     "test:contracts": "forge test --root ./contracts"
   },
@@ -26,6 +27,7 @@
     "rimraf": "^3.0.2"
   },
   "workspaces": [
-    "contracts"
+    "contracts",
+    "apps/demo"
   ]
 }
