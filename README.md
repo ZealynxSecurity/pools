@@ -15,15 +15,7 @@ Make sure you have installed:
 
 ## Running the demo app
 
-- Export a `MNEMONIC` env var from `.env.local` in `contracts` directory:
-
-```
-# contracts/.env.local
-export MNEMONIC="test test test test test test test test test test test junk"
-```
-
-- `touch` contracts/mnemonic and paste the same seed phrase in that file
-
+Make sure the `.env.local` is set up with all variables exported.
 `yarn demo`
 
 Under the hood this:<br />

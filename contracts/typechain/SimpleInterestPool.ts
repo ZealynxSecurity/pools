@@ -67,6 +67,7 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
     "flush()": FunctionFragment;
     "getFee(uint256)": FunctionFragment;
     "getLoan(address)": FunctionFragment;
+    "gracePeriod()": FunctionFragment;
     "id()": FunctionFragment;
     "interestRate()": FunctionFragment;
     "loanBalance(address)": FunctionFragment;
@@ -78,6 +79,7 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
     "mint(uint256,address)": FunctionFragment;
     "name()": FunctionFragment;
     "nonces(address)": FunctionFragment;
+    "penaltyFee()": FunctionFragment;
     "permit(address,address,uint256,uint256,uint8,bytes32,bytes32)": FunctionFragment;
     "pmtPerEpoch((uint256,uint256,uint256,uint256,uint256))": FunctionFragment;
     "previewDeposit(uint256)": FunctionFragment;
@@ -114,6 +116,7 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
       | "flush"
       | "getFee"
       | "getLoan"
+      | "gracePeriod"
       | "id"
       | "interestRate"
       | "loanBalance"
@@ -125,6 +128,7 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
       | "mint"
       | "name"
       | "nonces"
+      | "penaltyFee"
       | "permit"
       | "pmtPerEpoch"
       | "previewDeposit"
@@ -195,6 +199,10 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
     functionFragment: "getLoan",
     values: [PromiseOrValue<string>]
   ): string;
+  encodeFunctionData(
+    functionFragment: "gracePeriod",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "id", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "interestRate",
@@ -232,6 +240,10 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
   encodeFunctionData(
     functionFragment: "nonces",
     values: [PromiseOrValue<string>]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "penaltyFee",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "permit",
@@ -347,6 +359,10 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
   decodeFunctionResult(functionFragment: "flush", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "getFee", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "getLoan", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "gracePeriod",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "id", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "interestRate",
@@ -370,6 +386,7 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
   decodeFunctionResult(functionFragment: "mint", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "name", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "nonces", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "penaltyFee", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "permit", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "pmtPerEpoch",
@@ -416,13 +433,19 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
 
   events: {
     "Approval(address,address,uint256)": EventFragment;
+    "Borrow(address,address,uint256,uint256,uint256,uint256)": EventFragment;
     "Deposit(address,address,uint256,uint256)": EventFragment;
+    "Flush(address,address,uint256)": EventFragment;
+    "Repay(address,address,address,uint256)": EventFragment;
     "Transfer(address,address,uint256)": EventFragment;
     "Withdraw(address,address,address,uint256,uint256)": EventFragment;
   };
 
   getEvent(nameOrSignatureOrTopic: "Approval"): EventFragment;
+  getEvent(nameOrSignatureOrTopic: "Borrow"): EventFragment;
   getEvent(nameOrSignatureOrTopic: "Deposit"): EventFragment;
+  getEvent(nameOrSignatureOrTopic: "Flush"): EventFragment;
+  getEvent(nameOrSignatureOrTopic: "Repay"): EventFragment;
   getEvent(nameOrSignatureOrTopic: "Transfer"): EventFragment;
   getEvent(nameOrSignatureOrTopic: "Withdraw"): EventFragment;
 }
@@ -439,6 +462,21 @@ export type ApprovalEvent = TypedEvent<
 
 export type ApprovalEventFilter = TypedEventFilter<ApprovalEvent>;
 
+export interface BorrowEventObject {
+  caller: string;
+  loanAgent: string;
+  loanAmount: BigNumber;
+  loanInterest: BigNumber;
+  totalLoanAmount: BigNumber;
+  totalLoanInterest: BigNumber;
+}
+export type BorrowEvent = TypedEvent<
+  [string, string, BigNumber, BigNumber, BigNumber, BigNumber],
+  BorrowEventObject
+>;
+
+export type BorrowEventFilter = TypedEventFilter<BorrowEvent>;
+
 export interface DepositEventObject {
   caller: string;
   owner: string;
@@ -451,6 +489,31 @@ export type DepositEvent = TypedEvent<
 >;
 
 export type DepositEventFilter = TypedEventFilter<DepositEvent>;
+
+export interface FlushEventObject {
+  pool: string;
+  treasury: string;
+  amount: BigNumber;
+}
+export type FlushEvent = TypedEvent<
+  [string, string, BigNumber],
+  FlushEventObject
+>;
+
+export type FlushEventFilter = TypedEventFilter<FlushEvent>;
+
+export interface RepayEventObject {
+  caller: string;
+  pool: string;
+  loanAgent: string;
+  amount: BigNumber;
+}
+export type RepayEvent = TypedEvent<
+  [string, string, string, BigNumber],
+  RepayEventObject
+>;
+
+export type RepayEventFilter = TypedEventFilter<RepayEvent>;
 
 export interface TransferEventObject {
   from: string;
@@ -570,6 +633,8 @@ export interface SimpleInterestPool extends BaseContract {
       overrides?: CallOverrides
     ): Promise<[LoanStructOutput] & { loan: LoanStructOutput }>;
 
+    gracePeriod(overrides?: CallOverrides): Promise<[BigNumber]>;
+
     id(overrides?: CallOverrides): Promise<[BigNumber]>;
 
     interestRate(overrides?: CallOverrides): Promise<[BigNumber]>;
@@ -577,7 +642,7 @@ export interface SimpleInterestPool extends BaseContract {
     loanBalance(
       borrower: PromiseOrValue<string>,
       overrides?: CallOverrides
-    ): Promise<[BigNumber]>;
+    ): Promise<[BigNumber, BigNumber] & { bal: BigNumber; penalty: BigNumber }>;
 
     loanPeriods(overrides?: CallOverrides): Promise<[BigNumber]>;
 
@@ -613,6 +678,8 @@ export interface SimpleInterestPool extends BaseContract {
       arg0: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<[BigNumber]>;
+
+    penaltyFee(overrides?: CallOverrides): Promise<[BigNumber]>;
 
     permit(
       owner: PromiseOrValue<string>,
@@ -763,6 +830,8 @@ export interface SimpleInterestPool extends BaseContract {
     overrides?: CallOverrides
   ): Promise<LoanStructOutput>;
 
+  gracePeriod(overrides?: CallOverrides): Promise<BigNumber>;
+
   id(overrides?: CallOverrides): Promise<BigNumber>;
 
   interestRate(overrides?: CallOverrides): Promise<BigNumber>;
@@ -770,7 +839,7 @@ export interface SimpleInterestPool extends BaseContract {
   loanBalance(
     borrower: PromiseOrValue<string>,
     overrides?: CallOverrides
-  ): Promise<BigNumber>;
+  ): Promise<[BigNumber, BigNumber] & { bal: BigNumber; penalty: BigNumber }>;
 
   loanPeriods(overrides?: CallOverrides): Promise<BigNumber>;
 
@@ -806,6 +875,8 @@ export interface SimpleInterestPool extends BaseContract {
     arg0: PromiseOrValue<string>,
     overrides?: CallOverrides
   ): Promise<BigNumber>;
+
+  penaltyFee(overrides?: CallOverrides): Promise<BigNumber>;
 
   permit(
     owner: PromiseOrValue<string>,
@@ -951,6 +1022,8 @@ export interface SimpleInterestPool extends BaseContract {
       overrides?: CallOverrides
     ): Promise<LoanStructOutput>;
 
+    gracePeriod(overrides?: CallOverrides): Promise<BigNumber>;
+
     id(overrides?: CallOverrides): Promise<BigNumber>;
 
     interestRate(overrides?: CallOverrides): Promise<BigNumber>;
@@ -958,7 +1031,7 @@ export interface SimpleInterestPool extends BaseContract {
     loanBalance(
       borrower: PromiseOrValue<string>,
       overrides?: CallOverrides
-    ): Promise<BigNumber>;
+    ): Promise<[BigNumber, BigNumber] & { bal: BigNumber; penalty: BigNumber }>;
 
     loanPeriods(overrides?: CallOverrides): Promise<BigNumber>;
 
@@ -994,6 +1067,8 @@ export interface SimpleInterestPool extends BaseContract {
       arg0: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<BigNumber>;
+
+    penaltyFee(overrides?: CallOverrides): Promise<BigNumber>;
 
     permit(
       owner: PromiseOrValue<string>,
@@ -1091,6 +1166,23 @@ export interface SimpleInterestPool extends BaseContract {
       amount?: null
     ): ApprovalEventFilter;
 
+    "Borrow(address,address,uint256,uint256,uint256,uint256)"(
+      caller?: PromiseOrValue<string> | null,
+      loanAgent?: PromiseOrValue<string> | null,
+      loanAmount?: null,
+      loanInterest?: null,
+      totalLoanAmount?: null,
+      totalLoanInterest?: null
+    ): BorrowEventFilter;
+    Borrow(
+      caller?: PromiseOrValue<string> | null,
+      loanAgent?: PromiseOrValue<string> | null,
+      loanAmount?: null,
+      loanInterest?: null,
+      totalLoanAmount?: null,
+      totalLoanInterest?: null
+    ): BorrowEventFilter;
+
     "Deposit(address,address,uint256,uint256)"(
       caller?: PromiseOrValue<string> | null,
       owner?: PromiseOrValue<string> | null,
@@ -1103,6 +1195,30 @@ export interface SimpleInterestPool extends BaseContract {
       assets?: null,
       shares?: null
     ): DepositEventFilter;
+
+    "Flush(address,address,uint256)"(
+      pool?: PromiseOrValue<string> | null,
+      treasury?: PromiseOrValue<string> | null,
+      amount?: null
+    ): FlushEventFilter;
+    Flush(
+      pool?: PromiseOrValue<string> | null,
+      treasury?: PromiseOrValue<string> | null,
+      amount?: null
+    ): FlushEventFilter;
+
+    "Repay(address,address,address,uint256)"(
+      caller?: PromiseOrValue<string> | null,
+      pool?: PromiseOrValue<string> | null,
+      loanAgent?: PromiseOrValue<string> | null,
+      amount?: null
+    ): RepayEventFilter;
+    Repay(
+      caller?: PromiseOrValue<string> | null,
+      pool?: PromiseOrValue<string> | null,
+      loanAgent?: PromiseOrValue<string> | null,
+      amount?: null
+    ): RepayEventFilter;
 
     "Transfer(address,address,uint256)"(
       from?: PromiseOrValue<string> | null,
@@ -1197,6 +1313,8 @@ export interface SimpleInterestPool extends BaseContract {
       overrides?: CallOverrides
     ): Promise<BigNumber>;
 
+    gracePeriod(overrides?: CallOverrides): Promise<BigNumber>;
+
     id(overrides?: CallOverrides): Promise<BigNumber>;
 
     interestRate(overrides?: CallOverrides): Promise<BigNumber>;
@@ -1240,6 +1358,8 @@ export interface SimpleInterestPool extends BaseContract {
       arg0: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<BigNumber>;
+
+    penaltyFee(overrides?: CallOverrides): Promise<BigNumber>;
 
     permit(
       owner: PromiseOrValue<string>,
@@ -1391,6 +1511,8 @@ export interface SimpleInterestPool extends BaseContract {
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
 
+    gracePeriod(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
     id(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     interestRate(overrides?: CallOverrides): Promise<PopulatedTransaction>;
@@ -1434,6 +1556,8 @@ export interface SimpleInterestPool extends BaseContract {
       arg0: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
+
+    penaltyFee(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     permit(
       owner: PromiseOrValue<string>,

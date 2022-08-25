@@ -2,6 +2,3 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { BaseMiner } from "./BaseMiner";
-export type { BaseMinerTest } from "./BaseMinerTest";
-export type { BaseTest } from "./BaseTest";
-export type { IntegrationTest } from "./IntegrationTest";

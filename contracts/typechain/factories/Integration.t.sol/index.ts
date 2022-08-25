@@ -2,6 +2,3 @@
 /* tslint:disable */
 /* eslint-disable */
 export { BaseMiner__factory } from "./BaseMiner__factory";
-export { BaseMinerTest__factory } from "./BaseMinerTest__factory";
-export { BaseTest__factory } from "./BaseTest__factory";
-export { IntegrationTest__factory } from "./IntegrationTest__factory";

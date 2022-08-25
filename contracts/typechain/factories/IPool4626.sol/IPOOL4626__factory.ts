@@ -47,6 +47,49 @@ const _abi = [
       {
         indexed: true,
         internalType: "address",
+        name: "loanAgent",
+        type: "address",
+      },
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "loanAmount",
+        type: "uint256",
+      },
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "loanInterest",
+        type: "uint256",
+      },
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "totalLoanAmount",
+        type: "uint256",
+      },
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "totalLoanInterest",
+        type: "uint256",
+      },
+    ],
+    name: "Borrow",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "address",
+        name: "caller",
+        type: "address",
+      },
+      {
+        indexed: true,
+        internalType: "address",
         name: "owner",
         type: "address",
       },
@@ -64,6 +107,62 @@ const _abi = [
       },
     ],
     name: "Deposit",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "address",
+        name: "pool",
+        type: "address",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "treasury",
+        type: "address",
+      },
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "amount",
+        type: "uint256",
+      },
+    ],
+    name: "Flush",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "address",
+        name: "caller",
+        type: "address",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "pool",
+        type: "address",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "loanAgent",
+        type: "address",
+      },
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "amount",
+        type: "uint256",
+      },
+    ],
+    name: "Repay",
     type: "event",
   },
   {
@@ -433,6 +532,19 @@ const _abi = [
   },
   {
     inputs: [],
+    name: "gracePeriod",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
     name: "id",
     outputs: [
       {
@@ -469,7 +581,12 @@ const _abi = [
     outputs: [
       {
         internalType: "uint256",
-        name: "",
+        name: "bal",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "penalty",
         type: "uint256",
       },
     ],
@@ -611,6 +728,19 @@ const _abi = [
       },
     ],
     name: "nonces",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "penaltyFee",
     outputs: [
       {
         internalType: "uint256",

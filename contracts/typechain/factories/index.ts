@@ -2,31 +2,20 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as contractSSol from "./Contract.s.sol";
+export * as demoSSol from "./Demo.s.sol";
+export * as gcredSol from "./GCRED.sol";
 export * as iPool4626Sol from "./IPool4626.sol";
 export * as integrationTSol from "./Integration.t.sol";
-export * as loanAgentTSol from "./LoanAgent.t.sol";
 export * as loanAgentFactorySol from "./LoanAgentFactory.sol";
 export * as mockMinerSol from "./MockMiner.sol";
-export * as mockMinerTSol from "./MockMiner.t.sol";
 export * as poolSol from "./Pool.sol";
-export * as poolTSol from "./Pool.t.sol";
 export * as poolFactorySol from "./PoolFactory.sol";
-export * as poolTokenTSol from "./PoolToken.t.sol";
-export * as simpleInterestPoolTSol from "./SimpleInterestPool.t.sol";
 export * as testSol from "./test.sol";
-export { BaseTest__factory } from "./BaseTest__factory";
-export { DoubleEndedQueue__factory } from "./DoubleEndedQueue__factory";
 export { ERC20__factory } from "./ERC20__factory";
 export { ERC4626__factory } from "./ERC4626__factory";
 export { IERC20__factory } from "./IERC20__factory";
-export { IERC20Metadata__factory } from "./IERC20Metadata__factory";
-export { ILoanAgent__factory } from "./ILoanAgent__factory";
-export { LoanAgent__factory } from "./LoanAgent__factory";
 export { MockERC20__factory } from "./MockERC20__factory";
-export { Ownable__factory } from "./Ownable__factory";
 export { PoolRegistry__factory } from "./PoolRegistry__factory";
 export { PoolToken__factory } from "./PoolToken__factory";
-export { Script__factory } from "./Script__factory";
 export { SimpleInterestPool__factory } from "./SimpleInterestPool__factory";
-export { Vm__factory } from "./Vm__factory";
 export { WFIL__factory } from "./WFIL__factory";
