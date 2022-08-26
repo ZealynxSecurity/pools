@@ -95,7 +95,7 @@ async function main() {
       return (
         transactionType === "CREATE" &&
         contractName === "LoanAgentFactory" &&
-        invoked?.includes("create(address)")
+        invoked?.includes("create(")
       );
     })
     .map(({ additionalContracts }) => ({
@@ -103,39 +103,53 @@ async function main() {
       contractAddress: additionalContracts[0].address,
     }));
 
-  // add in ABIs
-  const contractsInfo: ContractInfo[] = [...createTxs, ...createLATxs].map(
-    (tx) => {
-      const pathToCompiledContract = `${__dirname}/../out/${tx.contractName}.sol/${tx.contractName}.json`;
-      const file = JSON.parse(
-        fs.readFileSync(pathToCompiledContract, "utf8")
-      ) as CompiledContract;
+  // add in calls to the `create` method on the PoolFactory
+  const createPoolTxs = json.transactions
+    .filter(({ transactionType, contractName, function: invoked }) => {
+      return (
+        transactionType === "CREATE" &&
+        contractName === "PoolFactory" &&
+        invoked?.includes("createSimpleInterestPool(")
+      );
+    })
+    .map(({ additionalContracts }) => ({
+      contractName: "SimpleInterestPool",
+      contractAddress: additionalContracts[0].address,
+    }));
 
-      return {
-        name: tx.contractName,
-        address: tx.contractAddress,
-        abi: file.abi,
-      };
-    }
-  );
+  // add in ABIs
+  const contractsInfo: ContractInfo[] = [
+    ...createTxs,
+    ...createLATxs,
+    ...createPoolTxs,
+  ].map((tx) => {
+    const pathToCompiledContract = `${__dirname}/../out/${tx.contractName}.sol/${tx.contractName}.json`;
+    const file = JSON.parse(
+      fs.readFileSync(pathToCompiledContract, "utf8")
+    ) as CompiledContract;
+
+    return {
+      name: tx.contractName,
+      address: tx.contractAddress,
+      abi: file.abi,
+    };
+  });
 
   const res = contractsInfo.reduce((accum, ele) => {
-    if (ele.name === "MockMiner") {
-      if (!!accum?.miners) {
-        (accum.miners as ContractInfo[]).push(ele);
-      } else {
-        accum.miners = [ele];
+    switch (ele.name) {
+      case "MockMiner":
+      case "LoanAgent":
+      case "SimpleInterestPool": {
+        if (!!accum?.[ele.name]) {
+          (accum[ele.name] as ContractInfo[]).push(ele);
+        } else {
+          accum[ele.name] = [ele];
+        }
+        break;
       }
-    } else if (ele.name === "LoanAgent") {
-      if (!!accum?.loanAgents) {
-        (accum.loanAgents as ContractInfo[]).push(ele);
-      } else {
-        accum.loanAgents = [ele];
-      }
-    } else {
-      accum[ele.name] = ele;
+      default:
+        accum[ele.name] = ele;
     }
-
     return accum;
   }, {} as Digest);
 

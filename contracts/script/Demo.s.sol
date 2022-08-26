@@ -11,6 +11,7 @@ import "../src/MockMiner.sol";
 import "../src/WFIL.sol";
 import "../src/Pool/PoolFactory.sol";
 import "../src/Pool/IPool4626.sol";
+import "../src/Pool/SimpleInterestPool.sol";
 
 // used for deploying GCRED to anvil for local testing and development
 contract DemoDeploy is Script {
@@ -34,7 +35,15 @@ contract DemoDeploy is Script {
         vm.startBroadcast();
         address treasury = address(msg.sender);
         WFIL wFil = new WFIL();
+
+        // deploy 2 simple interest pools
         PoolFactory poolFactory = new PoolFactory(wFil, treasury);
+        // 20% simple interest pool
+        poolFactory.createSimpleInterestPool("POOL1", 20e18);
+        // 15% simple interest pool
+        poolFactory.createSimpleInterestPool("POOL2", 15e18);
+
+        // deploy 2 miners with their loan agent's configured
         loanAgentFactory = new LoanAgentFactory(address(poolFactory));
         setUpMiner();
         setUpMiner();
