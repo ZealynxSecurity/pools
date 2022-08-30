@@ -3,7 +3,7 @@ import {
   PageProps,
   PagePropTypes,
   ExplorerIconHeaderFooter,
-  NetworkConnection
+  NetworkSelector
 } from '@glif/react-components'
 import { GLIF_DISCORD, PAGE } from '../../constants'
 
@@ -11,12 +11,7 @@ export default function Layout({ children, ...rest }: PageProps) {
   return (
     <Page
       connection={
-        <NetworkConnection
-          lotusApiAddr={process.env.NEXT_PUBLIC_LOTUS_NODE_JSONRPC}
-          apiKey={process.env.NEXT_PUBLIC_NODE_STATUS_API_KEY}
-          statusApiAddr={process.env.NEXT_PUBLIC_NODE_STATUS_API_ADDRESS}
-          errorCallback={() => {}}
-        />
+        <NetworkSelector enableSwitching={false} errorCallback={() => {}} />
       }
       logout={() => {}}
       addressLinks={[
@@ -24,7 +19,6 @@ export default function Layout({ children, ...rest }: PageProps) {
           label: 'Wallet Address',
           address: 't13wmfneijr5pyksi6gtes2v24nw6qh7iuxib7sdy',
           disableLink: false,
-          stopPropagation: true,
           hideCopy: false,
           hideCopyText: true
         },
@@ -32,7 +26,6 @@ export default function Layout({ children, ...rest }: PageProps) {
           label: 'Balance',
           address: '100 FIL',
           disableLink: true,
-          stopPropagation: true,
           hideCopy: true,
           hideCopyText: true
         }

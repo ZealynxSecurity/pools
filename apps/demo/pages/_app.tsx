@@ -3,7 +3,11 @@ import App from 'next/app'
 import Head from 'next/head'
 import Script from 'next/script'
 import React from 'react'
-import { theme, ThemeProvider } from '@glif/react-components'
+import {
+  EnvironmentProvider,
+  theme,
+  ThemeProvider
+} from '@glif/react-components'
 import { ApolloProvider } from '@apollo/client'
 import { SWRConfig } from 'swr'
 
@@ -55,15 +59,17 @@ class MyApp extends App {
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: JSON.stringify(JSONLD) }}
         />
-        <ApolloProvider client={apolloClient}>
-          <SWRConfig value={{ refreshInterval: 10000 }}>
-            <ThemeProvider theme={theme}>
-              <ErrorBoundary>
-                <Component {...pageProps} />
-              </ErrorBoundary>
-            </ThemeProvider>
-          </SWRConfig>
-        </ApolloProvider>
+        <EnvironmentProvider>
+          <ApolloProvider client={apolloClient}>
+            <SWRConfig value={{ refreshInterval: 10000 }}>
+              <ThemeProvider theme={theme}>
+                <ErrorBoundary>
+                  <Component {...pageProps} />
+                </ErrorBoundary>
+              </ThemeProvider>
+            </SWRConfig>
+          </ApolloProvider>
+        </EnvironmentProvider>
       </>
     )
   }

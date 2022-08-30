@@ -15,14 +15,16 @@ Make sure you have installed:
 
 ## Running the demo app
 
-Make sure the `.env.local` is set up with all variables exported.
-`yarn demo`
+The demo app can technically be run on any blockchain node, but we generally expect a local Ethereum node to be running on portfolio 8545. We use [anvil](https://github.com/foundry-rs/foundry/tree/master/anvil).
+
+1. Make sure the `.env.local` is set up with all variables exported.
+2. To start the node, run `yarn start:node`
+3. In a separate terminal window, run `yarn demo`
 
 Under the hood this:<br />
 _Deploy:_
 
 - Compiles all of our smart contracts
-- Spins up an Anvil local EVM client
 - Deploys the smart contracts to the Anvil client
 - Caches the deployed contract addresses
 

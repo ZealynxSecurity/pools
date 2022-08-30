@@ -8,8 +8,8 @@
     "build": "run-s build:*",
     "copy:assets": "mkdir -p apps/demo && cp -a contracts/typechain apps/demo/ && cp -a contracts/generated apps/demo/",
     "demo:contracts": "yarn workspace gcred-contracts demo:local",
-    "demo:frontend": "",
-    "start:demo": "run-s demo:* copy:assets",
+    "demo:frontend": "yarn workspace gcred-demo demo:local",
+    "demo": "run-s demo:contracts copy:assets demo:frontend",
     "start:node": "yarn workspace gcred-contracts start:node",
     "test": "yarn workspaces run test",
     "test:contracts": "forge test --root ./contracts"
@@ -31,6 +31,6 @@
   },
   "workspaces": [
     "contracts",
-    "apps/demo"
+    "apps/*"
   ]
 }
