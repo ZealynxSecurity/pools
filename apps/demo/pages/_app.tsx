@@ -6,16 +6,52 @@ import React from 'react'
 import {
   EnvironmentProvider,
   theme,
-  ThemeProvider
+  ThemeProvider,
+  ApolloWrapper,
+  ErrorBoundary
 } from '@glif/react-components'
-import { ApolloProvider } from '@apollo/client'
 import { SWRConfig } from 'swr'
+import { WagmiConfig, createClient, configureChains, chain } from 'wagmi'
+import { publicProvider } from 'wagmi/providers/public'
+import { CoinbaseWalletConnector } from 'wagmi/connectors/coinbaseWallet'
+import { InjectedConnector } from 'wagmi/connectors/injected'
+import { MetaMaskConnector } from 'wagmi/connectors/metaMask'
+import { WalletConnectConnector } from 'wagmi/connectors/walletConnect'
 
-import { createApolloClient } from '../apolloClient'
-import ErrorBoundary from '../src/components/ErrorBoundary'
 import JSONLD from '../JSONLD'
 
-const apolloClient = createApolloClient()
+const { provider, webSocketProvider, chains } = configureChains(
+  [chain.foundry],
+  [publicProvider()]
+)
+
+const client = createClient({
+  autoConnect: true,
+  connectors: [
+    new MetaMaskConnector({ chains }),
+    new CoinbaseWalletConnector({
+      chains,
+      options: {
+        appName: 'wagmi'
+      }
+    }),
+    new WalletConnectConnector({
+      chains,
+      options: {
+        qrcode: true
+      }
+    }),
+    new InjectedConnector({
+      chains,
+      options: {
+        name: 'Injected',
+        shimDisconnect: true
+      }
+    })
+  ],
+  provider,
+  webSocketProvider
+})
 
 class MyApp extends App {
   render() {
@@ -60,15 +96,17 @@ class MyApp extends App {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(JSONLD) }}
         />
         <EnvironmentProvider>
-          <ApolloProvider client={apolloClient}>
-            <SWRConfig value={{ refreshInterval: 10000 }}>
-              <ThemeProvider theme={theme}>
-                <ErrorBoundary>
-                  <Component {...pageProps} />
-                </ErrorBoundary>
-              </ThemeProvider>
-            </SWRConfig>
-          </ApolloProvider>
+          <WagmiConfig client={client}>
+            <ApolloWrapper>
+              <SWRConfig value={{ refreshInterval: 10000 }}>
+                <ThemeProvider theme={theme}>
+                  <ErrorBoundary>
+                    <Component {...pageProps} />
+                  </ErrorBoundary>
+                </ThemeProvider>
+              </SWRConfig>
+            </ApolloWrapper>
+          </WagmiConfig>
         </EnvironmentProvider>
       </>
     )
