@@ -1,3 +1,4 @@
+const path = require('path')
 const pkgjson = require('./package.json')
 
 const {
@@ -5,9 +6,29 @@ const {
   PHASE_PRODUCTION_SERVER
 } = require('next/constants')
 
+const webpack = (config) => {
+  const adjustedConf = { ...config }
+  const experiments = config.experiments || {}
+  adjustedConf.experiments = { ...experiments, syncWebAssembly: true }
+
+  adjustedConf.resolve.alias = {
+    ...config.resolve.alias,
+    react: path.resolve('../../node_modules/react'),
+    'react-dom': path.resolve('../../node_modules/react-dom'),
+    next: path.resolve('../../node_modules/next'),
+    'styled-components': path.resolve('../../node_modules/styled-components'),
+    '@glif/react-components': path.resolve(
+      '../../node_modules/@glif/react-components'
+    )
+  }
+
+  return adjustedConf
+}
+
 module.exports = (phase) => {
   return {
     trailingSlash: true,
+    webpack,
     env: {
       NEXT_PUBLIC_PACKAGE_NAME: pkgjson.name,
       NEXT_PUBLIC_PACKAGE_VERSION: pkgjson.version,
