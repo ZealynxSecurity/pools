@@ -1,7 +1,14 @@
 import PropTypes from 'prop-types'
 import { ButtonV2, ShadowBox, space } from '@glif/react-components'
+import { FilecoinNumber } from '@glif/filecoin-number'
 import styled from 'styled-components'
+import { useContractReads } from 'wagmi'
+
 import { DataPoint } from '../generic'
+import contractDigest from '../../../generated/contractDigest.json'
+import { useMemo } from 'react'
+
+const { SimpleInterestPool } = contractDigest
 
 const OppContainer = styled.div`
   width: 100%;
@@ -42,11 +49,42 @@ export const Header = styled.header`
   }
 `
 
-const Opportunity = ({ poolID }: OpportunityProps) => {
-  const name = 'Conservative miner index'
-  // just fuxing around
-  const apy = `22.${poolID}2%`
-  const tokenPrice = '1.325 FIL'
+const Opportunity = ({ poolAddress }: OpportunityProps) => {
+  const contracts = useMemo(() => {
+    return [
+      {
+        addressOrName: poolAddress,
+        contractInterface: SimpleInterestPool[0].abi,
+        functionName: 'name'
+      },
+      {
+        addressOrName: poolAddress,
+        contractInterface: SimpleInterestPool[0].abi,
+        functionName: 'interestRate'
+      },
+      {
+        addressOrName: poolAddress,
+        contractInterface: SimpleInterestPool[0].abi,
+        functionName: 'previewDeposit',
+        args: [1]
+      }
+    ]
+  }, [poolAddress])
+
+  const { data } = useContractReads({ contracts })
+
+  const [name, interestRate, pricePerShare] = useMemo(() => {
+    if (data) {
+      return [
+        data[0].toString(),
+        new FilecoinNumber(data[1].toString(), 'attofil').times(100).toFil(),
+        data[2].toString()
+      ]
+    }
+
+    return []
+  }, [data])
+
   return (
     <OppContainer>
       <DataContainer>
@@ -56,11 +94,11 @@ const Opportunity = ({ poolID }: OpportunityProps) => {
         </DataPoint>
         <DataPoint>
           <p>Current APY</p>
-          <h3>{apy}</h3>
+          <h3>{interestRate}%</h3>
         </DataPoint>
         <DataPoint>
-          <p>Current token price</p>
-          <h3>{tokenPrice}</h3>
+          <p>Price per share</p>
+          <h3>{pricePerShare} FIL</h3>
         </DataPoint>
       </DataContainer>
       <ButtonV2>&gt;</ButtonV2>
@@ -69,11 +107,11 @@ const Opportunity = ({ poolID }: OpportunityProps) => {
 }
 
 type OpportunityProps = {
-  poolID: number
+  poolAddress: string
 }
 
 Opportunity.propTypes = {
-  poolID: PropTypes.number.isRequired
+  poolAddress: PropTypes.string.isRequired
 }
 
 const OpportunitiesWrapper = styled(ShadowBox)`
@@ -91,13 +129,14 @@ export const Opportunities = ({ opportunities }: OpportunitiesProps) => {
       <Header>
         <h2>Opportunities</h2>
       </Header>
-      {opportunities.map((poolID) => (
-        <Opportunity key={poolID} poolID={poolID} />
+      {opportunities.map((poolAddress) => (
+        <Opportunity key={poolAddress} poolAddress={poolAddress} />
       ))}
     </OpportunitiesWrapper>
   )
 }
 
 type OpportunitiesProps = {
-  opportunities: number[]
+  // pool addresses
+  opportunities: string[]
 }

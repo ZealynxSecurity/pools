@@ -1,22 +1,22 @@
 import styled from 'styled-components'
-import { TR, TH, TD, makeFriendlyBalance } from '@glif/react-components'
+import { makeFriendlyBalance } from '@glif/react-components'
 import PropTypes from 'prop-types'
 import { BigNumber } from '@glif/filecoin-number'
 import { random2DecimalFloat } from '../../utils'
 
 export const PortfolioRowColumnTitles = () => (
   <thead>
-    <TR>
-      <TH>Pool ID</TH>
-      <TH>Token Price</TH>
-      <TH>Token Balance</TH>
-      <TH>Value</TH>
-      <TH>P/L</TH>
-    </TR>
+    <tr>
+      <th>Pool ID</th>
+      <th>Token Price</th>
+      <th>Token Balance</th>
+      <th>Value</th>
+      <th>P/L</th>
+    </tr>
   </thead>
 )
 
-const PLTD = styled(TD)`
+const PLTD = styled.td`
   color: ${(props) => `var(${props.color})`};
 `
 
@@ -54,15 +54,15 @@ export const PortfolioRow = (props: PortfolioRowProps) => {
       : Number(random2DecimalFloat(10, 50))
 
   return (
-    <TR>
-      <TD>{props.poolID}</TD>
-      <TD>{price} FIL</TD>
-      <TD>
+    <tr>
+      <td>{props.poolID}</td>
+      <td>{price} FIL</td>
+      <td>
         {bal} p{props.poolID}GLIF
-      </TD>
-      <TD>{val} FIL</TD>
+      </td>
+      <td>{val} FIL</td>
       <PL pl={pl} />
-    </TR>
+    </tr>
   )
 }
 

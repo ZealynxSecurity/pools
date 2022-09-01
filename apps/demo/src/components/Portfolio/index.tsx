@@ -1,9 +1,14 @@
-import { TABLE, OneColumnCentered } from '@glif/react-components'
+import { useMemo } from 'react'
+import { OneColumnCentered } from '@glif/react-components'
 import styled from 'styled-components'
 import Layout from '../Layout'
 import { PortfolioRow, PortfolioRowColumnTitles } from './table'
 import { Opportunities } from './Opportunities'
 import { MetadataContainer, TableHeader, Stat } from '../generic'
+import contractDigest from '../../../generated/contractDigest.json'
+import { useContractRead, useContractReads } from 'wagmi'
+
+const { PoolFactory } = contractDigest
 
 const PageWrapper = styled(OneColumnCentered)`
   margin-left: 10%;
@@ -17,6 +22,29 @@ const PageWrapper = styled(OneColumnCentered)`
 `
 
 export default function Portfolio() {
+  const { data: allPoolsLength } = useContractRead({
+    addressOrName: PoolFactory.address,
+    contractInterface: PoolFactory.abi,
+    functionName: 'allPoolsLength'
+  })
+
+  const contracts = useMemo(() => {
+    const pools = []
+    if (!!allPoolsLength && Number(allPoolsLength.toString())) {
+      for (let i = 0; i < Number(allPoolsLength.toString()); i++) {
+        pools.push({
+          addressOrName: PoolFactory.address,
+          contractInterface: PoolFactory.abi,
+          functionName: 'allPools',
+          args: [i]
+        })
+      }
+    }
+    return pools
+  }, [allPoolsLength])
+
+  const { data: poolAddrs } = useContractReads({ contracts })
+
   return (
     <Layout>
       <PageWrapper>
@@ -27,16 +55,20 @@ export default function Portfolio() {
         </MetadataContainer>
         <br />
         <TableHeader>Your Holdings</TableHeader>
-        <TABLE>
+        <table>
           <PortfolioRowColumnTitles />
           <tbody>
             {new Array(3).fill('').map((_, i) => (
               <PortfolioRow key={i} poolID={i} />
             ))}
           </tbody>
-        </TABLE>
+        </table>
         <br />
-        <Opportunities opportunities={[0, 1, 2]} />
+        {poolAddrs && poolAddrs.length > 0 ? (
+          <Opportunities opportunities={poolAddrs.map((p) => p.toString())} />
+        ) : (
+          <div>Loading...</div>
+        )}
       </PageWrapper>
     </Layout>
   )
