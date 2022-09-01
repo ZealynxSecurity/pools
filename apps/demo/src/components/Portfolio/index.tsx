@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 import { OneColumnCentered } from '@glif/react-components'
 import styled from 'styled-components'
+import { useAccount, useContractRead, useContractReads } from 'wagmi'
+
 import Layout from '../Layout'
-import { PortfolioRow, PortfolioRowColumnTitles } from './table'
 import { Opportunities } from './Opportunities'
-import { MetadataContainer, TableHeader, Stat } from '../generic'
+import { Holdings } from './Holdings'
+import { MetadataContainer, Stat } from '../generic'
 import contractDigest from '../../../generated/contractDigest.json'
-import { useContractRead, useContractReads } from 'wagmi'
 
 const { PoolFactory } = contractDigest
 
@@ -28,7 +29,9 @@ export default function Portfolio() {
     functionName: 'allPoolsLength'
   })
 
-  const contracts = useMemo(() => {
+  const { address } = useAccount()
+
+  const poolContracts = useMemo(() => {
     const pools = []
     if (!!allPoolsLength && Number(allPoolsLength.toString())) {
       for (let i = 0; i < Number(allPoolsLength.toString()); i++) {
@@ -43,7 +46,7 @@ export default function Portfolio() {
     return pools
   }, [allPoolsLength])
 
-  const { data: poolAddrs } = useContractReads({ contracts })
+  const { data: poolAddrs } = useContractReads({ contracts: poolContracts })
 
   return (
     <Layout>
@@ -53,22 +56,11 @@ export default function Portfolio() {
           <Stat title='Total deposited' stat='69 FIL' />
           <Stat title='Total profit/loss' stat='22 FIL' />
         </MetadataContainer>
-        <br />
-        <TableHeader>Your Holdings</TableHeader>
-        <table>
-          <PortfolioRowColumnTitles />
-          <tbody>
-            {new Array(3).fill('').map((_, i) => (
-              <PortfolioRow key={i} poolID={i} />
-            ))}
-          </tbody>
-        </table>
-        <br />
-        {poolAddrs && poolAddrs.length > 0 ? (
-          <Opportunities opportunities={poolAddrs.map((p) => p.toString())} />
-        ) : (
-          <div>Loading...</div>
-        )}
+        <Holdings
+          walletAddress={address}
+          poolAddrs={poolAddrs?.map((p) => p.toString())}
+        />
+        <Opportunities poolAddrs={poolAddrs?.map((p) => p.toString())} />
       </PageWrapper>
     </Layout>
   )

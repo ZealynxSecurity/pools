@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import PropTypes from 'prop-types'
 import { ButtonV2, ShadowBox, space } from '@glif/react-components'
 import { FilecoinNumber } from '@glif/filecoin-number'
@@ -6,7 +7,6 @@ import { useContractReads } from 'wagmi'
 
 import { DataPoint } from '../generic'
 import contractDigest from '../../../generated/contractDigest.json'
-import { useMemo } from 'react'
 
 const { SimpleInterestPool } = contractDigest
 
@@ -123,20 +123,25 @@ const OpportunitiesWrapper = styled(ShadowBox)`
   }
 `
 
-export const Opportunities = ({ opportunities }: OpportunitiesProps) => {
-  return (
-    <OpportunitiesWrapper>
-      <Header>
-        <h2>Opportunities</h2>
-      </Header>
-      {opportunities.map((poolAddress) => (
-        <Opportunity key={poolAddress} poolAddress={poolAddress} />
-      ))}
-    </OpportunitiesWrapper>
+export const Opportunities = ({ poolAddrs }: OpportunitiesProps) => {
+  return poolAddrs && poolAddrs.length > 0 ? (
+    <>
+      <br />
+      <OpportunitiesWrapper>
+        <Header>
+          <h2>Opportunities</h2>
+        </Header>
+        {poolAddrs.map((poolAddress) => (
+          <Opportunity key={poolAddress} poolAddress={poolAddress} />
+        ))}
+      </OpportunitiesWrapper>
+    </>
+  ) : (
+    <div>Loading...</div>
   )
 }
 
 type OpportunitiesProps = {
   // pool addresses
-  opportunities: string[]
+  poolAddrs: string[]
 }
