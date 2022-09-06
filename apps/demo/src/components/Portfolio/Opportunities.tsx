@@ -1,16 +1,11 @@
-import { useMemo } from 'react'
-import PropTypes from 'prop-types'
 import { ButtonV2, navigate, ShadowBox, space } from '@glif/react-components'
-import { FilecoinNumber } from '@glif/filecoin-number'
 import styled from 'styled-components'
-import { useContractReads } from 'wagmi'
+import { useRouter } from 'next/router'
 
 import { DataPoint } from '../generic'
-import contractDigest from '../../../generated/contractDigest.json'
-import { useRouter } from 'next/router'
 import { PAGE } from '../../../constants'
-
-const { SimpleInterestPool } = contractDigest
+import { Pool } from '../../utils'
+import { POOLS_PROP_TYPE, POOL_PROP_TYPE } from '../../customPropTypes'
 
 const OppContainer = styled.div`
   width: 100%;
@@ -56,48 +51,7 @@ export const Header = styled.header`
   }
 `
 
-const Opportunity = ({ poolAddress }: OpportunityProps) => {
-  const contracts = useMemo(() => {
-    return [
-      {
-        addressOrName: poolAddress,
-        contractInterface: SimpleInterestPool[0].abi,
-        functionName: 'id'
-      },
-      {
-        addressOrName: poolAddress,
-        contractInterface: SimpleInterestPool[0].abi,
-        functionName: 'name'
-      },
-      {
-        addressOrName: poolAddress,
-        contractInterface: SimpleInterestPool[0].abi,
-        functionName: 'interestRate'
-      },
-      {
-        addressOrName: poolAddress,
-        contractInterface: SimpleInterestPool[0].abi,
-        functionName: 'previewDeposit',
-        args: [1]
-      }
-    ]
-  }, [poolAddress])
-
-  const { data } = useContractReads({ contracts })
-
-  const [id, name, interestRate, pricePerShare] = useMemo(() => {
-    if (data) {
-      return [
-        data[0].toString(),
-        data[1].toString(),
-        new FilecoinNumber(data[2].toString(), 'attofil').times(100).toFil(),
-        data[3].toString()
-      ]
-    }
-
-    return []
-  }, [data])
-
+const Opportunity = ({ pool }: OpportunityProps) => {
   const router = useRouter()
 
   return (
@@ -105,15 +59,15 @@ const Opportunity = ({ poolAddress }: OpportunityProps) => {
       <DataContainer>
         <DataPoint>
           <p>Name</p>
-          <h3>{name}</h3>
+          <h3>{pool.name}</h3>
         </DataPoint>
         <DataPoint>
           <p>Current APY</p>
-          <h3>{interestRate}%</h3>
+          <h3>{pool.interestRate.toFil()}%</h3>
         </DataPoint>
         <DataPoint>
           <p>Price per share</p>
-          <h3>{pricePerShare} FIL</h3>
+          <h3>{pool.exchangeRate.toFil()} FIL</h3>
         </DataPoint>
       </DataContainer>
       <ButtonV2
@@ -121,7 +75,7 @@ const Opportunity = ({ poolAddress }: OpportunityProps) => {
           navigate(router, {
             pageUrl: PAGE.POOL,
             params: {
-              id
+              id: pool.id
             }
           })
         }
@@ -133,11 +87,11 @@ const Opportunity = ({ poolAddress }: OpportunityProps) => {
 }
 
 type OpportunityProps = {
-  poolAddress: string
+  pool: Pool
 }
 
 Opportunity.propTypes = {
-  poolAddress: PropTypes.string.isRequired
+  pool: POOL_PROP_TYPE.isRequired
 }
 
 const OpportunitiesWrapper = styled(ShadowBox)`
@@ -149,16 +103,16 @@ const OpportunitiesWrapper = styled(ShadowBox)`
   }
 `
 
-export const Opportunities = ({ poolAddrs }: OpportunitiesProps) => {
-  return poolAddrs && poolAddrs.length > 0 ? (
+export const Opportunities = ({ pools }: OpportunitiesProps) => {
+  return pools.length > 0 ? (
     <>
       <br />
       <OpportunitiesWrapper>
         <Header>
           <h2>Opportunities</h2>
         </Header>
-        {poolAddrs.map((poolAddress) => (
-          <Opportunity key={poolAddress} poolAddress={poolAddress} />
+        {pools.map((pool) => (
+          <Opportunity key={pool.address} pool={pool} />
         ))}
       </OpportunitiesWrapper>
     </>
@@ -168,6 +122,9 @@ export const Opportunities = ({ poolAddrs }: OpportunitiesProps) => {
 }
 
 type OpportunitiesProps = {
-  // pool addresses
-  poolAddrs: string[]
+  pools: Pool[]
+}
+
+Opportunities.propTypes = {
+  pools: POOLS_PROP_TYPE.isRequired
 }

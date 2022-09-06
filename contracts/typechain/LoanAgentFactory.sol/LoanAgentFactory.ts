@@ -25,6 +25,7 @@ import type {
 export interface LoanAgentFactoryInterface extends utils.Interface {
   functions: {
     "activeMiners(address)": FunctionFragment;
+    "count()": FunctionFragment;
     "create(address)": FunctionFragment;
     "loanAgents(address)": FunctionFragment;
     "poolFactory()": FunctionFragment;
@@ -33,6 +34,7 @@ export interface LoanAgentFactoryInterface extends utils.Interface {
   getFunction(
     nameOrSignatureOrTopic:
       | "activeMiners"
+      | "count"
       | "create"
       | "loanAgents"
       | "poolFactory"
@@ -42,6 +44,7 @@ export interface LoanAgentFactoryInterface extends utils.Interface {
     functionFragment: "activeMiners",
     values: [PromiseOrValue<string>]
   ): string;
+  encodeFunctionData(functionFragment: "count", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "create",
     values: [PromiseOrValue<string>]
@@ -59,6 +62,7 @@ export interface LoanAgentFactoryInterface extends utils.Interface {
     functionFragment: "activeMiners",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "count", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "create", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "loanAgents", data: BytesLike): Result;
   decodeFunctionResult(
@@ -101,6 +105,8 @@ export interface LoanAgentFactory extends BaseContract {
       overrides?: CallOverrides
     ): Promise<[string]>;
 
+    count(overrides?: CallOverrides): Promise<[BigNumber]>;
+
     create(
       _miner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
@@ -119,6 +125,8 @@ export interface LoanAgentFactory extends BaseContract {
     overrides?: CallOverrides
   ): Promise<string>;
 
+  count(overrides?: CallOverrides): Promise<BigNumber>;
+
   create(
     _miner: PromiseOrValue<string>,
     overrides?: Overrides & { from?: PromiseOrValue<string> }
@@ -136,6 +144,8 @@ export interface LoanAgentFactory extends BaseContract {
       arg0: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<string>;
+
+    count(overrides?: CallOverrides): Promise<BigNumber>;
 
     create(
       _miner: PromiseOrValue<string>,
@@ -158,6 +168,8 @@ export interface LoanAgentFactory extends BaseContract {
       overrides?: CallOverrides
     ): Promise<BigNumber>;
 
+    count(overrides?: CallOverrides): Promise<BigNumber>;
+
     create(
       _miner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
@@ -176,6 +188,8 @@ export interface LoanAgentFactory extends BaseContract {
       arg0: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
+
+    count(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     create(
       _miner: PromiseOrValue<string>,

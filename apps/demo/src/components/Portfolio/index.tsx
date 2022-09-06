@@ -1,21 +1,14 @@
 import { useMemo } from 'react'
 import { makeFriendlyBalance, OneColumnCentered } from '@glif/react-components'
+import { FilecoinNumber } from '@glif/filecoin-number'
 import styled from 'styled-components'
-import {
-  useAccount,
-  useBalance,
-  useContractRead,
-  useContractReads
-} from 'wagmi'
+import { useAccount, useBalance } from 'wagmi'
 
 import Layout from '../Layout'
 import { Opportunities } from './Opportunities'
 import { Holdings } from './Holdings'
 import { MetadataContainer, Stat } from '../generic'
-import contractDigest from '../../../generated/contractDigest.json'
-import { FilecoinNumber } from '@glif/filecoin-number'
-
-const { PoolFactory, SimpleInterestPool } = contractDigest
+import { usePools, useAllPoolTokenBalances } from '../../utils'
 
 const PageWrapper = styled(OneColumnCentered)`
   margin-left: 10%;
@@ -29,83 +22,42 @@ const PageWrapper = styled(OneColumnCentered)`
 `
 
 export default function Portfolio() {
-  const { data: allPoolsLength } = useContractRead({
-    addressOrName: PoolFactory.address,
-    contractInterface: PoolFactory.abi,
-    functionName: 'allPoolsLength'
-  })
-
   const { address } = useAccount()
-  const { data: balData } = useBalance({ addressOrName: address })
-  const balance = useMemo(() => {
-    if (balData) {
-      const bal = new FilecoinNumber(balData.value.toString(), 'attofil')
-      return makeFriendlyBalance(bal, 6, true).toString()
-    }
-    return ''
-  }, [balData])
-
-  const poolContracts = useMemo(() => {
-    const pools = []
-    if (!!allPoolsLength && Number(allPoolsLength.toString())) {
-      for (let i = 0; i < Number(allPoolsLength.toString()); i++) {
-        pools.push({
-          addressOrName: PoolFactory.address,
-          contractInterface: PoolFactory.abi,
-          functionName: 'allPools',
-          args: [i]
-        })
-      }
-    }
-    return pools
-  }, [allPoolsLength])
-
-  const { data: poolAddrs } = useContractReads({ contracts: poolContracts })
-
-  const totalBalanceContracts = useMemo(() => {
-    if (poolAddrs?.length > 0 && !!address) {
-      return poolAddrs.map((addr) => {
-        return {
-          addressOrName: addr.toString(),
-          contractInterface: SimpleInterestPool[0].abi,
-          functionName: 'balanceOf',
-          args: [address]
-        }
-      })
-    }
-    return []
-  }, [address, poolAddrs])
-
-  const { data: allBalances } = useContractReads({
-    contracts: totalBalanceContracts
+  const { data: balance } = useBalance({
+    addressOrName: address,
+    formatUnits: 'ether'
   })
+
+  const { pools } = usePools()
+  const allPoolBalances = useAllPoolTokenBalances(address)
 
   const totalDeposited = useMemo(() => {
-    if (allBalances) {
+    if (allPoolBalances) {
       return makeFriendlyBalance(
-        allBalances.reduce((total, bal) => {
-          return total.plus(new FilecoinNumber(bal.toString(), 'attofil'))
-        }, new FilecoinNumber(0, 'fil')),
+        Object.keys(allPoolBalances).reduce(
+          (total, id) =>
+            total.plus(
+              new FilecoinNumber(allPoolBalances[id].toString(), 'attofil')
+            ),
+          new FilecoinNumber(0, 'fil')
+        ),
         6,
         true
       )
     }
     return 0
-  }, [allBalances])
+  }, [allPoolBalances])
 
   return (
     <Layout>
       <PageWrapper>
         <MetadataContainer width='60%'>
-          <Stat title='Liquid FIL' stat={balance} />
+          <Stat title='Liquid FIL' stat={balance?.formatted?.toString()} />
           <Stat title='Total deposited' stat={`${totalDeposited} FIL`} />
           <Stat title='Total profit/loss' stat='0 FIL' />
         </MetadataContainer>
-        <Holdings
-          walletAddress={address}
-          poolAddrs={poolAddrs?.map((p) => p.toString())}
-        />
-        <Opportunities poolAddrs={poolAddrs?.map((p) => p.toString())} />
+        <Holdings walletAddress={address} pools={pools} />
+        <Opportunities pools={pools} />
       </PageWrapper>
     </Layout>
   )

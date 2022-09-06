@@ -1,20 +1,25 @@
 import PropTypes from 'prop-types'
+import { POOLS_PROP_TYPE } from '../../customPropTypes'
+import { Pool } from '../../utils'
 
 import { TableHeader } from '../generic'
 import { PortfolioRow, PortfolioRowColumnTitles } from './table'
 
-export function Holdings({ poolAddrs, walletAddress }: HoldingsProps) {
-  return poolAddrs && poolAddrs.length > 0 ? (
+export function Holdings({ pools, walletAddress }: HoldingsProps) {
+  return pools.length > 0 ? (
     <>
       <br />
       <TableHeader>Your Holdings</TableHeader>
       <table>
         <PortfolioRowColumnTitles />
         <tbody>
-          {poolAddrs.map((poolAddr, i) => (
+          {pools.map((pool, i) => (
             <PortfolioRow
               key={i}
-              poolAddress={poolAddr}
+              poolAddress={pool.address}
+              poolID={pool.id}
+              name={pool.name}
+              exchangeRate={pool.exchangeRate}
               walletAddress={walletAddress}
             />
           ))}
@@ -27,11 +32,11 @@ export function Holdings({ poolAddrs, walletAddress }: HoldingsProps) {
 }
 
 type HoldingsProps = {
-  poolAddrs: string[]
+  pools: Pool[]
   walletAddress: string
 }
 
 Holdings.propTypes = {
-  poolAddrs: PropTypes.arrayOf(PropTypes.string).isRequired,
+  pools: POOLS_PROP_TYPE.isRequired,
   walletAddress: PropTypes.string.isRequired
 }

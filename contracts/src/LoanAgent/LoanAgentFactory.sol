@@ -11,6 +11,7 @@ contract LoanAgentFactory {
   address public poolFactory;
   mapping(address => address) public loanAgents;
   mapping(address => address) public activeMiners;
+  uint256 public count = 0;
 
   constructor(address _poolFactory) {
     poolFactory = _poolFactory;
@@ -25,6 +26,7 @@ contract LoanAgentFactory {
     LoanAgent loanAgent = new LoanAgent(_miner, poolFactory);
     loanAgents[address(loanAgent)] = _miner;
     activeMiners[_miner] = address(loanAgent);
+    count += 1;
     return address(loanAgent);
   }
 }

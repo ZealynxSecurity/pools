@@ -1,5 +1,6 @@
 import {
   ButtonV2,
+  FILECOIN_NUMBER_PROPTYPE,
   InputV2,
   ShadowBox as _ShadowBox,
   space
@@ -7,15 +8,11 @@ import {
 import { FilecoinNumber } from '@glif/filecoin-number'
 import PropTypes from 'prop-types'
 import styled from 'styled-components'
-import { useMemo, useState } from 'react'
-import {
-  useAccount,
-  useContractReads,
-  useContractWrite,
-  usePrepareContractWrite
-} from 'wagmi'
+import { useState } from 'react'
+import { useAccount, useContractWrite, usePrepareContractWrite } from 'wagmi'
 
 import contractDigest from '../../../generated/contractDigest.json'
+import { usePoolTokenBalance } from '../../utils'
 
 const { SimpleInterestPool } = contractDigest
 
@@ -106,22 +103,7 @@ export function Transact(props: TransactProps) {
   const [withdrawAmount, setWithdrawAmount] = useState(0)
 
   const { address } = useAccount()
-  const { data: poolData } = useContractReads({
-    contracts: [
-      {
-        addressOrName: props.poolAddress,
-        contractInterface: SimpleInterestPool[0].abi,
-        functionName: 'balanceOf',
-        args: [address]
-      }
-    ]
-  })
-
-  const [shares] = useMemo(() => {
-    return poolData
-      ? [new FilecoinNumber(poolData?.[0]?.toString(), 'attofil').toFil()]
-      : []
-  }, [poolData])
+  const { balance } = usePoolTokenBalance(props.poolID, address)
 
   const { config: depositConfig, error: depositError } =
     usePrepareContractWrite({
@@ -151,7 +133,6 @@ export function Transact(props: TransactProps) {
     <Form
       onSubmit={(e) => {
         e.preventDefault()
-        console.log(depositAmount.toFil(), depositError)
         if (withdrawAmount > 0 && !withdrawError) withdraw?.()
         else if (depositAmount.isGreaterThan(0) && !depositError) deposit?.()
       }}
@@ -177,7 +158,7 @@ export function Transact(props: TransactProps) {
         </Tab>
         <FormContainer>
           <h3>
-            Your balance: {shares} P{props.poolID}GLIF
+            Your balance: {balance?.toFil()} P{props.poolID}GLIF
           </h3>
           {tab === TransactTab.DEPOSIT ? (
             <>
@@ -187,7 +168,7 @@ export function Transact(props: TransactProps) {
                 value={depositAmount}
                 onChange={setDepositAmount}
               />
-              <h3>1 FIL = {props.exchangeRate} P0GLIF</h3>
+              <h3>1 FIL = {props.exchangeRate.toFil()} P0GLIF</h3>
               <p>
                 Receive {depositAmount.times(props.exchangeRate).toFil()} P
                 {props.poolID}GLIF
@@ -224,5 +205,17 @@ export function Transact(props: TransactProps) {
 type TransactProps = {
   poolID: string
   poolAddress: string
-  exchangeRate: string
+  exchangeRate: FilecoinNumber
+}
+
+Transact.propTypes = {
+  poolID: PropTypes.string,
+  poolAddress: PropTypes.string,
+  exchangeRate: FILECOIN_NUMBER_PROPTYPE
+}
+
+Transact.defaultProps = {
+  poolID: '',
+  poolAddress: '',
+  exchangeRate: new FilecoinNumber('0', 'fil')
 }

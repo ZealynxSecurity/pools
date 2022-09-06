@@ -1,12 +1,13 @@
 import styled from 'styled-components'
-import { makeFriendlyBalance } from '@glif/react-components'
-import PropTypes from 'prop-types'
+import {
+  FILECOIN_NUMBER_PROPTYPE,
+  makeFriendlyBalance
+} from '@glif/react-components'
 import { FilecoinNumber } from '@glif/filecoin-number'
-import { useContractReads } from 'wagmi'
+import PropTypes from 'prop-types'
+import { useAccount } from 'wagmi'
 
-import contractDigest from '../../../generated/contractDigest.json'
-
-const { SimpleInterestPool } = contractDigest
+import { usePoolTokenBalance } from '../../utils'
 
 export const PortfolioRowColumnTitles = () => (
   <thead>
@@ -44,73 +45,41 @@ PL.propTypes = {
 }
 
 export const PortfolioRow = (props: PortfolioRowProps) => {
-  const { data } = useContractReads({
-    contracts: [
-      {
-        addressOrName: props.poolAddress,
-        contractInterface: SimpleInterestPool[0].abi,
-        functionName: 'id'
-      },
-      {
-        addressOrName: props.poolAddress,
-        contractInterface: SimpleInterestPool[0].abi,
-        functionName: 'name'
-      },
-      {
-        addressOrName: props.poolAddress,
-        contractInterface: SimpleInterestPool[0].abi,
-        functionName: 'previewDeposit',
-        args: [1]
-      },
-      {
-        addressOrName: props.poolAddress,
-        contractInterface: SimpleInterestPool[0].abi,
-        functionName: 'balanceOf',
-        args: [props.walletAddress]
-      }
-    ]
-  })
-
-  const [id, name, pricePerShare, balance, val] =
-    !!data && data.length > 0
-      ? [
-          data[0].toString(),
-          data[1].toString(),
-          data[2].toString(),
-          makeFriendlyBalance(
-            new FilecoinNumber(data[3].toString(), 'attofil'),
-            4,
-            true
-          ),
-          makeFriendlyBalance(
-            new FilecoinNumber(data[3].toString(), 'attofil').times(5),
-            4,
-            true
-          )
-        ]
-      : []
-
-  const pl = 0
+  const { address } = useAccount()
+  const { balance } = usePoolTokenBalance(props.poolID, address)
 
   return (
     <tr>
-      <td>{name}</td>
-      <td>{pricePerShare} FIL</td>
+      <td>{props.name}</td>
+      <td>{makeFriendlyBalance(props.exchangeRate.toFil(), 6, true)} FIL</td>
       <td>
-        {balance} p{id}GLIF
+        {makeFriendlyBalance(balance?.toFil(), 6, true)} p{props.poolID}GLIF
       </td>
-      <td>{val} FIL</td>
-      <PL pl={pl} />
+      <td>
+        {makeFriendlyBalance(
+          balance?.times(props.exchangeRate).toFil(),
+          6,
+          true
+        )}{' '}
+        FIL
+      </td>
+      <PL pl={0} />
     </tr>
   )
 }
 
 type PortfolioRowProps = {
   poolAddress: string
+  poolID: string
+  exchangeRate: FilecoinNumber
+  name: string
   walletAddress: string
 }
 
 PortfolioRow.propTypes = {
   poolAddress: PropTypes.string.isRequired,
+  poolID: PropTypes.string.isRequired,
+  exchangeRate: FILECOIN_NUMBER_PROPTYPE.isRequired,
+  name: PropTypes.string.isRequired,
   walletAddress: PropTypes.string.isRequired
 }

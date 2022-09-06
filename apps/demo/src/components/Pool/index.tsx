@@ -1,17 +1,19 @@
-import { OneColumn, TwoColumns } from '@glif/react-components'
-import { FilecoinNumber } from '@glif/filecoin-number'
+import {
+  makeFriendlyBalance,
+  OneColumn,
+  TwoColumns
+} from '@glif/react-components'
 import styled from 'styled-components'
 import { useRouter } from 'next/router'
-import { useAccount, useContractRead, useContractReads } from 'wagmi'
+import { useAccount } from 'wagmi'
+
 import { MetadataContainer, Stat } from '../generic'
 import Layout from '../Layout'
 import { PriceChart } from './PriceChart'
 import { Education } from './Education'
 import { Transact } from './Transact'
-import contractDigest from '../../../generated/contractDigest.json'
 import { WFIL } from './WFIL'
-
-const { PoolFactory, SimpleInterestPool } = contractDigest
+import { usePoolTokenBalance, usePool } from '../../utils'
 
 const PoolPageWrapper = styled(OneColumn)`
   display: flex;
@@ -23,41 +25,17 @@ export default function Pool() {
   const { query } = useRouter()
   const { address } = useAccount()
 
-  const { data: poolAddr } = useContractRead({
-    addressOrName: PoolFactory.address,
-    contractInterface: PoolFactory.abi,
-    functionName: 'allPools',
-    args: [Number(query.id)]
-  })
-
-  const contracts = [
-    {
-      addressOrName: poolAddr?.toString(),
-      contractInterface: SimpleInterestPool[0].abi,
-      functionName: 'balanceOf',
-      args: [address]
-    },
-    {
-      addressOrName: poolAddr?.toString(),
-      contractInterface: SimpleInterestPool[0].abi,
-      functionName: 'previewDeposit',
-      args: [1]
-    }
-  ]
-
-  const { data } = useContractReads({ contracts })
+  const { balance } = usePoolTokenBalance(query.id as string, address)
+  const pool = usePool(query.id as string)
 
   return (
     <Layout>
       <PoolPageWrapper>
-        {data && (
+        {!!balance && (
           <MetadataContainer width='40%'>
             <Stat
               title='Your holdings'
-              stat={`${new FilecoinNumber(
-                data[0]?.toString(),
-                'attofil'
-              ).toFil()} P${query.id}GLIF`}
+              stat={makeFriendlyBalance(balance, 6, true).toString()}
             />
             <Stat title='Your earnings' stat='0 P0GLIF' />
           </MetadataContainer>
@@ -67,11 +45,11 @@ export default function Pool() {
       <TwoColumns>
         <Education />
         <div>
-          <WFIL poolAddress={poolAddr?.toString() || ''} />
+          <WFIL poolAddress={pool?.address} />
           <Transact
-            poolID={query.id as string}
-            poolAddress={poolAddr?.toString() || ''}
-            exchangeRate={data?.[1]?.toString()}
+            poolID={pool?.id}
+            poolAddress={pool?.address}
+            exchangeRate={pool?.exchangeRate}
           />
         </div>
       </TwoColumns>

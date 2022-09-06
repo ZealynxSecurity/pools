@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import PropTypes from 'prop-types'
 import {
   ButtonV2,
   InputV2,
@@ -5,19 +7,13 @@ import {
   space
 } from '@glif/react-components'
 import { FilecoinNumber } from '@glif/filecoin-number'
-import PropTypes from 'prop-types'
 import styled from 'styled-components'
-import { useMemo, useState } from 'react'
-import {
-  useAccount,
-  useContractRead,
-  useContractReads,
-  useContractWrite,
-  usePrepareContractWrite
-} from 'wagmi'
+import { useAccount, useContractWrite, usePrepareContractWrite } from 'wagmi'
 
 import contractDigest from '../../../generated/contractDigest.json'
 import { ethers } from 'ethers'
+import { useWFILBalance } from '../../utils'
+import { useAllowance } from '../../utils/hooks/contracts/useAllowance'
 
 const { WFIL: WFILContract } = contractDigest
 
@@ -86,30 +82,8 @@ export function WFIL(props: WFILProps) {
 
   const { write: grantAllowance } = useContractWrite(allowanceConfig)
 
-  const { data } = useContractReads({
-    contracts: [
-      {
-        addressOrName: WFILContract.address,
-        contractInterface: WFILContract.abi,
-        functionName: 'balanceOf',
-        args: [address]
-      },
-      {
-        addressOrName: WFILContract.address,
-        contractInterface: WFILContract.abi,
-        functionName: 'allowance',
-        args: [address]
-      }
-    ]
-  })
-  const [balance, allowance] = useMemo(() => {
-    return !!data
-      ? [
-          new FilecoinNumber(data[0].toString(), 'attofil').toFil(),
-          data[1] ? data[1].toString() : '0'
-        ]
-      : []
-  }, [data])
+  const { balance } = useWFILBalance(address)
+  const { allowance } = useAllowance(address, props.poolAddress)
 
   return (
     <>
@@ -121,7 +95,7 @@ export function WFIL(props: WFILProps) {
       >
         <ShadowBox>
           <FormContainer>
-            <h3>Your balance: {balance} WFIL</h3>
+            <h3>Your balance: {balance.toFil()} WFIL</h3>
             <hr />
             <InputV2.Filecoin
               label='Deposit amount'
@@ -139,13 +113,12 @@ export function WFIL(props: WFILProps) {
       <Form
         onSubmit={(e) => {
           e.preventDefault()
-          console.log(allowanceError)
           if (!allowanceError) grantAllowance?.()
         }}
       >
         <ShadowBox>
           <FormContainer>
-            <h3>Your allowance: {allowance} WFIL</h3>
+            <h3>Your allowance: {allowance.toFil()} WFIL</h3>
             <hr />
             <InputV2.Filecoin
               label='Allowance amount'
@@ -165,4 +138,8 @@ export function WFIL(props: WFILProps) {
 
 type WFILProps = {
   poolAddress: string
+}
+
+WFIL.propTypes = {
+  poolAddress: PropTypes.string.isRequired
 }

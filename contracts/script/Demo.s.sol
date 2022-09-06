@@ -33,8 +33,7 @@ contract DemoDeploy is Script {
 
     function run() public {
         vm.startBroadcast();
-        // TODO: change this to a treasury contract
-        address treasury = address(msg.sender);
+        address treasury = vm.envAddress("TREASURY_ADDR");
         WFIL wFil = new WFIL();
 
         // deploy 2 simple interest pools
@@ -44,7 +43,7 @@ contract DemoDeploy is Script {
         // 15% simple interest pool
         IPool4626 pool2 = poolFactory.createSimpleInterestPool("POOL2", 15e18);
 
-        // temp
+        // temp https://github.com/glif-confidential/gcred/issues/26
         wFil.deposit{value: 100e18}();
         wFil.approve(address(pool1), 100e18);
         wFil.approve(address(pool2), 100e18);

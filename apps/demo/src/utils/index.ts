@@ -3,3 +3,5 @@ export const randomInt = (min, max) =>
 
 export const random2DecimalFloat = (min, max) =>
   `${randomInt(min, max)}.${randomInt(0, 100)}`
+
+export * from './hooks'
