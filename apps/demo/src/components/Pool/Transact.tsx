@@ -4,9 +4,20 @@ import {
   ShadowBox as _ShadowBox,
   space
 } from '@glif/react-components'
+import { FilecoinNumber } from '@glif/filecoin-number'
 import PropTypes from 'prop-types'
 import styled from 'styled-components'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import {
+  useAccount,
+  useContractReads,
+  useContractWrite,
+  usePrepareContractWrite
+} from 'wagmi'
+
+import contractDigest from '../../../generated/contractDigest.json'
+
+const { SimpleInterestPool } = contractDigest
 
 const Form = styled.form`
   margin-left: 10%;
@@ -27,7 +38,7 @@ const ShadowBox = styled(_ShadowBox)`
   }
 `
 
-const FormContainer = styled.form`
+const FormContainer = styled.div`
   margin-top: ${space('lg')};
   display: flex;
   flex-direction: column;
@@ -87,11 +98,64 @@ enum TransactTab {
   WITHDRAW = 'WITHDRAW'
 }
 
-export function Transact() {
+export function Transact(props: TransactProps) {
   const [tab, setTab] = useState<TransactTab>(TransactTab.DEPOSIT)
+  const [depositAmount, setDepositAmount] = useState(
+    new FilecoinNumber('0', 'fil')
+  )
+  const [withdrawAmount, setWithdrawAmount] = useState(0)
+
+  const { address } = useAccount()
+  const { data: poolData } = useContractReads({
+    contracts: [
+      {
+        addressOrName: props.poolAddress,
+        contractInterface: SimpleInterestPool[0].abi,
+        functionName: 'balanceOf',
+        args: [address]
+      }
+    ]
+  })
+
+  const [shares] = useMemo(() => {
+    return poolData
+      ? [new FilecoinNumber(poolData?.[0]?.toString(), 'attofil').toFil()]
+      : []
+  }, [poolData])
+
+  const { config: depositConfig, error: depositError } =
+    usePrepareContractWrite({
+      addressOrName: props.poolAddress,
+      contractInterface: SimpleInterestPool[0].abi,
+      functionName: 'deposit',
+      args: [depositAmount.toAttoFil(), address]
+    })
+
+  const { write: deposit } = useContractWrite(depositConfig)
+
+  const { config: withdrawConfig, error: withdrawError } =
+    usePrepareContractWrite({
+      addressOrName: props.poolAddress,
+      contractInterface: SimpleInterestPool[0].abi,
+      functionName: 'withdraw',
+      args: [
+        new FilecoinNumber(withdrawAmount, 'fil').toAttoFil(),
+        address,
+        address
+      ]
+    })
+
+  const { write: withdraw } = useContractWrite(withdrawConfig)
 
   return (
-    <Form>
+    <Form
+      onSubmit={(e) => {
+        e.preventDefault()
+        console.log(depositAmount.toFil(), depositError)
+        if (withdrawAmount > 0 && !withdrawError) withdraw?.()
+        else if (depositAmount.isGreaterThan(0) && !depositError) deposit?.()
+      }}
+    >
       <ShadowBox>
         <Tab
           firstTab
@@ -112,15 +176,53 @@ export function Transact() {
           Withdraw
         </Tab>
         <FormContainer>
-          <InputV2.Number label='Deposit amount' unit='FIL' placeholder='0' />
-          <h3>1 FIL = 0.99 P0GLIF</h3>
-          <InputV2.Number label='Receive' unit='P0GLIF' placeholder='0' />
+          <h3>
+            Your balance: {shares} P{props.poolID}GLIF
+          </h3>
+          {tab === TransactTab.DEPOSIT ? (
+            <>
+              <InputV2.Filecoin
+                label='Deposit amount'
+                placeholder='0'
+                value={depositAmount}
+                onChange={setDepositAmount}
+              />
+              <h3>1 FIL = {props.exchangeRate} P0GLIF</h3>
+              <p>
+                Receive {depositAmount.times(props.exchangeRate).toFil()} P
+                {props.poolID}GLIF
+              </p>
+            </>
+          ) : (
+            <>
+              <InputV2.Number
+                label='Withdraw amount'
+                placeholder='0'
+                value={withdrawAmount}
+                onChange={setWithdrawAmount}
+              />
+              <h3>1 FIL = {props.exchangeRate} P0GLIF</h3>
+              <p>
+                Receive{' '}
+                {new FilecoinNumber(withdrawAmount, 'fil')
+                  .times(props.exchangeRate)
+                  .toFil()}{' '}
+                FIL
+              </p>
+            </>
+          )}
           <hr />
         </FormContainer>
       </ShadowBox>
-      <ButtonV2 large green>
+      <ButtonV2 large green type='submit'>
         {tab}
       </ButtonV2>
     </Form>
   )
+}
+
+type TransactProps = {
+  poolID: string
+  poolAddress: string
+  exchangeRate: string
 }

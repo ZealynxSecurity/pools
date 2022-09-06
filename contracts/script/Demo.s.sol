@@ -33,15 +33,21 @@ contract DemoDeploy is Script {
 
     function run() public {
         vm.startBroadcast();
+        // TODO: change this to a treasury contract
         address treasury = address(msg.sender);
         WFIL wFil = new WFIL();
 
         // deploy 2 simple interest pools
         PoolFactory poolFactory = new PoolFactory(wFil, treasury);
         // 20% simple interest pool
-        poolFactory.createSimpleInterestPool("POOL1", 20e18);
+        IPool4626 pool1 = poolFactory.createSimpleInterestPool("POOL1", 20e18);
         // 15% simple interest pool
-        poolFactory.createSimpleInterestPool("POOL2", 15e18);
+        IPool4626 pool2 = poolFactory.createSimpleInterestPool("POOL2", 15e18);
+
+        // temp
+        wFil.deposit{value: 100e18}();
+        wFil.approve(address(pool1), 100e18);
+        wFil.approve(address(pool2), 100e18);
 
         // deploy 2 miners with their loan agent's configured
         loanAgentFactory = new LoanAgentFactory(address(poolFactory));
