@@ -6,7 +6,7 @@ pragma solidity ^0.8.15;
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 
-contract WETH is ERC20("Wrapped Filecoin", "WFIL", 18) {
+contract WFIL is ERC20("Wrapped Filecoin", "WFIL", 18) {
     using SafeTransferLib for address;
 
     event Deposit(address indexed from, uint256 amount);

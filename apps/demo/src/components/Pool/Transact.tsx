@@ -1,204 +1,130 @@
-import {
-  ButtonV2,
-  FILECOIN_NUMBER_PROPTYPE,
-  InputV2,
-  ShadowBox as _ShadowBox,
-  space
-} from '@glif/react-components'
+import { FILECOIN_NUMBER_PROPTYPE } from '@glif/react-components'
 import { FilecoinNumber } from '@glif/filecoin-number'
 import PropTypes from 'prop-types'
-import styled from 'styled-components'
-import { useState } from 'react'
-import { useAccount, useContractWrite, usePrepareContractWrite } from 'wagmi'
+import { useEffect, useMemo, useState } from 'react'
+import { useAccount, useBalance, useSigner } from 'wagmi'
 
+import { useAllowance, usePoolTokenBalance, useWFILBalance } from '../../utils'
+import { TransactTab } from './types'
+import { DEPOSIT_ELIGIBILITY } from './common'
+import { TransactForm } from './TransactForm'
+import {
+  SimpleInterestPool,
+  SimpleInterestPool__factory,
+  WFIL,
+  WFIL__factory
+} from '../../../typechain'
 import contractDigest from '../../../generated/contractDigest.json'
-import { usePoolTokenBalance } from '../../utils'
-
-const { SimpleInterestPool } = contractDigest
-
-const Form = styled.form`
-  margin-left: 10%;
-  margin-right: 10%;
-
-  > button {
-    width: 100%;
-    margin-top: ${space()};
-  }
-`
-
-const ShadowBox = styled(_ShadowBox)`
-  padding: 0;
-  padding-bottom: 1.5em;
-
-  > * {
-    text-align: center;
-  }
-`
-
-const FormContainer = styled.div`
-  margin-top: ${space('lg')};
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-
-  > label {
-    width: fit-content;
-    margin-left: auto;
-    margin-right: auto;
-    margin-top: ${space('lg')};
-    margin-bottom: ${space('lg')};
-  }
-`
-
-const Tab = styled.button.attrs(() => ({
-  type: 'button'
-}))`
-  border: none;
-  width: 50%;
-  text-align: center;
-  word-break: break-word;
-  padding: 1em;
-  cursor: pointer;
-
-  font-size: 1.375em;
-
-  ${(props) =>
-    props.selected
-      ? `
-        background-color: var(--purple-medium);
-        color: var(--white);
-        border-bottom: 1px solid var(--purple-medium);
-      `
-      : `
-        background-color: var(--white);
-        color: var(--purple-medium);
-        border-bottom: 1px solid var(--purple-medium);
-
-        &:hover {
-          background-color: var(--purple-light);
-        }
-      `}
-
-  ${(props) => props.firstTab && `border-top-left-radius: 8px;`}
-
-  ${(props) => props.lastTab && `border-top-right-radius: 8px;`}
-`
-
-Tab.propTYpes = {
-  firstTab: PropTypes.bool,
-  lastTab: PropTypes.bool,
-  selected: PropTypes.bool
-}
-
-enum TransactTab {
-  DEPOSIT = 'DEPOSIT',
-  WITHDRAW = 'WITHDRAW'
-}
 
 export function Transact(props: TransactProps) {
   const [tab, setTab] = useState<TransactTab>(TransactTab.DEPOSIT)
-  const [depositAmount, setDepositAmount] = useState(
-    new FilecoinNumber('0', 'fil')
-  )
-  const [withdrawAmount, setWithdrawAmount] = useState(0)
-
+  const [depositEligibility, setDepositEligibility] =
+    useState<DEPOSIT_ELIGIBILITY>(DEPOSIT_ELIGIBILITY.LOADING)
   const { address } = useAccount()
-  const { balance } = usePoolTokenBalance(props.poolID, address)
+  const {
+    data: filBalance,
+    isLoading: filBalLoading,
+    error: filBalErr
+  } = useBalance({
+    addressOrName: address,
+    formatUnits: 'ether'
+  })
+  const { balance: poolTokenBalance } = usePoolTokenBalance(
+    props.poolID,
+    address
+  )
+  const { data: signer } = useSigner()
 
-  const { config: depositConfig, error: depositError } =
-    usePrepareContractWrite({
-      addressOrName: props.poolAddress,
-      contractInterface: SimpleInterestPool[0].abi,
-      functionName: 'deposit',
-      args: [depositAmount.toAttoFil(), address]
-    })
+  const { simpleInterestContract, wFILContract } = useMemo<{
+    simpleInterestContract: SimpleInterestPool
+    wFILContract: WFIL
+  }>(() => {
+    if (!props.poolAddress || !signer)
+      return { simpleInterestContract: null, wFILContract: null }
+    const simpleInterestContract = SimpleInterestPool__factory.connect(
+      props.poolAddress,
+      signer
+    )
+    const wFILContract = WFIL__factory.connect(
+      contractDigest.WFIL.address,
+      signer
+    )
+    return { simpleInterestContract, wFILContract }
+  }, [props.poolAddress, signer])
 
-  const { write: deposit } = useContractWrite(depositConfig)
+  const {
+    balance: wFILBal,
+    loading: wFILBalLoading,
+    error: wFILBalErr
+  } = useWFILBalance(address)
+  const {
+    allowance: wFILAllowance,
+    loading: allowanceLoading,
+    error: allowanceErr
+  } = useAllowance(address, props.poolAddress)
 
-  const { config: withdrawConfig, error: withdrawError } =
-    usePrepareContractWrite({
-      addressOrName: props.poolAddress,
-      contractInterface: SimpleInterestPool[0].abi,
-      functionName: 'withdraw',
-      args: [
-        new FilecoinNumber(withdrawAmount, 'fil').toAttoFil(),
-        address,
-        address
-      ]
-    })
-
-  const { write: withdraw } = useContractWrite(withdrawConfig)
+  // based on contract data, set the UI state
+  useEffect(() => {
+    if (
+      !allowanceErr &&
+      !allowanceLoading &&
+      !wFILBalLoading &&
+      !wFILBalErr &&
+      !filBalErr &&
+      !filBalLoading
+    ) {
+      if (
+        wFILBal.isEqualTo(0) &&
+        depositEligibility < DEPOSIT_ELIGIBILITY.NEEDS_WFIL
+      ) {
+        // if the user has no WFIL but has FIL, they need to deposit to get WFIL
+        if (filBalance.value.gt(0)) {
+          setDepositEligibility(DEPOSIT_ELIGIBILITY.NEEDS_WFIL)
+        } else {
+          // only make this check if the user also doesn't have WFIL
+          setDepositEligibility(DEPOSIT_ELIGIBILITY.NEEDS_FIL)
+        }
+      } else if (
+        wFILBal.isGreaterThan(0) &&
+        wFILAllowance.isEqualTo(0) &&
+        depositEligibility < DEPOSIT_ELIGIBILITY.NEEDS_WFIL_ALLOWANCE
+      ) {
+        setDepositEligibility(DEPOSIT_ELIGIBILITY.NEEDS_WFIL_ALLOWANCE)
+      } else if (
+        wFILAllowance.isGreaterThan(0) &&
+        depositEligibility < DEPOSIT_ELIGIBILITY.READY
+      ) {
+        setDepositEligibility(DEPOSIT_ELIGIBILITY.READY)
+      }
+    }
+  }, [
+    wFILBal,
+    wFILAllowance,
+    wFILBalLoading,
+    wFILBalErr,
+    allowanceLoading,
+    allowanceErr,
+    depositEligibility,
+    filBalance,
+    filBalLoading,
+    filBalErr
+  ])
 
   return (
-    <Form
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (withdrawAmount > 0 && !withdrawError) withdraw?.()
-        else if (depositAmount.isGreaterThan(0) && !depositError) deposit?.()
-      }}
-    >
-      <ShadowBox>
-        <Tab
-          firstTab
-          selected={tab === TransactTab.DEPOSIT}
-          onClick={() => {
-            setTab(TransactTab.DEPOSIT)
-          }}
-        >
-          Deposit
-        </Tab>
-        <Tab
-          lastTab
-          selected={tab === TransactTab.WITHDRAW}
-          onClick={() => {
-            setTab(TransactTab.WITHDRAW)
-          }}
-        >
-          Withdraw
-        </Tab>
-        <FormContainer>
-          <h3>
-            Your balance: {balance?.toFil()} P{props.poolID}GLIF
-          </h3>
-          {tab === TransactTab.DEPOSIT ? (
-            <>
-              <InputV2.Filecoin
-                label='Deposit amount'
-                placeholder='0'
-                value={depositAmount}
-                onChange={setDepositAmount}
-              />
-              <h3>1 FIL = {props.exchangeRate.toFil()} P0GLIF</h3>
-              <p>
-                Receive {depositAmount.times(props.exchangeRate).toFil()} P
-                {props.poolID}GLIF
-              </p>
-            </>
-          ) : (
-            <>
-              <InputV2.Number
-                label='Withdraw amount'
-                placeholder='0'
-                value={withdrawAmount}
-                onChange={setWithdrawAmount}
-              />
-              <h3>1 FIL = {props.exchangeRate} P0GLIF</h3>
-              <p>
-                Receive{' '}
-                {new FilecoinNumber(withdrawAmount, 'fil')
-                  .times(props.exchangeRate)
-                  .toFil()}{' '}
-                FIL
-              </p>
-            </>
-          )}
-          <hr />
-        </FormContainer>
-      </ShadowBox>
-      <ButtonV2 large green type='submit'>
-        {tab}
-      </ButtonV2>
-    </Form>
+    <TransactForm
+      address={address}
+      poolAddress={props.poolAddress}
+      wFILBalance={wFILBal}
+      allowance={wFILAllowance}
+      tab={tab}
+      depositEligibility={depositEligibility}
+      setTab={setTab}
+      poolID={props.poolID}
+      poolTokenBalance={poolTokenBalance}
+      exchangeRate={props.exchangeRate}
+      simpleInterestContract={simpleInterestContract}
+      wFILContract={wFILContract}
+    />
   )
 }
 

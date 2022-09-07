@@ -12,7 +12,6 @@ import Layout from '../Layout'
 import { PriceChart } from './PriceChart'
 import { Education } from './Education'
 import { Transact } from './Transact'
-import { WFIL } from './WFIL'
 import { usePoolTokenBalance, usePool } from '../../utils'
 
 const PoolPageWrapper = styled(OneColumn)`
@@ -44,14 +43,11 @@ export default function Pool() {
       </PoolPageWrapper>
       <TwoColumns>
         <Education />
-        <div>
-          <WFIL poolAddress={pool?.address} />
-          <Transact
-            poolID={pool?.id}
-            poolAddress={pool?.address}
-            exchangeRate={pool?.exchangeRate}
-          />
-        </div>
+        <Transact
+          poolID={pool?.id || ''}
+          poolAddress={pool?.address || ''}
+          exchangeRate={pool?.exchangeRate}
+        />
       </TwoColumns>
     </Layout>
   )

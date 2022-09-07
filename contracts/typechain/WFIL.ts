@@ -171,8 +171,8 @@ export type ApprovalEvent = TypedEvent<
 export type ApprovalEventFilter = TypedEventFilter<ApprovalEvent>;
 
 export interface DepositEventObject {
-  dst: string;
-  wad: BigNumber;
+  from: string;
+  amount: BigNumber;
 }
 export type DepositEvent = TypedEvent<[string, BigNumber], DepositEventObject>;
 
@@ -191,8 +191,8 @@ export type TransferEvent = TypedEvent<
 export type TransferEventFilter = TypedEventFilter<TransferEvent>;
 
 export interface WithdrawalEventObject {
-  src: string;
-  wad: BigNumber;
+  to: string;
+  amount: BigNumber;
 }
 export type WithdrawalEvent = TypedEvent<
   [string, BigNumber],
@@ -289,7 +289,7 @@ export interface WFIL extends BaseContract {
     ): Promise<ContractTransaction>;
 
     withdraw(
-      wad: PromiseOrValue<BigNumberish>,
+      amount: PromiseOrValue<BigNumberish>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<ContractTransaction>;
   };
@@ -355,7 +355,7 @@ export interface WFIL extends BaseContract {
   ): Promise<ContractTransaction>;
 
   withdraw(
-    wad: PromiseOrValue<BigNumberish>,
+    amount: PromiseOrValue<BigNumberish>,
     overrides?: Overrides & { from?: PromiseOrValue<string> }
   ): Promise<ContractTransaction>;
 
@@ -419,7 +419,7 @@ export interface WFIL extends BaseContract {
     ): Promise<boolean>;
 
     withdraw(
-      wad: PromiseOrValue<BigNumberish>,
+      amount: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
     ): Promise<void>;
   };
@@ -437,12 +437,12 @@ export interface WFIL extends BaseContract {
     ): ApprovalEventFilter;
 
     "Deposit(address,uint256)"(
-      dst?: PromiseOrValue<string> | null,
-      wad?: null
+      from?: PromiseOrValue<string> | null,
+      amount?: null
     ): DepositEventFilter;
     Deposit(
-      dst?: PromiseOrValue<string> | null,
-      wad?: null
+      from?: PromiseOrValue<string> | null,
+      amount?: null
     ): DepositEventFilter;
 
     "Transfer(address,address,uint256)"(
@@ -457,12 +457,12 @@ export interface WFIL extends BaseContract {
     ): TransferEventFilter;
 
     "Withdrawal(address,uint256)"(
-      src?: PromiseOrValue<string> | null,
-      wad?: null
+      to?: PromiseOrValue<string> | null,
+      amount?: null
     ): WithdrawalEventFilter;
     Withdrawal(
-      src?: PromiseOrValue<string> | null,
-      wad?: null
+      to?: PromiseOrValue<string> | null,
+      amount?: null
     ): WithdrawalEventFilter;
   };
 
@@ -528,7 +528,7 @@ export interface WFIL extends BaseContract {
     ): Promise<BigNumber>;
 
     withdraw(
-      wad: PromiseOrValue<BigNumberish>,
+      amount: PromiseOrValue<BigNumberish>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<BigNumber>;
   };
@@ -595,7 +595,7 @@ export interface WFIL extends BaseContract {
     ): Promise<PopulatedTransaction>;
 
     withdraw(
-      wad: PromiseOrValue<BigNumberish>,
+      amount: PromiseOrValue<BigNumberish>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<PopulatedTransaction>;
   };
