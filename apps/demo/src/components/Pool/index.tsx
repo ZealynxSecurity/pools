@@ -42,7 +42,12 @@ export default function Pool() {
         <PriceChart poolID={Number(query.id)} />
       </PoolPageWrapper>
       <TwoColumns>
-        <Education />
+        <Education
+          poolID={pool.id}
+          name={pool.name}
+          interestRate={pool.interestRate}
+          totalAssets={pool.totalAssets}
+        />
         <Transact
           poolID={pool?.id || ''}
           poolAddress={pool?.address || ''}

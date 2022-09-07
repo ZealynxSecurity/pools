@@ -1,3 +1,4 @@
+import { FilecoinNumber } from '@glif/filecoin-number'
 import { space, StandardBox } from '@glif/react-components'
 import styled from 'styled-components'
 import { DataPoint } from '../generic'
@@ -27,32 +28,32 @@ const OnChainStatsWrapper = styled(StandardBox)`
   }
 `
 
-function OnChainStats() {
+function OnChainStats(props: EducationProps) {
   return (
     <OnChainStatsWrapper>
       <DataPoint>
         <p>Pool #</p>
-        <h2>1</h2>
+        <h2>{props.poolID}</h2>
       </DataPoint>
       <DataPoint>
         <p>Name</p>
-        <h2>Conservative miner index</h2>
+        <h2>{props.name}</h2>
       </DataPoint>
       <DataPoint>
         <p>Exit Liquidity</p>
-        <h2>200,000 FIL</h2>
+        <h2>{props.exitLiquidity}</h2>
       </DataPoint>
       <DataPoint>
         <p>Current APY</p>
-        <h2>22.36%</h2>
+        <h2>{props.interestRate.toFil()}%</h2>
       </DataPoint>
       <DataPoint>
         <p>Total Assets</p>
-        <h2>1,200,000 FIL</h2>
+        <h2>{props.totalAssets.toFil()} FIL</h2>
       </DataPoint>
       <DataPoint>
         <p>Working Assets</p>
-        <h2>384,000 FIL</h2>
+        <h2>{props.workingAssets}</h2>
       </DataPoint>
     </OnChainStatsWrapper>
   )
@@ -68,10 +69,10 @@ const EducationWrapper = styled.div`
   }
 `
 
-export function Education() {
+export function Education(props: EducationProps) {
   return (
     <EducationWrapper>
-      <OnChainStats />
+      <OnChainStats {...props} />
       <StandardBox>
         <h2>About</h2>
         <p>
@@ -92,4 +93,13 @@ export function Education() {
       </StandardBox>
     </EducationWrapper>
   )
+}
+
+type EducationProps = {
+  poolID: string
+  name: string
+  exitLiquidity: FilecoinNumber
+  interestRate: FilecoinNumber
+  totalAssets: FilecoinNumber
+  workingAssets: FilecoinNumber
 }

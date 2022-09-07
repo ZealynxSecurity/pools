@@ -13,6 +13,7 @@ export type Pool = {
   name: string
   exchangeRate: FilecoinNumber
   interestRate: FilecoinNumber
+  totalAssets: FilecoinNumber
 }
 
 export type UsePoolAddressesReturn = {
@@ -75,6 +76,11 @@ export const usePools = (): UsePoolAddressesReturn => {
           addressOrName: address.toString(),
           contractInterface: SimpleInterestPool[0].abi,
           functionName: 'interestRate'
+        },
+        {
+          addressOrName: address.toString(),
+          contractInterface: SimpleInterestPool[0].abi,
+          functionName: 'totalAssets'
         }
       ]
     })
@@ -84,7 +90,7 @@ export const usePools = (): UsePoolAddressesReturn => {
   const { data, isLoading, error } = useContractReads(poolMetadataContracts)
   // this is to help us make sense of the return data from `useContractReads`
   // each pool contract has a call to "name" and to "previewDeposit"
-  const CONTRACT_READS_PER_POOL = 3
+  const CONTRACT_READS_PER_POOL = 4
   const pools = useMemo(() => {
     if (error || isLoading) return []
     if (!data) return []
@@ -101,7 +107,11 @@ export const usePools = (): UsePoolAddressesReturn => {
         id: i.toString(),
         name: data[indexes[0]].toString(),
         exchangeRate: new FilecoinNumber(data[indexes[1]].toString(), 'fil'),
-        interestRate: new FilecoinNumber(data[indexes[2]].toString(), 'attofil')
+        interestRate: new FilecoinNumber(
+          data[indexes[2]].toString(),
+          'attofil'
+        ),
+        totalAssets: new FilecoinNumber(data[indexes[3]].toString(), 'attofil')
       }
       byPool.push(pool)
     }
@@ -132,10 +142,17 @@ export const usePools = (): UsePoolAddressesReturn => {
 export const usePool = (poolID: string): Pool => {
   const { pools } = usePools()
   return useMemo(() => {
-    if (pools.length > 0) {
+    if (pools.length > 0 && !!poolID) {
       return pools[poolID as string]
     }
 
-    return null
+    return {
+      id: '',
+      address: '',
+      name: '',
+      exchangeRate: new FilecoinNumber('0', 'fil'),
+      interestRate: new FilecoinNumber('0', 'fil'),
+      totalAssets: new FilecoinNumber('0', 'fil')
+    }
   }, [pools, poolID])
 }
