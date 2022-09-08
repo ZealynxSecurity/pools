@@ -64,8 +64,12 @@ export default function Layout({ children, ...rest }: PageProps) {
           url: PAGE.PORTFOLIO
         },
         {
-          title: 'Miners',
-          url: PAGE.MINERS
+          title: 'Borrow',
+          url: PAGE.BORROW
+        },
+        {
+          title: 'Repay loan',
+          url: PAGE.REPAY
         },
         {
           title: 'Discord',

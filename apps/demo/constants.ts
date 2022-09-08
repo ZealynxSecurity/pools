@@ -4,7 +4,8 @@ export enum PAGE {
   PORTFOLIO = '/portfolio',
   POOLS = '/pools',
   POOL = '/pool',
-  MINERS = '/miners'
+  BORROW = '/miner/borrow',
+  REPAY = '/miner/repay'
 }
 
 export const GLIF_DISCORD = 'https://discord.gg/B9ju5Eu4Rq'

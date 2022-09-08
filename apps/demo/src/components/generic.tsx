@@ -1,5 +1,5 @@
 import styled from 'styled-components'
-import { devices, InfoBox, space } from '@glif/react-components'
+import { devices, InfoBox } from '@glif/react-components'
 import PropTypes from 'prop-types'
 
 export const TableHeader = styled.h3`
@@ -49,10 +49,10 @@ Stat.propTypes = {
 export const DataPoint = styled.div`
   display: flex;
   flex-direction: column;
-  margin-right: ${space('lg')};
-  margin-left: ${space('lg')};
-  padding-right: ${space('lg')};
-  padding-left: ${space('lg')};
+  margin-right: var(--space-l)};
+  margin-left: var(--space-l)};
+  padding-right: var(--space-l)};
+  padding-left: var(--space-l)};
 
   > * {
     padding: 0;
@@ -60,14 +60,22 @@ export const DataPoint = styled.div`
   }
 
   > p {
-    margin-top: ${space('lg')};
-    padding-top: ${space('lg')};
+    margin-top: var(--space-l);
+    padding-top: var(--space-l);
     color: var(--gray-light);
   }
 
   > h3 {
-    margin-top: ${space('sm')};
-    margin-bottom: ${space('lg')};
-    padding-bottom: ${space('lg')};
+    margin-top: var(--space-s);
+    margin-bottom: var(--space-l);
+    padding-bottom: var(--space-l);
   }
 `
+
+export enum DEPOSIT_ELIGIBILITY {
+  LOADING,
+  NEEDS_FIL,
+  NEEDS_WFIL,
+  NEEDS_WFIL_ALLOWANCE,
+  READY
+}

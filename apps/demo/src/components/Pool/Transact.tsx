@@ -6,7 +6,7 @@ import { useAccount, useBalance, useSigner } from 'wagmi'
 
 import { useAllowance, usePoolTokenBalance, useWFILBalance } from '../../utils'
 import { TransactTab } from './types'
-import { DEPOSIT_ELIGIBILITY } from './common'
+import { DEPOSIT_ELIGIBILITY } from '../generic'
 import { TransactForm } from './TransactForm'
 import {
   SimpleInterestPool,

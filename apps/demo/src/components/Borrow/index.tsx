@@ -13,7 +13,7 @@ const MinerPageWrapper = styled(OneColumn)`
   align-items: center;
 `
 
-export default function Miners() {
+export default function Borrow() {
   const { data } = useContractRead({
     addressOrName: LoanAgentFactory.address,
     contractInterface: LoanAgentFactory.abi,

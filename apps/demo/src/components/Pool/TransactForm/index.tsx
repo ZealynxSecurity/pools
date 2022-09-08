@@ -1,10 +1,11 @@
-import { FilecoinNumber } from '@glif/filecoin-number'
-import PropTypes from 'prop-types'
-import { TransactTab } from '../types'
-import { DEPOSIT_ELIGIBILITY } from '../common'
-import { FILECOIN_NUMBER_PROPTYPE } from '@glif/react-components'
-import { FormTemplate } from './FormTemplate'
 import { Dispatch, SetStateAction } from 'react'
+import { FilecoinNumber } from '@glif/filecoin-number'
+import { FILECOIN_NUMBER_PROPTYPE } from '@glif/react-components'
+import PropTypes from 'prop-types'
+
+import { TransactTab } from '../types'
+import { DEPOSIT_ELIGIBILITY } from '../../generic'
+import { FormTemplate } from './FormTemplate'
 import { SimpleInterestPool, WFIL } from '../../../../typechain'
 
 export const TransactForm = (props: TransactFormProps) => {

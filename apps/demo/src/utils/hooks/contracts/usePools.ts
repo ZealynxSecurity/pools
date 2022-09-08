@@ -106,7 +106,7 @@ export const usePools = (): UsePoolAddressesReturn => {
         address: poolAddrs[i].toString(),
         id: i.toString(),
         name: data[indexes[0]].toString(),
-        exchangeRate: new FilecoinNumber(data[indexes[1]].toString(), 'fil'),
+        exchangeRate: new FilecoinNumber(data[indexes[1]]?.toString(), 'fil'),
         interestRate: new FilecoinNumber(
           data[indexes[2]].toString(),
           'attofil'

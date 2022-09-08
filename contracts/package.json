@@ -16,7 +16,7 @@
     "clean:types": "rimraf typechain",
     "demo:local": "run-s clean deploy:contracts:local build",
     "deploy:contracts:local": "source .env.local && forge script script/Demo.s.sol --fork-url $FORK_URL --private-key $DEPLOYER_PRIVATE_KEY --target-contract DemoDeploy --broadcast -vvvv",
-    "start:node": "anvil",
+    "start:node": "anvil --block-time 1",
     "test": "forge test -vvv",
     "test:watch": "forge test -w -vvv",
     "test:contract": "forge test -vvv --match-contract",

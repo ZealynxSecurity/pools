@@ -37,7 +37,7 @@ export default function Portfolio() {
         Object.keys(allPoolBalances).reduce(
           (total, id) =>
             total.plus(
-              new FilecoinNumber(allPoolBalances[id].toString(), 'attofil')
+              new FilecoinNumber(allPoolBalances[id].toAttoFil(), 'attofil')
             ),
           new FilecoinNumber(0, 'fil')
         ),
