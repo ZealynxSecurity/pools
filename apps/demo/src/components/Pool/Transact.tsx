@@ -66,6 +66,7 @@ export function Transact(props: TransactProps) {
   // based on contract data, set the UI state
   useEffect(() => {
     if (
+      !!address &&
       !allowanceErr &&
       !allowanceLoading &&
       !wFILBalLoading &&
@@ -107,7 +108,8 @@ export function Transact(props: TransactProps) {
     depositEligibility,
     filBalance,
     filBalLoading,
-    filBalErr
+    filBalErr,
+    address
   ])
 
   return (

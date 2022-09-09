@@ -44,11 +44,11 @@ contract DemoDeploy is Script {
         IPool4626 pool2 = poolFactory.createSimpleInterestPool("POOL2", 15e18);
 
         // temp https://github.com/glif-confidential/gcred/issues/26
-        wFil.deposit{value: 100e18}();
-        wFil.approve(address(pool1), 100e18);
-        wFil.approve(address(pool2), 100e18);
+        // wFil.deposit{value: 100e18}();
+        // wFil.approve(address(pool1), 100e18);
+        // wFil.approve(address(pool2), 100e18);
 
-        pool1.deposit(50e18, msg.sender);
+        // pool1.deposit(50e18, msg.sender);
 
         // deploy 2 miners with their loan agent's configured
         loanAgentFactory = new LoanAgentFactory(address(poolFactory));

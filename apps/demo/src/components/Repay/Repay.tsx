@@ -6,7 +6,10 @@ import {
   ShadowBox,
   Dialog,
   ButtonV2,
-  StandardBox
+  StandardBox,
+  truncateAddress,
+  CopyText,
+  Colors
 } from '@glif/react-components'
 import { FilecoinNumber } from '@glif/filecoin-number'
 import { useAccount, useSigner } from 'wagmi'
@@ -92,6 +95,10 @@ export function Repay() {
 
           {!loanError && loan && (
             <Lines>
+              <Line label='Pool address'>
+                {truncateAddress(pool.address)}
+                <CopyText text={pool.address} color={Colors.PURPLE_MEDIUM} />
+              </Line>
               <Line label='Owed today'>{loanBalance.bal.toFil()} FIL</Line>
               <Line label='Penalty'>{loanBalance.penalty.toFil()} FIL</Line>
               {Object.keys(loan).map((key: keyof Loan) => (
@@ -100,7 +107,11 @@ export function Repay() {
                 </Line>
               ))}
               <Line label='Total owed'>
-                {loan.interest.plus(loan.principal).toFil()} FIL
+                {loan.interest
+                  .plus(loan.principal)
+                  .minus(loan.totalPaid)
+                  .toFil()}{' '}
+                FIL
               </Line>
             </Lines>
           )}

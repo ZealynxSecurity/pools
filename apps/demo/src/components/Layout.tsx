@@ -72,6 +72,10 @@ export default function Layout({ children, ...rest }: PageProps) {
           url: PAGE.REPAY
         },
         {
+          title: 'WFIL',
+          url: PAGE.WFIL
+        },
+        {
           title: 'Discord',
           url: GLIF_DISCORD
         }

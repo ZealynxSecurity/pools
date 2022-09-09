@@ -1,5 +1,11 @@
 import { FilecoinNumber } from '@glif/filecoin-number'
-import { space, StandardBox } from '@glif/react-components'
+import {
+  Colors,
+  CopyText,
+  space,
+  StandardBox,
+  truncateAddress
+} from '@glif/react-components'
 import styled from 'styled-components'
 import { DataPoint } from '../generic'
 
@@ -8,17 +14,6 @@ const OnChainStatsWrapper = styled(StandardBox)`
   flex-wrap: wrap;
 
   > * {
-    align-items: flex-start;
-
-    &:first-child {
-      width: 100%;
-
-      p {
-        margin-top: ${space()};
-        padding-top: ${space()};
-      }
-    }
-
     &:last-child {
       h2 {
         margin-bottom: ${space()};
@@ -34,6 +29,13 @@ function OnChainStats(props: EducationProps) {
       <DataPoint>
         <p>Pool #</p>
         <h2>{props.poolID}</h2>
+      </DataPoint>
+      <DataPoint>
+        <p>Pool Address</p>
+        <span>
+          <h2>{truncateAddress(props.poolAddress)} </h2>
+          <CopyText text={props.poolAddress} color={Colors.PURPLE_MEDIUM} />
+        </span>
       </DataPoint>
       <DataPoint>
         <p>Name</p>
@@ -97,6 +99,7 @@ export function Education(props: EducationProps) {
 
 type EducationProps = {
   poolID: string
+  poolAddress: string
   name: string
   exitLiquidity: FilecoinNumber
   interestRate: FilecoinNumber

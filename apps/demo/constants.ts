@@ -5,7 +5,8 @@ export enum PAGE {
   POOLS = '/pools',
   POOL = '/pool',
   BORROW = '/miner/borrow',
-  REPAY = '/miner/repay'
+  REPAY = '/miner/repay',
+  WFIL = '/wfil'
 }
 
 export const GLIF_DISCORD = 'https://discord.gg/B9ju5Eu4Rq'

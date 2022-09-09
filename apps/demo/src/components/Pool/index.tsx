@@ -44,6 +44,7 @@ export default function Pool() {
       <TwoColumns>
         <Education
           poolID={pool.id}
+          poolAddress={pool.address}
           name={pool.name}
           interestRate={pool.interestRate}
           totalAssets={pool.totalAssets}

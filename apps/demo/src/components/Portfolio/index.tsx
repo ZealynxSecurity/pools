@@ -52,7 +52,13 @@ export default function Portfolio() {
     <Layout>
       <PageWrapper>
         <MetadataContainer width='60%'>
-          <Stat title='Liquid FIL' stat={balance?.formatted?.toString()} />
+          <Stat
+            title='Liquid FIL'
+            stat={makeFriendlyBalance(
+              new FilecoinNumber(balance?.formatted?.toString(), 'fil'),
+              6
+            ).toString()}
+          />
           <Stat title='Total deposited' stat={`${totalDeposited} FIL`} />
           <Stat title='Total profit/loss' stat='0 FIL' />
         </MetadataContainer>

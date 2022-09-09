@@ -70,6 +70,21 @@ export const DataPoint = styled.div`
     margin-bottom: var(--space-l);
     padding-bottom: var(--space-l);
   }
+
+  > span {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-s);
+
+    > h2 {
+      margin: 0;
+      padding: 0;
+    }
+    > div {
+      height: fit-content;
+    }
+  }
 `
 
 export enum DEPOSIT_ELIGIBILITY {
