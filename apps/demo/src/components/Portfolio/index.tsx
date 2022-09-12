@@ -55,7 +55,7 @@ export default function Portfolio() {
           <Stat
             title='Liquid FIL'
             stat={makeFriendlyBalance(
-              new FilecoinNumber(balance?.formatted?.toString(), 'fil'),
+              new FilecoinNumber(balance?.formatted?.toString() || '0', 'fil'),
               6
             ).toString()}
           />

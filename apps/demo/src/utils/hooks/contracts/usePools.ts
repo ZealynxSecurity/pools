@@ -69,7 +69,7 @@ export const usePools = (): UsePoolAddressesReturn => {
         {
           addressOrName: address.toString(),
           contractInterface: SimpleInterestPool[0].abi,
-          functionName: 'previewDeposit',
+          functionName: 'convertToAssets',
           args: [1]
         },
         {

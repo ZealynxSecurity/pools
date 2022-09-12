@@ -13,6 +13,8 @@ Make sure you have installed:
 
 ## Running tests
 
+For testing contracts, from the repository root, run `yarn test:contracts`. Under the hood, this runs the forge testing suite, so you can pass any flag as you would directly to forge. For example, to run the SimpleInterestPool tests in watch mode, with logging enabled, you would run: `yarn test:contracts -w -vvv --match-contract SimpleInterestPool`
+
 ## Running the demo app
 
 The demo app can technically be run on any blockchain node, but we generally expect a local Ethereum node to be running on portfolio 8545. We use [anvil](https://github.com/foundry-rs/foundry/tree/master/anvil).
