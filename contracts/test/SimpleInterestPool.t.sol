@@ -613,4 +613,70 @@ contract SimpleInterestPoolLendingTest is Test {
       assertGt(loanBalance, 0, "Should have non zero balance");
       assertGt(penalty, 0, "Should have non zero penalty.");
     }
+
+    function testSharePricingBeforeRewards() public {
+      uint256 sharePrice = simpleInterestPool.convertToAssets(1);
+
+      // deposit into pool
+      vm.startPrank(alice);
+      wFil.approve(address(simpleInterestPool), aliceUnderlyingAmount);
+      simpleInterestPool.deposit(aliceUnderlyingAmount, alice);
+      vm.stopPrank();
+
+      assertEq(simpleInterestPool.convertToAssets(1), sharePrice, "Share price should not change upon deposit");
+
+      // borrow from pool
+      simpleInterestPool.borrow(10e18, miner);
+      // roll blocks forward
+      vm.roll(simpleInterestPool.gracePeriod() + 2);
+
+      assertEq(simpleInterestPool.convertToAssets(1), sharePrice, "Share price should not change upon borrow");
+    }
+
+    function testSharePricingAfterRewards() public {
+      uint256 initialSharePrice = simpleInterestPool.convertToAssets(1);
+
+      // deposit into pool
+      vm.startPrank(alice);
+      wFil.approve(address(simpleInterestPool), aliceUnderlyingAmount);
+      simpleInterestPool.deposit(aliceUnderlyingAmount, alice);
+      vm.stopPrank();
+
+      assertEq(simpleInterestPool.convertToAssets(1), initialSharePrice, "Share price should not change upon deposit");
+
+      vm.startPrank(miner);
+      // borrow from pool
+      simpleInterestPool.borrow(1000e18, miner);
+      // give the miner enough funds to pay interest
+      vm.deal(address(miner), 200e18);
+      wFil.deposit{value: 200e18}();
+      // pay off entirety of loan + interest immediately
+      Loan memory l = simpleInterestPool.getLoan(address (miner));
+      wFil.approve(address(simpleInterestPool), l.principal + l.interest);
+
+      simpleInterestPool.repay(l.principal + l.interest, address(miner), address(miner));
+
+      // since the pool now has a greater asset base than when it did before (interest has been paid), its share price should have increased
+      assertGt(simpleInterestPool.convertToAssets(1), initialSharePrice);
+    }
+
+    function testLoanBalanceAfterDurationEnds() public {
+      // deposit into pool
+      vm.startPrank(alice);
+      wFil.approve(address(simpleInterestPool), aliceUnderlyingAmount);
+      simpleInterestPool.deposit(aliceUnderlyingAmount, alice);
+      vm.stopPrank();
+
+      vm.startPrank(miner);
+      // borrow from pool
+      simpleInterestPool.borrow(1000e18, miner);
+      Loan memory l = simpleInterestPool.getLoan(address(miner));
+      // fast forward loanPeriods (so the duration of the loan is technically "over" even though no payments have been made)
+      vm.warp(l.startEpoch + l.periods + 2);
+      (uint256 bal, uint256 penalty) = simpleInterestPool.loanBalance(address(miner));
+      // the balance of the loan should be principal + interest
+      assertEq(l.principal + l.interest, bal);
+      // there should be a penalty
+      assertGt(penalty, 0);
+    }
 }
