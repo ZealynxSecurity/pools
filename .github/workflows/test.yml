@@ -28,10 +28,10 @@ jobs:
       - name: Run Forge build
         run: |
           forge --version
-          forge build --sizes --root ./foundry
+          forge build --sizes --root ./contracts
         id: build
 
       - name: Run Forge tests
         run: |
-          forge test -vvv --root ./foundry
+          forge test -vvv --root ./contracts
         id: test
