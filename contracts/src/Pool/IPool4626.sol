@@ -5,12 +5,13 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import "src/LoanAgent/LoanAgent.sol";
 
 struct Loan {
     // the epoch in which the borrow function was called
     uint256 startEpoch;
-    // the loan duration in epochs
-    uint256 periods;
+    // set at time of borrow / repay / refinance
+    uint256 pmtPerEpoch;
     // the total amount borrowed by the loan agent
     uint256 principal;
     // the total cost of the loan
@@ -102,11 +103,11 @@ abstract contract IPool4626 is ERC4626 {
                       Pool Borrowing Functions
     ////////////////////////////////////////////////////////*/
     function totalLoanValue(Loan memory _loan) public pure returns (uint256) {
-        return _loan.principal + _loan.interest;
+        return _loan.principal + _loan.interest - _loan.totalPaid;
     }
 
     function pmtPerEpoch(Loan memory _loan) public pure returns (uint256) {
-        return totalLoanValue(_loan).divWadUp(_loan.periods * 1e18);
+        return _loan.pmtPerEpoch;
     }
 
     function loanBalance(address borrower) public view returns (uint256 bal, uint256 penalty) {
@@ -115,21 +116,23 @@ abstract contract IPool4626 is ERC4626 {
             return (0, 0);
         }
         uint256 currentPeriod = block.number - loan.startEpoch;
-        uint256 totalOwed = (currentPeriod * 1e18).mulWadUp(pmtPerEpoch(loan));
+        // don't charge for more periods than the total loan duration
+        uint256 maxOwed = currentPeriod > loanPeriods
+            ? totalLoanValue(loan)
+            : (currentPeriod * 1e18).mulWadUp(loan.pmtPerEpoch);
 
-        if (totalOwed <= loan.totalPaid) {
+        if (maxOwed <= loan.totalPaid) {
             return (0, 0);
         }
 
-        bal = totalOwed - loan.totalPaid;
-        penalty = 0;
-        uint256 maxBalBeforePenalty = (gracePeriod * 1e18).mulWadUp(pmtPerEpoch(loan));
+        uint256 maxBalBeforePenalty = (gracePeriod * 1e18).mulWadUp(loan.pmtPerEpoch);
+        uint256 totalOwed = (currentPeriod * 1e18).mulWadUp(loan.pmtPerEpoch);
 
-        if (bal <= maxBalBeforePenalty) {
-            return (bal, penalty);
+        if (totalOwed <= maxBalBeforePenalty) {
+            return (maxOwed, 0);
         }
-        // we are in the penalty zone
-        penalty = penaltyFee.mulWadUp((bal - maxBalBeforePenalty) * 1e18);
+
+        return (maxOwed, penaltyFee.mulWadUp((totalOwed - maxBalBeforePenalty) * 1e18));
     }
 
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/1
@@ -138,6 +141,8 @@ abstract contract IPool4626 is ERC4626 {
     function borrow(uint256 amount, address loanAgent) public virtual returns (uint256 interest) {
         // check
         require(amount <= totalAssets(), "Amount to borrow must be less than this pool's liquid totalAssets");
+        // require(!LoanAgent(payable(loanAgent)).isLoanAgent(), "Cannot borrow as a non loan-aget actor");
+        // require(!LoanAgent(payable(loanAgent)).hasPenalties(), "Cannot borrow from a pool when LoanAgent is in penalty");
 
         // effect
         uint256 newInterest = amount.mulWadUp(interestRate);
@@ -145,7 +150,7 @@ abstract contract IPool4626 is ERC4626 {
         uint256 principal = _loans[loanAgent].principal + amount;
         _loans[loanAgent] = Loan(
             block.number,
-            loanPeriods,
+            (principal + interest - _loans[loanAgent].totalPaid).divWadUp(loanPeriods * 1e18),
             principal,
             interest,
             _loans[loanAgent].totalPaid

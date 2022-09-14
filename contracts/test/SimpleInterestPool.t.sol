@@ -487,7 +487,6 @@ contract SimpleInterestPoolLendingTest is Test {
       Loan memory l = simpleInterestPool.getLoan(address(miner));
       assertEq(l.principal, aliceUnderlyingAmount);
       assertEq(l.interest, FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount), "it should report the correct interest amount owed on the loan");
-      assertEq(l.periods, simpleInterestPool.loanPeriods());
       assertEq(l.totalPaid, 0);
       assertEq(l.startEpoch, blockNum);
 
@@ -538,7 +537,6 @@ contract SimpleInterestPoolLendingTest is Test {
       Loan memory l = simpleInterestPool.getLoan(address(miner));
       assertEq(l.principal, aliceUnderlyingAmount);
       assertEq(l.interest, FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount));
-      assertEq(l.periods, simpleInterestPool.loanPeriods());
       assertEq(l.totalPaid, halfOfBorrowAmount);
       assertEq(postLoanMinerBal - postRepayMinerBal, l.totalPaid);
     }
@@ -571,7 +569,6 @@ contract SimpleInterestPoolLendingTest is Test {
       Loan memory l = simpleInterestPool.getLoan(address(miner));
       assertEq(l.principal, borrowAmount1);
       assertEq(l.interest, FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount1), "it should report the correct interest amount owed on the loan");
-      assertEq(l.periods, simpleInterestPool.loanPeriods());
       assertEq(l.totalPaid, 0);
       assertEq(l.startEpoch, blockNum);
 
@@ -595,7 +592,6 @@ contract SimpleInterestPoolLendingTest is Test {
       l = simpleInterestPool.getLoan(address(miner));
       assertEq(l.principal, borrowAmount1 + borrowAmount2, "Expected principal to increase to include both loan amounts");
       assertEq(l.interest, combinedInterest, "it should report the correct interest amount owed on the loan");
-      assertEq(l.periods, simpleInterestPool.loanPeriods());
       assertEq(l.totalPaid, 0);
       assertEq(l.startEpoch, blockNum);
     }
@@ -672,7 +668,7 @@ contract SimpleInterestPoolLendingTest is Test {
       simpleInterestPool.borrow(1000e18, miner);
       Loan memory l = simpleInterestPool.getLoan(address(miner));
       // fast forward loanPeriods (so the duration of the loan is technically "over" even though no payments have been made)
-      vm.warp(l.startEpoch + l.periods + 2);
+      vm.roll(l.startEpoch + simpleInterestPool.loanPeriods() + 1000);
       (uint256 bal, uint256 penalty) = simpleInterestPool.loanBalance(address(miner));
       // the balance of the loan should be principal + interest
       assertEq(l.principal + l.interest, bal);

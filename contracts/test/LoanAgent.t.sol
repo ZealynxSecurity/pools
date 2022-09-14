@@ -213,4 +213,11 @@ contract LoanAgentTest is Test {
         assertTrue(inPenalty);
         loanAgent.borrow(loanAmount, pool.id());
     }
+
+    function testInPenaltyWithNoLoans() public {
+        vm.startPrank(alice);
+        vm.roll(pool.gracePeriod() + 2);
+        bool inPenalty = loanAgent.hasPenalties();
+        assertFalse(inPenalty);
+    }
 }
