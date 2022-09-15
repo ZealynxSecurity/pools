@@ -2,20 +2,18 @@
 pragma solidity ^0.8.15;
 
 import "src/LoanAgent/LoanAgent.sol";
+import "src/Router/RouterAware.sol";
 
 interface ILoanAgentFactory {
   function create(address _miner) external returns (address);
+  function loanAgents(address loanAgent) external returns (address);
+  function activeMiners(address miner) external returns (address);
 }
 
-contract LoanAgentFactory {
-  address public poolFactory;
+contract LoanAgentFactory is RouterAware {
   mapping(address => address) public loanAgents;
   mapping(address => address) public activeMiners;
   uint256 public count = 0;
-
-  constructor(address _poolFactory) {
-    poolFactory = _poolFactory;
-  }
 
   function create(address _miner) public returns (address) {
     // can only have 1 loan agent per miner
@@ -23,7 +21,7 @@ contract LoanAgentFactory {
       return activeMiners[_miner];
     }
 
-    LoanAgent loanAgent = new LoanAgent(_miner, poolFactory);
+    LoanAgent loanAgent = new LoanAgent(_miner, router);
     loanAgents[address(loanAgent)] = _miner;
     activeMiners[_miner] = address(loanAgent);
     count += 1;

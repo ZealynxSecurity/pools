@@ -13,7 +13,4 @@ interface ILoanAgent {
   function borrow(uint256 amount, uint256 poolID) external;
   // calls withdrawBalance on the miner to take earned FIL and pay down loan amount
   function repay(uint256 amount, uint256 poolID) external;
-
-  function isDebtor() external returns (bool);
-  function hasPenalties() external returns (bool);
 }

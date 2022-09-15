@@ -16,6 +16,7 @@ contract SimpleInterestPool is IPool4626 {
         string memory _symbol,
         uint256 poolID,
         uint256 baseRate,
-        address treasury
-    ) IPool4626(_asset, _name, _symbol, poolID, baseRate, treasury) {}
+        address treasury,
+        address router
+    ) IPool4626(_asset, _name, _symbol, poolID, baseRate, treasury, router) {}
 }

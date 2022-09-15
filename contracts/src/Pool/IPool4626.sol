@@ -5,7 +5,10 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import "src/LoanAgent/LoanAgent.sol";
+import {LoanAgentFactory} from "src/LoanAgent/LoanAgentFactory.sol";
+import {LoanAgent} from "src/LoanAgent/LoanAgent.sol";
+import {Router} from "src/Router/Router.sol";
+import {IStats} from "src/Stats/IStats.sol";
 
 struct Loan {
     // the epoch in which the borrow function was called
@@ -31,6 +34,7 @@ abstract contract IPool4626 is ERC4626 {
     using FixedPointMathLib for uint256;
 
     address public treasury;
+    address public router;
 
     uint256 public id;
     uint256 public interestRate;
@@ -79,12 +83,14 @@ abstract contract IPool4626 is ERC4626 {
         uint256 _id,
         // interest rate in percentages (e.g. 55 => 5.5% interest)
         uint256 _interestRate,
-        address _treasury
-    ) ERC4626(_asset, _name, _symbol) {
+        address _treasury,
+        address _router
+        ) ERC4626(_asset, _name, _symbol) {
         id = _id;
         // TODO: https://github.com/glif-confidential/gcred-contracts/issues/20
         interestRate = _interestRate.divWadUp(100e18);
         treasury = _treasury;
+        router = _router;
     }
 
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/19
@@ -99,6 +105,7 @@ abstract contract IPool4626 is ERC4626 {
     function getFee(uint256 amount) public view returns (uint256) {
         return fee.mulWadUp(amount);
     }
+
     /*////////////////////////////////////////////////////////
                       Pool Borrowing Functions
     ////////////////////////////////////////////////////////*/
@@ -141,8 +148,10 @@ abstract contract IPool4626 is ERC4626 {
     function borrow(uint256 amount, address loanAgent) public virtual returns (uint256 interest) {
         // check
         require(amount <= totalAssets(), "Amount to borrow must be less than this pool's liquid totalAssets");
-        // require(!LoanAgent(payable(loanAgent)).isLoanAgent(), "Cannot borrow as a non loan-aget actor");
-        // require(!LoanAgent(payable(loanAgent)).hasPenalties(), "Cannot borrow from a pool when LoanAgent is in penalty");
+
+        IStats stats = IStats(Router(router).getStats());
+        require(stats.isLoanAgent(loanAgent), "Only loan agents can borrow from pools");
+        require(!stats.hasPenalties(loanAgent), "Cannot borrow from a pool when LoanAgent is in penalty");
 
         // effect
         uint256 newInterest = amount.mulWadUp(interestRate);

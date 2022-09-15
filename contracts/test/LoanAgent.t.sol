@@ -56,6 +56,14 @@ contract LoanAgentBasicTest is Test {
         assertEq(loanAgent.owner(), alice, "After claiming ownership, the loanAgent's owner should be the previous miner's owner");
     }
 
+    function testIsLoanAgent() public {
+        vm.startPrank(alice);
+        address la = loanAgentFactory.create(address(miner));
+        assertTrue(loanAgentFactory.isLoanAgent(la));
+        assertFalse(loanAgentFactory.isLoanAgent(address(0xABC)));
+        vm.stopPrank();
+    }
+
     function testFailClaimOwnership() public {
         vm.startPrank(alice);
         LoanAgent loanAgent = LoanAgent(payable(loanAgentFactory.create(address(miner))));

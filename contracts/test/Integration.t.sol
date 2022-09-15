@@ -37,8 +37,11 @@ contract IntegrationTest is BaseTest {
         vm.label(miner2Owner, "miner2Owner");
 
         wFil = new WFIL();
+        loanAgentFactory = new LoanAgentFactory();
+        poolFactory = new PoolFactory(wFil, treasury, address(loanAgentFactory));
+        loanAgentFactory.setPoolFactory(address(poolFactory));
+
         // create 2 pools
-        poolFactory = new PoolFactory(wFil, treasury);
         pool1 = poolFactory.createSimpleInterestPool(poolName1, poolBaseInterestRate);
         pool2 = poolFactory.createSimpleInterestPool(poolName2, poolBaseInterestRate);
 
@@ -62,8 +65,6 @@ contract IntegrationTest is BaseTest {
         pool1.deposit(stakeAmount, investor2);
         pool2.deposit(stakeAmount, investor2);
         vm.stopPrank();
-
-        loanAgentFactory = new LoanAgentFactory(address(poolFactory));
 
         (miner1, loanAgent1) = setUpMiner(miner1Owner, address(loanAgentFactory));
         (miner2, loanAgent2) = setUpMiner(miner2Owner, address(loanAgentFactory));

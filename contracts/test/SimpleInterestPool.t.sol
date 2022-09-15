@@ -13,9 +13,11 @@ contract SimpleInterestPoolStakingTest is Test {
 
   WFIL wFil;
   IPool4626 simpleInterestPool;
+  LoanAgentFactory loanAgentFactory;
   function setUp() public {
     wFil = new WFIL();
-    simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, 20e18, treasury);
+    loanAgentFactory = new LoanAgentFactory();
+    simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, 20e18, treasury, address(loanAgentFactory));
 
     vm.deal(alice, 10e18);
     vm.prank(alice);
@@ -461,9 +463,11 @@ contract SimpleInterestPoolLendingTest is Test {
 
   WFIL wFil;
   IPool4626 simpleInterestPool;
+  LoanAgentFactory loanAgentFactory;
   function setUp() public {
     wFil = new WFIL();
-    simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, interestBaseRate, treasury);
+    loanAgentFactory = new LoanAgentFactory();
+    simpleInterestPool = new SimpleInterestPool(wFil, poolName, poolSymbol, 0, interestBaseRate, treasury, address(loanAgentFactory));
 
     vm.deal(alice, 1000000e18);
     vm.prank(alice);

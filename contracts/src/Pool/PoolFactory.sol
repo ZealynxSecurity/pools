@@ -4,6 +4,8 @@ pragma solidity ^0.8.15;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "src/Pool/SimpleInterestPool.sol";
+import "src/Router/RouterAware.sol";
+
 
 interface IPoolFactory {
   function allPools(uint256 poolID) external view returns (address);
@@ -11,7 +13,7 @@ interface IPoolFactory {
   function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external returns (IPool4626);
 }
 
-contract PoolFactory is Ownable, IPoolFactory {
+contract PoolFactory is Ownable, IPoolFactory, RouterAware {
   ERC20 public asset;
   address[] public allPools;
   address public treasury;
@@ -35,7 +37,7 @@ contract PoolFactory is Ownable, IPoolFactory {
   }
 
   function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external onlyOwner returns (IPool4626 pool) {
-    pool = new SimpleInterestPool(asset, name, createSymbol(), allPools.length, baseInterestRate, treasury);
+    pool = new SimpleInterestPool(asset, name, createSymbol(), allPools.length, baseInterestRate, treasury, router);
     allPools.push(address(pool));
   }
 }

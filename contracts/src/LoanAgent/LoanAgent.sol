@@ -6,16 +6,18 @@ import "src/LoanAgent/ILoanAgent.sol";
 import "src/Pool/PoolFactory.sol";
 import "src/Pool/IPool4626.sol";
 import "solmate/tokens/ERC20.sol";
+import {Router} from "src/Router/Router.sol";
+import {IStats} from "src/Stats/IStats.sol";
 
 contract LoanAgent is ILoanAgent {
+  address public router;
   address public miner;
   address public owner;
-  address public poolFactory;
   bool public active = false;
 
-  constructor(address _miner, address _poolFactory) {
+  constructor(address _miner, address _router) {
     miner = _miner;
-    poolFactory = _poolFactory;
+    router = _router;
   }
 
   receive() external payable {}
@@ -34,30 +36,10 @@ contract LoanAgent is ILoanAgent {
     active = true;
   }
 
-  function isDebtor() public view returns (bool) {
-    for (uint256 i = 0; i < IPoolFactory(poolFactory).allPoolsLength(); ++i) {
-      (uint256 bal,) = IPool4626(IPoolFactory(poolFactory).allPools(i)).loanBalance(address(this));
-      if (bal > 0) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  function hasPenalties() public view returns (bool) {
-    for (uint256 i = 0; i < IPoolFactory(poolFactory).allPoolsLength(); ++i) {
-      (,uint256 penalty) = IPool4626(IPoolFactory(poolFactory).allPools(i)).loanBalance(address(this));
-      if (penalty > 0) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   function revokeMinerOwnership(address newOwner) external {
     require(owner == msg.sender, "Only LoanAgent owner can call revokeOwnership");
     require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
-    require(!isDebtor(), "Cannot revoke miner ownership with outstanding loans");
+    require(!IStats(Router.getStats()).isDebtor(), "Cannot revoke miner ownership with outstanding loans");
 
     active = false;
     IMiner(miner).changeOwnerAddress(newOwner);
@@ -68,14 +50,14 @@ contract LoanAgent is ILoanAgent {
   }
 
   function getPool(uint256 poolID) internal view returns (IPool4626) {
-    require(poolID <= IPoolFactory(poolFactory).allPoolsLength(), "Invalid pool ID");
-    address pool = IPoolFactory(poolFactory).allPools(poolID);
+    IPoolFactory poolFactory = IPoolFactory(Router.getPoolFactory());
+    require(poolID <= poolFactory.allPoolsLength(), "Invalid pool ID");
+    address pool = poolFactory.allPools(poolID);
     return IPool4626(pool);
   }
 
   function borrow(uint256 amount, uint256 poolID) external {
     require(owner == msg.sender, "Only LoanAgent owner can call borrow");
-    require(!hasPenalties(), "Cannot borrow while loanAgent is in any pool's  penalty zone.");
     getPool(poolID).borrow(amount, address(this));
   }
 
