@@ -24,17 +24,34 @@ import type {
 
 export interface ILoanAgentFactoryInterface extends utils.Interface {
   functions: {
+    "activeMiners(address)": FunctionFragment;
     "create(address)": FunctionFragment;
+    "loanAgents(address)": FunctionFragment;
   };
 
-  getFunction(nameOrSignatureOrTopic: "create"): FunctionFragment;
+  getFunction(
+    nameOrSignatureOrTopic: "activeMiners" | "create" | "loanAgents"
+  ): FunctionFragment;
 
+  encodeFunctionData(
+    functionFragment: "activeMiners",
+    values: [PromiseOrValue<string>]
+  ): string;
   encodeFunctionData(
     functionFragment: "create",
     values: [PromiseOrValue<string>]
   ): string;
+  encodeFunctionData(
+    functionFragment: "loanAgents",
+    values: [PromiseOrValue<string>]
+  ): string;
 
+  decodeFunctionResult(
+    functionFragment: "activeMiners",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "create", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "loanAgents", data: BytesLike): Result;
 
   events: {};
 }
@@ -66,20 +83,50 @@ export interface ILoanAgentFactory extends BaseContract {
   removeListener: OnEvent<this>;
 
   functions: {
+    activeMiners(
+      miner: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<[string]>;
+
     create(
       _miner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<ContractTransaction>;
+
+    loanAgents(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<[string]>;
   };
+
+  activeMiners(
+    miner: PromiseOrValue<string>,
+    overrides?: CallOverrides
+  ): Promise<string>;
 
   create(
     _miner: PromiseOrValue<string>,
     overrides?: Overrides & { from?: PromiseOrValue<string> }
   ): Promise<ContractTransaction>;
 
+  loanAgents(
+    loanAgent: PromiseOrValue<string>,
+    overrides?: CallOverrides
+  ): Promise<string>;
+
   callStatic: {
+    activeMiners(
+      miner: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<string>;
+
     create(
       _miner: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<string>;
+
+    loanAgents(
+      loanAgent: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<string>;
   };
@@ -87,16 +134,36 @@ export interface ILoanAgentFactory extends BaseContract {
   filters: {};
 
   estimateGas: {
+    activeMiners(
+      miner: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
+
     create(
       _miner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<BigNumber>;
+
+    loanAgents(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
   };
 
   populateTransaction: {
+    activeMiners(
+      miner: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
+
     create(
       _miner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<PopulatedTransaction>;
+
+    loanAgents(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
   };
 }

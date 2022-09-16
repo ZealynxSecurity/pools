@@ -9,5 +9,8 @@ export * as testSol from "./test.sol";
 export { ERC20__factory } from "./ERC20__factory";
 export { ERC4626__factory } from "./ERC4626__factory";
 export { IPool4626__factory } from "./IPool4626__factory";
+export { IStats__factory } from "./IStats__factory";
+export { Router__factory } from "./Router__factory";
 export { SimpleInterestPool__factory } from "./SimpleInterestPool__factory";
+export { Stats__factory } from "./Stats__factory";
 export { WFIL__factory } from "./WFIL__factory";

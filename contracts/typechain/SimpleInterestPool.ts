@@ -29,7 +29,7 @@ import type {
 
 export type LoanStruct = {
   startEpoch: PromiseOrValue<BigNumberish>;
-  periods: PromiseOrValue<BigNumberish>;
+  pmtPerEpoch: PromiseOrValue<BigNumberish>;
   principal: PromiseOrValue<BigNumberish>;
   interest: PromiseOrValue<BigNumberish>;
   totalPaid: PromiseOrValue<BigNumberish>;
@@ -43,7 +43,7 @@ export type LoanStructOutput = [
   BigNumber
 ] & {
   startEpoch: BigNumber;
-  periods: BigNumber;
+  pmtPerEpoch: BigNumber;
   principal: BigNumber;
   interest: BigNumber;
   totalPaid: BigNumber;
@@ -88,6 +88,7 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
     "previewWithdraw(uint256)": FunctionFragment;
     "redeem(uint256,address,address)": FunctionFragment;
     "repay(uint256,address,address)": FunctionFragment;
+    "router()": FunctionFragment;
     "symbol()": FunctionFragment;
     "totalAssets()": FunctionFragment;
     "totalLoanValue((uint256,uint256,uint256,uint256,uint256))": FunctionFragment;
@@ -137,6 +138,7 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
       | "previewWithdraw"
       | "redeem"
       | "repay"
+      | "router"
       | "symbol"
       | "totalAssets"
       | "totalLoanValue"
@@ -293,6 +295,7 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
       PromiseOrValue<string>
     ]
   ): string;
+  encodeFunctionData(functionFragment: "router", values?: undefined): string;
   encodeFunctionData(functionFragment: "symbol", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "totalAssets",
@@ -410,6 +413,7 @@ export interface SimpleInterestPoolInterface extends utils.Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "redeem", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "repay", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "router", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "symbol", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "totalAssets",
@@ -731,6 +735,8 @@ export interface SimpleInterestPool extends BaseContract {
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<ContractTransaction>;
 
+    router(overrides?: CallOverrides): Promise<[string]>;
+
     symbol(overrides?: CallOverrides): Promise<[string]>;
 
     totalAssets(overrides?: CallOverrides): Promise<[BigNumber]>;
@@ -924,6 +930,8 @@ export interface SimpleInterestPool extends BaseContract {
     payee: PromiseOrValue<string>,
     overrides?: Overrides & { from?: PromiseOrValue<string> }
   ): Promise<ContractTransaction>;
+
+  router(overrides?: CallOverrides): Promise<string>;
 
   symbol(overrides?: CallOverrides): Promise<string>;
 
@@ -1119,6 +1127,8 @@ export interface SimpleInterestPool extends BaseContract {
       payee: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<void>;
+
+    router(overrides?: CallOverrides): Promise<string>;
 
     symbol(overrides?: CallOverrides): Promise<string>;
 
@@ -1411,6 +1421,8 @@ export interface SimpleInterestPool extends BaseContract {
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<BigNumber>;
 
+    router(overrides?: CallOverrides): Promise<BigNumber>;
+
     symbol(overrides?: CallOverrides): Promise<BigNumber>;
 
     totalAssets(overrides?: CallOverrides): Promise<BigNumber>;
@@ -1608,6 +1620,8 @@ export interface SimpleInterestPool extends BaseContract {
       payee: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<PopulatedTransaction>;
+
+    router(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     symbol(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 

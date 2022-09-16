@@ -25,46 +25,53 @@ import type {
   TypedListener,
   OnEvent,
   PromiseOrValue,
-} from "../common";
+} from "./common";
 
-export interface PoolFactoryInterface extends utils.Interface {
+export interface StatsInterface extends utils.Interface {
   functions: {
-    "allPools(uint256)": FunctionFragment;
-    "allPoolsLength()": FunctionFragment;
-    "asset()": FunctionFragment;
-    "createSimpleInterestPool(string,uint256)": FunctionFragment;
+    "hasPenalties(address,uint256)": FunctionFragment;
+    "hasPenalties(address)": FunctionFragment;
+    "isDebtor(address,uint256)": FunctionFragment;
+    "isDebtor(address)": FunctionFragment;
+    "isLoanAgent(address)": FunctionFragment;
     "owner()": FunctionFragment;
     "renounceOwnership()": FunctionFragment;
     "setRouter(address)": FunctionFragment;
     "transferOwnership(address)": FunctionFragment;
-    "treasury()": FunctionFragment;
   };
 
   getFunction(
     nameOrSignatureOrTopic:
-      | "allPools"
-      | "allPoolsLength"
-      | "asset"
-      | "createSimpleInterestPool"
+      | "hasPenalties(address,uint256)"
+      | "hasPenalties(address)"
+      | "isDebtor(address,uint256)"
+      | "isDebtor(address)"
+      | "isLoanAgent"
       | "owner"
       | "renounceOwnership"
       | "setRouter"
       | "transferOwnership"
-      | "treasury"
   ): FunctionFragment;
 
   encodeFunctionData(
-    functionFragment: "allPools",
-    values: [PromiseOrValue<BigNumberish>]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "allPoolsLength",
-    values?: undefined
-  ): string;
-  encodeFunctionData(functionFragment: "asset", values?: undefined): string;
-  encodeFunctionData(
-    functionFragment: "createSimpleInterestPool",
+    functionFragment: "hasPenalties(address,uint256)",
     values: [PromiseOrValue<string>, PromiseOrValue<BigNumberish>]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "hasPenalties(address)",
+    values: [PromiseOrValue<string>]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "isDebtor(address,uint256)",
+    values: [PromiseOrValue<string>, PromiseOrValue<BigNumberish>]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "isDebtor(address)",
+    values: [PromiseOrValue<string>]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "isLoanAgent",
+    values: [PromiseOrValue<string>]
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
@@ -79,16 +86,25 @@ export interface PoolFactoryInterface extends utils.Interface {
     functionFragment: "transferOwnership",
     values: [PromiseOrValue<string>]
   ): string;
-  encodeFunctionData(functionFragment: "treasury", values?: undefined): string;
 
-  decodeFunctionResult(functionFragment: "allPools", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "allPoolsLength",
+    functionFragment: "hasPenalties(address,uint256)",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "asset", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "createSimpleInterestPool",
+    functionFragment: "hasPenalties(address)",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "isDebtor(address,uint256)",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "isDebtor(address)",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "isLoanAgent",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
@@ -101,7 +117,6 @@ export interface PoolFactoryInterface extends utils.Interface {
     functionFragment: "transferOwnership",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "treasury", data: BytesLike): Result;
 
   events: {
     "OwnershipTransferred(address,address)": EventFragment;
@@ -122,12 +137,12 @@ export type OwnershipTransferredEvent = TypedEvent<
 export type OwnershipTransferredEventFilter =
   TypedEventFilter<OwnershipTransferredEvent>;
 
-export interface PoolFactory extends BaseContract {
+export interface Stats extends BaseContract {
   connect(signerOrProvider: Signer | Provider | string): this;
   attach(addressOrName: string): this;
   deployed(): Promise<this>;
 
-  interface: PoolFactoryInterface;
+  interface: StatsInterface;
 
   queryFilter<TEvent extends TypedEvent>(
     event: TypedEventFilter<TEvent>,
@@ -149,20 +164,32 @@ export interface PoolFactory extends BaseContract {
   removeListener: OnEvent<this>;
 
   functions: {
-    allPools(
-      arg0: PromiseOrValue<BigNumberish>,
+    "hasPenalties(address,uint256)"(
+      loanAgent: PromiseOrValue<string>,
+      poolID: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
-    ): Promise<[string]>;
+    ): Promise<[boolean]>;
 
-    allPoolsLength(overrides?: CallOverrides): Promise<[BigNumber]>;
+    "hasPenalties(address)"(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<[boolean]>;
 
-    asset(overrides?: CallOverrides): Promise<[string]>;
+    "isDebtor(address,uint256)"(
+      loanAgent: PromiseOrValue<string>,
+      poolID: PromiseOrValue<BigNumberish>,
+      overrides?: CallOverrides
+    ): Promise<[boolean]>;
 
-    createSimpleInterestPool(
-      name: PromiseOrValue<string>,
-      baseInterestRate: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
+    "isDebtor(address)"(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<[boolean]>;
+
+    isLoanAgent(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<[boolean]>;
 
     owner(overrides?: CallOverrides): Promise<[string]>;
 
@@ -179,24 +206,34 @@ export interface PoolFactory extends BaseContract {
       newOwner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<ContractTransaction>;
-
-    treasury(overrides?: CallOverrides): Promise<[string]>;
   };
 
-  allPools(
-    arg0: PromiseOrValue<BigNumberish>,
+  "hasPenalties(address,uint256)"(
+    loanAgent: PromiseOrValue<string>,
+    poolID: PromiseOrValue<BigNumberish>,
     overrides?: CallOverrides
-  ): Promise<string>;
+  ): Promise<boolean>;
 
-  allPoolsLength(overrides?: CallOverrides): Promise<BigNumber>;
+  "hasPenalties(address)"(
+    loanAgent: PromiseOrValue<string>,
+    overrides?: CallOverrides
+  ): Promise<boolean>;
 
-  asset(overrides?: CallOverrides): Promise<string>;
+  "isDebtor(address,uint256)"(
+    loanAgent: PromiseOrValue<string>,
+    poolID: PromiseOrValue<BigNumberish>,
+    overrides?: CallOverrides
+  ): Promise<boolean>;
 
-  createSimpleInterestPool(
-    name: PromiseOrValue<string>,
-    baseInterestRate: PromiseOrValue<BigNumberish>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
+  "isDebtor(address)"(
+    loanAgent: PromiseOrValue<string>,
+    overrides?: CallOverrides
+  ): Promise<boolean>;
+
+  isLoanAgent(
+    loanAgent: PromiseOrValue<string>,
+    overrides?: CallOverrides
+  ): Promise<boolean>;
 
   owner(overrides?: CallOverrides): Promise<string>;
 
@@ -214,23 +251,33 @@ export interface PoolFactory extends BaseContract {
     overrides?: Overrides & { from?: PromiseOrValue<string> }
   ): Promise<ContractTransaction>;
 
-  treasury(overrides?: CallOverrides): Promise<string>;
-
   callStatic: {
-    allPools(
-      arg0: PromiseOrValue<BigNumberish>,
+    "hasPenalties(address,uint256)"(
+      loanAgent: PromiseOrValue<string>,
+      poolID: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
-    ): Promise<string>;
+    ): Promise<boolean>;
 
-    allPoolsLength(overrides?: CallOverrides): Promise<BigNumber>;
-
-    asset(overrides?: CallOverrides): Promise<string>;
-
-    createSimpleInterestPool(
-      name: PromiseOrValue<string>,
-      baseInterestRate: PromiseOrValue<BigNumberish>,
+    "hasPenalties(address)"(
+      loanAgent: PromiseOrValue<string>,
       overrides?: CallOverrides
-    ): Promise<string>;
+    ): Promise<boolean>;
+
+    "isDebtor(address,uint256)"(
+      loanAgent: PromiseOrValue<string>,
+      poolID: PromiseOrValue<BigNumberish>,
+      overrides?: CallOverrides
+    ): Promise<boolean>;
+
+    "isDebtor(address)"(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<boolean>;
+
+    isLoanAgent(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<boolean>;
 
     owner(overrides?: CallOverrides): Promise<string>;
 
@@ -245,8 +292,6 @@ export interface PoolFactory extends BaseContract {
       newOwner: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<void>;
-
-    treasury(overrides?: CallOverrides): Promise<string>;
   };
 
   filters: {
@@ -261,19 +306,31 @@ export interface PoolFactory extends BaseContract {
   };
 
   estimateGas: {
-    allPools(
-      arg0: PromiseOrValue<BigNumberish>,
+    "hasPenalties(address,uint256)"(
+      loanAgent: PromiseOrValue<string>,
+      poolID: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
     ): Promise<BigNumber>;
 
-    allPoolsLength(overrides?: CallOverrides): Promise<BigNumber>;
+    "hasPenalties(address)"(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
 
-    asset(overrides?: CallOverrides): Promise<BigNumber>;
+    "isDebtor(address,uint256)"(
+      loanAgent: PromiseOrValue<string>,
+      poolID: PromiseOrValue<BigNumberish>,
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
 
-    createSimpleInterestPool(
-      name: PromiseOrValue<string>,
-      baseInterestRate: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    "isDebtor(address)"(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<BigNumber>;
+
+    isLoanAgent(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
     ): Promise<BigNumber>;
 
     owner(overrides?: CallOverrides): Promise<BigNumber>;
@@ -291,24 +348,34 @@ export interface PoolFactory extends BaseContract {
       newOwner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<BigNumber>;
-
-    treasury(overrides?: CallOverrides): Promise<BigNumber>;
   };
 
   populateTransaction: {
-    allPools(
-      arg0: PromiseOrValue<BigNumberish>,
+    "hasPenalties(address,uint256)"(
+      loanAgent: PromiseOrValue<string>,
+      poolID: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
 
-    allPoolsLength(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+    "hasPenalties(address)"(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
 
-    asset(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+    "isDebtor(address,uint256)"(
+      loanAgent: PromiseOrValue<string>,
+      poolID: PromiseOrValue<BigNumberish>,
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
 
-    createSimpleInterestPool(
-      name: PromiseOrValue<string>,
-      baseInterestRate: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    "isDebtor(address)"(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
+
+    isLoanAgent(
+      loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
 
     owner(overrides?: CallOverrides): Promise<PopulatedTransaction>;
@@ -326,7 +393,5 @@ export interface PoolFactory extends BaseContract {
       newOwner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<PopulatedTransaction>;
-
-    treasury(overrides?: CallOverrides): Promise<PopulatedTransaction>;
   };
 }

@@ -25,27 +25,76 @@ import type {
 export interface DemoDeployInterface extends utils.Interface {
   functions: {
     "IS_SCRIPT()": FunctionFragment;
+    "configureLoanAgent()": FunctionFragment;
+    "creditScore()": FunctionFragment;
+    "loanAgentFactory()": FunctionFragment;
+    "poolFactory()": FunctionFragment;
+    "router()": FunctionFragment;
     "run()": FunctionFragment;
-    "setUpMiner()": FunctionFragment;
+    "stats()": FunctionFragment;
     "vm()": FunctionFragment;
+    "wFIL()": FunctionFragment;
   };
 
   getFunction(
-    nameOrSignatureOrTopic: "IS_SCRIPT" | "run" | "setUpMiner" | "vm"
+    nameOrSignatureOrTopic:
+      | "IS_SCRIPT"
+      | "configureLoanAgent"
+      | "creditScore"
+      | "loanAgentFactory"
+      | "poolFactory"
+      | "router"
+      | "run"
+      | "stats"
+      | "vm"
+      | "wFIL"
   ): FunctionFragment;
 
   encodeFunctionData(functionFragment: "IS_SCRIPT", values?: undefined): string;
-  encodeFunctionData(functionFragment: "run", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "setUpMiner",
+    functionFragment: "configureLoanAgent",
     values?: undefined
   ): string;
+  encodeFunctionData(
+    functionFragment: "creditScore",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "loanAgentFactory",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "poolFactory",
+    values?: undefined
+  ): string;
+  encodeFunctionData(functionFragment: "router", values?: undefined): string;
+  encodeFunctionData(functionFragment: "run", values?: undefined): string;
+  encodeFunctionData(functionFragment: "stats", values?: undefined): string;
   encodeFunctionData(functionFragment: "vm", values?: undefined): string;
+  encodeFunctionData(functionFragment: "wFIL", values?: undefined): string;
 
   decodeFunctionResult(functionFragment: "IS_SCRIPT", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "configureLoanAgent",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "creditScore",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "loanAgentFactory",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "poolFactory",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "router", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "run", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "setUpMiner", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "stats", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "vm", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "wFIL", data: BytesLike): Result;
 
   events: {};
 }
@@ -79,37 +128,73 @@ export interface DemoDeploy extends BaseContract {
   functions: {
     IS_SCRIPT(overrides?: CallOverrides): Promise<[boolean]>;
 
+    configureLoanAgent(
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<ContractTransaction>;
+
+    creditScore(overrides?: CallOverrides): Promise<[string]>;
+
+    loanAgentFactory(overrides?: CallOverrides): Promise<[string]>;
+
+    poolFactory(overrides?: CallOverrides): Promise<[string]>;
+
+    router(overrides?: CallOverrides): Promise<[string]>;
+
     run(
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<ContractTransaction>;
 
-    setUpMiner(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
+    stats(overrides?: CallOverrides): Promise<[string]>;
 
     vm(overrides?: CallOverrides): Promise<[string]>;
+
+    wFIL(overrides?: CallOverrides): Promise<[string]>;
   };
 
   IS_SCRIPT(overrides?: CallOverrides): Promise<boolean>;
+
+  configureLoanAgent(
+    overrides?: Overrides & { from?: PromiseOrValue<string> }
+  ): Promise<ContractTransaction>;
+
+  creditScore(overrides?: CallOverrides): Promise<string>;
+
+  loanAgentFactory(overrides?: CallOverrides): Promise<string>;
+
+  poolFactory(overrides?: CallOverrides): Promise<string>;
+
+  router(overrides?: CallOverrides): Promise<string>;
 
   run(
     overrides?: Overrides & { from?: PromiseOrValue<string> }
   ): Promise<ContractTransaction>;
 
-  setUpMiner(
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
+  stats(overrides?: CallOverrides): Promise<string>;
 
   vm(overrides?: CallOverrides): Promise<string>;
+
+  wFIL(overrides?: CallOverrides): Promise<string>;
 
   callStatic: {
     IS_SCRIPT(overrides?: CallOverrides): Promise<boolean>;
 
+    configureLoanAgent(overrides?: CallOverrides): Promise<[string, string]>;
+
+    creditScore(overrides?: CallOverrides): Promise<string>;
+
+    loanAgentFactory(overrides?: CallOverrides): Promise<string>;
+
+    poolFactory(overrides?: CallOverrides): Promise<string>;
+
+    router(overrides?: CallOverrides): Promise<string>;
+
     run(overrides?: CallOverrides): Promise<void>;
 
-    setUpMiner(overrides?: CallOverrides): Promise<void>;
+    stats(overrides?: CallOverrides): Promise<string>;
 
     vm(overrides?: CallOverrides): Promise<string>;
+
+    wFIL(overrides?: CallOverrides): Promise<string>;
   };
 
   filters: {};
@@ -117,28 +202,52 @@ export interface DemoDeploy extends BaseContract {
   estimateGas: {
     IS_SCRIPT(overrides?: CallOverrides): Promise<BigNumber>;
 
+    configureLoanAgent(
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<BigNumber>;
+
+    creditScore(overrides?: CallOverrides): Promise<BigNumber>;
+
+    loanAgentFactory(overrides?: CallOverrides): Promise<BigNumber>;
+
+    poolFactory(overrides?: CallOverrides): Promise<BigNumber>;
+
+    router(overrides?: CallOverrides): Promise<BigNumber>;
+
     run(
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<BigNumber>;
 
-    setUpMiner(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
+    stats(overrides?: CallOverrides): Promise<BigNumber>;
 
     vm(overrides?: CallOverrides): Promise<BigNumber>;
+
+    wFIL(overrides?: CallOverrides): Promise<BigNumber>;
   };
 
   populateTransaction: {
     IS_SCRIPT(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
+    configureLoanAgent(
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<PopulatedTransaction>;
+
+    creditScore(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    loanAgentFactory(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    poolFactory(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    router(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
     run(
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<PopulatedTransaction>;
 
-    setUpMiner(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
+    stats(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     vm(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    wFIL(overrides?: CallOverrides): Promise<PopulatedTransaction>;
   };
 }

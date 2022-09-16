@@ -500,7 +500,7 @@ const _abi = [
           },
           {
             internalType: "uint256",
-            name: "periods",
+            name: "pmtPerEpoch",
             type: "uint256",
           },
           {
@@ -802,7 +802,7 @@ const _abi = [
           },
           {
             internalType: "uint256",
-            name: "periods",
+            name: "pmtPerEpoch",
             type: "uint256",
           },
           {
@@ -967,6 +967,19 @@ const _abi = [
   },
   {
     inputs: [],
+    name: "router",
+    outputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
     name: "symbol",
     outputs: [
       {
@@ -1002,7 +1015,7 @@ const _abi = [
           },
           {
             internalType: "uint256",
-            name: "periods",
+            name: "pmtPerEpoch",
             type: "uint256",
           },
           {

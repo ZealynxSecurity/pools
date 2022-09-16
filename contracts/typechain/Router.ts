@@ -25,83 +25,96 @@ import type {
   TypedListener,
   OnEvent,
   PromiseOrValue,
-} from "../common";
+} from "./common";
 
-export interface PoolFactoryInterface extends utils.Interface {
+export interface RouterInterface extends utils.Interface {
   functions: {
-    "allPools(uint256)": FunctionFragment;
-    "allPoolsLength()": FunctionFragment;
-    "asset()": FunctionFragment;
-    "createSimpleInterestPool(string,uint256)": FunctionFragment;
+    "getCreditScorer()": FunctionFragment;
+    "getLoanAgentFactory()": FunctionFragment;
+    "getPoolFactory()": FunctionFragment;
+    "getRoute(uint8)": FunctionFragment;
+    "getStats()": FunctionFragment;
     "owner()": FunctionFragment;
+    "pushRoute(address)": FunctionFragment;
     "renounceOwnership()": FunctionFragment;
-    "setRouter(address)": FunctionFragment;
+    "routes(uint256)": FunctionFragment;
     "transferOwnership(address)": FunctionFragment;
-    "treasury()": FunctionFragment;
   };
 
   getFunction(
     nameOrSignatureOrTopic:
-      | "allPools"
-      | "allPoolsLength"
-      | "asset"
-      | "createSimpleInterestPool"
+      | "getCreditScorer"
+      | "getLoanAgentFactory"
+      | "getPoolFactory"
+      | "getRoute"
+      | "getStats"
       | "owner"
+      | "pushRoute"
       | "renounceOwnership"
-      | "setRouter"
+      | "routes"
       | "transferOwnership"
-      | "treasury"
   ): FunctionFragment;
 
   encodeFunctionData(
-    functionFragment: "allPools",
+    functionFragment: "getCreditScorer",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getLoanAgentFactory",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getPoolFactory",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getRoute",
+    values: [PromiseOrValue<BigNumberish>]
+  ): string;
+  encodeFunctionData(functionFragment: "getStats", values?: undefined): string;
+  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "pushRoute",
+    values: [PromiseOrValue<string>]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "renounceOwnership",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "routes",
     values: [PromiseOrValue<BigNumberish>]
   ): string;
   encodeFunctionData(
-    functionFragment: "allPoolsLength",
-    values?: undefined
-  ): string;
-  encodeFunctionData(functionFragment: "asset", values?: undefined): string;
-  encodeFunctionData(
-    functionFragment: "createSimpleInterestPool",
-    values: [PromiseOrValue<string>, PromiseOrValue<BigNumberish>]
-  ): string;
-  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
-  encodeFunctionData(
-    functionFragment: "renounceOwnership",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setRouter",
-    values: [PromiseOrValue<string>]
-  ): string;
-  encodeFunctionData(
     functionFragment: "transferOwnership",
     values: [PromiseOrValue<string>]
   ): string;
-  encodeFunctionData(functionFragment: "treasury", values?: undefined): string;
 
-  decodeFunctionResult(functionFragment: "allPools", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "allPoolsLength",
+    functionFragment: "getCreditScorer",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "asset", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "createSimpleInterestPool",
+    functionFragment: "getLoanAgentFactory",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "getPoolFactory",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "getRoute", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "getStats", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "pushRoute", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceOwnership",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "setRouter", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "routes", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "transferOwnership",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "treasury", data: BytesLike): Result;
 
   events: {
     "OwnershipTransferred(address,address)": EventFragment;
@@ -122,12 +135,12 @@ export type OwnershipTransferredEvent = TypedEvent<
 export type OwnershipTransferredEventFilter =
   TypedEventFilter<OwnershipTransferredEvent>;
 
-export interface PoolFactory extends BaseContract {
+export interface Router extends BaseContract {
   connect(signerOrProvider: Signer | Provider | string): this;
   attach(addressOrName: string): this;
   deployed(): Promise<this>;
 
-  interface: PoolFactoryInterface;
+  interface: RouterInterface;
 
   queryFilter<TEvent extends TypedEvent>(
     event: TypedEventFilter<TEvent>,
@@ -149,104 +162,107 @@ export interface PoolFactory extends BaseContract {
   removeListener: OnEvent<this>;
 
   functions: {
-    allPools(
-      arg0: PromiseOrValue<BigNumberish>,
+    getCreditScorer(overrides?: CallOverrides): Promise<[string]>;
+
+    getLoanAgentFactory(overrides?: CallOverrides): Promise<[string]>;
+
+    getPoolFactory(overrides?: CallOverrides): Promise<[string]>;
+
+    getRoute(
+      id: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
     ): Promise<[string]>;
 
-    allPoolsLength(overrides?: CallOverrides): Promise<[BigNumber]>;
-
-    asset(overrides?: CallOverrides): Promise<[string]>;
-
-    createSimpleInterestPool(
-      name: PromiseOrValue<string>,
-      baseInterestRate: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
+    getStats(overrides?: CallOverrides): Promise<[string]>;
 
     owner(overrides?: CallOverrides): Promise<[string]>;
+
+    pushRoute(
+      newRoute: PromiseOrValue<string>,
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<ContractTransaction>;
 
     renounceOwnership(
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<ContractTransaction>;
 
-    setRouter(
-      _router: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
+    routes(
+      arg0: PromiseOrValue<BigNumberish>,
+      overrides?: CallOverrides
+    ): Promise<[string]>;
 
     transferOwnership(
       newOwner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<ContractTransaction>;
-
-    treasury(overrides?: CallOverrides): Promise<[string]>;
   };
 
-  allPools(
-    arg0: PromiseOrValue<BigNumberish>,
+  getCreditScorer(overrides?: CallOverrides): Promise<string>;
+
+  getLoanAgentFactory(overrides?: CallOverrides): Promise<string>;
+
+  getPoolFactory(overrides?: CallOverrides): Promise<string>;
+
+  getRoute(
+    id: PromiseOrValue<BigNumberish>,
     overrides?: CallOverrides
   ): Promise<string>;
 
-  allPoolsLength(overrides?: CallOverrides): Promise<BigNumber>;
-
-  asset(overrides?: CallOverrides): Promise<string>;
-
-  createSimpleInterestPool(
-    name: PromiseOrValue<string>,
-    baseInterestRate: PromiseOrValue<BigNumberish>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
+  getStats(overrides?: CallOverrides): Promise<string>;
 
   owner(overrides?: CallOverrides): Promise<string>;
+
+  pushRoute(
+    newRoute: PromiseOrValue<string>,
+    overrides?: Overrides & { from?: PromiseOrValue<string> }
+  ): Promise<ContractTransaction>;
 
   renounceOwnership(
     overrides?: Overrides & { from?: PromiseOrValue<string> }
   ): Promise<ContractTransaction>;
 
-  setRouter(
-    _router: PromiseOrValue<string>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
+  routes(
+    arg0: PromiseOrValue<BigNumberish>,
+    overrides?: CallOverrides
+  ): Promise<string>;
 
   transferOwnership(
     newOwner: PromiseOrValue<string>,
     overrides?: Overrides & { from?: PromiseOrValue<string> }
   ): Promise<ContractTransaction>;
 
-  treasury(overrides?: CallOverrides): Promise<string>;
-
   callStatic: {
-    allPools(
-      arg0: PromiseOrValue<BigNumberish>,
+    getCreditScorer(overrides?: CallOverrides): Promise<string>;
+
+    getLoanAgentFactory(overrides?: CallOverrides): Promise<string>;
+
+    getPoolFactory(overrides?: CallOverrides): Promise<string>;
+
+    getRoute(
+      id: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
     ): Promise<string>;
 
-    allPoolsLength(overrides?: CallOverrides): Promise<BigNumber>;
-
-    asset(overrides?: CallOverrides): Promise<string>;
-
-    createSimpleInterestPool(
-      name: PromiseOrValue<string>,
-      baseInterestRate: PromiseOrValue<BigNumberish>,
-      overrides?: CallOverrides
-    ): Promise<string>;
+    getStats(overrides?: CallOverrides): Promise<string>;
 
     owner(overrides?: CallOverrides): Promise<string>;
 
+    pushRoute(
+      newRoute: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<number>;
+
     renounceOwnership(overrides?: CallOverrides): Promise<void>;
 
-    setRouter(
-      _router: PromiseOrValue<string>,
+    routes(
+      arg0: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
-    ): Promise<void>;
+    ): Promise<string>;
 
     transferOwnership(
       newOwner: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<void>;
-
-    treasury(overrides?: CallOverrides): Promise<string>;
   };
 
   filters: {
@@ -261,72 +277,76 @@ export interface PoolFactory extends BaseContract {
   };
 
   estimateGas: {
-    allPools(
-      arg0: PromiseOrValue<BigNumberish>,
+    getCreditScorer(overrides?: CallOverrides): Promise<BigNumber>;
+
+    getLoanAgentFactory(overrides?: CallOverrides): Promise<BigNumber>;
+
+    getPoolFactory(overrides?: CallOverrides): Promise<BigNumber>;
+
+    getRoute(
+      id: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
     ): Promise<BigNumber>;
 
-    allPoolsLength(overrides?: CallOverrides): Promise<BigNumber>;
-
-    asset(overrides?: CallOverrides): Promise<BigNumber>;
-
-    createSimpleInterestPool(
-      name: PromiseOrValue<string>,
-      baseInterestRate: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
+    getStats(overrides?: CallOverrides): Promise<BigNumber>;
 
     owner(overrides?: CallOverrides): Promise<BigNumber>;
 
+    pushRoute(
+      newRoute: PromiseOrValue<string>,
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<BigNumber>;
+
     renounceOwnership(
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<BigNumber>;
 
-    setRouter(
-      _router: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    routes(
+      arg0: PromiseOrValue<BigNumberish>,
+      overrides?: CallOverrides
     ): Promise<BigNumber>;
 
     transferOwnership(
       newOwner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<BigNumber>;
-
-    treasury(overrides?: CallOverrides): Promise<BigNumber>;
   };
 
   populateTransaction: {
-    allPools(
+    getCreditScorer(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    getLoanAgentFactory(
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
+
+    getPoolFactory(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    getRoute(
+      id: PromiseOrValue<BigNumberish>,
+      overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
+
+    getStats(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    owner(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    pushRoute(
+      newRoute: PromiseOrValue<string>,
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<PopulatedTransaction>;
+
+    renounceOwnership(
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<PopulatedTransaction>;
+
+    routes(
       arg0: PromiseOrValue<BigNumberish>,
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
 
-    allPoolsLength(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    asset(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    createSimpleInterestPool(
-      name: PromiseOrValue<string>,
-      baseInterestRate: PromiseOrValue<BigNumberish>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    owner(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    renounceOwnership(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    setRouter(
-      _router: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
     transferOwnership(
       newOwner: PromiseOrValue<string>,
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<PopulatedTransaction>;
-
-    treasury(overrides?: CallOverrides): Promise<PopulatedTransaction>;
   };
 }

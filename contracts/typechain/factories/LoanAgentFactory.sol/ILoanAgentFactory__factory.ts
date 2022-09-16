@@ -14,6 +14,25 @@ const _abi = [
     inputs: [
       {
         internalType: "address",
+        name: "miner",
+        type: "address",
+      },
+    ],
+    name: "activeMiners",
+    outputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
         name: "_miner",
         type: "address",
       },
@@ -27,6 +46,25 @@ const _abi = [
       },
     ],
     stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "loanAgent",
+        type: "address",
+      },
+    ],
+    name: "loanAgents",
+    outputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
     type: "function",
   },
 ];
