@@ -6,8 +6,8 @@ import "src/Router/RouterAware.sol";
 
 interface ILoanAgentFactory {
   function create(address _miner) external returns (address);
-  function loanAgents(address loanAgent) external returns (address);
-  function activeMiners(address miner) external returns (address);
+  function loanAgents(address loanAgent) external view returns (address);
+  function activeMiners(address miner) external view returns (address);
 }
 
 contract LoanAgentFactory is RouterAware {

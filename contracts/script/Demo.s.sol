@@ -51,7 +51,7 @@ contract DemoDeploy is Script {
         // pool1.deposit(50e18, msg.sender);
 
         // deploy 2 miners with their loan agent's configured
-        loanAgentFactory = new LoanAgentFactory(address(poolFactory));
+        loanAgentFactory = new LoanAgentFactory();
         setUpMiner();
         setUpMiner();
         vm.stopBroadcast();

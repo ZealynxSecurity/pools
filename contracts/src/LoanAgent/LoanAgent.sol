@@ -39,7 +39,7 @@ contract LoanAgent is ILoanAgent {
   function revokeMinerOwnership(address newOwner) external {
     require(owner == msg.sender, "Only LoanAgent owner can call revokeOwnership");
     require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
-    require(!IStats(Router.getStats()).isDebtor(), "Cannot revoke miner ownership with outstanding loans");
+    require(!IStats(Router(router).getStats()).isDebtor(address(this)), "Cannot revoke miner ownership with outstanding loans");
 
     active = false;
     IMiner(miner).changeOwnerAddress(newOwner);
@@ -50,7 +50,7 @@ contract LoanAgent is ILoanAgent {
   }
 
   function getPool(uint256 poolID) internal view returns (IPool4626) {
-    IPoolFactory poolFactory = IPoolFactory(Router.getPoolFactory());
+    IPoolFactory poolFactory = IPoolFactory(Router(router).getPoolFactory());
     require(poolID <= poolFactory.allPoolsLength(), "Invalid pool ID");
     address pool = poolFactory.allPools(poolID);
     return IPool4626(pool);
