@@ -60,10 +60,10 @@ contract DemoDeploy is Script {
         stats = new Stats();
 
         router = new Router(
-        address(loanAgentFactory),
-        address(poolFactory),
-        address(creditScore),
-        address(stats)
+            address(loanAgentFactory),
+            address(poolFactory),
+            address(creditScore),
+            address(stats)
         );
 
         loanAgentFactory.setRouter(address(router));

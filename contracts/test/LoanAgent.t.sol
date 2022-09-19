@@ -67,6 +67,7 @@ contract LoanAgentBasicTest is BaseTest {
         loanAgent.revokeMinerOwnership(investor1);
 
         assertEq(loanAgent.miner(), address(miner));
+        // TODO: https://github.com/glif-confidential/gcred/issues/32
         assertEq(loanAgentFactory.activeMiners(address(miner)), address(loanAgent));
         assertEq(loanAgentFactory.loanAgents(address(loanAgent)), address(miner));
         assertEq(miner.currentOwner(), address(loanAgent));

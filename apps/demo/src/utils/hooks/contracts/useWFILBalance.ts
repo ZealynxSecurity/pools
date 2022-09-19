@@ -1,36 +1,37 @@
 import { FilecoinNumber } from '@glif/filecoin-number'
-import { useContractRead } from 'wagmi'
+import { useCallback } from 'react'
+import useSWR, { SWRConfiguration } from 'swr'
+import { useProvider } from 'wagmi'
 
 import contractDigest from '../../../../generated/contractDigest.json'
+import { WFIL__factory } from '../../../../typechain'
 
 const { WFIL } = contractDigest
 
 export const useWFILBalance = (
-  address: string
+  address: string,
+  swrConfig?: SWRConfiguration
 ): {
   balance: FilecoinNumber
   loading: boolean
   error: Error
 } => {
-  const { data, isLoading, error } = useContractRead({
-    addressOrName: WFIL.address,
-    contractInterface: WFIL.abi,
-    functionName: 'balanceOf',
-    args: [address],
-    enabled: !!address
-  })
+  const provider = useProvider()
+  const fetcher = useCallback(
+    async (_, address) => {
+      const wFIL = WFIL__factory.connect(WFIL.address, provider)
 
-  if (data) {
-    return {
-      balance: new FilecoinNumber(data.toString(), 'attofil'),
-      loading: false,
-      error: null
-    }
-  }
+      const balance = await wFIL.balanceOf(address)
+      return new FilecoinNumber(balance.toString(), 'attofil')
+    },
+    [provider]
+  )
 
-  return {
-    balance: new FilecoinNumber(0, 'attofil'),
-    loading: isLoading,
-    error
-  }
+  const { data, error } = useSWR<FilecoinNumber>(
+    [provider, address],
+    fetcher,
+    swrConfig
+  )
+
+  return { balance: data, loading: !data && !error, error }
 }

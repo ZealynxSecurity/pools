@@ -40,7 +40,7 @@ contract LoanAgent is ILoanAgent {
     require(owner == msg.sender, "Only LoanAgent owner can call revokeOwnership");
     require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
     require(!IStats(Router(router).getStats()).isDebtor(address(this)), "Cannot revoke miner ownership with outstanding loans");
-
+    // TODO: https://github.com/glif-confidential/gcred/issues/32
     active = false;
     IMiner(miner).changeOwnerAddress(newOwner);
   }
