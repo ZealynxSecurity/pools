@@ -12,10 +12,15 @@ import "./BaseTest.sol";
 contract SimpleInterestPoolStakingTest is BaseTest {
   address investor1 = makeAddr("INVESTOR_1");
   address investor2 = makeAddr("INVESTOR_2");
+  address investor3 = makeAddr("INVESTOR_3");
+  address minerOwner = makeAddr("MINER_OWNER");
+
   string poolName = "TEST 20% Simple Interest Pool";
   uint256 baseInterestRate = 20e18;
 
   IPool4626 simpleInterestPool;
+  LoanAgent loanAgent;
+  MockMiner mockMiner;
   function setUp() public {
     simpleInterestPool = poolFactory.createSimpleInterestPool(poolName, baseInterestRate);
 
@@ -23,6 +28,8 @@ contract SimpleInterestPoolStakingTest is BaseTest {
     vm.prank(investor1);
     wFIL.deposit{value: 1e18}();
     require(wFIL.balanceOf(investor1) == 1e18);
+
+    (loanAgent, mockMiner) = configureLoanAgent(minerOwner);
   }
 
   function testAsset() public {
@@ -101,36 +108,31 @@ contract SimpleInterestPoolStakingTest is BaseTest {
   }
 
   function testMultipleMintDepositRedeemWithdraw() public {
-    address rewardsActor = address(0xAAAA);
-    vm.deal(rewardsActor, 10 ether);
-    vm.prank(rewardsActor);
-    wFIL.deposit{value: 10 ether}();
-
     // Scenario:
-    // A = Arthur, B = investor2
+    // A = investor3, B = investor2
     //  ________________________________________________________
-    // | Pool shares | A share | A assets | B share | B assets |
+    // | Pool shares | A share | A assets | B share | B assets  |
     // |========================================================|
-    // | 1. Arthur mints 2000 shares (costs 2000 tokens)         |
+    // | 1. investor3 mints 2000 shares (costs 2000 tokens)     |
     // |--------------|---------|----------|---------|----------|
     // |         2000 |    2000 |     2000 |       0 |        0 |
     // |--------------|---------|----------|---------|----------|
-    // | 2. investor2 deposits 4000 tokens (mints 4000 shares)        |
+    // | 2. investor2 deposits 4000 tokens (mints 4000 shares)  |
     // |--------------|---------|----------|---------|----------|
     // |         6000 |    2000 |     2000 |    4000 |     4000 |
     // |--------------|---------|----------|---------|----------|
-    // | 3. Pool mutates by +3000 tokens...                    |
+    // | 3. Pool mutates by +3000 tokens...                     |
     // |    (simulated yield returned from strategy)...         |
     // |--------------|---------|----------|---------|----------|
     // |         6000 |    2000 |     3000 |    4000 |     6000 |
     // |--------------|---------|----------|---------|----------|
-    // | 4. Arthur deposits 2000 tokens (mints 1333 shares)      |
+    // | 4. investor3 deposits 2000 wFIL (mints 1333 shares)    |
     // |--------------|---------|----------|---------|----------|
     // |         7333 |    3333 |     4999 |    4000 |     6000 |
     // |--------------|---------|----------|---------|----------|
-    // | 5. investor2 mints 2000 shares (costs 3001 assets)           |
-    // |    NOTE: investor2's assets spent got rounded up             |
-    // |    NOTE: Arthur's simpleInterestPool assets got rounded up           |
+    // | 5. investor2 mints 2000 shares (costs 3001 wFIL)       |
+    // | NOTE: investor2's assets spent got rounded up          |
+    // | NOTE: investor3's simpleInterestPool assets rounded up |
     // |--------------|---------|----------|---------|----------|
     // |         9333 |    3333 |     5000 |    6000 |     9000 |
     // |--------------|---------|----------|---------|----------|
@@ -141,7 +143,7 @@ contract SimpleInterestPoolStakingTest is BaseTest {
     // |--------------|---------|----------|---------|----------|
     // |         9333 |    3333 |     6071 |    6000 |    10929 |
     // |--------------|---------|----------|---------|----------|
-    // | 7. Arthur redeem 1333 shares (2428 assets)              |
+    // | 7. investor3 redeems 1333 shares (2428 assets)         |
     // |--------------|---------|----------|---------|----------|
     // |         8000 |    2000 |     3643 |    6000 |    10929 |
     // |--------------|---------|----------|---------|----------|
@@ -149,7 +151,7 @@ contract SimpleInterestPoolStakingTest is BaseTest {
     // |--------------|---------|----------|---------|----------|
     // |         6392 |    2000 |     3643 |    4392 |     8000 |
     // |--------------|---------|----------|---------|----------|
-    // | 9. Arthur withdraws 3643 assets (2000 shares)           |
+    // | 9. investor3 withdraws 3643 assets (2000 shares)           |
     // |    NOTE: investor2's assets have been rounded back up        |
     // |--------------|---------|----------|---------|----------|
     // |         4392 |       0 |        0 |    4392 |     8001 |
@@ -159,46 +161,43 @@ contract SimpleInterestPoolStakingTest is BaseTest {
     // |            0 |       0 |        0 |       0 |        0 |
     // |______________|_________|__________|_________|__________|
 
-    address arthur = address(0xBADC);
-    vm.deal(arthur, 1e18);
+    vm.deal(investor3, 1e18);
     vm.deal(investor2, 1e18);
 
-    uint256 mutationUnderlyingAmount = 3000;
+    uint256 mutationUnderlyingAmount = 600;
 
-
-    vm.startPrank(arthur);
+    vm.startPrank(investor3);
     wFIL.deposit{value: 4000}();
 
     wFIL.approve(address(simpleInterestPool), 4000);
     vm.stopPrank();
 
-    assertEq(wFIL.allowance(arthur, address(simpleInterestPool)), 4000);
+    assertEq(wFIL.allowance(investor3, address(simpleInterestPool)), 4000);
 
     vm.startPrank(investor2);
-    wFIL.deposit{value: 7001}();
-    wFIL.approve(address(simpleInterestPool), 7001);
+    wFIL.deposit{value: 6201}();
+    wFIL.approve(address(simpleInterestPool), 6201);
     vm.stopPrank();
 
-    assertEq(wFIL.allowance(investor2, address(simpleInterestPool)), 7001);
+    assertEq(wFIL.allowance(investor2, address(simpleInterestPool)), 6201);
 
-    // 1. Arthur mints 2000 shares (costs 2000 tokens)
-    vm.prank(arthur);
-    uint256 investor1UnderlyingAmount = simpleInterestPool.mint(2000, arthur);
-
-    uint256 investor1ShareAmount = simpleInterestPool.previewDeposit(investor1UnderlyingAmount);
+    // 1. investor3 mints 2000 shares (costs 2000 tokens)
+    vm.prank(investor3);
+    uint256 investor3UnderlyingAmount = simpleInterestPool.mint(2000, investor3);
+    uint256 investor3ShareAmount = simpleInterestPool.previewDeposit(investor3UnderlyingAmount);
 
     // Expect to have received the requested mint amount.
-    assertEq(investor1ShareAmount, 2000);
-    assertEq(simpleInterestPool.balanceOf(arthur), investor1ShareAmount);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(arthur)), investor1UnderlyingAmount);
-    assertEq(simpleInterestPool.convertToShares(investor1UnderlyingAmount), simpleInterestPool.balanceOf(arthur));
+    assertEq(investor3ShareAmount, 2000);
+    assertEq(simpleInterestPool.balanceOf(investor3), investor3ShareAmount);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)), investor3UnderlyingAmount);
+    assertEq(simpleInterestPool.convertToShares(investor3UnderlyingAmount), simpleInterestPool.balanceOf(investor3));
 
     // Expect a 1:1 ratio before mutation.
-    assertEq(investor1UnderlyingAmount, 2000);
+    assertEq(investor3UnderlyingAmount, 2000);
 
     // Sanity check.
-    assertEq(simpleInterestPool.totalSupply(), investor1ShareAmount);
-    assertEq(simpleInterestPool.totalAssets(), investor1UnderlyingAmount);
+    assertEq(simpleInterestPool.totalSupply(), investor3ShareAmount);
+    assertEq(simpleInterestPool.totalAssets(), investor3UnderlyingAmount);
 
     // 2. investor2 deposits 4000 tokens (mints 4000 shares)
     vm.prank(investor2);
@@ -215,114 +214,126 @@ contract SimpleInterestPoolStakingTest is BaseTest {
     assertEq(investor2ShareAmount, investor2UnderlyingAmount);
 
     // Sanity check.
-    uint256 preMutationShareBal = investor1ShareAmount + investor2ShareAmount;
-    uint256 preMutationBal = investor1UnderlyingAmount + investor2UnderlyingAmount;
+    uint256 preMutationShareBal = investor3ShareAmount + investor2ShareAmount;
+    uint256 preMutationBal = investor3UnderlyingAmount + investor2UnderlyingAmount;
     assertEq(simpleInterestPool.totalSupply(), preMutationShareBal);
     assertEq(simpleInterestPool.totalAssets(), preMutationBal);
     assertEq(simpleInterestPool.totalSupply(), 6000);
     assertEq(simpleInterestPool.totalAssets(), 6000);
 
-    // 3. Pool mutates by +3000 tokens...                    |
+    // 3. Pool mutates by +600 tokens...                    |
     //    (simulated yield returned from strategy)...
     // The Pool now contains more tokens than deposited which causes the exchange rate to change.
-    // Arthur share is 33.33% of the Pool, investor 2 66.66% of the Pool.
-    // Arthur's share count stays the same but the wFIL amount changes from 2000 to 3000.
+    // investor3 share is 33.33% of the Pool, investor 2 66.66% of the Pool.
+    // investor3's share count stays the same but the wFIL amount changes from 2000 to 3000.
     // investor 2's share count stays the same but the wFIL amount changes from 4000 to 6000.
-    vm.prank(rewardsActor);
-    wFIL.transfer(address(simpleInterestPool), mutationUnderlyingAmount);
-
+    vm.prank(address(loanAgent));
+    simpleInterestPool.borrow(3000, address(loanAgent));
+    uint256 preMutationTotalAssets =  preMutationBal + mutationUnderlyingAmount;
     assertEq(simpleInterestPool.totalSupply(), preMutationShareBal);
-    assertEq(simpleInterestPool.totalAssets(), preMutationBal + mutationUnderlyingAmount);
-    assertEq(simpleInterestPool.balanceOf(arthur), investor1ShareAmount);
+    assertEq(simpleInterestPool.totalAssets(), preMutationTotalAssets);
+    assertEq(simpleInterestPool.balanceOf(investor3), investor3ShareAmount);
     assertEq(
-        simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(arthur)),
-        investor1UnderlyingAmount + (mutationUnderlyingAmount / 3) * 1
+        simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)),
+        investor3UnderlyingAmount + (mutationUnderlyingAmount / 3) * 1
     );
     assertEq(simpleInterestPool.balanceOf(investor2), investor2ShareAmount);
     assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), investor2UnderlyingAmount + (mutationUnderlyingAmount / 3) * 2);
 
-    // 4. investor1 deposits 2000 tokens (mints 1333 shares)
-    vm.prank(arthur);
-    simpleInterestPool.deposit(2000, arthur);
-
-    assertEq(simpleInterestPool.totalSupply(), 7333);
-    assertEq(simpleInterestPool.balanceOf(arthur), 3333);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(arthur)), 4999);
+    // 4. investor3 deposits 2000 tokens (mints 1395 shares)
+    vm.prank(investor3);
+    simpleInterestPool.deposit(2000, investor3);
+    uint256 newAssetsAdded = 2000 + preMutationTotalAssets;
+    uint256 step4TotalSupply = preMutationShareBal + 1818;
+    assertEq(simpleInterestPool.totalAssets(), newAssetsAdded, "Borrowing should mutate the total assets of the pool");
+    assertEq(simpleInterestPool.totalSupply(), step4TotalSupply, "Borrowing should mutate the total assets of the pool");
+    assertEq(simpleInterestPool.balanceOf(investor3), 3818);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)), 4199);
     assertEq(simpleInterestPool.balanceOf(investor2), 4000);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 6000);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 4400);
 
     // 5. investor 2 mints 2000 shares (costs 3001 assets)
     // NOTE: investor 2's assets spent got rounded up
     // NOTE: investor1's simpleInterestPool assets got rounded up
     vm.prank(investor2);
     simpleInterestPool.mint(2000, investor2);
-
-    assertEq(simpleInterestPool.totalSupply(), 9333);
-    assertEq(simpleInterestPool.balanceOf(arthur), 3333);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(arthur)), 5000);
+    assertEq(simpleInterestPool.totalSupply(), step4TotalSupply + 2000);
+    assertEq(simpleInterestPool.balanceOf(investor3), 3818);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)), 4200);
     assertEq(simpleInterestPool.balanceOf(investor2), 6000);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 9000);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 6600);
 
     // Sanity checks:
     // investor1 and investor2 should have spent all their tokens now
-    assertEq(wFIL.balanceOf(arthur), 0);
+    assertEq(wFIL.balanceOf(investor3), 0);
     assertEq(wFIL.balanceOf(investor2), 0);
-    // Assets in simpleInterestPool: 4k (arthur) + 7k (investor2) + 3k (yield) + 1 (round up)
-    assertEq(simpleInterestPool.totalAssets(), 14001);
+    // Assets in simpleInterestPool: 4k (investor3) + 6.2k (investor2) + .6k (yield) + 1 (round up)
+    assertEq(simpleInterestPool.totalAssets(), 10801);
 
-    // 6. Vault mutates by +3000 tokens
-    // NOTE: Vault holds 17001 tokens, but sum of assetsOf() is 17000.
-    vm.prank(rewardsActor);
-    wFIL.transfer(address(simpleInterestPool), mutationUnderlyingAmount);
-    assertEq(simpleInterestPool.totalAssets(), 17001);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(arthur)), 6071);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 10929);
+    // 6. Vault mutates by +600 assets
+    // NOTE: Vault holds 11401 assets, but sum of assetsOf() is 11400.
+    vm.prank(address(loanAgent));
+    simpleInterestPool.borrow(3000, address(loanAgent));
+    assertEq(simpleInterestPool.totalAssets(), 11401);
+    assertEq(simpleInterestPool.totalSupply(), 9818);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)), 4433);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 6967);
 
-    // 7. investor1 redeem 1333 shares (2428 assets)
-    vm.prank(arthur);
-    simpleInterestPool.redeem(1333, arthur, arthur);
+    // 7. investor3 redeem 1818 shares (2111 assets)
+    vm.prank(investor3);
+    simpleInterestPool.redeem(1818, investor3, investor3);
 
-    assertEq(wFIL.balanceOf(arthur), 2428);
+    assertEq(wFIL.balanceOf(investor3), 2111);
     assertEq(simpleInterestPool.totalSupply(), 8000);
-    assertEq(simpleInterestPool.totalAssets(), 14573);
-    assertEq(simpleInterestPool.balanceOf(arthur), 2000);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(arthur)), 3643);
+    assertEq(simpleInterestPool.totalAssets(), 11401 - 2111);
+    assertEq(simpleInterestPool.balanceOf(investor3), 2000);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)), 2322);
     assertEq(simpleInterestPool.balanceOf(investor2), 6000);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 10929);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 6967);
 
-    // 8. investor2 withdraws 2929 assets (1608 shares)
+    // 8. investor2 withdraws 1967 assets (1693 shares)
+    // in order to withdraw, the pool needs sufficient liquidity
+    // investor1 sends some liquidity to the loan agent to simulate loan agent accruing rewards
+    vm.prank(investor1);
+    wFIL.transfer(address(loanAgent), 2500);
+
+    vm.startPrank(address(loanAgent));
+    wFIL.approve(address(simpleInterestPool), 7200);
+    simpleInterestPool.repay(7200, address(loanAgent), address(loanAgent));
+    vm.stopPrank();
+
     vm.prank(investor2);
-    simpleInterestPool.withdraw(2929, investor2, investor2);
+    simpleInterestPool.withdraw(1967, investor2, investor2);
 
-    assertEq(wFIL.balanceOf(investor2), 2929);
-    assertEq(simpleInterestPool.totalSupply(), 6392);
-    assertEq(simpleInterestPool.totalAssets(), 11644);
-    assertEq(simpleInterestPool.balanceOf(arthur), 2000);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(arthur)), 3643);
-    assertEq(simpleInterestPool.balanceOf(investor2), 4392);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 8000);
+    assertEq(wFIL.balanceOf(investor2), 1967);
+    assertEq(simpleInterestPool.totalSupply(), 6306);
+    assertEq(simpleInterestPool.totalAssets(), 7323);
+    assertEq(simpleInterestPool.balanceOf(investor3), 2000);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)), 2322);
+    assertEq(simpleInterestPool.balanceOf(investor2), 4306);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 5000);
 
-    // 9. investor1 withdraws 3643 assets (2000 shares)
+    // 9. investor3 withdraws 2322 assets (2000 shares)
     // NOTE: investor 2's assets have been rounded back up
-    vm.prank(arthur);
-    simpleInterestPool.withdraw(3643, arthur, arthur);
+    vm.prank(investor3);
+    simpleInterestPool.withdraw(2322, investor3, investor3);
 
-    assertEq(wFIL.balanceOf(arthur), 6071);
-    assertEq(simpleInterestPool.totalSupply(), 4392);
-    assertEq(simpleInterestPool.totalAssets(), 8001);
-    assertEq(simpleInterestPool.balanceOf(arthur), 0);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(arthur)), 0);
-    assertEq(simpleInterestPool.balanceOf(investor2), 4392);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 8001);
+    assertEq(wFIL.balanceOf(investor3), 4433);
+    assertEq(simpleInterestPool.totalSupply(), 4306);
+    assertEq(simpleInterestPool.totalAssets(), 5001);
+    assertEq(simpleInterestPool.balanceOf(investor3), 0);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)), 0);
+    assertEq(simpleInterestPool.balanceOf(investor2), 4306);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 5001);
 
-    // 10. investor2 redeem 4392 shares (8001 tokens)
+    // 10. investor2 redeem 4306 shares (5001 tokens)
     vm.prank(investor2);
-    simpleInterestPool.redeem(4392, investor2, investor2);
-    assertEq(wFIL.balanceOf(investor2), 10930);
+    simpleInterestPool.redeem(4306, investor2, investor2);
+    assertEq(wFIL.balanceOf(investor2), 6968);
     assertEq(simpleInterestPool.totalSupply(), 0);
     assertEq(simpleInterestPool.totalAssets(), 0);
-    assertEq(simpleInterestPool.balanceOf(arthur), 0);
-    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(arthur)), 0);
+    assertEq(simpleInterestPool.balanceOf(investor3), 0);
+    assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)), 0);
     assertEq(simpleInterestPool.balanceOf(investor2), 0);
     assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor2)), 0);
 
@@ -632,20 +643,33 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       assertEq(simpleInterestPool.convertToAssets(1), sharePrice, "Share price should not change upon borrow");
     }
 
-    function testSharePricingAfterRewards() public {
-      uint256 initialSharePrice = simpleInterestPool.convertToAssets(1);
+    function testFailBorrowTooMuch() public {
+      vm.startPrank(investor1);
+      wFIL.approve(address(simpleInterestPool), 1e18);
+      simpleInterestPool.deposit(1e18, investor1);
+      vm.stopPrank();
 
+      vm.prank(address(loanAgent));
+      simpleInterestPool.borrow(2e18, loanAgent);
+    }
+
+    function testSharePricingAfterRewards() public {
+      uint256 initialSharePrice = simpleInterestPool.convertToAssets(1e18);
       // deposit into pool
       vm.startPrank(investor1);
       wFIL.approve(address(simpleInterestPool), investor1UnderlyingAmount);
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
 
-      assertEq(simpleInterestPool.convertToAssets(1), initialSharePrice, "Share price should not change upon deposit");
-
+      assertEq(simpleInterestPool.totalAssets(), investor1UnderlyingAmount);
+      assertEq(simpleInterestPool.totalSupply(), investor1UnderlyingAmount);
+      assertEq(simpleInterestPool.convertToAssets(1e18), initialSharePrice, "Share price should not change upon deposit");
       vm.startPrank(loanAgent);
+
       // borrow from pool
       simpleInterestPool.borrow(1000e18, loanAgent);
+      assertEq(wFIL.balanceOf(address(loanAgent)), 1000e18, "Loan agent should have gotten the borrow amount");
+
       // give the miner enough funds to pay interest
       vm.deal(loanAgent, 200e18);
       wFIL.deposit{value: 200e18}();
@@ -655,8 +679,8 @@ contract SimpleInterestPoolLendingTest is BaseTest {
 
       simpleInterestPool.repay(l.principal + l.interest, loanAgent, loanAgent);
 
-      // since the pool now has a greater asset base than when it did before (interest has been paid), its share price should have increased
-      assertGt(simpleInterestPool.convertToAssets(1), initialSharePrice);
+      // since the pool now has a greater asset base than when it did before (loan has been granted), its share price should have increased by the interest paid on the loan
+      assertEq(simpleInterestPool.convertToAssets(1e18), 1002000000000000000);
     }
 
     function testLoanBalanceAfterDurationEnds() public {

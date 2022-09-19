@@ -29,6 +29,7 @@ struct Loan {
 
 /// @title ERC4626 interface
 /// See: https://eips.ethereum.org/EIPS/eip-4626
+/// NOTE: this pool uses accrual basis accounting to compute share prices
 abstract contract IPool4626 is ERC4626 {
     using SafeTransferLib for ERC20;
     using FixedPointMathLib for uint256;
@@ -39,6 +40,8 @@ abstract contract IPool4626 is ERC4626 {
     uint256 public id;
     uint256 public interestRate;
     uint256 public loanPeriods = 1555200;
+
+    uint256 private _totalAssets = 0;
 
     uint256 public fee = 0.025e18; // 2.5%
     uint256 public feesCollected = 0;
@@ -93,9 +96,16 @@ abstract contract IPool4626 is ERC4626 {
         router = _router;
     }
 
-    // TODO: https://github.com/glif-confidential/gcred-contracts/issues/19
     function totalAssets() public view override returns (uint256) {
-        return asset.balanceOf(address(this));
+        return _totalAssets;
+    }
+
+    function beforeWithdraw(uint256 assets, uint256 shares) internal override {
+        _totalAssets -= assets;
+    }
+
+    function afterDeposit(uint256 assets, uint256 shares) internal override {
+        _totalAssets += assets;
     }
 
     function getLoan(address borrower) public view returns (Loan memory loan) {
@@ -164,6 +174,8 @@ abstract contract IPool4626 is ERC4626 {
             interest,
             _loans[loanAgent].totalPaid
         );
+        // accrual basis accounting
+        _totalAssets += newInterest;
         emit Borrow(msg.sender, loanAgent, amount, newInterest, principal, interest);
 
         // interact
