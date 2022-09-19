@@ -13,7 +13,6 @@ generated/
 # Packages
 node_modules
 dist
-lib
 module
 .nyc_output
 
