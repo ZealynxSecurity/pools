@@ -62,14 +62,15 @@ contract LoanAgentBasicTest is BaseTest {
     function testRevokeOwnership() public {
         vm.startPrank(investor1);
         LoanAgent loanAgent = LoanAgent(payable(loanAgentFactory.create(address(miner))));
+        uint256 prevCount = loanAgentFactory.count();
         miner.changeOwnerAddress(address(loanAgent));
         loanAgent.claimOwnership();
-        loanAgent.revokeMinerOwnership(investor1);
+        loanAgent.revokeOwnership(investor1);
 
         assertEq(loanAgent.miner(), address(miner));
-        // TODO: https://github.com/glif-confidential/gcred/issues/32
-        assertEq(loanAgentFactory.activeMiners(address(miner)), address(loanAgent));
-        assertEq(loanAgentFactory.loanAgents(address(loanAgent)), address(miner));
+        assertEq(loanAgentFactory.activeMiners(address(miner)), address(0));
+        assertEq(loanAgentFactory.loanAgents(address(loanAgent)), address(0));
+        assertEq(loanAgentFactory.count(), prevCount - 1);
         assertEq(miner.currentOwner(), address(loanAgent));
         assertEq(loanAgent.owner(), investor1);
 
@@ -197,5 +198,23 @@ contract LoanAgentTest is BaseTest {
         vm.roll(pool.gracePeriod() + 2);
         bool inPenalty = stats.hasPenalties(address(loanAgent));
         assertFalse(inPenalty);
+    }
+
+    function testFailRevokeOwnershipWithExistingLoans() public {
+        address newOwner = makeAddr("INVESTOR_2");
+        vm.startPrank(investor1);
+        loanAgent.revokeOwnership(newOwner);
+    }
+
+    function testFailRevokeOwnershipFromWrongOwner() public {
+        address newOwner = makeAddr("TEST");
+        vm.startPrank(newOwner);
+        loanAgent.revokeOwnership(newOwner);
+    }
+
+    function testFailPoolFactoryRevokeOwnershipWrongOwner() public {
+        address newOwner = makeAddr("TEST");
+        vm.startPrank(newOwner);
+        loanAgentFactory.revokeOwnership(newOwner);
     }
 }

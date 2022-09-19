@@ -3,6 +3,7 @@ pragma solidity ^0.8.15;
 
 import "src/MockMiner.sol";
 import "src/LoanAgent/ILoanAgent.sol";
+import "src/LoanAgent/LoanAgentFactory.sol";
 import "src/Pool/PoolFactory.sol";
 import "src/Pool/IPool4626.sol";
 import "solmate/tokens/ERC20.sol";
@@ -10,10 +11,9 @@ import {Router} from "src/Router/Router.sol";
 import {IStats} from "src/Stats/IStats.sol";
 
 contract LoanAgent is ILoanAgent {
-  address public router;
+  address private router;
   address public miner;
   address public owner;
-  bool public active = false;
 
   constructor(address _miner, address _router) {
     miner = _miner;
@@ -33,16 +33,14 @@ contract LoanAgent is ILoanAgent {
     IMiner(miner).changeOwnerAddress(address(this));
     // if this call does not error out, set the owner of this loan agent to be the sender of this message
     owner = msg.sender;
-    active = true;
   }
 
-  function revokeMinerOwnership(address newOwner) external {
+  function revokeOwnership(address newOwner) external {
     require(owner == msg.sender, "Only LoanAgent owner can call revokeOwnership");
     require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
     require(!IStats(Router(router).getStats()).isDebtor(address(this)), "Cannot revoke miner ownership with outstanding loans");
-    // TODO: https://github.com/glif-confidential/gcred/issues/32
-    active = false;
     IMiner(miner).changeOwnerAddress(newOwner);
+    ILoanAgentFactory(Router(router).getLoanAgentFactory()).revokeOwnership(address(this));
   }
 
   function withdrawBalance() external returns (uint256) {
