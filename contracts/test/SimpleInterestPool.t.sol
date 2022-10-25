@@ -490,9 +490,9 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       wFIL.approve(address(simpleInterestPool), investor1UnderlyingAmount);
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
-
       uint256 prevMinerBal = wFIL.balanceOf(loanAgent);
       uint256 blockNum = block.number;
+      vm.prank(loanAgent);
       simpleInterestPool.borrow(borrowAmount, loanAgent);
       uint256 postMinerBal = wFIL.balanceOf(loanAgent);
 
@@ -517,7 +517,7 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       wFIL.approve(address(simpleInterestPool), investor1UnderlyingAmount);
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
-
+      vm.prank(loanAgent);
       simpleInterestPool.borrow(100000e18, loanAgent);
 
       Loan memory l = simpleInterestPool.getLoan(loanAgent);
@@ -537,7 +537,7 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       wFIL.approve(address(simpleInterestPool), investor1UnderlyingAmount);
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
-
+      vm.prank(loanAgent);
       simpleInterestPool.borrow(borrowAmount, loanAgent);
       uint256 postLoanMinerBal = wFIL.balanceOf(loanAgent);
 
@@ -575,6 +575,7 @@ contract SimpleInterestPoolLendingTest is BaseTest {
 
       uint256 prevMinerBal = wFIL.balanceOf(loanAgent);
       uint256 blockNum = block.number;
+      vm.prank(loanAgent);
       simpleInterestPool.borrow(borrowAmount1, loanAgent);
       uint256 postMinerBal = wFIL.balanceOf(loanAgent);
 
@@ -595,6 +596,7 @@ contract SimpleInterestPoolLendingTest is BaseTest {
 
       // borrow again
       prevMinerBal = wFIL.balanceOf(loanAgent);
+      vm.prank(loanAgent);
       simpleInterestPool.borrow(borrowAmount2, loanAgent);
       postMinerBal = wFIL.balanceOf(loanAgent);
 
@@ -615,7 +617,7 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       wFIL.approve(address(simpleInterestPool), investor1UnderlyingAmount);
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
-
+      vm.prank(loanAgent);
       simpleInterestPool.borrow(100000e18, loanAgent);
       vm.roll(simpleInterestPool.gracePeriod() + 2);
 
@@ -636,6 +638,7 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       assertEq(simpleInterestPool.convertToAssets(1), sharePrice, "Share price should not change upon deposit");
 
       // borrow from pool
+      vm.prank(loanAgent);
       simpleInterestPool.borrow(10e18, loanAgent);
       // roll blocks forward
       vm.roll(simpleInterestPool.gracePeriod() + 2);
@@ -651,6 +654,17 @@ contract SimpleInterestPoolLendingTest is BaseTest {
 
       vm.prank(address(loanAgent));
       simpleInterestPool.borrow(2e18, loanAgent);
+    }
+
+    function testFailBorrowAsNonLoanAgentOwner() public {
+      vm.startPrank(investor1);
+      wFIL.approve(address(simpleInterestPool), 1e18);
+      simpleInterestPool.deposit(1e18, investor1);
+      vm.stopPrank();
+
+      address scammer = makeAddr("SCAM");
+      vm.prank(scammer);
+      simpleInterestPool.borrow(0.5e18, loanAgent);
     }
 
     function testSharePricingAfterRewards() public {

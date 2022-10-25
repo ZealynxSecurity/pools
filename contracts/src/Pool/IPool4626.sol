@@ -100,11 +100,11 @@ abstract contract IPool4626 is ERC4626 {
         return _totalAssets;
     }
 
-    function beforeWithdraw(uint256 assets, uint256 shares) internal override {
+    function beforeWithdraw(uint256 assets, uint256) internal override {
         _totalAssets -= assets;
     }
 
-    function afterDeposit(uint256 assets, uint256 shares) internal override {
+    function afterDeposit(uint256 assets, uint256) internal override {
         _totalAssets += assets;
     }
 
@@ -152,8 +152,6 @@ abstract contract IPool4626 is ERC4626 {
         return (maxOwed, penaltyFee.mulWadUp((totalOwed - maxBalBeforePenalty) * 1e18));
     }
 
-    // TODO: https://github.com/glif-confidential/gcred-contracts/issues/1
-    // TODO: https://github.com/glif-confidential/gcred-contracts/issues/21
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/16
     function borrow(uint256 amount, address loanAgent) public virtual returns (uint256 interest) {
         // check
@@ -162,6 +160,7 @@ abstract contract IPool4626 is ERC4626 {
         IStats stats = IStats(Router(router).getStats());
         require(stats.isLoanAgent(loanAgent), "Only loan agents can borrow from pools");
         require(!stats.hasPenalties(loanAgent), "Cannot borrow from a pool when LoanAgent is in penalty");
+        require(loanAgent == msg.sender || LoanAgent(payable(loanAgent)).owner() == msg.sender, "Cannot borrow on behalf of a loan agent you do not own");
 
         // effect
         uint256 newInterest = amount.mulWadUp(interestRate);
