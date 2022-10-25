@@ -7,7 +7,7 @@ contract Router is Ownable {
   /**
     0 - loanAgentFactory
     1 - poolFactory
-    2 - creditScorer
+    2 - vcVerifier
     3 - stats
     4 - ? TBD
    */
@@ -16,10 +16,10 @@ contract Router is Ownable {
   constructor(
     address _loanAgentFactory,
     address _poolFactory,
-    address _creditScorer,
+    address _vcVerifier,
     address _stats
   ) {
-    routes = [_loanAgentFactory, _poolFactory, _creditScorer, _stats];
+    routes = [_loanAgentFactory, _poolFactory, _vcVerifier, _stats];
   }
 
   function getRoute(uint8 id) public view returns (address) {
@@ -34,7 +34,7 @@ contract Router is Ownable {
     return getRoute(1);
   }
 
-  function getCreditScorer() public view returns (address) {
+  function getVCVerifier() public view returns (address) {
     return getRoute(2);
   }
 

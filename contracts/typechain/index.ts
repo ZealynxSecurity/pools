@@ -18,6 +18,7 @@ export type { IStats } from "./IStats";
 export type { Router } from "./Router";
 export type { SimpleInterestPool } from "./SimpleInterestPool";
 export type { Stats } from "./Stats";
+export type { VCVerifier } from "./VCVerifier";
 export type { WFIL } from "./WFIL";
 export * as factories from "./factories";
 export type { DemoDeploy } from "./Demo.s.sol/DemoDeploy";
@@ -41,6 +42,7 @@ export { PoolFactory__factory } from "./factories/PoolFactory.sol/PoolFactory__f
 export { Router__factory } from "./factories/Router__factory";
 export { SimpleInterestPool__factory } from "./factories/SimpleInterestPool__factory";
 export { Stats__factory } from "./factories/Stats__factory";
+export { VCVerifier__factory } from "./factories/VCVerifier__factory";
 export { WFIL__factory } from "./factories/WFIL__factory";
 export type { StdError } from "./test.sol/StdError";
 export { StdError__factory } from "./factories/test.sol/StdError__factory";

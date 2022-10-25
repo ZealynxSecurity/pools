@@ -27,10 +27,15 @@ export interface ILoanAgentFactoryInterface extends utils.Interface {
     "activeMiners(address)": FunctionFragment;
     "create(address)": FunctionFragment;
     "loanAgents(address)": FunctionFragment;
+    "revokeOwnership(address)": FunctionFragment;
   };
 
   getFunction(
-    nameOrSignatureOrTopic: "activeMiners" | "create" | "loanAgents"
+    nameOrSignatureOrTopic:
+      | "activeMiners"
+      | "create"
+      | "loanAgents"
+      | "revokeOwnership"
   ): FunctionFragment;
 
   encodeFunctionData(
@@ -45,6 +50,10 @@ export interface ILoanAgentFactoryInterface extends utils.Interface {
     functionFragment: "loanAgents",
     values: [PromiseOrValue<string>]
   ): string;
+  encodeFunctionData(
+    functionFragment: "revokeOwnership",
+    values: [PromiseOrValue<string>]
+  ): string;
 
   decodeFunctionResult(
     functionFragment: "activeMiners",
@@ -52,6 +61,10 @@ export interface ILoanAgentFactoryInterface extends utils.Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "create", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "loanAgents", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "revokeOwnership",
+    data: BytesLike
+  ): Result;
 
   events: {};
 }
@@ -97,6 +110,11 @@ export interface ILoanAgentFactory extends BaseContract {
       loanAgent: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<[string]>;
+
+    revokeOwnership(
+      _loanAgent: PromiseOrValue<string>,
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<ContractTransaction>;
   };
 
   activeMiners(
@@ -114,6 +132,11 @@ export interface ILoanAgentFactory extends BaseContract {
     overrides?: CallOverrides
   ): Promise<string>;
 
+  revokeOwnership(
+    _loanAgent: PromiseOrValue<string>,
+    overrides?: Overrides & { from?: PromiseOrValue<string> }
+  ): Promise<ContractTransaction>;
+
   callStatic: {
     activeMiners(
       miner: PromiseOrValue<string>,
@@ -129,6 +152,11 @@ export interface ILoanAgentFactory extends BaseContract {
       loanAgent: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<string>;
+
+    revokeOwnership(
+      _loanAgent: PromiseOrValue<string>,
+      overrides?: CallOverrides
+    ): Promise<void>;
   };
 
   filters: {};
@@ -148,6 +176,11 @@ export interface ILoanAgentFactory extends BaseContract {
       loanAgent: PromiseOrValue<string>,
       overrides?: CallOverrides
     ): Promise<BigNumber>;
+
+    revokeOwnership(
+      _loanAgent: PromiseOrValue<string>,
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    ): Promise<BigNumber>;
   };
 
   populateTransaction: {
@@ -164,6 +197,11 @@ export interface ILoanAgentFactory extends BaseContract {
     loanAgents(
       loanAgent: PromiseOrValue<string>,
       overrides?: CallOverrides
+    ): Promise<PopulatedTransaction>;
+
+    revokeOwnership(
+      _loanAgent: PromiseOrValue<string>,
+      overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<PopulatedTransaction>;
   };
 }

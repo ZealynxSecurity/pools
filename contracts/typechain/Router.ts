@@ -29,11 +29,11 @@ import type {
 
 export interface RouterInterface extends utils.Interface {
   functions: {
-    "getCreditScorer()": FunctionFragment;
     "getLoanAgentFactory()": FunctionFragment;
     "getPoolFactory()": FunctionFragment;
     "getRoute(uint8)": FunctionFragment;
     "getStats()": FunctionFragment;
+    "getVCVerifier()": FunctionFragment;
     "owner()": FunctionFragment;
     "pushRoute(address)": FunctionFragment;
     "renounceOwnership()": FunctionFragment;
@@ -43,11 +43,11 @@ export interface RouterInterface extends utils.Interface {
 
   getFunction(
     nameOrSignatureOrTopic:
-      | "getCreditScorer"
       | "getLoanAgentFactory"
       | "getPoolFactory"
       | "getRoute"
       | "getStats"
+      | "getVCVerifier"
       | "owner"
       | "pushRoute"
       | "renounceOwnership"
@@ -55,10 +55,6 @@ export interface RouterInterface extends utils.Interface {
       | "transferOwnership"
   ): FunctionFragment;
 
-  encodeFunctionData(
-    functionFragment: "getCreditScorer",
-    values?: undefined
-  ): string;
   encodeFunctionData(
     functionFragment: "getLoanAgentFactory",
     values?: undefined
@@ -72,6 +68,10 @@ export interface RouterInterface extends utils.Interface {
     values: [PromiseOrValue<BigNumberish>]
   ): string;
   encodeFunctionData(functionFragment: "getStats", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "getVCVerifier",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "pushRoute",
@@ -91,10 +91,6 @@ export interface RouterInterface extends utils.Interface {
   ): string;
 
   decodeFunctionResult(
-    functionFragment: "getCreditScorer",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "getLoanAgentFactory",
     data: BytesLike
   ): Result;
@@ -104,6 +100,10 @@ export interface RouterInterface extends utils.Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "getRoute", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "getStats", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "getVCVerifier",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "pushRoute", data: BytesLike): Result;
   decodeFunctionResult(
@@ -162,8 +162,6 @@ export interface Router extends BaseContract {
   removeListener: OnEvent<this>;
 
   functions: {
-    getCreditScorer(overrides?: CallOverrides): Promise<[string]>;
-
     getLoanAgentFactory(overrides?: CallOverrides): Promise<[string]>;
 
     getPoolFactory(overrides?: CallOverrides): Promise<[string]>;
@@ -174,6 +172,8 @@ export interface Router extends BaseContract {
     ): Promise<[string]>;
 
     getStats(overrides?: CallOverrides): Promise<[string]>;
+
+    getVCVerifier(overrides?: CallOverrides): Promise<[string]>;
 
     owner(overrides?: CallOverrides): Promise<[string]>;
 
@@ -197,8 +197,6 @@ export interface Router extends BaseContract {
     ): Promise<ContractTransaction>;
   };
 
-  getCreditScorer(overrides?: CallOverrides): Promise<string>;
-
   getLoanAgentFactory(overrides?: CallOverrides): Promise<string>;
 
   getPoolFactory(overrides?: CallOverrides): Promise<string>;
@@ -209,6 +207,8 @@ export interface Router extends BaseContract {
   ): Promise<string>;
 
   getStats(overrides?: CallOverrides): Promise<string>;
+
+  getVCVerifier(overrides?: CallOverrides): Promise<string>;
 
   owner(overrides?: CallOverrides): Promise<string>;
 
@@ -232,8 +232,6 @@ export interface Router extends BaseContract {
   ): Promise<ContractTransaction>;
 
   callStatic: {
-    getCreditScorer(overrides?: CallOverrides): Promise<string>;
-
     getLoanAgentFactory(overrides?: CallOverrides): Promise<string>;
 
     getPoolFactory(overrides?: CallOverrides): Promise<string>;
@@ -244,6 +242,8 @@ export interface Router extends BaseContract {
     ): Promise<string>;
 
     getStats(overrides?: CallOverrides): Promise<string>;
+
+    getVCVerifier(overrides?: CallOverrides): Promise<string>;
 
     owner(overrides?: CallOverrides): Promise<string>;
 
@@ -277,8 +277,6 @@ export interface Router extends BaseContract {
   };
 
   estimateGas: {
-    getCreditScorer(overrides?: CallOverrides): Promise<BigNumber>;
-
     getLoanAgentFactory(overrides?: CallOverrides): Promise<BigNumber>;
 
     getPoolFactory(overrides?: CallOverrides): Promise<BigNumber>;
@@ -289,6 +287,8 @@ export interface Router extends BaseContract {
     ): Promise<BigNumber>;
 
     getStats(overrides?: CallOverrides): Promise<BigNumber>;
+
+    getVCVerifier(overrides?: CallOverrides): Promise<BigNumber>;
 
     owner(overrides?: CallOverrides): Promise<BigNumber>;
 
@@ -313,8 +313,6 @@ export interface Router extends BaseContract {
   };
 
   populateTransaction: {
-    getCreditScorer(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
     getLoanAgentFactory(
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
@@ -327,6 +325,8 @@ export interface Router extends BaseContract {
     ): Promise<PopulatedTransaction>;
 
     getStats(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    getVCVerifier(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     owner(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 

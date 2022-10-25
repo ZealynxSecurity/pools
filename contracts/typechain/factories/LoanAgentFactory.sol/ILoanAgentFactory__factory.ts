@@ -67,6 +67,19 @@ const _abi = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "_loanAgent",
+        type: "address",
+      },
+    ],
+    name: "revokeOwnership",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ];
 
 export class ILoanAgentFactory__factory {

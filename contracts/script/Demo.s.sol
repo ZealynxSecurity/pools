@@ -13,7 +13,7 @@ import "src/Pool/PoolFactory.sol";
 import "src/Pool/IPool4626.sol";
 import "src/Pool/SimpleInterestPool.sol";
 import "src/Stats/Stats.sol";
-import "src/CreditScore/CreditScore.sol";
+import "src/VCVerifier/VCVerifier.sol";
 
 // used for deploying GCRED to anvil for local testing and development
 contract DemoDeploy is Script {
@@ -21,7 +21,7 @@ contract DemoDeploy is Script {
     // This order matters when instantiating the router
     LoanAgentFactory public loanAgentFactory;
     PoolFactory public poolFactory;
-    CreditScore public creditScore;
+    VCVerifier public vcVerifier;
     Stats public stats;
 
     Router public router;
@@ -56,19 +56,19 @@ contract DemoDeploy is Script {
         wFIL = new WFIL();
         loanAgentFactory = new LoanAgentFactory();
         poolFactory = new PoolFactory(wFIL, treasury);
-        creditScore = new CreditScore();
+        vcVerifier = new VCVerifier("lending.glif.io", "1");
         stats = new Stats();
 
         router = new Router(
             address(loanAgentFactory),
             address(poolFactory),
-            address(creditScore),
+            address(vcVerifier),
             address(stats)
         );
 
         loanAgentFactory.setRouter(address(router));
         poolFactory.setRouter(address(router));
-        creditScore.setRouter(address(router));
+        vcVerifier.setRouter(address(router));
         stats.setRouter(address(router));
 
         configureLoanAgent();

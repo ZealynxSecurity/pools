@@ -26,12 +26,12 @@ export interface DemoDeployInterface extends utils.Interface {
   functions: {
     "IS_SCRIPT()": FunctionFragment;
     "configureLoanAgent()": FunctionFragment;
-    "creditScore()": FunctionFragment;
     "loanAgentFactory()": FunctionFragment;
     "poolFactory()": FunctionFragment;
     "router()": FunctionFragment;
     "run()": FunctionFragment;
     "stats()": FunctionFragment;
+    "vcVerifier()": FunctionFragment;
     "vm()": FunctionFragment;
     "wFIL()": FunctionFragment;
   };
@@ -40,12 +40,12 @@ export interface DemoDeployInterface extends utils.Interface {
     nameOrSignatureOrTopic:
       | "IS_SCRIPT"
       | "configureLoanAgent"
-      | "creditScore"
       | "loanAgentFactory"
       | "poolFactory"
       | "router"
       | "run"
       | "stats"
+      | "vcVerifier"
       | "vm"
       | "wFIL"
   ): FunctionFragment;
@@ -53,10 +53,6 @@ export interface DemoDeployInterface extends utils.Interface {
   encodeFunctionData(functionFragment: "IS_SCRIPT", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "configureLoanAgent",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "creditScore",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -70,16 +66,16 @@ export interface DemoDeployInterface extends utils.Interface {
   encodeFunctionData(functionFragment: "router", values?: undefined): string;
   encodeFunctionData(functionFragment: "run", values?: undefined): string;
   encodeFunctionData(functionFragment: "stats", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "vcVerifier",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "vm", values?: undefined): string;
   encodeFunctionData(functionFragment: "wFIL", values?: undefined): string;
 
   decodeFunctionResult(functionFragment: "IS_SCRIPT", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "configureLoanAgent",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "creditScore",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -93,6 +89,7 @@ export interface DemoDeployInterface extends utils.Interface {
   decodeFunctionResult(functionFragment: "router", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "run", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "stats", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "vcVerifier", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "vm", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "wFIL", data: BytesLike): Result;
 
@@ -132,8 +129,6 @@ export interface DemoDeploy extends BaseContract {
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<ContractTransaction>;
 
-    creditScore(overrides?: CallOverrides): Promise<[string]>;
-
     loanAgentFactory(overrides?: CallOverrides): Promise<[string]>;
 
     poolFactory(overrides?: CallOverrides): Promise<[string]>;
@@ -146,6 +141,8 @@ export interface DemoDeploy extends BaseContract {
 
     stats(overrides?: CallOverrides): Promise<[string]>;
 
+    vcVerifier(overrides?: CallOverrides): Promise<[string]>;
+
     vm(overrides?: CallOverrides): Promise<[string]>;
 
     wFIL(overrides?: CallOverrides): Promise<[string]>;
@@ -156,8 +153,6 @@ export interface DemoDeploy extends BaseContract {
   configureLoanAgent(
     overrides?: Overrides & { from?: PromiseOrValue<string> }
   ): Promise<ContractTransaction>;
-
-  creditScore(overrides?: CallOverrides): Promise<string>;
 
   loanAgentFactory(overrides?: CallOverrides): Promise<string>;
 
@@ -171,6 +166,8 @@ export interface DemoDeploy extends BaseContract {
 
   stats(overrides?: CallOverrides): Promise<string>;
 
+  vcVerifier(overrides?: CallOverrides): Promise<string>;
+
   vm(overrides?: CallOverrides): Promise<string>;
 
   wFIL(overrides?: CallOverrides): Promise<string>;
@@ -179,8 +176,6 @@ export interface DemoDeploy extends BaseContract {
     IS_SCRIPT(overrides?: CallOverrides): Promise<boolean>;
 
     configureLoanAgent(overrides?: CallOverrides): Promise<[string, string]>;
-
-    creditScore(overrides?: CallOverrides): Promise<string>;
 
     loanAgentFactory(overrides?: CallOverrides): Promise<string>;
 
@@ -191,6 +186,8 @@ export interface DemoDeploy extends BaseContract {
     run(overrides?: CallOverrides): Promise<void>;
 
     stats(overrides?: CallOverrides): Promise<string>;
+
+    vcVerifier(overrides?: CallOverrides): Promise<string>;
 
     vm(overrides?: CallOverrides): Promise<string>;
 
@@ -206,8 +203,6 @@ export interface DemoDeploy extends BaseContract {
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<BigNumber>;
 
-    creditScore(overrides?: CallOverrides): Promise<BigNumber>;
-
     loanAgentFactory(overrides?: CallOverrides): Promise<BigNumber>;
 
     poolFactory(overrides?: CallOverrides): Promise<BigNumber>;
@@ -219,6 +214,8 @@ export interface DemoDeploy extends BaseContract {
     ): Promise<BigNumber>;
 
     stats(overrides?: CallOverrides): Promise<BigNumber>;
+
+    vcVerifier(overrides?: CallOverrides): Promise<BigNumber>;
 
     vm(overrides?: CallOverrides): Promise<BigNumber>;
 
@@ -232,8 +229,6 @@ export interface DemoDeploy extends BaseContract {
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<PopulatedTransaction>;
 
-    creditScore(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
     loanAgentFactory(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     poolFactory(overrides?: CallOverrides): Promise<PopulatedTransaction>;
@@ -245,6 +240,8 @@ export interface DemoDeploy extends BaseContract {
     ): Promise<PopulatedTransaction>;
 
     stats(overrides?: CallOverrides): Promise<PopulatedTransaction>;
+
+    vcVerifier(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     vm(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 

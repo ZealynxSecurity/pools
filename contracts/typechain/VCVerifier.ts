@@ -4,6 +4,7 @@
 import type {
   BaseContract,
   BigNumber,
+  BigNumberish,
   BytesLike,
   CallOverrides,
   ContractTransaction,
@@ -24,55 +25,73 @@ import type {
   TypedListener,
   OnEvent,
   PromiseOrValue,
-} from "../common";
+} from "./common";
 
-export interface LoanAgentFactoryInterface extends utils.Interface {
+export type VerifiableCredentialStruct = {
+  issuer: PromiseOrValue<string>;
+  subject: PromiseOrValue<string>;
+  data: PromiseOrValue<string>;
+  issued: PromiseOrValue<string>;
+  validUntil: PromiseOrValue<string>;
+};
+
+export type VerifiableCredentialStructOutput = [
+  string,
+  string,
+  string,
+  string,
+  string
+] & {
+  issuer: string;
+  subject: string;
+  data: string;
+  issued: string;
+  validUntil: string;
+};
+
+export interface VCVerifierInterface extends utils.Interface {
   functions: {
-    "activeMiners(address)": FunctionFragment;
-    "count()": FunctionFragment;
-    "create(address)": FunctionFragment;
-    "loanAgents(address)": FunctionFragment;
+    "_VERIFIABLE_CREDENTIAL_TYPE_HASH()": FunctionFragment;
+    "digest((address,address,string,string,string))": FunctionFragment;
     "owner()": FunctionFragment;
+    "recover((address,address,string,string,string),uint8,bytes32,bytes32)": FunctionFragment;
     "renounceOwnership()": FunctionFragment;
-    "revokeOwnership(address)": FunctionFragment;
     "setRouter(address)": FunctionFragment;
     "transferOwnership(address)": FunctionFragment;
   };
 
   getFunction(
     nameOrSignatureOrTopic:
-      | "activeMiners"
-      | "count"
-      | "create"
-      | "loanAgents"
+      | "_VERIFIABLE_CREDENTIAL_TYPE_HASH"
+      | "digest"
       | "owner"
+      | "recover"
       | "renounceOwnership"
-      | "revokeOwnership"
       | "setRouter"
       | "transferOwnership"
   ): FunctionFragment;
 
   encodeFunctionData(
-    functionFragment: "activeMiners",
-    values: [PromiseOrValue<string>]
-  ): string;
-  encodeFunctionData(functionFragment: "count", values?: undefined): string;
-  encodeFunctionData(
-    functionFragment: "create",
-    values: [PromiseOrValue<string>]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "loanAgents",
-    values: [PromiseOrValue<string>]
-  ): string;
-  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
-  encodeFunctionData(
-    functionFragment: "renounceOwnership",
+    functionFragment: "_VERIFIABLE_CREDENTIAL_TYPE_HASH",
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "revokeOwnership",
-    values: [PromiseOrValue<string>]
+    functionFragment: "digest",
+    values: [VerifiableCredentialStruct]
+  ): string;
+  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "recover",
+    values: [
+      VerifiableCredentialStruct,
+      PromiseOrValue<BigNumberish>,
+      PromiseOrValue<BytesLike>,
+      PromiseOrValue<BytesLike>
+    ]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "renounceOwnership",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "setRouter",
@@ -84,19 +103,14 @@ export interface LoanAgentFactoryInterface extends utils.Interface {
   ): string;
 
   decodeFunctionResult(
-    functionFragment: "activeMiners",
+    functionFragment: "_VERIFIABLE_CREDENTIAL_TYPE_HASH",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "count", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "create", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "loanAgents", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "digest", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "recover", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceOwnership",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "revokeOwnership",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "setRouter", data: BytesLike): Result;
@@ -124,12 +138,12 @@ export type OwnershipTransferredEvent = TypedEvent<
 export type OwnershipTransferredEventFilter =
   TypedEventFilter<OwnershipTransferredEvent>;
 
-export interface LoanAgentFactory extends BaseContract {
+export interface VCVerifier extends BaseContract {
   connect(signerOrProvider: Signer | Provider | string): this;
   attach(addressOrName: string): this;
   deployed(): Promise<this>;
 
-  interface: LoanAgentFactoryInterface;
+  interface: VCVerifierInterface;
 
   queryFilter<TEvent extends TypedEvent>(
     event: TypedEventFilter<TEvent>,
@@ -151,31 +165,26 @@ export interface LoanAgentFactory extends BaseContract {
   removeListener: OnEvent<this>;
 
   functions: {
-    activeMiners(
-      arg0: PromiseOrValue<string>,
+    _VERIFIABLE_CREDENTIAL_TYPE_HASH(
       overrides?: CallOverrides
     ): Promise<[string]>;
 
-    count(overrides?: CallOverrides): Promise<[BigNumber]>;
-
-    create(
-      _miner: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
-
-    loanAgents(
-      arg0: PromiseOrValue<string>,
+    digest(
+      vc: VerifiableCredentialStruct,
       overrides?: CallOverrides
     ): Promise<[string]>;
 
     owner(overrides?: CallOverrides): Promise<[string]>;
 
-    renounceOwnership(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<ContractTransaction>;
+    recover(
+      vc: VerifiableCredentialStruct,
+      v: PromiseOrValue<BigNumberish>,
+      r: PromiseOrValue<BytesLike>,
+      s: PromiseOrValue<BytesLike>,
+      overrides?: CallOverrides
+    ): Promise<[string]>;
 
-    revokeOwnership(
-      _loanAgent: PromiseOrValue<string>,
+    renounceOwnership(
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<ContractTransaction>;
 
@@ -190,31 +199,24 @@ export interface LoanAgentFactory extends BaseContract {
     ): Promise<ContractTransaction>;
   };
 
-  activeMiners(
-    arg0: PromiseOrValue<string>,
-    overrides?: CallOverrides
-  ): Promise<string>;
+  _VERIFIABLE_CREDENTIAL_TYPE_HASH(overrides?: CallOverrides): Promise<string>;
 
-  count(overrides?: CallOverrides): Promise<BigNumber>;
-
-  create(
-    _miner: PromiseOrValue<string>,
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
-
-  loanAgents(
-    arg0: PromiseOrValue<string>,
+  digest(
+    vc: VerifiableCredentialStruct,
     overrides?: CallOverrides
   ): Promise<string>;
 
   owner(overrides?: CallOverrides): Promise<string>;
 
-  renounceOwnership(
-    overrides?: Overrides & { from?: PromiseOrValue<string> }
-  ): Promise<ContractTransaction>;
+  recover(
+    vc: VerifiableCredentialStruct,
+    v: PromiseOrValue<BigNumberish>,
+    r: PromiseOrValue<BytesLike>,
+    s: PromiseOrValue<BytesLike>,
+    overrides?: CallOverrides
+  ): Promise<string>;
 
-  revokeOwnership(
-    _loanAgent: PromiseOrValue<string>,
+  renounceOwnership(
     overrides?: Overrides & { from?: PromiseOrValue<string> }
   ): Promise<ContractTransaction>;
 
@@ -229,31 +231,26 @@ export interface LoanAgentFactory extends BaseContract {
   ): Promise<ContractTransaction>;
 
   callStatic: {
-    activeMiners(
-      arg0: PromiseOrValue<string>,
+    _VERIFIABLE_CREDENTIAL_TYPE_HASH(
       overrides?: CallOverrides
     ): Promise<string>;
 
-    count(overrides?: CallOverrides): Promise<BigNumber>;
-
-    create(
-      _miner: PromiseOrValue<string>,
-      overrides?: CallOverrides
-    ): Promise<string>;
-
-    loanAgents(
-      arg0: PromiseOrValue<string>,
+    digest(
+      vc: VerifiableCredentialStruct,
       overrides?: CallOverrides
     ): Promise<string>;
 
     owner(overrides?: CallOverrides): Promise<string>;
 
-    renounceOwnership(overrides?: CallOverrides): Promise<void>;
-
-    revokeOwnership(
-      _loanAgent: PromiseOrValue<string>,
+    recover(
+      vc: VerifiableCredentialStruct,
+      v: PromiseOrValue<BigNumberish>,
+      r: PromiseOrValue<BytesLike>,
+      s: PromiseOrValue<BytesLike>,
       overrides?: CallOverrides
-    ): Promise<void>;
+    ): Promise<string>;
+
+    renounceOwnership(overrides?: CallOverrides): Promise<void>;
 
     setRouter(
       _router: PromiseOrValue<string>,
@@ -278,31 +275,26 @@ export interface LoanAgentFactory extends BaseContract {
   };
 
   estimateGas: {
-    activeMiners(
-      arg0: PromiseOrValue<string>,
+    _VERIFIABLE_CREDENTIAL_TYPE_HASH(
       overrides?: CallOverrides
     ): Promise<BigNumber>;
 
-    count(overrides?: CallOverrides): Promise<BigNumber>;
-
-    create(
-      _miner: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<BigNumber>;
-
-    loanAgents(
-      arg0: PromiseOrValue<string>,
+    digest(
+      vc: VerifiableCredentialStruct,
       overrides?: CallOverrides
     ): Promise<BigNumber>;
 
     owner(overrides?: CallOverrides): Promise<BigNumber>;
 
-    renounceOwnership(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    recover(
+      vc: VerifiableCredentialStruct,
+      v: PromiseOrValue<BigNumberish>,
+      r: PromiseOrValue<BytesLike>,
+      s: PromiseOrValue<BytesLike>,
+      overrides?: CallOverrides
     ): Promise<BigNumber>;
 
-    revokeOwnership(
-      _loanAgent: PromiseOrValue<string>,
+    renounceOwnership(
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<BigNumber>;
 
@@ -318,31 +310,26 @@ export interface LoanAgentFactory extends BaseContract {
   };
 
   populateTransaction: {
-    activeMiners(
-      arg0: PromiseOrValue<string>,
+    _VERIFIABLE_CREDENTIAL_TYPE_HASH(
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
 
-    count(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    create(
-      _miner: PromiseOrValue<string>,
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
-    ): Promise<PopulatedTransaction>;
-
-    loanAgents(
-      arg0: PromiseOrValue<string>,
+    digest(
+      vc: VerifiableCredentialStruct,
       overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
 
     owner(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
-    renounceOwnership(
-      overrides?: Overrides & { from?: PromiseOrValue<string> }
+    recover(
+      vc: VerifiableCredentialStruct,
+      v: PromiseOrValue<BigNumberish>,
+      r: PromiseOrValue<BytesLike>,
+      s: PromiseOrValue<BytesLike>,
+      overrides?: CallOverrides
     ): Promise<PopulatedTransaction>;
 
-    revokeOwnership(
-      _loanAgent: PromiseOrValue<string>,
+    renounceOwnership(
       overrides?: Overrides & { from?: PromiseOrValue<string> }
     ): Promise<PopulatedTransaction>;
 
