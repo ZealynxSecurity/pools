@@ -1,36 +1,49 @@
 {
-  "name": "gcred",
+  "name": "pools-contracts",
   "version": "0.0.0",
+  "description": "FEVM contracts for GLIF Pools",
+  "main": "index.js",
+  "license": "MIT",
   "private": true,
-  "description": "",
-  "scripts": {
-    "build:contracts": "yarn workspace gcred-contracts build",
-    "build": "run-s build:*",
-    "copy:assets": "mkdir -p apps/demo && cp -a contracts/typechain apps/demo/ && cp -a contracts/generated apps/demo/",
-    "demo:contracts": "yarn workspace gcred-contracts demo:local",
-    "demo:frontend": "yarn workspace gcred-demo demo:local",
-    "demo": "run-s demo:contracts copy:assets demo:frontend",
-    "start:node": "yarn workspace gcred-contracts start:node",
-    "test": "yarn workspaces run test",
-    "test:contracts": "forge test --root ./contracts"
-  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/glif-confidential/gcred.git"
+    "url": "https://github.com/glif-confidential/pools.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/Schwartz10/glif-confidential/issues"
+  "scripts": {
+    "build": "run-p build:*",
+    "build:types": "mkdir -p typechain && typechain --target=ethers-v5 ./out/**/*[^.metadata].json --out-dir typechain/ --show-stack-traces",
+    "build-digest": "mkdir -p generated && yarn clean:digest && touch generated/contractDigest.json && ts-node utils/digestContracts.ts",
+    "build:abigen": "mkdir -p generated && ts-node utils/preProcessAbigen.ts",
+    "clean": "run-p clean:*",
+    "clean:broadcast": "rimraf broadcast",
+    "clean:contracts": "rimraf out",
+    "clean:digest": "rimraf generated/contractDigest.json",
+    "clean:types": "rimraf typechain",
+    "create:credential": "ts-node utils/createVerifiableCred.ts",
+    "demo:local": "run-s clean deploy:contracts:local build",
+    "deploy:contracts:local": "source .env.local && forge script script/Demo.s.sol --fork-url $FORK_URL --private-key $DEPLOYER_PRIVATE_KEY --target-contract DemoDeploy --broadcast -vvvv",
+    "start:node": "anvil --block-time 1",
+    "test": "forge test -vvv",
+    "test:watch": "forge test -w -vvv",
+    "test:contract": "forge test -vvv --match-contract",
+    "test:watch:contract": "forge test -w -vvv --match-contract"
   },
-  "homepage": "https://github.com/Schwartz10/glif-confidential#readme",
   "devDependencies": {
-    "npm-run-all2": "^6.0.1",
-    "rimraf": "^3.0.2"
+    "@typechain/ethers-v5": "^10.1.0",
+    "@types/node": "^18.7.21",
+    "cross-env": "^7.0.3",
+    "npm-run-all2": "^6.0.2",
+    "path": "^0.12.7",
+    "rimraf": "^3.0.2",
+    "ts-node": "^10.9.1",
+    "typechain": "^8.1.0",
+    "typescript": "^4.7.4"
   },
-  "workspaces": [
-    "contracts",
-    "apps/*"
+  "dependencies": {
+    "@ethersproject/providers": "^5.6.8",
+    "ethers": "^5.7.1"
+  },
+  "files": [
+    "typechain"
   ]
 }

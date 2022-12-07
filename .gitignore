@@ -3,12 +3,15 @@ cache/
 out/
 
 # Ignores development broadcast logs
-!/contracts/broadcast
-/contracts/broadcast/*
-/contracts/broadcast/*/31337/
+!/broadcast
+/broadcast/*
+/broadcast/*/31337/
 
 # Generated files
 generated/
+
+# Typechain
+typechain/
 
 # Packages
 node_modules
