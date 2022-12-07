@@ -6,12 +6,18 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "src/Router/RouterAware.sol";
 
 struct MinerData {
+  bytes32 additional;
+  uint256 assets;
+  uint256 exposureAtDefault;
+  uint256 expectedLoss;
+  uint256 liabilities;
+  uint256 liquidationValue;
+  uint256 lossGivenDefault;
+  uint256 probabilityOfDefault;
+  uint256 qaPower;
+  uint256 rawPower;
   uint256 startEpoch;
-  uint256 power;
-  // -1 -> miner growth < network growth
-  // 0 -> miner growth == network growth
-  // 1 -> miner growth > network growth
-  uint256 beta;
+  uint256 unexpectedLoss;
 }
 
 struct VerifiableCredential {
@@ -31,7 +37,7 @@ contract VCVerifier is RouterAware, EIP712 {
   string internal constant _VERIFIABLE_CREDENTIAL_TYPE =
     "VerifiableCredential(address issuer,address subject,uint256 epochIssued,uint256 epochValidUntil,MinerData miner)";
   string internal constant _MINER_DATA_TYPE =
-    "MinerData(uint256 startEpoch,uint256 power,uint256 beta)";
+    "MinerData(bytes32 additional,uint256 assets,uint256 exposureAtDefault,uint256 expectedLoss,uint256 liabilities,uint256 liquidationValue,uint256 lossGivenDefault,uint256 probabilityOfDefault,uint256 qaPower,uint256 rawPower,uint256 startEpoch,uint256 unexpectedLoss)";
 
   bytes32 public constant _VERIFIABLE_CREDENTIAL_TYPE_HASH =
     keccak256(abi.encodePacked(_VERIFIABLE_CREDENTIAL_TYPE, _MINER_DATA_TYPE));
@@ -42,9 +48,18 @@ contract VCVerifier is RouterAware, EIP712 {
   function deriveMinerDataHash(MinerData memory miner) public pure returns(bytes32) {
     return keccak256(abi.encode(
       _MINER_DATA_TYPE_HASH,
+      miner.additional,
+      miner.assets,
+      miner.exposureAtDefault,
+      miner.expectedLoss,
+      miner.liabilities,
+      miner.liquidationValue,
+      miner.lossGivenDefault,
+      miner.probabilityOfDefault,
+      miner.qaPower,
+      miner.rawPower,
       miner.startEpoch,
-      miner.power,
-      miner.beta
+      miner.unexpectedLoss
     ));
   }
 

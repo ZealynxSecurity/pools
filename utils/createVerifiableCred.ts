@@ -1,13 +1,19 @@
 import * as ethers from "ethers";
 import { _TypedDataEncoder } from "ethers/lib/utils";
 
-// represents https://www.w3.org/TR/xmlschema11-2/#dateTime
-type DateTime = string;
-
 type MinerData = {
+  additional: ethers.BytesLike;
+  assets: ethers.BigNumberish;
+  exposureAtDefault: ethers.BigNumberish;
+  expectedLoss: ethers.BigNumberish;
+  liabilities: ethers.BigNumberish;
+  liquidationValue: ethers.BigNumberish;
+  lossGivenDefault: ethers.BigNumberish;
+  probabilityOfDefault: ethers.BigNumberish;
+  qaPower: ethers.BigNumberish;
+  rawPower: ethers.BigNumberish;
   startEpoch: ethers.BigNumberish;
-  power: ethers.BigNumberish;
-  beta: ethers.BigNumberish;
+  unexpectedLoss: ethers.BigNumberish;
 };
 
 type VerifiableCredential = {
@@ -16,8 +22,6 @@ type VerifiableCredential = {
   epochIssued: ethers.BigNumberish;
   epochValidUntil: ethers.BigNumberish;
   miner: MinerData;
-  // issued: DateTime;
-  // validUntil: DateTime;
 };
 
 function encodeType(
@@ -36,11 +40,11 @@ async function main() {
   ).connect(provider);
 
   const domain: ethers.TypedDataDomain = {
-    name: "lending.glif.io",
+    name: "glif.io",
     version: "1",
     // anvil
     chainId: 31337,
-    verifyingContract: "0xCe71065D4017F316EC606Fe4422e11eB2c47c246",
+    verifyingContract: "0xce71065d4017f316ec606fe4422e11eb2c47c246",
   };
 
   const vcDataFields: ethers.TypedDataField[] = [
@@ -52,9 +56,18 @@ async function main() {
   ];
 
   const minerDataFields: ethers.TypedDataField[] = [
+    { name: "additional", type: "bytes32" },
+    { name: "assets", type: "uint256" },
+    { name: "exposureAtDefault", type: "uint256" },
+    { name: "expectedLoss", type: "uint256" },
+    { name: "liabilities", type: "uint256" },
+    { name: "liquidationValue", type: "uint256" },
+    { name: "lossGivenDefault", type: "uint256" },
+    { name: "probabilityOfDefault", type: "uint256" },
+    { name: "qaPower", type: "uint256" },
+    { name: "rawPower", type: "uint256" },
     { name: "startEpoch", type: "uint256" },
-    { name: "power", type: "uint256" },
-    { name: "beta", type: "uint256" },
+    { name: "unexpectedLoss", type: "uint256" },
   ];
 
   const types: Record<string, ethers.TypedDataField[]> = {
@@ -68,9 +81,18 @@ async function main() {
     epochIssued: "100",
     epochValidUntil: "100",
     miner: {
+      additional: ethers.constants.HashZero,
+      assets: "100",
+      exposureAtDefault: "100",
+      expectedLoss: "100",
+      liabilities: "100",
+      liquidationValue: "100",
+      lossGivenDefault: "100",
+      probabilityOfDefault: "100",
+      qaPower: "100",
+      rawPower: "100",
       startEpoch: "100",
-      power: "100",
-      beta: "100",
+      unexpectedLoss: "100",
     },
   };
 
@@ -99,7 +121,6 @@ async function main() {
     v,
     primaryType,
     vcTypeHash,
-    // minerDataTypeHash,
     hashStruct,
   });
 }
