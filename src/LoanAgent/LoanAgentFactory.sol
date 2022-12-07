@@ -15,6 +15,13 @@ contract LoanAgentFactory is RouterAware {
   mapping(address => address) public loanAgents;
   mapping(address => address) public activeMiners;
   uint256 public count = 0;
+  string public verifierName;
+  string public verifiedVersion;
+
+  constructor(string memory _name, string memory _version) {
+    verifierName = _name;
+    verifiedVersion = _version;
+  }
 
   function create(address _miner) external returns (address) {
     // can only have 1 loan agent per miner
@@ -22,11 +29,17 @@ contract LoanAgentFactory is RouterAware {
       return activeMiners[_miner];
     }
 
-    LoanAgent loanAgent = new LoanAgent(_miner, router);
+    LoanAgent loanAgent = new LoanAgent(_miner, router, verifierName, verifiedVersion);
     loanAgents[address(loanAgent)] = _miner;
     activeMiners[_miner] = address(loanAgent);
     count += 1;
     return address(loanAgent);
+  }
+
+  function setVerifierName(string memory _name, string memory _version) external {
+    // TODO: Add Role based permissions
+    verifierName = _name;
+    verifiedVersion = _version;
   }
 
   function revokeOwnership(address _loanAgent) external {

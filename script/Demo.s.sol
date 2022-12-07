@@ -26,6 +26,10 @@ contract DemoDeploy is Script {
 
     Router public router;
 
+    // Should this name-space be changed to just glif.io?
+    string constant public VERIFIED_NAME = "glif.io";
+    string constant public VERIFIED_VERSION = "1";
+
     function configureLoanAgent() public returns (LoanAgent, MockMiner) {
         MockMiner miner = new MockMiner();
         // give miner some fake rewards and vest them over 1000 epochs
@@ -54,9 +58,9 @@ contract DemoDeploy is Script {
         address treasury = vm.envAddress("TREASURY_ADDR");
 
         wFIL = new WFIL();
-        loanAgentFactory = new LoanAgentFactory();
+        loanAgentFactory = new LoanAgentFactory(VERIFIED_NAME, VERIFIED_VERSION);
         poolFactory = new PoolFactory(wFIL, treasury);
-        vcVerifier = new VCVerifier("lending.glif.io", "1");
+        vcVerifier = new VCVerifier(VERIFIED_NAME, VERIFIED_VERSION);
         stats = new Stats();
 
         router = new Router(

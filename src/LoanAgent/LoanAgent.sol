@@ -6,18 +6,19 @@ import "src/LoanAgent/ILoanAgent.sol";
 import "src/LoanAgent/LoanAgentFactory.sol";
 import "src/Pool/PoolFactory.sol";
 import "src/Pool/IPool4626.sol";
+import "src/VCVerifier/VCVerifier.sol";
 import "solmate/tokens/ERC20.sol";
 import {Router} from "src/Router/Router.sol";
 import {IStats} from "src/Stats/IStats.sol";
 
-contract LoanAgent is ILoanAgent {
-  address private router;
+contract LoanAgent is ILoanAgent, VCVerifier {
   address public miner;
-  address public owner;
 
-  constructor(address _miner, address _router) {
+  constructor(address _miner, address _router, string memory _name, string memory _version)
+    VCVerifier(_name, _version) {
     miner = _miner;
-    router = _router;
+    setRouter(_router);
+    renounceOwnership();
   }
 
   receive() external payable {}
@@ -32,11 +33,10 @@ contract LoanAgent is ILoanAgent {
     require(IMiner(miner).currentOwner() == msg.sender);
     IMiner(miner).changeOwnerAddress(address(this));
     // if this call does not error out, set the owner of this loan agent to be the sender of this message
-    owner = msg.sender;
+    _transferOwnership(_msgSender());
   }
 
-  function revokeOwnership(address newOwner) external {
-    require(owner == msg.sender, "Only LoanAgent owner can call revokeOwnership");
+  function revokeOwnership(address newOwner) external onlyOwner {
     require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
     require(!IStats(Router(router).getStats()).isDebtor(address(this)), "Cannot revoke miner ownership with outstanding loans");
     IMiner(miner).changeOwnerAddress(newOwner);
@@ -54,18 +54,21 @@ contract LoanAgent is ILoanAgent {
     return IPool4626(pool);
   }
 
-  function borrow(uint256 amount, uint256 poolID) external {
-    require(owner == msg.sender, "Only LoanAgent owner can call borrow");
+  function borrow(uint256 amount, uint256 poolID) external onlyOwner {
     getPool(poolID).borrow(amount, address(this));
   }
 
-  function repay(uint256 amount, uint256 poolID) external {
-    require(owner == msg.sender, "Only LoanAgent owner can call repay");
+  function repay(uint256 amount, uint256 poolID) external onlyOwner {
     require(getPool(poolID).asset().balanceOf(address(this)) >= amount && amount >= 0, "Invalid amount passed to paydownDebt");
     if (amount == 0) amount = getPool(poolID).asset().balanceOf(address(this));
     IPool4626 pool = getPool(poolID);
     pool.asset().approve(address(pool), amount);
     pool.repay(amount, address(this), address(this));
   }
+
+  function owner() public view override(Ownable, ILoanAgent) returns (address) {
+    return Ownable.owner();
+  }
+
 }
 

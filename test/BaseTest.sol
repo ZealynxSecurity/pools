@@ -33,11 +33,15 @@ contract BaseTest is Test {
 
   Router public router;
 
+  // Should this name-space be changed to just glif.io?
+  string constant public VERIFIED_NAME = "glif.io";
+  string constant public VERIFIED_VERSION = "1";
+
   constructor() {
     wFIL = new WFIL();
-    loanAgentFactory = new LoanAgentFactory();
+    loanAgentFactory = new LoanAgentFactory(VERIFIED_NAME, VERIFIED_VERSION);
     poolFactory = new PoolFactory(wFIL, treasury);
-    vcVerifier = new VCVerifier("lending.glif.io", "1");
+    vcVerifier = new VCVerifier("glif.io", "1");
     stats = new Stats();
 
     router = new Router(
