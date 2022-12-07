@@ -32,7 +32,18 @@ jobs:
       - name: Install
         run: yarn
 
-      - name: Build
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Forge build
+        run: |
+          forge --version
+          forge build --sizes
+        id: build
+
+      - name: Build artifacts
         run: yarn build
 
       - uses: actions/upload-artifact@v3
