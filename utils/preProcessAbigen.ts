@@ -7,7 +7,15 @@ import path from "path";
  * You run the command like:
  * `abigen --bin=VCVerifier.bin --abi=VCVerifier.abi --pkg=chain --out=VCVerifier.go`
  */
-const CONTRACTS_TO_PROCESS = ["VCVerifier", "Router", "LoanAgentFactory"];
+const CONTRACTS_TO_PROCESS = [
+  "VCVerifier",
+  "Router",
+  "LoanAgentFactory",
+  "LoanAgent",
+  "ERC20",
+  "ERC4626",
+  "Stats",
+];
 
 type Bytecode = {
   object: string;
