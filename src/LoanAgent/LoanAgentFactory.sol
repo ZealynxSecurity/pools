@@ -7,32 +7,25 @@ import "src/Router/RouterAware.sol";
 interface ILoanAgentFactory {
   function create(address _miner) external returns (address);
   function revokeOwnership(address _loanAgent) external;
-  function loanAgents(address loanAgent) external view returns (address);
+  function loanAgents(address loanAgent) external view returns (bool);
   function activeMiners(address miner) external view returns (address);
 }
 
 contract LoanAgentFactory is RouterAware {
-  mapping(address => address) public loanAgents;
-  mapping(address => address) public activeMiners;
-  uint256 public count = 0;
+  mapping(address => bool) public loanAgents;
   string public verifierName;
   string public verifiedVersion;
+
 
   constructor(string memory _name, string memory _version) {
     verifierName = _name;
     verifiedVersion = _version;
   }
 
-  function create(address _miner) external returns (address) {
-    // can only have 1 loan agent per miner
-    if (activeMiners[_miner] != address(0)) {
-      return activeMiners[_miner];
-    }
-
-    LoanAgent loanAgent = new LoanAgent(_miner, router, verifierName, verifiedVersion);
-    loanAgents[address(loanAgent)] = _miner;
-    activeMiners[_miner] = address(loanAgent);
-    count += 1;
+  function create() external returns (address) {
+    LoanAgent loanAgent = new LoanAgent(router, verifierName, verifiedVersion);
+    loanAgents[address(loanAgent)] = true;
+    // What's the reasoning behind returning this address? Are we consuming it anywhere?
     return address(loanAgent);
   }
 
@@ -42,16 +35,5 @@ contract LoanAgentFactory is RouterAware {
     verifiedVersion = _version;
   }
 
-  function revokeOwnership(address _loanAgent) external {
-    // check
-    require(msg.sender == _loanAgent, "Loan agent must revoke itself");
 
-    if (_loanAgent != address(0)) {
-      LoanAgent loanAgent = LoanAgent(payable(_loanAgent));
-      // effect
-      activeMiners[address(loanAgent.miner())] = address(0);
-      loanAgents[address(loanAgent)] = address(0);
-      count -= 1;
-    }
-  }
 }

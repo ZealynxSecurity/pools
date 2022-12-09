@@ -17,9 +17,10 @@ contract Router is Ownable {
     address _loanAgentFactory,
     address _poolFactory,
     address _vcVerifier,
-    address _stats
+    address _stats,
+    address _minerRegistry
   ) {
-    routes = [_loanAgentFactory, _poolFactory, _vcVerifier, _stats];
+    routes = [_loanAgentFactory, _poolFactory, _vcVerifier, _stats, _minerRegistry];
   }
 
   function getRoute(uint8 id) public view returns (address) {
@@ -40,6 +41,10 @@ contract Router is Ownable {
 
   function getStats() public view returns (address) {
     return getRoute(3);
+  }
+
+  function getMinerRegistry() public view returns (address) {
+    return getRoute(4);
   }
 
   function pushRoute(address newRoute) public onlyOwner returns (uint8) {

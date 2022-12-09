@@ -4,9 +4,9 @@ pragma solidity ^0.8.15;
 import "forge-std/Script.sol";
 import "src/MockMiner.sol";
 import "src/LoanAgent/ILoanAgent.sol";
-import "src/LoanAgent/LoanAgentFactory.sol";
 import "src/LoanAgent/LoanAgent.sol";
 import "src/LoanAgent/LoanAgentFactory.sol";
+import "src/LoanAgent/MinerRegistry.sol";
 import "src/MockMiner.sol";
 import "src/WFIL.sol";
 import "src/Pool/PoolFactory.sol";
@@ -19,6 +19,7 @@ import "src/VCVerifier/VCVerifier.sol";
 contract DemoDeploy is Script {
     WFIL public wFIL;
     // This order matters when instantiating the router
+    MinerRegistry public registry;
     LoanAgentFactory public loanAgentFactory;
     PoolFactory public poolFactory;
     VCVerifier public vcVerifier;
@@ -36,18 +37,19 @@ contract DemoDeploy is Script {
         vm.deal(address(miner), 100e18);
         miner.lockBalance(block.number, 1000, 100e18);
         // create a loan agent for miner
+        // Why are you wrapping this as payable?
         LoanAgent loanAgent = LoanAgent(
         payable(
-            loanAgentFactory.create(address(miner))
+            loanAgentFactory.create()
         ));
         // propose the change owner to the loan agent
         miner.changeOwnerAddress(address(loanAgent));
         // confirm change owner address (loanAgent1 now owns miner)
-        loanAgent.claimOwnership();
+        loanAgent.addMiner(address(miner));
 
         require(miner.currentOwner() == address(loanAgent));
         require(loanAgent.owner() == msg.sender);
-        require(loanAgent.miner() == address(miner));
+        require(loanAgent.hasMiner(address(miner)));
 
         vm.stopPrank();
         return (loanAgent, miner);
@@ -58,6 +60,7 @@ contract DemoDeploy is Script {
         address treasury = vm.envAddress("TREASURY_ADDR");
 
         wFIL = new WFIL();
+        registry = new MinerRegistry();
         loanAgentFactory = new LoanAgentFactory(VERIFIED_NAME, VERIFIED_VERSION);
         poolFactory = new PoolFactory(wFIL, treasury);
         vcVerifier = new VCVerifier(VERIFIED_NAME, VERIFIED_VERSION);
@@ -67,7 +70,8 @@ contract DemoDeploy is Script {
             address(loanAgentFactory),
             address(poolFactory),
             address(vcVerifier),
-            address(stats)
+            address(stats),
+            address(registry)
         );
 
         loanAgentFactory.setRouter(address(router));

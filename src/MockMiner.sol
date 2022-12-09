@@ -59,6 +59,8 @@ contract MockMiner is IMiner {
     } else if (msg.sender == nextOwner && newOwner == nextOwner) {
       currentOwner = nextOwner;
       nextOwner = address(0);
+    } else {
+      revert("not authorized");
     }
   }
 

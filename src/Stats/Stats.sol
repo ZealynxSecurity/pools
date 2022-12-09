@@ -58,6 +58,6 @@ contract Stats is RouterAware {
   }
 
   function isLoanAgent(address loanAgent) public view returns (bool) {
-    return getLoanAgentFactory().loanAgents(loanAgent) != address(0);
+    return getLoanAgentFactory().loanAgents(loanAgent);
   }
 }

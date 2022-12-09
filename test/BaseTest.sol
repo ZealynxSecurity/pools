@@ -4,6 +4,7 @@ pragma solidity ^0.8.15;
 import "forge-std/Test.sol";
 import "src/LoanAgent/LoanAgent.sol";
 import "src/LoanAgent/LoanAgentFactory.sol";
+import "src/LoanAgent/MinerRegistry.sol";
 import "src/MockMiner.sol";
 import "src/WFIL.sol";
 import "src/Pool/PoolFactory.sol";
@@ -26,6 +27,7 @@ contract BaseTest is Test {
 
   WFIL public wFIL;
   // This order matters when instantiating the router
+  MinerRegistry registry;
   LoanAgentFactory public loanAgentFactory;
   PoolFactory public poolFactory;
   VCVerifier public vcVerifier;
@@ -39,6 +41,7 @@ contract BaseTest is Test {
 
   constructor() {
     wFIL = new WFIL();
+    registry = new MinerRegistry();
     loanAgentFactory = new LoanAgentFactory(VERIFIED_NAME, VERIFIED_VERSION);
     poolFactory = new PoolFactory(wFIL, treasury);
     vcVerifier = new VCVerifier("glif.io", "1");
@@ -48,7 +51,8 @@ contract BaseTest is Test {
       address(loanAgentFactory),
       address(poolFactory),
       address(vcVerifier),
-      address(stats)
+      address(stats),
+      address(registry)
     );
 
     loanAgentFactory.setRouter(address(router));
@@ -66,16 +70,15 @@ contract BaseTest is Test {
     // create a loan agent for miner
     LoanAgent loanAgent = LoanAgent(
       payable(
-        loanAgentFactory.create(address(miner))
+        loanAgentFactory.create()
       ));
     // propose the change owner to the loan agent
     miner.changeOwnerAddress(address(loanAgent));
     // confirm change owner address (loanAgent1 now owns miner)
-    loanAgent.claimOwnership();
+    loanAgent.addMiner(address(miner));
 
-    require(miner.currentOwner() == address(loanAgent));
-    require(loanAgent.owner() == minerOwner);
-    require(loanAgent.miner() == address(miner));
+    require(miner.currentOwner() == address(loanAgent), "Miner owner not set");
+    require(loanAgent.hasMiner(address(miner)), "Miner not registered");
 
     vm.stopPrank();
     return (loanAgent, miner);
