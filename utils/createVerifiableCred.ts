@@ -2,8 +2,8 @@ import * as ethers from "ethers";
 import { _TypedDataEncoder } from "ethers/lib/utils";
 
 type MinerData = {
-  additional: ethers.BytesLike;
   assets: ethers.BigNumberish;
+  expectedDailyRewards: ethers.BigNumberish;
   exposureAtDefault: ethers.BigNumberish;
   expectedLoss: ethers.BigNumberish;
   liabilities: ethers.BigNumberish;
@@ -56,8 +56,8 @@ async function main() {
   ];
 
   const minerDataFields: ethers.TypedDataField[] = [
-    { name: "additional", type: "bytes32" },
     { name: "assets", type: "uint256" },
+    { name: "expectedDailyRewards", type: "uint256" },
     { name: "exposureAtDefault", type: "uint256" },
     { name: "expectedLoss", type: "uint256" },
     { name: "liabilities", type: "uint256" },
@@ -81,8 +81,8 @@ async function main() {
     epochIssued: "100",
     epochValidUntil: "100",
     miner: {
-      additional: ethers.constants.HashZero,
       assets: "100",
+      expectedDailyRewards: "100",
       exposureAtDefault: "100",
       expectedLoss: "100",
       liabilities: "100",

@@ -14,7 +14,7 @@ contract VCVerifierTest is Test {
     VCVerifier vcVerifier = new VCVerifier("glif.io", "1");
     address issuer = vm.addr(privateKey);
 
-    MinerData memory miner = MinerData(0x0, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
+    MinerData memory miner = MinerData(1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
 
     VerifiableCredential memory vc = VerifiableCredential(
       issuer,
@@ -30,14 +30,13 @@ contract VCVerifierTest is Test {
     assertEq(vcVerifier.recover(vc, v, r, s), issuer);
   }
 
-  function testVerifyCredentialFromJavaScript() internal {
-    uint8 v = 27;
-    bytes32 r = hex"e60903848b9b0b61d566d9dc28262a19ce43a9db236a4a879211893428e745aa";
-    bytes32 s = hex"392acd2c3f18aa60660855ca28c2d6b9b46e519e664db19d7eb6ea73ad21c894";
-    bytes32 additional = 0x0000000000000000000000000000000000000000000000000000000000000000;
+  function testVerifyCredentialFromJavaScript() private {
+    uint8 v = 28;
+    bytes32 r = hex"3b43bdb9918247ce43a6f85feda05a7a28042991febb87dc36c75fc940d9241b";
+    bytes32 s = hex"39d6c763bf4d2d7d4c76a29d2395af9d7d9df1b49c14899fec98ea0149294f29";
     VCVerifier vcVerifier = new VCVerifier("glif.io", "1");
 
-    MinerData memory miner = MinerData(additional, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100);
+    MinerData memory miner = MinerData(100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100);
 
     VerifiableCredential memory vc = VerifiableCredential(
       0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,
