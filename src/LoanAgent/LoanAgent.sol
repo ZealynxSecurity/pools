@@ -9,12 +9,15 @@ import "src/Pool/PoolFactory.sol";
 import "src/Pool/IPool4626.sol";
 import "src/VCVerifier/VCVerifier.sol";
 import "solmate/tokens/ERC20.sol";
+import "src/PowerToken/IPowerToken.sol";
 import {Router} from "src/Router/Router.sol";
 import {IStats} from "src/Stats/IStats.sol";
 
 contract LoanAgent is ILoanAgent, VCVerifier {
   address[] public override miners;
   mapping(address => bool) public hasMiner;
+  uint256 powerTokensMinted = 0;
+  bool redZone = false;
 
   constructor(address _router, string memory _name, string memory _version)
     VCVerifier(_name, _version) {
@@ -22,6 +25,9 @@ contract LoanAgent is ILoanAgent, VCVerifier {
     renounceOwnership();
   }
 
+  /*//////////////////////////////////////////////////
+                MINER OWNERSHIP CHANGES
+  //////////////////////////////////////////////////*/
 
   function addMiner(address miner) external {
     _addMiner(miner);
@@ -44,18 +50,6 @@ contract LoanAgent is ILoanAgent, VCVerifier {
     return miners.length;
   }
 
-
-  // this function does two things:
-  // 1. it sets the miner's owner addr to be the loan agent
-  // 2. it sets the loan agent's owner to be the old miner owner
-  // only the miner's current owner can claim ownership over that miner's loan agent
-  function _claimOwnership(address miner) internal {
-    // TODO: needs a solution for FVM <> EVM compatibility
-    // TODO: Confirm that the sender has correct perms to claim this miner
-    IMiner(miner).changeOwnerAddress(address(this));
-    // if this call does not error out, set the owner of this loan agent to be the sender of this message
-  }
-
   // TODO: add role based auth to this function
   function revokeOwnership(address newOwner, address miner) public {
     require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
@@ -64,6 +58,36 @@ contract LoanAgent is ILoanAgent, VCVerifier {
     // What's the intention here?
     ILoanAgentFactory(Router(router).getLoanAgentFactory()).revokeOwnership(address(this));
   }
+
+  function owner() public view override(Ownable, ILoanAgent) returns (address) {
+    return Ownable.owner();
+  }
+
+  /*//////////////////////////////////////////////////
+                POWER TOKEN FUNCTIONS
+  //////////////////////////////////////////////////*/
+
+  function mintPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external {
+    require(!redZone, "LoanAgent: Cannot mint power while Agent is in the red zone");
+    require(isValid(vc, v, r, s), "Invalid VC");
+    require(vc.miner.qaPower > powerTokensMinted + amount, "Cannot mint more power than the miner has");
+
+    IPowerToken(Router(router).getPowerToken()).mint(amount);
+    powerTokensMinted += amount;
+  }
+
+  function burnPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external {
+    require(isValid(vc, v, r, s), "Invalid VC");
+    IPowerToken powerToken = IPowerToken(Router(router).getPowerToken());
+    require(amount <= powerToken.balanceOf(address(this)), "LoanAgent: Cannot burn more power than the agent holds");
+
+    powerToken.burn(amount);
+    powerTokensMinted -= amount;
+  }
+
+  /*////////////////////////////////////////////////
+                FINANCIAL FUNCTIONS
+  ////////////////////////////////////////////////*/
 
   function withdrawBalance(address miner) external returns (uint256) {
     return IMiner(miner).withdrawBalance(0);
@@ -83,12 +107,9 @@ contract LoanAgent is ILoanAgent, VCVerifier {
     pool.repay(amount, address(this), address(this));
   }
 
-  function owner() public view override(Ownable, ILoanAgent) returns (address) {
-    return Ownable.owner();
-  }
-
-  // Internal functions
-
+  /*//////////////////////////////////////////////
+                INTERNAL FUNCTIONS
+  //////////////////////////////////////////////*/
 
   function _getPool(uint256 poolID) internal view returns (IPool4626) {
     IPoolFactory poolFactory = IPoolFactory(Router(router).getPoolFactory());
@@ -96,7 +117,7 @@ contract LoanAgent is ILoanAgent, VCVerifier {
     address pool = poolFactory.allPools(poolID);
     return IPool4626(pool);
   }
-  
+
   function _addMiner(address miner) internal {
     require(hasMiner[miner] == false, "Miner already added");
     IMinerRegistry(Router(router).getMinerRegistry()).addMiner(miner);
@@ -120,6 +141,10 @@ contract LoanAgent is ILoanAgent, VCVerifier {
     miners.pop();
   }
 
+  function _claimOwnership(address miner) internal {
+    IMiner(miner).changeOwnerAddress(address(this));
+  }
+
   function _canRemoveMiner(uint256 index) internal view returns (bool) {
     return !IStats(Router(router).getStats()).isDebtor(address(this)) || _evaluateCollateral(index);
   }
@@ -129,6 +154,5 @@ contract LoanAgent is ILoanAgent, VCVerifier {
   }
 
   fallback() external payable {  }
-
 }
 

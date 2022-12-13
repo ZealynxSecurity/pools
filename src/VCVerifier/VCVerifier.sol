@@ -89,6 +89,7 @@ contract VCVerifier is RouterAware, EIP712 {
     require(validIssuers[issuer], "Verifiable Credential issued by unknown issuer");
     require(issuer == vc.issuer, "Mismatching issuer");
     require(block.number >= vc.epochIssued && block.number <= vc.epochValidUntil, "Verifiable Credential not in valid epoch range");
+    require(vc.subject == address(this), "Verifiable Credential not for this contract");
 
     return true;
   }

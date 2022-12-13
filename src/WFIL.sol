@@ -14,20 +14,20 @@ contract WFIL is ERC20("Wrapped Filecoin", "WFIL", 18) {
     event Withdrawal(address indexed to, uint256 amount);
 
     function deposit() public payable virtual {
-        _mint(msg.sender, msg.value);
+      _mint(msg.sender, msg.value);
 
-        emit Deposit(msg.sender, msg.value);
+      emit Deposit(msg.sender, msg.value);
     }
 
-    function withdraw(uint256 amount) public virtual {
-        _burn(msg.sender, amount);
+    function withdraw(uint256 _amount) public virtual {
+      _burn(msg.sender, _amount);
 
-        emit Withdrawal(msg.sender, amount);
+      emit Withdrawal(msg.sender, _amount);
 
-        msg.sender.safeTransferETH(amount);
+      msg.sender.safeTransferETH(_amount);
     }
 
     receive() external payable virtual {
-        deposit();
+      deposit();
     }
 }

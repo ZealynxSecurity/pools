@@ -1,3 +1,5 @@
+import {VerifiableCredential} from "src/VCVerifier/VCVerifier.sol";
+
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
@@ -8,12 +10,11 @@ interface ILoanAgent {
   // withdraws any available balance from the miner by calling withdrawBalance
   // will return 0 if any unpaid loans are still active
   function withdrawBalance(address miner) external returns (uint256);
-  // takeLoan steps:
-  // 1. exchanges tTokens owned by loan agent for FIL via the Swap actor
-  // 2. sends received FIL to the miner actor
-  // 3. pledges received FIL as the miner actor (calls applyReward on the miner)
   function borrow(uint256 amount, uint256 poolID) external;
-  // calls withdrawBalance on the miner to take earned FIL and pay down loan amount
+
   function repay(uint256 amount, uint256 poolID) external;
   function revokeOwnership(address newOwner, address miner) external;
+  // for dealing with power tokens
+  function mintPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external;
+  function burnPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external;
 }

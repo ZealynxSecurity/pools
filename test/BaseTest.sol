@@ -52,7 +52,9 @@ contract BaseTest is Test {
       address(poolFactory),
       address(vcVerifier),
       address(stats),
-      address(registry)
+      address(registry),
+      address(0),
+      address(0)
     );
 
     loanAgentFactory.setRouter(address(router));
