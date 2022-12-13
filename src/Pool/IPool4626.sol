@@ -160,7 +160,8 @@ abstract contract IPool4626 is ERC4626 {
         IStats stats = IStats(Router(router).getStats());
         require(stats.isLoanAgent(loanAgent), "Only loan agents can borrow from pools");
         require(!stats.hasPenalties(loanAgent), "Cannot borrow from a pool when LoanAgent is in penalty");
-        require(loanAgent == msg.sender || LoanAgent(payable(loanAgent)).owner() == msg.sender, "Cannot borrow on behalf of a loan agent you do not own");
+        // TODO: ROLES ADD THE AGENT MANAGER CHECK HERE
+        require(loanAgent == msg.sender, "Cannot borrow on behalf of a loan agent you do not own");
 
         // effect
         uint256 newInterest = amount.mulWadUp(interestRate);

@@ -13,7 +13,7 @@ interface IPoolFactory {
   function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external returns (IPool4626);
 }
 
-contract PoolFactory is Ownable, IPoolFactory, RouterAware {
+contract PoolFactory is IPoolFactory, RouterAware {
   ERC20 public asset;
   address[] public allPools;
   address public treasury;
@@ -36,7 +36,7 @@ contract PoolFactory is Ownable, IPoolFactory, RouterAware {
     return allPools.length;
   }
 
-  function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external onlyOwner returns (IPool4626 pool) {
+  function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external returns (IPool4626 pool) {
     pool = new SimpleInterestPool(asset, name, createSymbol(), allPools.length, baseInterestRate, treasury, router);
     allPools.push(address(pool));
   }

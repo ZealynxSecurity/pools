@@ -2,6 +2,7 @@
 pragma solidity ^0.8.15;
 
 import "src/MockMiner.sol";
+import "src/Auth/Auth.sol";
 import "src/LoanAgent/ILoanAgent.sol";
 import "src/LoanAgent/IMinerRegistry.sol";
 import "src/LoanAgent/LoanAgentFactory.sol";
@@ -19,21 +20,29 @@ contract LoanAgent is ILoanAgent, VCVerifier {
   uint256 powerTokensMinted = 0;
   bool redZone = false;
 
+  /*//////////////////////////////////////
+                MODIFIERS
+  //////////////////////////////////////*/
+
+  modifier requiresAuth() virtual {
+    require(Authority(Router(router).getAuthority()).canCall(msg.sender, address(this), msg.sig), "LoanAgent: Not authorized");
+    _;
+  }
+
   constructor(address _router, string memory _name, string memory _version)
     VCVerifier(_name, _version) {
     setRouter(_router);
-    renounceOwnership();
   }
 
   /*//////////////////////////////////////////////////
                 MINER OWNERSHIP CHANGES
   //////////////////////////////////////////////////*/
 
-  function addMiner(address miner) external {
+  function addMiner(address miner) external requiresAuth {
     _addMiner(miner);
   }
 
-  function removeMiner(address miner) external {
+  function removeMiner(address miner) external requiresAuth {
     for (uint256 i = 0; i < miners.length; i++) {
       if (miners[i] == miner) {
         _removeMiner(i);
@@ -42,7 +51,7 @@ contract LoanAgent is ILoanAgent, VCVerifier {
     }
   }
 
-  function removeMiner(uint256 index) external {
+  function removeMiner(uint256 index) external requiresAuth {
     _removeMiner(index);
   }
 
@@ -50,17 +59,11 @@ contract LoanAgent is ILoanAgent, VCVerifier {
     return miners.length;
   }
 
-  // TODO: add role based auth to this function
-  function revokeOwnership(address newOwner, address miner) public {
+  function revokeOwnership(address newOwner, address miner) public requiresAuth{
     require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
     require(!IStats(Router(router).getStats()).isDebtor(address(this)), "Cannot revoke miner ownership with outstanding loans");
     IMiner(miner).changeOwnerAddress(newOwner);
-    // What's the intention here?
     ILoanAgentFactory(Router(router).getLoanAgentFactory()).revokeOwnership(address(this));
-  }
-
-  function owner() public view override(Ownable, ILoanAgent) returns (address) {
-    return Ownable.owner();
   }
 
   /*//////////////////////////////////////////////////
@@ -85,21 +88,18 @@ contract LoanAgent is ILoanAgent, VCVerifier {
     powerTokensMinted -= amount;
   }
 
-  /*////////////////////////////////////////////////
+  /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS
-  ////////////////////////////////////////////////*/
-
-  function withdrawBalance(address miner) external returns (uint256) {
+  //////////////////////////////////////////////*/
+  function withdrawBalance(address miner) external requiresAuth returns (uint256) {
     return IMiner(miner).withdrawBalance(0);
   }
 
-  // TODO: add role based auth to this function
   function borrow(uint256 amount, uint256 poolID) external {
     _getPool(poolID).borrow(amount, address(this));
   }
 
-  // TODO: add role based auth to this function
-  function repay(uint256 amount, uint256 poolID) external  {
+  function repay(uint256 amount, uint256 poolID) external {
     require(_getPool(poolID).asset().balanceOf(address(this)) >= amount && amount >= 0, "Invalid amount passed to paydownDebt");
     if (amount == 0) amount = _getPool(poolID).asset().balanceOf(address(this));
     IPool4626 pool = _getPool(poolID);

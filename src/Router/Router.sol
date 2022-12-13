@@ -3,7 +3,7 @@ pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Router is Ownable {
+contract Router {
   /**
     0 - loanAgentFactory
     1 - poolFactory
@@ -59,7 +59,7 @@ contract Router is Ownable {
     return getRoute(6);
   }
 
-  function pushRoute(address newRoute) public onlyOwner returns (uint8) {
+  function pushRoute(address newRoute) public returns (uint8) {
     uint8 routeID = uint8(routes.length);
     routes.push(newRoute);
     return routeID;

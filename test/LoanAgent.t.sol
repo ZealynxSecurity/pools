@@ -14,6 +14,7 @@ contract LoanAgentBasicTest is BaseTest {
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner1 = makeAddr("MINER_OWNER_1");
+    address constant public AGENT_MANAGER = address(0);
 
     MockMiner miner;
     function setUp() public {
@@ -23,10 +24,22 @@ contract LoanAgentBasicTest is BaseTest {
 
     function testInitialState() public {
         vm.startPrank(investor1);
-        LoanAgent loanAgent = LoanAgent(payable(loanAgentFactory.create()));
+
+        // create a loan agent for miner
+        LoanAgent loanAgent = LoanAgent(
+        payable(
+            loanAgentFactory.create()
+        ));
         assertEq(miner.currentOwner(), investor1, "The mock miner's current owner should be set to the original owner");
-        assertEq(loanAgent.owner(), address(0), "The loan agent's default owner should be a zero address");
+
         miner.changeOwnerAddress(address(loanAgent));
+
+        vm.stopPrank();
+
+        // Authority must be established by the main calling contract
+        setLoanAgentPermissions(loanAgent, investor1);
+
+        vm.startPrank(investor1);
         loanAgent.addMiner(address(miner));
         assertTrue(loanAgent.hasMiner(address(miner)), "The miner should be registered as a miner on the loan agent");
         assertTrue(registry.minerRegistered(address(miner)), "After adding the miner the registry should have the miner's address as a registered miner");
@@ -47,29 +60,17 @@ contract LoanAgentBasicTest is BaseTest {
     }
 
     function testDuplicateMiner() public {
+        LoanAgent loanAgent = _configureLoanAgent(investor1, miner);
         vm.startPrank(investor1);
-        LoanAgent loanAgent = LoanAgent(payable(loanAgentFactory.create()));
-        miner.changeOwnerAddress(address(loanAgent));
-        loanAgent.addMiner(address(miner));
         vm.expectRevert(bytes("Miner already added"));
         loanAgent.addMiner(address(miner));
         vm.stopPrank();
     }
 
-    function testRevokeOwnership() public {
-        vm.startPrank(investor1);
-        LoanAgent loanAgent = LoanAgent(payable(loanAgentFactory.create()));
-        miner.changeOwnerAddress(address(loanAgent));
-        // TODO: Fix to work with Roles
-        vm.stopPrank();
-    }
 
     function testWithdrawNoBalance() public {
-        LoanAgent loanAgent = LoanAgent(payable(loanAgentFactory.create()));
-        // configure the loan agent to be the miner's owner
+        LoanAgent loanAgent = _configureLoanAgent(investor1, miner);
         vm.startPrank(investor1);
-        miner.changeOwnerAddress(address(loanAgent));
-        loanAgent.addMiner(address(miner));
 
         uint256 prevBalance = address(loanAgent).balance;
         vm.roll(20);
@@ -78,6 +79,7 @@ contract LoanAgentBasicTest is BaseTest {
 
         assertEq(currBalance, prevBalance);
         assertEq(prevBalance, 0);
+        vm.stopPrank();
     }
 
     function testWithdrawBalance() public {
@@ -85,12 +87,12 @@ contract LoanAgentBasicTest is BaseTest {
         vm.deal(address(miner), 100 ether);
         // lock the funds to simulate rewards coming in over time
         vm.startPrank(investor1);
-        miner.lockBalance(block.number, 100, 100 ether);
 
-        LoanAgent loanAgent = LoanAgent(payable(loanAgentFactory.create()));
-        // configure the loan agent to be the miner's owner
-        miner.changeOwnerAddress(address(loanAgent));
-        loanAgent.addMiner(address(miner));
+        miner.lockBalance(block.number, 100, 100 ether);
+        vm.stopPrank();
+        LoanAgent loanAgent = _configureLoanAgent(investor1, miner);
+
+        vm.startPrank(investor1);
 
         uint256 prevBalance = address(loanAgent).balance;
         vm.roll(20);
@@ -99,6 +101,7 @@ contract LoanAgentBasicTest is BaseTest {
 
         assertGt(currBalance, prevBalance);
         assertEq(prevBalance, 0);
+        vm.stopPrank();
     }
 }
 
@@ -130,12 +133,9 @@ contract LoanAgentTest is BaseTest {
         vm.deal(address(miner), 100e18);
         // lock the funds to simulate rewards coming in over time
         miner.lockBalance(block.number, 100, 100 ether);
-
-        loanAgent = LoanAgent(payable(loanAgentFactory.create()));
-        // configure the loan agent to be the miner's owner
-        miner.changeOwnerAddress(address(loanAgent));
-        loanAgent.addMiner(address(miner));
         vm.stopPrank();
+
+        loanAgent = _configureLoanAgent(investor2, miner);
     }
 
     function testBorrow() public {
