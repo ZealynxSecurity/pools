@@ -5,7 +5,7 @@ pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
-import "src/LoanAgent/LoanAgent.sol";
+import "src/Agent/Agent.sol";
 
 contract PowerToken is ERC20("Tokenized Filecoin Power", "POW", 18) {
     using SafeTransferLib for address;

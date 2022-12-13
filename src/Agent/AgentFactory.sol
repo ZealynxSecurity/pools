@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "src/LoanAgent/LoanAgent.sol";
+import "src/Agent/Agent.sol";
 import "src/Router/RouterAware.sol";
 
-interface ILoanAgentFactory {
+interface IAgentFactory {
   function create(address _miner) external returns (address);
-  function revokeOwnership(address _loanAgent) external;
-  function loanAgents(address loanAgent) external view returns (bool);
+  function revokeOwnership(address _agent) external;
+  function agents(address agent) external view returns (bool);
   function activeMiners(address miner) external view returns (address);
 }
 
-contract LoanAgentFactory is RouterAware {
-  mapping(address => bool) public loanAgents;
+contract AgentFactory is RouterAware {
+  mapping(address => bool) public agents;
   string public verifierName;
   string public verifiedVersion;
 
@@ -23,10 +23,10 @@ contract LoanAgentFactory is RouterAware {
   }
 
   function create() external returns (address) {
-    LoanAgent loanAgent = new LoanAgent(router, verifierName, verifiedVersion);
-    loanAgents[address(loanAgent)] = true;
+    Agent agent = new Agent(router, verifierName, verifiedVersion);
+    agents[address(agent)] = true;
     // What's the reasoning behind returning this address? Are we consuming it anywhere?
-    return address(loanAgent);
+    return address(agent);
   }
 
   function setVerifierName(string memory _name, string memory _version) external {

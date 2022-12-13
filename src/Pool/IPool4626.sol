@@ -5,8 +5,8 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {LoanAgentFactory} from "src/LoanAgent/LoanAgentFactory.sol";
-import {LoanAgent} from "src/LoanAgent/LoanAgent.sol";
+import {AgentFactory} from "src/Agent/AgentFactory.sol";
+import {Agent} from "src/Agent/Agent.sol";
 import {Router} from "src/Router/Router.sol";
 import {IStats} from "src/Stats/IStats.sol";
 
@@ -15,7 +15,7 @@ struct Loan {
     uint256 startEpoch;
     // set at time of borrow / repay / refinance
     uint256 pmtPerEpoch;
-    // the total amount borrowed by the loan agent
+    // the total amount borrowed by the agent
     uint256 principal;
     // the total cost of the loan
     uint256 interest;
@@ -59,7 +59,7 @@ abstract contract IPool4626 is ERC4626 {
 
     event Borrow(
         address indexed caller,
-        address indexed loanAgent,
+        address indexed agent,
         uint256 loanAmount,
         uint256 loanInterest,
         uint256 totalLoanAmount,
@@ -69,7 +69,7 @@ abstract contract IPool4626 is ERC4626 {
     event Repay(
         address indexed caller,
         address indexed pool,
-        address indexed loanAgent,
+        address indexed agent,
         uint256 amount
     );
 
@@ -153,45 +153,45 @@ abstract contract IPool4626 is ERC4626 {
     }
 
     // TODO: https://github.com/glif-confidential/gcred-contracts/issues/16
-    function borrow(uint256 amount, address loanAgent) public virtual returns (uint256 interest) {
+    function borrow(uint256 amount, address agent) public virtual returns (uint256 interest) {
         // check
         require(amount <= totalAssets(), "Amount to borrow must be less than this pool's liquid totalAssets");
 
         IStats stats = IStats(Router(router).getStats());
-        require(stats.isLoanAgent(loanAgent), "Only loan agents can borrow from pools");
-        require(!stats.hasPenalties(loanAgent), "Cannot borrow from a pool when LoanAgent is in penalty");
+        require(stats.isAgent(agent), "Only loan agents can borrow from pools");
+        require(!stats.hasPenalties(agent), "Cannot borrow from a pool when Agent is in penalty");
         // TODO: ROLES ADD THE AGENT MANAGER CHECK HERE
-        require(loanAgent == msg.sender, "Cannot borrow on behalf of a loan agent you do not own");
+        require(agent == msg.sender, "Cannot borrow on behalf of a loan agent you do not own");
 
         // effect
         uint256 newInterest = amount.mulWadUp(interestRate);
-        interest = _loans[loanAgent].interest + newInterest;
-        uint256 principal = _loans[loanAgent].principal + amount;
-        _loans[loanAgent] = Loan(
+        interest = _loans[agent].interest + newInterest;
+        uint256 principal = _loans[agent].principal + amount;
+        _loans[agent] = Loan(
             block.number,
-            (principal + interest - _loans[loanAgent].totalPaid).divWadUp(loanPeriods * 1e18),
+            (principal + interest - _loans[agent].totalPaid).divWadUp(loanPeriods * 1e18),
             principal,
             interest,
-            _loans[loanAgent].totalPaid
+            _loans[agent].totalPaid
         );
         // accrual basis accounting
         _totalAssets += newInterest;
-        emit Borrow(msg.sender, loanAgent, amount, newInterest, principal, interest);
+        emit Borrow(msg.sender, agent, amount, newInterest, principal, interest);
 
         // interact
-        asset.safeTransfer(loanAgent, amount);
+        asset.safeTransfer(agent, amount);
     }
 
-    function repay(uint256 amount, address loanAgent, address payee) public virtual {
+    function repay(uint256 amount, address agent, address payee) public virtual {
         // effect
-        Loan storage loan = _loans[loanAgent];
+        Loan storage loan = _loans[agent];
         loan.totalPaid += amount;
         if (feesCollected + getFee(amount) > feeFlushAmt) {
             flush();
         } else {
             feesCollected += getFee(amount);
         }
-        emit Repay(msg.sender, address(this), loanAgent, amount);
+        emit Repay(msg.sender, address(this), agent, amount);
 
         // interact
         asset.safeTransferFrom(payee, address(this), amount);

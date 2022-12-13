@@ -2,8 +2,8 @@
 pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
-import "src/LoanAgent/LoanAgent.sol";
-import "src/LoanAgent/LoanAgentFactory.sol";
+import "src/Agent/Agent.sol";
+import "src/Agent/AgentFactory.sol";
 import "src/MockMiner.sol";
 import "src/WFIL.sol";
 import "src/Pool/PoolFactory.sol";
@@ -22,8 +22,8 @@ contract IntegrationTest is BaseTest {
 
     MockMiner miner1;
     MockMiner miner2;
-    LoanAgent loanAgent1;
-    LoanAgent loanAgent2;
+    Agent agent1;
+    Agent agent2;
     IPool4626 pool1;
     IPool4626 pool2;
     function setUp() public {
@@ -52,26 +52,26 @@ contract IntegrationTest is BaseTest {
       pool2.deposit(stakeAmount, investor2);
       vm.stopPrank();
 
-      (loanAgent1, miner1) = configureLoanAgent(minerOwner1);
-      (loanAgent2, miner2) = configureLoanAgent(minerOwner2);
+      (agent1, miner1) = configureAgent(minerOwner1);
+      (agent2, miner2) = configureAgent(minerOwner2);
     }
 
 
     // one miner should be able to take a loan from multiple pools
     function testMultiLoan() public {
       vm.startPrank(minerOwner1);
-      uint256 preLoan1Balance = wFIL.balanceOf(address(loanAgent1));
+      uint256 preLoan1Balance = wFIL.balanceOf(address(agent1));
       assertEq(preLoan1Balance, 0, "Loan agent pre loan balance should be 0");
       // take a loan from pool 1
       uint256 loanAmount = 1e18;
-      loanAgent1.borrow(loanAmount, pool1.id());
+      agent1.borrow(loanAmount, pool1.id());
 
-      uint256 preLoan2Balance = wFIL.balanceOf(address(loanAgent1));
-      vm.roll(pool1.getLoan(address(loanAgent1)).startEpoch + 1);
+      uint256 preLoan2Balance = wFIL.balanceOf(address(agent1));
+      vm.roll(pool1.getLoan(address(agent1)).startEpoch + 1);
       assertEq(preLoan2Balance, 1e18, "Loan agent balance after loan should be the loanAmount");
-      assertEq(pool1.getLoan(address(loanAgent1)).principal, loanAmount);
+      assertEq(pool1.getLoan(address(agent1)).principal, loanAmount);
       assertEq(
-        pool1.getLoan(address(loanAgent1)).interest,
+        pool1.getLoan(address(agent1)).interest,
         FixedPointMathLib.mulWadDown(
           FixedPointMathLib.divWadDown(
             poolBaseInterestRate, 100e18
@@ -79,18 +79,18 @@ contract IntegrationTest is BaseTest {
           loanAmount
         )
       );
-      (uint256 bal, ) = pool1.loanBalance(address(loanAgent1));
-      assertGt(bal, 0, "Loan agent's loan balance should be >0 after the start epoch");
+      (uint256 bal, ) = pool1.loanBalance(address(agent1));
+      assertGt(bal, 0, "Agent's loan balance should be >0 after the start epoch");
 
       // take a loan from pool 2
-      loanAgent1.borrow(loanAmount, pool2.id());
-      uint256 currBalance = wFIL.balanceOf(address(loanAgent1));
-      assertEq(currBalance, loanAmount * 2, "Loan agent's wFIL balance should be two times the loan amount");
-      vm.roll(pool2.getLoan(address(loanAgent1)).startEpoch + 1);
-      assertEq(preLoan2Balance, 1e18, "Loan agent balance after loan should be the loanAmount");
-      assertEq(pool2.getLoan(address(loanAgent1)).principal, loanAmount);
+      agent1.borrow(loanAmount, pool2.id());
+      uint256 currBalance = wFIL.balanceOf(address(agent1));
+      assertEq(currBalance, loanAmount * 2, "Agent's wFIL balance should be two times the loan amount");
+      vm.roll(pool2.getLoan(address(agent1)).startEpoch + 1);
+      assertEq(preLoan2Balance, 1e18, "Agent balance after loan should be the loanAmount");
+      assertEq(pool2.getLoan(address(agent1)).principal, loanAmount);
       assertEq(
-        pool2.getLoan(address(loanAgent1)).interest,
+        pool2.getLoan(address(agent1)).interest,
         FixedPointMathLib.mulWadDown(
           FixedPointMathLib.divWadDown(
             poolBaseInterestRate, 100e18
@@ -98,8 +98,8 @@ contract IntegrationTest is BaseTest {
           loanAmount
         )
       );
-      (uint256 bal2, ) = pool2.loanBalance(address(loanAgent1));
-      assertGt(bal2, 0, "Loan agent's loan balance should be >0 after the start epoch");
+      (uint256 bal2, ) = pool2.loanBalance(address(agent1));
+      assertGt(bal2, 0, "Agent's loan balance should be >0 after the start epoch");
     }
 
     // one miner should be able to pay down loans from multiple pools
@@ -107,17 +107,17 @@ contract IntegrationTest is BaseTest {
       // take out 2 loans for 1 eth each
       vm.startPrank(minerOwner1);
       uint256 loanAmount = 1e18;
-      loanAgent1.borrow(loanAmount, pool1.id());
-      loanAgent1.borrow(loanAmount, pool2.id());
-      assertEq(pool1.getLoan(address(loanAgent1)).principal, loanAmount, "Pool1 loan principal should be equal to the loan amount");
-      assertEq(pool2.getLoan(address(loanAgent1)).principal, loanAmount, "Pool2 loan principal should be equal to the loan amount");
+      agent1.borrow(loanAmount, pool1.id());
+      agent1.borrow(loanAmount, pool2.id());
+      assertEq(pool1.getLoan(address(agent1)).principal, loanAmount, "Pool1 loan principal should be equal to the loan amount");
+      assertEq(pool2.getLoan(address(agent1)).principal, loanAmount, "Pool2 loan principal should be equal to the loan amount");
 
       // paydown
-      loanAgent1.repay(loanAmount, pool1.id());
-      loanAgent1.repay(loanAmount, pool2.id());
+      agent1.repay(loanAmount, pool1.id());
+      agent1.repay(loanAmount, pool2.id());
 
-      (uint256 bal1, ) = pool1.loanBalance(address(loanAgent1));
-      (uint256 bal2, ) = pool2.loanBalance(address(loanAgent1));
+      (uint256 bal1, ) = pool1.loanBalance(address(agent1));
+      (uint256 bal2, ) = pool2.loanBalance(address(agent1));
       assertEq(bal1, 0);
       assertEq(bal2, 0);
     }
@@ -125,8 +125,8 @@ contract IntegrationTest is BaseTest {
     function testGlifFee() public {
       vm.startPrank(minerOwner1);
       uint256 loanAmount = 1e18;
-      loanAgent1.borrow(loanAmount, pool1.id());
-      loanAgent1.repay(loanAmount, pool1.id());
+      agent1.borrow(loanAmount, pool1.id());
+      agent1.repay(loanAmount, pool1.id());
       pool1.flush();
       assertEq(wFIL.balanceOf(treasury), FixedPointMathLib.mulWadDown(
           pool1.fee(),

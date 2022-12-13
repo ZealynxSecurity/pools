@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Router {
   /**
-    0 - loanAgentFactory
+    0 - agentFactory
     1 - poolFactory
     2 - vcVerifier
     3 - stats
@@ -16,7 +16,7 @@ contract Router {
   address[] public routes;
 
   constructor(
-    address _loanAgentFactory,
+    address _agentFactory,
     address _poolFactory,
     address _vcVerifier,
     address _stats,
@@ -24,14 +24,14 @@ contract Router {
     address _authority,
     address _powerToken
   ) {
-    routes = [_loanAgentFactory, _poolFactory, _vcVerifier, _stats, _minerRegistry, _authority, _powerToken];
+    routes = [_agentFactory, _poolFactory, _vcVerifier, _stats, _minerRegistry, _authority, _powerToken];
   }
 
   function getRoute(uint8 id) public view returns (address) {
     return routes[id];
   }
 
-  function getLoanAgentFactory() public view returns (address) {
+  function getAgentFactory() public view returns (address) {
     return getRoute(0);
   }
 

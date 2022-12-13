@@ -3,9 +3,9 @@ pragma solidity ^0.8.15;
 
 import "src/MockMiner.sol";
 import "src/Auth/Auth.sol";
-import "src/LoanAgent/ILoanAgent.sol";
-import "src/LoanAgent/IMinerRegistry.sol";
-import "src/LoanAgent/LoanAgentFactory.sol";
+import "src/Agent/IAgent.sol";
+import "src/Agent/IMinerRegistry.sol";
+import "src/Agent/AgentFactory.sol";
 import "src/Pool/PoolFactory.sol";
 import "src/Pool/IPool4626.sol";
 import "src/VCVerifier/VCVerifier.sol";
@@ -14,7 +14,7 @@ import "src/PowerToken/IPowerToken.sol";
 import {Router} from "src/Router/Router.sol";
 import {IStats} from "src/Stats/IStats.sol";
 
-contract LoanAgent is ILoanAgent, VCVerifier {
+contract Agent is IAgent, VCVerifier {
   address[] public override miners;
   mapping(address => bool) public hasMiner;
   uint256 powerTokensMinted = 0;
@@ -25,7 +25,7 @@ contract LoanAgent is ILoanAgent, VCVerifier {
   //////////////////////////////////////*/
 
   modifier requiresAuth() virtual {
-    require(Authority(Router(router).getAuthority()).canCall(msg.sender, address(this), msg.sig), "LoanAgent: Not authorized");
+    require(Authority(Router(router).getAuthority()).canCall(msg.sender, address(this), msg.sig), "Agent: Not authorized");
     _;
   }
 
@@ -60,10 +60,10 @@ contract LoanAgent is ILoanAgent, VCVerifier {
   }
 
   function revokeOwnership(address newOwner, address miner) public requiresAuth{
-    require(IMiner(miner).currentOwner() == address(this), "LoanAgent does not own miner");
+    require(IMiner(miner).currentOwner() == address(this), "Agent does not own miner");
     require(!IStats(Router(router).getStats()).isDebtor(address(this)), "Cannot revoke miner ownership with outstanding loans");
     IMiner(miner).changeOwnerAddress(newOwner);
-    ILoanAgentFactory(Router(router).getLoanAgentFactory()).revokeOwnership(address(this));
+    IAgentFactory(Router(router).getAgentFactory()).revokeOwnership(address(this));
   }
 
   /*//////////////////////////////////////////////////
@@ -71,7 +71,7 @@ contract LoanAgent is ILoanAgent, VCVerifier {
   //////////////////////////////////////////////////*/
 
   function mintPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external {
-    require(!redZone, "LoanAgent: Cannot mint power while Agent is in the red zone");
+    require(!redZone, "Agent: Cannot mint power while Agent is in the red zone");
     require(isValid(vc, v, r, s), "Invalid VC");
     require(vc.miner.qaPower > powerTokensMinted + amount, "Cannot mint more power than the miner has");
 
@@ -82,7 +82,7 @@ contract LoanAgent is ILoanAgent, VCVerifier {
   function burnPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external {
     require(isValid(vc, v, r, s), "Invalid VC");
     IPowerToken powerToken = IPowerToken(Router(router).getPowerToken());
-    require(amount <= powerToken.balanceOf(address(this)), "LoanAgent: Cannot burn more power than the agent holds");
+    require(amount <= powerToken.balanceOf(address(this)), "Agent: Cannot burn more power than the agent holds");
 
     powerToken.burn(amount);
     powerTokensMinted -= amount;

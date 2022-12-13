@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "src/Pool/SimpleInterestPool.sol";
 import "src/WFIL.sol";
 import "src/MockMiner.sol";
-import "src/LoanAgent/ILoanAgent.sol";
+import "src/Agent/IAgent.sol";
 
 import "./BaseTest.sol";
 
@@ -19,7 +19,7 @@ contract SimpleInterestPoolStakingTest is BaseTest {
   uint256 baseInterestRate = 20e18;
 
   IPool4626 simpleInterestPool;
-  LoanAgent loanAgent;
+  Agent agent;
   MockMiner mockMiner;
   function setUp() public {
     simpleInterestPool = poolFactory.createSimpleInterestPool(poolName, baseInterestRate);
@@ -29,7 +29,7 @@ contract SimpleInterestPoolStakingTest is BaseTest {
     wFIL.deposit{value: 1e18}();
     require(wFIL.balanceOf(investor1) == 1e18);
 
-    (loanAgent, mockMiner) = configureLoanAgent(minerOwner);
+    (agent, mockMiner) = configureAgent(minerOwner);
   }
 
   function testAsset() public {
@@ -227,8 +227,8 @@ contract SimpleInterestPoolStakingTest is BaseTest {
     // investor3 share is 33.33% of the Pool, investor 2 66.66% of the Pool.
     // investor3's share count stays the same but the wFIL amount changes from 2000 to 3000.
     // investor 2's share count stays the same but the wFIL amount changes from 4000 to 6000.
-    vm.prank(address(loanAgent));
-    simpleInterestPool.borrow(3000, address(loanAgent));
+    vm.prank(address(agent));
+    simpleInterestPool.borrow(3000, address(agent));
     uint256 preMutationTotalAssets =  preMutationBal + mutationUnderlyingAmount;
     assertEq(simpleInterestPool.totalSupply(), preMutationShareBal);
     assertEq(simpleInterestPool.totalAssets(), preMutationTotalAssets);
@@ -272,8 +272,8 @@ contract SimpleInterestPoolStakingTest is BaseTest {
 
     // 6. Vault mutates by +600 assets
     // NOTE: Vault holds 11401 assets, but sum of assetsOf() is 11400.
-    vm.prank(address(loanAgent));
-    simpleInterestPool.borrow(3000, address(loanAgent));
+    vm.prank(address(agent));
+    simpleInterestPool.borrow(3000, address(agent));
     assertEq(simpleInterestPool.totalAssets(), 11401);
     assertEq(simpleInterestPool.totalSupply(), 9818);
     assertEq(simpleInterestPool.convertToAssets(simpleInterestPool.balanceOf(investor3)), 4433);
@@ -293,13 +293,13 @@ contract SimpleInterestPoolStakingTest is BaseTest {
 
     // 8. investor2 withdraws 1967 assets (1693 shares)
     // in order to withdraw, the pool needs sufficient liquidity
-    // investor1 sends some liquidity to the loan agent to simulate loan agent accruing rewards
+    // investor1 sends some liquidity to the agent to simulate agent accruing rewards
     vm.prank(investor1);
-    wFIL.transfer(address(loanAgent), 2500);
+    wFIL.transfer(address(agent), 2500);
 
-    vm.startPrank(address(loanAgent));
+    vm.startPrank(address(agent));
     wFIL.approve(address(simpleInterestPool), 7200);
-    simpleInterestPool.repay(7200, address(loanAgent), address(loanAgent));
+    simpleInterestPool.repay(7200, address(agent), address(agent));
     vm.stopPrank();
 
     vm.prank(investor2);
@@ -470,7 +470,7 @@ contract SimpleInterestPoolLendingTest is BaseTest {
 
   IPool4626 simpleInterestPool;
   address miner;
-  address loanAgent;
+  address agent;
   function setUp() public {
     simpleInterestPool = poolFactory.createSimpleInterestPool(poolName, baseInterestRate);
 
@@ -479,10 +479,10 @@ contract SimpleInterestPoolLendingTest is BaseTest {
     wFIL.deposit{value: 1000000e18}();
     require(wFIL.balanceOf(investor1) == 1000000e18);
     MockMiner _miner;
-    ILoanAgent _loanAgent;
-    (_loanAgent, _miner) = configureLoanAgent(minerOwner1);
+    IAgent _agent;
+    (_agent, _miner) = configureAgent(minerOwner1);
     miner = address(_miner);
-    loanAgent = address(_loanAgent);
+    agent = address(_agent);
   }
 
   function testBorrow() public {
@@ -490,15 +490,15 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       wFIL.approve(address(simpleInterestPool), investor1UnderlyingAmount);
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
-      uint256 prevMinerBal = wFIL.balanceOf(loanAgent);
+      uint256 prevMinerBal = wFIL.balanceOf(agent);
       uint256 blockNum = block.number;
-      vm.prank(loanAgent);
-      simpleInterestPool.borrow(borrowAmount, loanAgent);
-      uint256 postMinerBal = wFIL.balanceOf(loanAgent);
+      vm.prank(agent);
+      simpleInterestPool.borrow(borrowAmount, agent);
+      uint256 postMinerBal = wFIL.balanceOf(agent);
 
       assertEq(postMinerBal - prevMinerBal, investor1UnderlyingAmount);
 
-      Loan memory l = simpleInterestPool.getLoan(loanAgent);
+      Loan memory l = simpleInterestPool.getLoan(agent);
       assertEq(l.principal, investor1UnderlyingAmount);
       assertEq(l.interest, FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount), "it should report the correct interest amount owed on the loan");
       assertEq(l.totalPaid, 0);
@@ -508,7 +508,7 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       assertEq(l.principal + l.interest, loanVal);
       uint256 pmtPerEpoch = simpleInterestPool.pmtPerEpoch(l);
       assertGt(pmtPerEpoch, 0);
-      (uint256 loanBalance, ) = simpleInterestPool.loanBalance(loanAgent);
+      (uint256 loanBalance, ) = simpleInterestPool.loanBalance(agent);
       assertEq(loanBalance, 0);
     }
 
@@ -517,16 +517,16 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       wFIL.approve(address(simpleInterestPool), investor1UnderlyingAmount);
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
-      vm.prank(loanAgent);
-      simpleInterestPool.borrow(100000e18, loanAgent);
+      vm.prank(agent);
+      simpleInterestPool.borrow(100000e18, agent);
 
-      Loan memory l = simpleInterestPool.getLoan(loanAgent);
+      Loan memory l = simpleInterestPool.getLoan(agent);
       uint256 pmtPerEpoch = simpleInterestPool.pmtPerEpoch(l);
-      (uint256 loanBalance, ) = simpleInterestPool.loanBalance(loanAgent);
+      (uint256 loanBalance, ) = simpleInterestPool.loanBalance(agent);
       assertEq(loanBalance, 0);
 
       vm.roll(l.startEpoch + 1);
-      (uint256 loanBalanceLater, ) = simpleInterestPool.loanBalance(loanAgent);
+      (uint256 loanBalanceLater, ) = simpleInterestPool.loanBalance(agent);
 
       assertEq(loanBalanceLater, pmtPerEpoch);
     }
@@ -537,18 +537,18 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       wFIL.approve(address(simpleInterestPool), investor1UnderlyingAmount);
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
-      vm.prank(loanAgent);
-      simpleInterestPool.borrow(borrowAmount, loanAgent);
-      uint256 postLoanMinerBal = wFIL.balanceOf(loanAgent);
+      vm.prank(agent);
+      simpleInterestPool.borrow(borrowAmount, agent);
+      uint256 postLoanMinerBal = wFIL.balanceOf(agent);
 
-      vm.startPrank(loanAgent);
+      vm.startPrank(agent);
       wFIL.approve(address(simpleInterestPool), halfOfBorrowAmount);
-      simpleInterestPool.repay(halfOfBorrowAmount, loanAgent, loanAgent);
+      simpleInterestPool.repay(halfOfBorrowAmount, agent, agent);
       vm.stopPrank();
 
-      uint256 postRepayMinerBal = wFIL.balanceOf(loanAgent);
+      uint256 postRepayMinerBal = wFIL.balanceOf(agent);
 
-      Loan memory l = simpleInterestPool.getLoan(loanAgent);
+      Loan memory l = simpleInterestPool.getLoan(agent);
       assertEq(l.principal, investor1UnderlyingAmount);
       assertEq(l.interest, FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount));
       assertEq(l.totalPaid, halfOfBorrowAmount);
@@ -573,15 +573,15 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
 
-      uint256 prevMinerBal = wFIL.balanceOf(loanAgent);
+      uint256 prevMinerBal = wFIL.balanceOf(agent);
       uint256 blockNum = block.number;
-      vm.prank(loanAgent);
-      simpleInterestPool.borrow(borrowAmount1, loanAgent);
-      uint256 postMinerBal = wFIL.balanceOf(loanAgent);
+      vm.prank(agent);
+      simpleInterestPool.borrow(borrowAmount1, agent);
+      uint256 postMinerBal = wFIL.balanceOf(agent);
 
       assertEq(postMinerBal - prevMinerBal, borrowAmount1);
 
-      Loan memory l = simpleInterestPool.getLoan(loanAgent);
+      Loan memory l = simpleInterestPool.getLoan(agent);
       assertEq(l.principal, borrowAmount1);
       assertEq(l.interest, FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount1), "it should report the correct interest amount owed on the loan");
       assertEq(l.totalPaid, 0);
@@ -591,21 +591,21 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       assertEq(l.principal + l.interest, loanVal);
       uint256 pmtPerEpoch = simpleInterestPool.pmtPerEpoch(l);
       assertGt(pmtPerEpoch, 0);
-      (uint256 loanBalance, ) = simpleInterestPool.loanBalance(loanAgent);
+      (uint256 loanBalance, ) = simpleInterestPool.loanBalance(agent);
       assertEq(loanBalance, 0);
 
       // borrow again
-      prevMinerBal = wFIL.balanceOf(loanAgent);
-      vm.prank(loanAgent);
-      simpleInterestPool.borrow(borrowAmount2, loanAgent);
-      postMinerBal = wFIL.balanceOf(loanAgent);
+      prevMinerBal = wFIL.balanceOf(agent);
+      vm.prank(agent);
+      simpleInterestPool.borrow(borrowAmount2, agent);
+      postMinerBal = wFIL.balanceOf(agent);
 
       assertEq(postMinerBal - prevMinerBal, borrowAmount2, "Miner balance should increase by borrowAmount2");
 
       uint256 combinedInterest =
         FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount2) + FixedPointMathLib.mulWadDown(simpleInterestPool.interestRate(), borrowAmount1);
 
-      l = simpleInterestPool.getLoan(loanAgent);
+      l = simpleInterestPool.getLoan(agent);
       assertEq(l.principal, borrowAmount1 + borrowAmount2, "Expected principal to increase to include both loan amounts");
       assertEq(l.interest, combinedInterest, "it should report the correct interest amount owed on the loan");
       assertEq(l.totalPaid, 0);
@@ -617,11 +617,11 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       wFIL.approve(address(simpleInterestPool), investor1UnderlyingAmount);
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
-      vm.prank(loanAgent);
-      simpleInterestPool.borrow(100000e18, loanAgent);
+      vm.prank(agent);
+      simpleInterestPool.borrow(100000e18, agent);
       vm.roll(simpleInterestPool.gracePeriod() + 2);
 
-      (uint256 loanBalance, uint256 penalty) = simpleInterestPool.loanBalance(loanAgent);
+      (uint256 loanBalance, uint256 penalty) = simpleInterestPool.loanBalance(agent);
       assertGt(loanBalance, 0, "Should have non zero balance");
       assertGt(penalty, 0, "Should have non zero penalty.");
     }
@@ -638,8 +638,8 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       assertEq(simpleInterestPool.convertToAssets(1), sharePrice, "Share price should not change upon deposit");
 
       // borrow from pool
-      vm.prank(loanAgent);
-      simpleInterestPool.borrow(10e18, loanAgent);
+      vm.prank(agent);
+      simpleInterestPool.borrow(10e18, agent);
       // roll blocks forward
       vm.roll(simpleInterestPool.gracePeriod() + 2);
 
@@ -652,11 +652,11 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       simpleInterestPool.deposit(1e18, investor1);
       vm.stopPrank();
 
-      vm.prank(address(loanAgent));
-      simpleInterestPool.borrow(2e18, loanAgent);
+      vm.prank(address(agent));
+      simpleInterestPool.borrow(2e18, agent);
     }
 
-    function testFailBorrowAsNonLoanAgentOwner() public {
+    function testFailBorrowAsNonAgentOwner() public {
       vm.startPrank(investor1);
       wFIL.approve(address(simpleInterestPool), 1e18);
       simpleInterestPool.deposit(1e18, investor1);
@@ -664,7 +664,7 @@ contract SimpleInterestPoolLendingTest is BaseTest {
 
       address scammer = makeAddr("SCAM");
       vm.prank(scammer);
-      simpleInterestPool.borrow(0.5e18, loanAgent);
+      simpleInterestPool.borrow(0.5e18, agent);
     }
 
     function testSharePricingAfterRewards() public {
@@ -678,20 +678,20 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       assertEq(simpleInterestPool.totalAssets(), investor1UnderlyingAmount);
       assertEq(simpleInterestPool.totalSupply(), investor1UnderlyingAmount);
       assertEq(simpleInterestPool.convertToAssets(1e18), initialSharePrice, "Share price should not change upon deposit");
-      vm.startPrank(loanAgent);
+      vm.startPrank(agent);
 
       // borrow from pool
-      simpleInterestPool.borrow(1000e18, loanAgent);
-      assertEq(wFIL.balanceOf(address(loanAgent)), 1000e18, "Loan agent should have gotten the borrow amount");
+      simpleInterestPool.borrow(1000e18, agent);
+      assertEq(wFIL.balanceOf(address(agent)), 1000e18, "Agent should have gotten the borrow amount");
 
       // give the miner enough funds to pay interest
-      vm.deal(loanAgent, 200e18);
+      vm.deal(agent, 200e18);
       wFIL.deposit{value: 200e18}();
       // pay off entirety of loan + interest immediately
-      Loan memory l = simpleInterestPool.getLoan(loanAgent);
+      Loan memory l = simpleInterestPool.getLoan(agent);
       wFIL.approve(address(simpleInterestPool), l.principal + l.interest);
 
-      simpleInterestPool.repay(l.principal + l.interest, loanAgent, loanAgent);
+      simpleInterestPool.repay(l.principal + l.interest, agent, agent);
 
       // since the pool now has a greater asset base than when it did before (loan has been granted), its share price should have increased by the interest paid on the loan
       assertEq(simpleInterestPool.convertToAssets(1e18), 1002000000000000000);
@@ -704,13 +704,13 @@ contract SimpleInterestPoolLendingTest is BaseTest {
       simpleInterestPool.deposit(investor1UnderlyingAmount, investor1);
       vm.stopPrank();
 
-      vm.startPrank(loanAgent);
+      vm.startPrank(agent);
       // borrow from pool
-      simpleInterestPool.borrow(1000e18, loanAgent);
-      Loan memory l = simpleInterestPool.getLoan(loanAgent);
+      simpleInterestPool.borrow(1000e18, agent);
+      Loan memory l = simpleInterestPool.getLoan(agent);
       // fast forward loanPeriods (so the duration of the loan is technically "over" even though no payments have been made)
       vm.roll(l.startEpoch + simpleInterestPool.loanPeriods() + 1000);
-      (uint256 bal, uint256 penalty) = simpleInterestPool.loanBalance(loanAgent);
+      (uint256 bal, uint256 penalty) = simpleInterestPool.loanBalance(agent);
       // the balance of the loan should be principal + interest
       assertEq(l.principal + l.interest, bal);
       // there should be a penalty

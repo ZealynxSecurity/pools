@@ -89,17 +89,17 @@ async function main() {
     ({ transactionType, function: fn }) => transactionType === "CREATE" && !fn
   );
 
-  // add in calls to the `create` method on the LoanAgentFactory
+  // add in calls to the `create` method on the AgentFactory
   const createLATxs = json.transactions
     .filter(({ transactionType, contractName, function: invoked }) => {
       return (
         transactionType === "CREATE" &&
-        contractName === "LoanAgentFactory" &&
+        contractName === "AgentFactory" &&
         invoked?.includes("create(")
       );
     })
     .map(({ additionalContracts }) => ({
-      contractName: "LoanAgent",
+      contractName: "Agent",
       contractAddress: additionalContracts[0].address,
     }));
 
@@ -138,7 +138,7 @@ async function main() {
   const res = contractsInfo.reduce((accum, ele) => {
     switch (ele.name) {
       case "MockMiner":
-      case "LoanAgent":
+      case "Agent":
       case "SimpleInterestPool": {
         if (!!accum?.[ele.name]) {
           (accum[ele.name] as ContractInfo[]).push(ele);

@@ -2,9 +2,9 @@
 pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
-import "src/LoanAgent/LoanAgent.sol";
-import "src/LoanAgent/LoanAgentFactory.sol";
-import "src/LoanAgent/MinerRegistry.sol";
+import "src/Agent/Agent.sol";
+import "src/Agent/AgentFactory.sol";
+import "src/Agent/MinerRegistry.sol";
 import "src/Auth/MultiRolesAuthority.sol";
 import "src/Auth/Roles.sol";
 import "src/MockMiner.sol";
@@ -18,7 +18,7 @@ import "src/VCVerifier/VCVerifier.sol";
 
 /**
   This BaseTest contract sets up an environment equipped with:
-  - LoanAgentFactory
+  - AgentFactory
   - PoolFactory
   - WFIL
   - Stats
@@ -32,7 +32,7 @@ contract BaseTest is Test {
   // This order matters when instantiating the router
   MinerRegistry registry;
   MultiRolesAuthority authority;
-  LoanAgentFactory public loanAgentFactory;
+  AgentFactory public agentFactory;
   PoolFactory public poolFactory;
   VCVerifier public vcVerifier;
   Stats public stats;
@@ -60,13 +60,13 @@ contract BaseTest is Test {
     powToken = new PowerToken();
     registry = new MinerRegistry();
     authority = new MultiRolesAuthority(address(this), Authority(address(0)));
-    loanAgentFactory = new LoanAgentFactory(VERIFIED_NAME, VERIFIED_VERSION);
+    agentFactory = new AgentFactory(VERIFIED_NAME, VERIFIED_VERSION);
     poolFactory = new PoolFactory(wFIL, treasury);
     vcVerifier = new VCVerifier("glif.io", "1");
     stats = new Stats();
 
     router = new Router(
-      address(loanAgentFactory),
+      address(agentFactory),
       address(poolFactory),
       address(vcVerifier),
       address(stats),
@@ -75,13 +75,13 @@ contract BaseTest is Test {
       address(powToken)
     );
 
-    loanAgentFactory.setRouter(address(router));
+    agentFactory.setRouter(address(router));
     poolFactory.setRouter(address(router));
     vcVerifier.setRouter(address(router));
     stats.setRouter(address(router));
   }
 
-  function setLoanAgentPermissions(LoanAgent loanAgent, address manager) internal {
+  function setAgentPermissions(Agent agent, address manager) internal {
       MultiRolesAuthority agentAuthority = new MultiRolesAuthority(address(this), Authority(address(0)));
       agentAuthority.setUserRole(manager, Roles.AGENT_MINER_MANAGER, true);
       agentAuthority.setUserRole(manager, Roles.AGENT_FINANCE_MANAGER, true);
@@ -92,10 +92,10 @@ contract BaseTest is Test {
       agentAuthority.setRoleCapability(Roles.AGENT_FINANCE_MANAGER, WITHDRAW_SELECTOR, true);
       agentAuthority.setRoleCapability(Roles.AGENT_FINANCE_MANAGER, BORROW_SELECTOR, true);
       agentAuthority.setRoleCapability(Roles.AGENT_FINANCE_MANAGER, REPAY_SELECTOR, true);
-      authority.setTargetCustomAuthority(address(loanAgent), agentAuthority);
+      authority.setTargetCustomAuthority(address(agent), agentAuthority);
   }
 
-  function configureLoanAgent(address minerOwner) public returns (LoanAgent, MockMiner) {
+  function configureAgent(address minerOwner) public returns (Agent, MockMiner) {
     vm.startPrank(minerOwner);
     MockMiner miner = new MockMiner();
 
@@ -104,34 +104,34 @@ contract BaseTest is Test {
     miner.lockBalance(block.number, 1000, 100e18);
     vm.stopPrank();
 
-    // create a loan agent for miner
-    LoanAgent loanAgent = _configureLoanAgent(minerOwner, miner);
-    return (loanAgent, miner);
+    // create an agent for miner
+    Agent agent = _configureAgent(minerOwner, miner);
+    return (agent, miner);
   }
 
-  function _configureLoanAgent(address minerOwner, MockMiner miner) public returns (LoanAgent) {
+  function _configureAgent(address minerOwner, MockMiner miner) public returns (Agent) {
     vm.startPrank(minerOwner);
 
-    // create a loan agent for miner
-    LoanAgent loanAgent = LoanAgent(
+    // create a agent for miner
+    Agent agent = Agent(
       payable(
-        loanAgentFactory.create()
+        agentFactory.create()
       ));
-    // propose the change owner to the loan agent
-    miner.changeOwnerAddress(address(loanAgent));
+    // propose the change owner to the agent
+    miner.changeOwnerAddress(address(agent));
     vm.stopPrank();
 
     // Authority must be established by the main calling contract
-    setLoanAgentPermissions(loanAgent, minerOwner);
+    setAgentPermissions(agent, minerOwner);
 
     vm.startPrank(minerOwner);
-    // confirm change owner address (loanAgent1 now owns miner)
-    loanAgent.addMiner(address(miner));
+    // confirm change owner address (agent1 now owns miner)
+    agent.addMiner(address(miner));
 
-    require(miner.currentOwner() == address(loanAgent), "Miner owner not set");
-    require(loanAgent.hasMiner(address(miner)), "Miner not registered");
+    require(miner.currentOwner() == address(agent), "Miner owner not set");
+    require(agent.hasMiner(address(miner)), "Miner not registered");
 
     vm.stopPrank();
-    return loanAgent;
+    return agent;
   }
 }
