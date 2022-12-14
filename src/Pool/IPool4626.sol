@@ -5,7 +5,10 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {Router} from "src/Router/Router.sol";
+import {AgentFactory} from "src/Agent/AgentFactory.sol";
+import {Agent} from "src/Agent/Agent.sol";
+import {IRouter} from "src/Router/IRouter.sol";
+import {Routes} from "src/Router/Routes.sol";
 import {IStats} from "src/Stats/IStats.sol";
 
 struct Loan {
@@ -155,7 +158,7 @@ abstract contract IPool4626 is ERC4626 {
         // check
         require(amount <= totalAssets(), "Amount to borrow must be less than this pool's liquid totalAssets");
 
-        IStats stats = IStats(Router(router).getStats());
+        IStats stats = IStats(IRouter(router).getRoute(Routes.STATS));
         require(stats.isAgent(agent), "Only loan agents can borrow from pools");
         require(!stats.hasPenalties(agent), "Cannot borrow from a pool when Agent is in penalty");
         // TODO: ROLES ADD THE AGENT MANAGER CHECK HERE

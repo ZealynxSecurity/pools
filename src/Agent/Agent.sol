@@ -11,7 +11,8 @@ import "src/Pool/IPool4626.sol";
 import "src/VCVerifier/VCVerifier.sol";
 import "solmate/tokens/ERC20.sol";
 import "src/PowerToken/IPowerToken.sol";
-import {Router} from "src/Router/Router.sol";
+import "src/Router/IRouter.sol";
+import "src/Router/Routes.sol";
 import {IStats} from "src/Stats/IStats.sol";
 
 contract Agent is IAgent, VCVerifier {
@@ -25,7 +26,7 @@ contract Agent is IAgent, VCVerifier {
   //////////////////////////////////////*/
 
   modifier requiresAuth() virtual {
-    require(Authority(Router(router).getAuthority()).canCall(msg.sender, address(this), msg.sig), "Agent: Not authorized");
+    require(Authority(IRouter(router).getRoute(Routes.AUTHORITY)).canCall(msg.sender, address(this), msg.sig), "Agent: Not authorized");
     _;
   }
 
@@ -61,9 +62,9 @@ contract Agent is IAgent, VCVerifier {
 
   function revokeOwnership(address newOwner, address miner) public requiresAuth{
     require(IMiner(miner).currentOwner() == address(this), "Agent does not own miner");
-    require(!IStats(Router(router).getStats()).isDebtor(address(this)), "Cannot revoke miner ownership with outstanding loans");
+    require(!IStats(IRouter(router).getRoute(Routes.STATS)).isDebtor(address(this)), "Cannot revoke miner ownership with outstanding loans");
     IMiner(miner).changeOwnerAddress(newOwner);
-    IAgentFactory(Router(router).getAgentFactory()).revokeOwnership(address(this));
+    IAgentFactory(IRouter(router).getRoute(Routes.AGENT_FACTORY)).revokeOwnership(address(this));
   }
 
   /*//////////////////////////////////////////////////
@@ -75,13 +76,13 @@ contract Agent is IAgent, VCVerifier {
     require(isValid(vc, v, r, s), "Invalid VC");
     require(vc.miner.qaPower > powerTokensMinted + amount, "Cannot mint more power than the miner has");
 
-    IPowerToken(Router(router).getPowerToken()).mint(amount);
+    IPowerToken(IRouter(router).getRoute(Routes.POWER_TOKEN)).mint(amount);
     powerTokensMinted += amount;
   }
 
   function burnPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external {
     require(isValid(vc, v, r, s), "Invalid VC");
-    IPowerToken powerToken = IPowerToken(Router(router).getPowerToken());
+    IPowerToken powerToken = IPowerToken(IRouter(router).getRoute(Routes.POWER_TOKEN));
     require(amount <= powerToken.balanceOf(address(this)), "Agent: Cannot burn more power than the agent holds");
 
     powerToken.burn(amount);
@@ -112,7 +113,7 @@ contract Agent is IAgent, VCVerifier {
   //////////////////////////////////////////////*/
 
   function _getPool(uint256 poolID) internal view returns (IPool4626) {
-    IPoolFactory poolFactory = IPoolFactory(Router(router).getPoolFactory());
+    IPoolFactory poolFactory = IPoolFactory(IRouter(router).getRoute(Routes.POOL_FACTORY));
     require(poolID <= poolFactory.allPoolsLength(), "Invalid pool ID");
     address pool = poolFactory.allPools(poolID);
     return IPool4626(pool);
@@ -120,7 +121,7 @@ contract Agent is IAgent, VCVerifier {
 
   function _addMiner(address miner) internal {
     require(hasMiner[miner] == false, "Miner already added");
-    IMinerRegistry(Router(router).getMinerRegistry()).addMiner(miner);
+    IMinerRegistry(IRouter(router).getRoute(Routes.MINER_REGISTRY)).addMiner(miner);
     hasMiner[miner] = true;
     _claimOwnership(miner);
     miners.push(miner);
@@ -132,7 +133,7 @@ contract Agent is IAgent, VCVerifier {
     require(_canRemoveMiner(index), "Cannot remove miner unless all loans are paid off or it isn't needed for collateral");
 
     // Remove the miner from the central registry
-    IMinerRegistry(Router(router).getMinerRegistry()).removeMiner(miners[index]);
+    IMinerRegistry(IRouter(router).getRoute(Routes.MINER_REGISTRY)).removeMiner(miners[index]);
 
     // Update state to reflect the miner removal
     hasMiner[miners[index]] = false;
@@ -146,7 +147,7 @@ contract Agent is IAgent, VCVerifier {
   }
 
   function _canRemoveMiner(uint256 index) internal view returns (bool) {
-    return !IStats(Router(router).getStats()).isDebtor(address(this)) || _evaluateCollateral(index);
+    return !IStats(IRouter(router).getRoute(Routes.STATS)).isDebtor(address(this)) || _evaluateCollateral(index);
   }
 
   function _evaluateCollateral(uint256 index) internal view returns (bool) {

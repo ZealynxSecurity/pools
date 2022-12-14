@@ -2,18 +2,11 @@
 pragma solidity ^0.8.15;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import {Routes} from "src/Router/Routes.sol";
+import {IRouter} from "src/Router/IRouter.sol";
 
-contract Router {
-  /**
-    0 - agentFactory
-    1 - poolFactory
-    2 - vcVerifier
-    3 - stats
-    4 - minerRegistry
-    5 - authority
-    6 - powerToken
-   */
-  address[] public routes;
+contract Router is IRouter {
+  mapping(bytes4 => address) public route;
 
   constructor(
     address _agentFactory,
@@ -24,44 +17,33 @@ contract Router {
     address _authority,
     address _powerToken
   ) {
-    routes = [_agentFactory, _poolFactory, _vcVerifier, _stats, _minerRegistry, _authority, _powerToken];
+    route[Routes.AGENT_FACTORY] = _agentFactory;
+    route[Routes.POOL_FACTORY] = _poolFactory;
+    route[Routes.VC_VERIFIER] = _vcVerifier;
+    route[Routes.STATS] = _stats;
+    route[Routes.MINER_REGISTRY] = _minerRegistry;
+    route[Routes.AUTHORITY] = _authority;
+    route[Routes.POWER_TOKEN] = _powerToken;
   }
 
-  function getRoute(uint8 id) public view returns (address) {
-    return routes[id];
+  function getRoute(bytes4 id) public view returns (address) {
+    return route[id];
   }
 
-  function getAgentFactory() public view returns (address) {
-    return getRoute(0);
+  function getRoute(string memory id) public view returns (address) {
+    return getRoute(bytes4(keccak256(bytes(id))));
   }
 
-  function getPoolFactory() public view returns (address) {
-    return getRoute(1);
+
+  function pushRoute(bytes4 id, address newRoute) public returns (bytes4) {
+    route[id] = newRoute;
+
+    emit PushRoute(newRoute, id);
+
+    return id;
   }
 
-  function getVCVerifier() public view returns (address) {
-    return getRoute(2);
-  }
-
-  function getStats() public view returns (address) {
-    return getRoute(3);
-  }
-
-  function getMinerRegistry() public view returns (address) {
-    return getRoute(4);
-  }
-
-  function getAuthority() public view returns (address) {
-    return getRoute(5);
-  }
-
-  function getPowerToken() public view returns (address) {
-    return getRoute(6);
-  }
-
-  function pushRoute(address newRoute) public returns (uint8) {
-    uint8 routeID = uint8(routes.length);
-    routes.push(newRoute);
-    return routeID;
+  function pushRoute(string memory id, address newRoute) public returns (bytes4) {
+    return pushRoute(bytes4(keccak256(bytes(id))), newRoute);
   }
 }
