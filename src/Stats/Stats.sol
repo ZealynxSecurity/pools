@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {IPoolFactory} from "src/Pool/PoolFactory.sol";
+import {IPoolFactory} from "src/Pool/IPoolFactory.sol";
 import {IPool4626} from "src/Pool/IPool4626.sol";
 import {IAgentFactory} from "src/Agent/AgentFactory.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";

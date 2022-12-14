@@ -5,8 +5,6 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {AgentFactory} from "src/Agent/AgentFactory.sol";
-import {Agent} from "src/Agent/Agent.sol";
 import {Router} from "src/Router/Router.sol";
 import {IStats} from "src/Stats/IStats.sol";
 

@@ -4,14 +4,8 @@ pragma solidity ^0.8.15;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "src/Pool/SimpleInterestPool.sol";
+import "src/Pool/IPoolFactory.sol";
 import "src/Router/RouterAware.sol";
-
-
-interface IPoolFactory {
-  function allPools(uint256 poolID) external view returns (address);
-  function allPoolsLength() external view returns (uint256);
-  function createSimpleInterestPool(string memory name, uint256 baseInterestRate) external returns (IPool4626);
-}
 
 contract PoolFactory is IPoolFactory, RouterAware {
   ERC20 public asset;

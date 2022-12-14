@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
 contract MinerRegistry {
@@ -36,5 +37,4 @@ contract MinerRegistry {
     require(minerRegistered[miner] == true, "Miner not registered");
     minerRegistered[miner] = false;
   }
-  
 }
