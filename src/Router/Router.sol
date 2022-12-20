@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "src/Router/Routes.sol";
-import {IRouter} from "src/Router/IRouter.sol";
+import {ROUTE_CORE_AUTHORITY} from "src/Constants/Routes.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
 import {Auth} from "src/Auth/Auth.sol";
 

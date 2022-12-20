@@ -2,13 +2,12 @@
 pragma solidity ^0.8.15;
 
 import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
-import {IMultiRolesAuthority} from "src/Auth/IMultiRolesAuthority.sol";
 import {Authority, Auth} from "src/Auth/Auth.sol";
-import {IRouter} from "src/Router/IRouter.sol";
-import {ROUTE_CORE_AUTHORITY} from "src/Router/Routes.sol";
-import {AGENT_MINT_POWER_SELECTOR} from "src/Constants/FuncSigs.sol";
-import "src/Constants/Roles.sol";
+import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {ROUTE_CORE_AUTHORITY} from "src/Constants/Routes.sol";
 import "src/Constants/FuncSigs.sol";
+import "src/Constants/Roles.sol";
 
 library RoleAuthority {
   function newMultiRolesAuthority(

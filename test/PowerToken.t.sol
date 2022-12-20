@@ -2,14 +2,14 @@
 pragma solidity ^0.8.15;
 
 import "./BaseTest.sol";
-import {VerifiableCredential, MinerData} from "src/VCVerifier/VCVerifier.sol";
-import {IVCVerifier} from "src/VCVerifier/IVCVerifier.sol";
-import {IAgent} from "src/Agent/IAgent.sol";
 import {PowerToken} from "src/PowerToken/PowerToken.sol";
-import {IPool4626} from "src/Pool/IPool4626.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
+import {VerifiableCredential, MinerData} from "src/Types/Structs/Credentials.sol";
 
 contract PowerTokenTest is BaseTest {
-  IPool4626 pool;
+  IPool pool;
   VerifiableCredential public vc;
   IAgent agent;
   address public agentOwner;
@@ -28,7 +28,14 @@ contract PowerTokenTest is BaseTest {
 
     (vc, v, r, s) = issueGenericVC(address(agent));
 
-    pool = poolFactory.createSimpleInterestPool("TEST", 0);
+    pool = poolFactory.createPool(
+        "TEST",
+        "TEST",
+        ZERO_ADDRESS,
+        ZERO_ADDRESS,
+        address(wFIL),
+        ZERO_ADDRESS
+    );
   }
 
   function testMintBurnPower() public {

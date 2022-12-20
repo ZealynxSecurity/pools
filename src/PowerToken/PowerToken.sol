@@ -5,11 +5,11 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
-import {IPowerToken} from "src/PowerToken/IPowerToken.sol";
-import {IPoolFactory} from "src/Pool/IPoolFactory.sol";
-import {IAgentFactory} from "src/Agent/IAgentFactory.sol";
-import {IRouter} from "src/Router/IRouter.sol";
-import {ROUTE_POOL_FACTORY, ROUTE_AGENT_FACTORY} from "src/Router/Routes.sol";
+import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
+import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
+import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {ROUTE_POOL_FACTORY, ROUTE_AGENT_FACTORY} from "src/Constants/Routes.sol";
 
 contract PowerToken is
   IPowerToken,

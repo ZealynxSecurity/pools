@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "src/Router/Router.sol";
-import "src/Router/IRouter.sol";
-import "src/Router/Routes.sol";
+import {Router} from "src/Router/Router.sol";
 import {Authority} from "src/Auth/Auth.sol";
 import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
-import {IMultiRolesAuthority} from "src/Auth/IMultiRolesAuthority.sol";
+import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
+import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
+import "src/Constants/Routes.sol";
 
 library Deployer {
   function init() internal returns (

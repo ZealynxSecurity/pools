@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "src/Auth/MultiRolesAuthority.sol";
-import {IMultiRolesAuthority} from "src/Auth/IMultiRolesAuthority.sol";
 import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
-import {IRouter} from "src/Router/IRouter.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {
   ROUTE_POWER_TOKEN,
   ROUTE_VC_ISSUER,
   ROUTE_MINER_REGISTRY
-  } from "src/Router/Routes.sol";
+} from "src/Constants/Routes.sol";
 
 contract AgentFactory is RouterAware {
   mapping(address => bool) public agents;

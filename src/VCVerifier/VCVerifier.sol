@@ -5,31 +5,9 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
-import {IMultiRolesAuthority} from "src/Auth/IMultiRolesAuthority.sol";
+import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {ROLE_VC_ISSUER} from "src/Constants/Roles.sol";
-
-struct MinerData {
-  uint256 assets;
-  uint256 expectedDailyRewards;
-  uint256 exposureAtDefault;
-  uint256 expectedLoss;
-  uint256 liabilities;
-  uint256 liquidationValue;
-  uint256 lossGivenDefault;
-  uint256 probabilityOfDefault;
-  uint256 qaPower;
-  uint256 rawPower;
-  uint256 startEpoch;
-  uint256 unexpectedLoss;
-}
-
-struct VerifiableCredential {
-  address issuer;
-  address subject;
-  uint256 epochIssued;
-  uint256 epochValidUntil;
-  MinerData miner;
-}
+import {MinerData, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 
 abstract contract VCVerifier is RouterAware, EIP712 {
   constructor(string memory _name, string memory _version)

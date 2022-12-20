@@ -3,8 +3,8 @@ pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
 import "src/Router/Router.sol";
-import "src/Router/Routes.sol";
-import "src/Router/IRouter.sol";
+import "src/Constants/Routes.sol";
+import "src/Types/Interfaces/IRouter.sol";
 import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
 import {Authority} from "src/Auth/Auth.sol";
 import {Deployer} from "deploy/Deployer.sol";

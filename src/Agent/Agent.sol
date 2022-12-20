@@ -2,26 +2,28 @@
 pragma solidity ^0.8.15;
 
 import "src/MockMiner.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Authority} from "src/Auth/Auth.sol";
 import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
-import {IMultiRolesAuthority} from "src/Auth/IMultiRolesAuthority.sol";
-import {IAgent} from "src/Agent/IAgent.sol";
-import {IMinerRegistry} from "src/Agent/IMinerRegistry.sol";
-import {IAgentFactory} from "src/Agent/IAgentFactory.sol";
-import {IPoolFactory} from "src/Pool/IPoolFactory.sol";
-import {IPool4626} from "src/Pool/IPool4626.sol";
-import {VCVerifier, VerifiableCredential} from "src/VCVerifier/VCVerifier.sol";
-import {IPowerToken} from "src/PowerToken/IPowerToken.sol";
-import {IRouter} from "src/Router/IRouter.sol";
+import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
+
+import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IStats} from "src/Types/Interfaces/IStats.sol";
+import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+
 import {
   ROUTE_AGENT_FACTORY,
   ROUTE_POWER_TOKEN,
   ROUTE_POOL_FACTORY,
   ROUTE_MINER_REGISTRY,
-  ROUTE_STATS } from "src/Router/Routes.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
-import {IStats} from "src/Stats/IStats.sol";
+  ROUTE_STATS } from "src/Constants/Routes.sol";
 import {ROLE_AGENT_OPERATOR, ROLE_AGENT_OWNER} from "src/Constants/Roles.sol";
 
 contract Agent is IAgent, VCVerifier {
@@ -41,7 +43,7 @@ contract Agent is IAgent, VCVerifier {
 
   constructor(address _router, string memory _name, string memory _version)
     VCVerifier(_name, _version) {
-    setRouter(_router);
+    router = _router;
   }
 
   /*//////////////////////////////////////////////////
@@ -129,27 +131,42 @@ contract Agent is IAgent, VCVerifier {
     return IMiner(miner).withdrawBalance(0);
   }
 
-  function borrow(uint256 amount, uint256 poolID) external {
-    _getPool(poolID).borrow(amount, address(this));
+  function borrow(
+    uint256 amount,
+    uint256 poolID,
+    VerifiableCredential memory vc,
+    uint256 powerTokenAmount,
+    uint8 v,
+    bytes32 r,
+    bytes32 s
+  ) external {
+    require(isValid(vc, v, r, s), "Invalid VC");
+    _getPool(poolID).borrow(amount, address(this), vc, powerTokenAmount);
   }
 
-  function repay(uint256 amount, uint256 poolID) external {
-    require(_getPool(poolID).asset().balanceOf(address(this)) >= amount && amount >= 0, "Invalid amount passed to paydownDebt");
-    if (amount == 0) amount = _getPool(poolID).asset().balanceOf(address(this));
-    IPool4626 pool = _getPool(poolID);
-    pool.asset().approve(address(pool), amount);
-    pool.repay(amount, address(this), address(this));
+  function exit(
+    uint256 poolID,
+    VerifiableCredential memory vc,
+    uint8 v,
+    bytes32 r,
+    bytes32 s
+  ) external {
+    require(isValid(vc, v, r, s), "Invalid VC");
+    IPool pool = _getPool(poolID);
+    uint256 amount = pool.getAgentBorrowed(address(this));
+    pool.getAsset().approve(address(pool), amount);
+    pool.exitPool(amount, address(this), vc);
   }
 
   /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/
 
-  function _getPool(uint256 poolID) internal view returns (IPool4626) {
+  function _getPool(uint256 poolID) internal view returns (IPool) {
     IPoolFactory poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
     require(poolID <= poolFactory.allPoolsLength(), "Invalid pool ID");
     address pool = poolFactory.allPools(poolID);
-    return IPool4626(pool);
+    return IPool(pool);
   }
 
   function _addMiner(address miner) internal {

@@ -2,25 +2,29 @@
 pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
-import {Deployer} from "deploy/Deployer.sol";
-import "src/Agent/Agent.sol";
-import "src/Agent/AgentFactory.sol";
-import "src/Agent/MinerRegistry.sol";
-import "src/Auth/MultiRolesAuthority.sol";
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
 import "src/MockMiner.sol";
-import "src/WFIL.sol";
-import "src/PowerToken/PowerToken.sol";
-import "src/Pool/PoolFactory.sol";
-import "src/Pool/IPool4626.sol";
-import "src/Router/Router.sol";
-import "src/Router/Routes.sol";
-import {IRouter} from "src/Router/IRouter.sol";
-import "src/Stats/Stats.sol";
-import {IVCVerifier} from "src/VCVerifier/IVCVerifier.sol";
-import {MinerData, VerifiableCredential} from "src/VCVerifier/VCVerifier.sol";
+import {Deployer} from "deploy/Deployer.sol";
+import {Agent} from "src/Agent/Agent.sol";
+import {AgentFactory} from "src/Agent/AgentFactory.sol";
+import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
+import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {WFIL} from "src/WFIL.sol";
+import {PowerToken} from "src/PowerToken/PowerToken.sol";
+import {PoolFactory} from "src/Pool/PoolFactory.sol";
+import {Router} from "src/Router/Router.sol";
+import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
+import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {MinerData, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {Stats} from "src/Stats/Stats.sol";
+import "src/Constants/Routes.sol";
 
 contract BaseTest is Test {
+  address public constant ZERO_ADDRESS = address(0);
   address public treasury = makeAddr('TREASURY');
   address public router;
 

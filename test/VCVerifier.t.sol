@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "./BaseTest.sol";
-import "src/VCVerifier/VCVerifier.sol";
 import {MultiRolesAuthority, RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {Authority} from "src/Auth/Auth.sol";
 import {ROLE_VC_ISSUER} from "src/Constants/Roles.sol";
+import "src/VCVerifier/VCVerifier.sol";
+import "./BaseTest.sol";
 
 contract VCVerifierMock is VCVerifier {
   constructor(
