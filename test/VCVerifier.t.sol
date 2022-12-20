@@ -1,53 +1,97 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "forge-std/Test.sol";
+import "./BaseTest.sol";
 import "src/VCVerifier/VCVerifier.sol";
+import {MultiRolesAuthority, RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {ROLE_VC_ISSUER} from "src/Constants/Roles.sol";
 
-contract VCVerifierTest is Test {
-  function testVerifyCredential(uint256 privateKey) public {
-    // here we fuzz with a bunch of private keys
-    // sometimes the signing fails if the private key is too large, so we bound its size
-    privateKey = bound(privateKey, 1, 1e36);
-    require(privateKey >= 1 && privateKey <= 1e36);
+contract VCVerifierMock is VCVerifier {
+  constructor(
+    address _router,
+    string memory verifiedName,
+    string memory verifiedVersion
+  ) VCVerifier(verifiedName, verifiedVersion) {
+    router = _router;
+  }
+}
 
-    VCVerifier vcVerifier = new VCVerifier("glif.io", "1");
-    address issuer = vm.addr(privateKey);
+contract VCVerifierTest is BaseTest {
+  VCVerifierMock public vcv;
+  MultiRolesAuthority public sauth;
 
-    MinerData memory miner = MinerData(1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
+  function setUp() public {
+    vcv = new VCVerifierMock(address(router), "glif.io", "1");
+    sauth = RoleAuthority.newMultiRolesAuthority(address(this), Authority(address(0)));
+    sauth.setUserRole(address(vcIssuer), ROLE_VC_ISSUER, true);
+    RoleAuthority.setSubAuthority(address(router), address(vcv), sauth);
+  }
+
+  function testVerifyCredential() public {
+    (
+      VerifiableCredential memory vc,
+      uint8 v, bytes32 r, bytes32 s
+    ) = issueGenericVC(address(vcv));
+
+    assertTrue(vcv.isValid(vc, v, r, s));
+  }
+
+  function testVerifyCredentialFromWrongIssuer() public {
+    uint256 qaPower = 10e10;
+
+    MinerData memory miner = MinerData(
+      1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0
+    );
 
     VerifiableCredential memory vc = VerifiableCredential(
-      issuer,
-      makeAddr("SUBJECT"),
+      vcIssuer,
+      address(vcv),
       block.number,
       block.number + 100,
       miner
     );
 
-    bytes32 digest = vcVerifier.digest(vc);
-    (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
-
-    assertEq(vcVerifier.recover(vc, v, r, s), issuer);
+    bytes32 digest = IVCVerifier(vc.subject).digest(vc);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, digest);
+    vm.expectRevert("VCVerifier: Mismatching issuer");
+    vcv.isValid(vc, v, r, s);
   }
 
-  function testVerifyCredentialFromJavaScript() private {
-    uint8 v = 28;
-    bytes32 r = hex"3b43bdb9918247ce43a6f85feda05a7a28042991febb87dc36c75fc940d9241b";
-    bytes32 s = hex"39d6c763bf4d2d7d4c76a29d2395af9d7d9df1b49c14899fec98ea0149294f29";
-    VCVerifier vcVerifier = new VCVerifier("glif.io", "1");
+  function testBadIssuer() public {
+    VCVerifierMock vcv2 = new VCVerifierMock(address(router), "glif.io", "1");
+    MultiRolesAuthority auth = RoleAuthority.newMultiRolesAuthority(address(this), Authority(address(0)));
+    RoleAuthority.setSubAuthority(address(router), address(vcv2), auth);
 
-    MinerData memory miner = MinerData(100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100);
+    uint256 qaPower = 10e10;
+
+    MinerData memory miner = MinerData(
+      1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0
+    );
 
     VerifiableCredential memory vc = VerifiableCredential(
-      0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,
-      0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,
-      100,
-      100,
+      vcIssuer,
+      address(vcv2),
+      block.number,
+      block.number + 100,
       miner
     );
 
-    console.log("ADDRESS", address(vcVerifier));
+    bytes32 digest = IVCVerifier(vc.subject).digest(vc);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(vcIssuerPk, digest);
+    vm.expectRevert("VCVerifier: VC issued by unknown issuer");
+    vcv2.isValid(vc, v, r, s);
+  }
 
-    assertEq(vcVerifier.recover(vc, v, r, s), 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
+  function testFalseSubject() public {
+    (
+      VerifiableCredential memory vc,
+      uint8 v, bytes32 r, bytes32 s
+    ) = issueGenericVC(address(vcv));
+
+    vc.subject = makeAddr("FALSE_SUBJECT");
+    // NOTE - this test fails with "mismatching issuer"
+    // because ECRecover won't recover the right result with the wrong subject
+    vm.expectRevert("VCVerifier: Mismatching issuer");
+    vcv.isValid(vc, v, r, s);
   }
 }

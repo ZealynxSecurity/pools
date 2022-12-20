@@ -1,13 +1,22 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import {IMultiRolesAuthority} from "src/Auth/IMultiRolesAuthority.sol";
+import {Authority} from "src/Auth/Auth.sol";
+import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
 import "src/Agent/Agent.sol";
 import "src/Agent/AgentFactory.sol";
 import "src/MockMiner.sol";
 import "src/Pool/IPool4626.sol";
 import "src/Pool/PoolFactory.sol";
 import "src/WFIL.sol";
-
+import "src/Constants/FuncSigs.sol";
+import "src/Constants/Roles.sol";
+import {IRouterAware} from "src/Router/IRouter.sol";
+import {
+    ROUTE_AGENT_FACTORY_ADMIN,
+    ROUTE_MINER_REGISTRY
+    } from "src/Router/Routes.sol";
 import "./BaseTest.sol";
 
 contract AgentBasicTest is BaseTest {
@@ -20,15 +29,17 @@ contract AgentBasicTest is BaseTest {
     function setUp() public {
         vm.prank(investor1);
         miner = new MockMiner();
-    }
+     }
 
     function testInitialState() public {
+        IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
+        IMinerRegistry registry = IMinerRegistry(IRouter(router).getRoute(ROUTE_MINER_REGISTRY));
         vm.startPrank(investor1);
 
         // create an agent for miner
         Agent agent = Agent(
         payable(
-            agentFactory.create()
+            agentFactory.create(address(0))
         ));
         assertEq(miner.currentOwner(), investor1, "The mock miner's current owner should be set to the original owner");
 
@@ -36,21 +47,68 @@ contract AgentBasicTest is BaseTest {
 
         vm.stopPrank();
 
-        // Authority must be established by the main calling contract
-        setAgentPermissions(agent, investor1);
-
         vm.startPrank(investor1);
         agent.addMiner(address(miner));
         assertTrue(agent.hasMiner(address(miner)), "The miner should be registered as a miner on the agent");
         assertTrue(registry.minerRegistered(address(miner)), "After adding the miner the registry should have the miner's address as a registered miner");
 
-        vm.stopPrank();
+        Authority customAuthority = coreAuthority.getTargetCustomAuthority(address(agent));
 
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_ADD_MINER_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_REMOVE_MINER_ADDR_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_REMOVE_MINER_INDEX_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_WITHDRAW_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_REVOKE_OWNERSHIP_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_BORROW_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_REPAY_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_MINT_POWER_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_BURN_POWER_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_ENABLE_OPERATOR_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_DISABLE_OPERATOR_SELECTOR));
+        // Agent should be able to set roles on its own authorities
+        assertTrue(customAuthority.canCall(address(agent), address(customAuthority), AUTH_SET_USER_ROLE_SELECTOR));
+
+        address nonOperatorOwner = makeAddr("NON_OPERATOR_OWNER");
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_ADD_MINER_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_REMOVE_MINER_ADDR_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_REMOVE_MINER_INDEX_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_WITHDRAW_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_REVOKE_OWNERSHIP_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_BORROW_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_REPAY_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_MINT_POWER_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_BURN_POWER_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_ENABLE_OPERATOR_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_DISABLE_OPERATOR_SELECTOR));
+
+        vm.stopPrank();
+    }
+
+    function testClashingAgentRoles() public {
+        (Agent agent1,) = configureAgent(investor1);
+        (Agent agent2,) = configureAgent(investor2);
+
+        Authority agent1Authority = coreAuthority.getTargetCustomAuthority(address(agent1));
+        Authority agent2Authority = coreAuthority.getTargetCustomAuthority(address(agent2));
+
+        assertTrue(agent1Authority.canCall(investor1, address(agent1), AGENT_ADD_MINER_SELECTOR));
+        assertTrue(agent2Authority.canCall(investor2, address(agent2), AGENT_WITHDRAW_SELECTOR));
+
+        assertTrue(!(agent1Authority.canCall(investor2, address(agent1), AGENT_ADD_MINER_SELECTOR)));
+        assertTrue(!(agent2Authority.canCall(investor1, address(agent2), AGENT_WITHDRAW_SELECTOR)));
+
+        // the global authority should receive the same result
+        assertTrue(coreAuthority.canCall(investor1, address(agent1), AGENT_ADD_MINER_SELECTOR));
+        assertTrue(!(coreAuthority.canCall(investor2, address(agent1), AGENT_ADD_MINER_SELECTOR)));
+
+        assertTrue(coreAuthority.canCall(investor2, address(agent2), AGENT_WITHDRAW_SELECTOR));
+        assertTrue(!(coreAuthority.canCall(investor1, address(agent2), AGENT_WITHDRAW_SELECTOR)));
     }
 
     function testFailClaimOwnership() public {
+        IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
         vm.startPrank(investor2);
-        Agent agent = Agent(payable(agentFactory.create()));
+        Agent agent = Agent(payable(agentFactory.create(address(0))));
         miner.changeOwnerAddress(address(agent));
         vm.stopPrank();
 
@@ -66,7 +124,6 @@ contract AgentBasicTest is BaseTest {
         agent.addMiner(address(miner));
         vm.stopPrank();
     }
-
 
     function testWithdrawNoBalance() public {
         Agent agent = _configureAgent(investor1, miner);
@@ -103,9 +160,68 @@ contract AgentBasicTest is BaseTest {
         assertEq(prevBalance, 0);
         vm.stopPrank();
     }
+
+    function testEnableOwner() public {
+        Agent agent = _configureAgent(investor1, miner);
+        vm.startPrank(investor1);
+        address owner = makeAddr("OWNER");
+        agent.enableOwner(owner);
+        MultiRolesAuthority customAuthority = MultiRolesAuthority(
+            address(coreAuthority.getTargetCustomAuthority(address(agent)))
+        );
+        assertTrue(customAuthority.doesUserHaveRole(owner, ROLE_AGENT_OWNER));
+    }
+
+    function testDisableOwner() public {
+        Agent agent = _configureAgent(investor1, miner);
+        vm.startPrank(investor1);
+        address owner = makeAddr("OWNER");
+        agent.enableOwner(owner);
+
+        MultiRolesAuthority customAuthority = MultiRolesAuthority(
+            address(coreAuthority.getTargetCustomAuthority(address(agent)))
+        );
+
+        assertTrue(customAuthority.doesUserHaveRole(owner, ROLE_AGENT_OWNER));
+        agent.disableOwner(owner);
+        assertTrue(!customAuthority.doesUserHaveRole(owner, ROLE_AGENT_OWNER));
+    }
+
+    function testEnableOperator() public {
+        Agent agent = _configureAgent(investor1, miner);
+        vm.startPrank(investor1);
+        address operator = makeAddr("OPERATOR");
+        agent.enableOperator(operator);
+        MultiRolesAuthority customAuthority = MultiRolesAuthority(address(coreAuthority.getTargetCustomAuthority(address(agent))));
+        assertTrue(customAuthority.doesUserHaveRole(operator, ROLE_AGENT_OPERATOR));
+        assertTrue(!(customAuthority.doesUserHaveRole(operator, ROLE_AGENT_OWNER)));
+    }
+
+    function testDisableOperator() public {
+        Agent agent = _configureAgent(investor1, miner);
+        vm.startPrank(investor1);
+        address operator = makeAddr("OPERATOR");
+        agent.enableOperator(operator);
+
+        MultiRolesAuthority customAuthority = MultiRolesAuthority(
+            address(coreAuthority.getTargetCustomAuthority(address(agent)))
+        );
+
+        assertTrue(customAuthority.doesUserHaveRole(operator, ROLE_AGENT_OPERATOR));
+        assertTrue(!(customAuthority.doesUserHaveRole(operator, ROLE_AGENT_OWNER)));
+
+        agent.disableOperator(operator);
+        assertTrue(!customAuthority.doesUserHaveRole(operator, ROLE_AGENT_OPERATOR));
+    }
+
+    function testRouterConfigured() public {
+        (Agent agent,) = configureAgent(investor1);
+        address r = IRouterAware(address(agent)).router();
+        assertEq(IRouterAware(address(agent)).router(), address(r));
+    }
 }
 
-contract LoanAgentTest is BaseTest {
+contract AgentTest is BaseTest {
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     string poolName = "FIRST POOL NAME";
@@ -115,6 +231,7 @@ contract LoanAgentTest is BaseTest {
     IPool4626 pool;
 
     function setUp() public {
+        IPoolFactory poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
         pool = poolFactory.createSimpleInterestPool(poolName, baseInterestRate);
         // investor1 stakes 10 FIL
         vm.deal(investor1, 11e18);
@@ -146,13 +263,20 @@ contract LoanAgentTest is BaseTest {
         agent.borrow(loanAmount, pool.id());
         uint256 currBalance = wFIL.balanceOf(address(agent));
         vm.roll(pool.getLoan(address(agent)).startEpoch + 1);
-        assertEq(pool.getLoan(address(agent)).principal, currBalance, "Agent's principal should be the loan amount after borrowing.");
-        assertEq(pool.getLoan(address(agent)).interest, FixedPointMathLib.mulWadDown(
-          FixedPointMathLib.divWadDown(
-            baseInterestRate, 100e18
-          ),
-          loanAmount
-        ), "Agent's principal should be the loan amount after borrowing.");
+        assertEq(
+            pool.getLoan(address(agent)).principal, currBalance,
+            "Agent's principal should be the loan amount after borrowing."
+        );
+        assertEq(
+            pool.getLoan(address(agent)).interest,
+            FixedPointMathLib.mulWadDown(
+                FixedPointMathLib.divWadDown(
+                    baseInterestRate, 100e18
+                ),
+                loanAmount
+            ),
+            "Agent's principal should be the loan amount after borrowing."
+        );
         (uint256 bal, ) = pool.loanBalance(address(agent));
         assertGt(bal, 0, "Agent's balance should be greater than 0 as epochs pass.");
     }
@@ -170,6 +294,7 @@ contract LoanAgentTest is BaseTest {
     }
 
     function testFailBorrowInPenalty() public {
+        Stats stats = Stats(IRouter(router).getRoute(ROUTE_STATS));
         uint256 loanAmount = 1e18;
         vm.startPrank(investor2);
         agent.borrow(loanAmount, pool.id());
@@ -181,6 +306,7 @@ contract LoanAgentTest is BaseTest {
     }
 
     function testInPenaltyWithNoLoans() public {
+        Stats stats = Stats(IRouter(router).getRoute(ROUTE_STATS));
         vm.startPrank(investor2);
         vm.roll(pool.gracePeriod() + 2);
         bool inPenalty = stats.hasPenalties(address(agent));
@@ -197,5 +323,26 @@ contract LoanAgentTest is BaseTest {
         address newOwner = makeAddr("TEST");
         vm.startPrank(newOwner);
         agent.revokeOwnership(newOwner, address(miner));
+    }
+}
+
+contract AgentFactoryRolesTest is BaseTest {
+    IAgentFactory agentFactory;
+    function testSetVerifierName() public {
+        agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
+        string memory NEW_VERIFIED_NAME = "glif.io";
+        string memory NEW_VERIFIED_VERSION = "1";
+        vm.prank(IRouter(router).getRoute(ROUTE_AGENT_FACTORY_ADMIN));
+        agentFactory.setVerifierName(NEW_VERIFIED_NAME, NEW_VERIFIED_VERSION);
+        assertEq(agentFactory.verifierName(), NEW_VERIFIED_NAME);
+        assertEq(agentFactory.verifierVersion(), NEW_VERIFIED_VERSION);
+    }
+
+    function testFailSetVerifierName() public {
+        string memory NEW_VERIFIED_NAME = "glif.io";
+        string memory NEW_VERIFIED_VERSION = "1";
+        agentFactory.setVerifierName(NEW_VERIFIED_NAME, NEW_VERIFIED_VERSION);
+        assertEq(agentFactory.verifierName(), NEW_VERIFIED_NAME);
+        assertEq(agentFactory.verifierVersion(), NEW_VERIFIED_VERSION);
     }
 }

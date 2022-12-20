@@ -6,20 +6,6 @@ pragma solidity ^0.8.0;
  */
 interface IPowerToken {
     /**
-     * @dev Emitted when `value` tokens are moved from one account (`from`) to
-     * another (`to`).
-     *
-     * Note that `value` may be zero.
-     */
-    event Transfer(address indexed from, address indexed to, uint256 value);
-
-    /**
-     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
-     * a call to {approve}. `value` is the new allowance.
-     */
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-
-    /**
      * @dev Emitted when an Agent calls {mint}
      */
     event MintPower(address indexed agent, uint256 amount);
@@ -30,14 +16,34 @@ interface IPowerToken {
     event BurnPower(address indexed agent, uint256 amount);
 
     /**
-     * @dev Returns the amount of tokens in existence.
+     * @dev Emitted when Power Token Admin calls {pause}
      */
-    function totalSupply() external view returns (uint256);
+    event PauseContract();
 
     /**
-     * @dev Returns the amount of tokens owned by `account`.
+     * @dev Emitted when Power Token Admin calls {resume}
      */
-    function balanceOf(address account) external view returns (uint256);
+    event ResumeContract();
+
+    /**
+     * @dev Mints the amount of token passed as `amount`
+     */
+    function mint(uint256 amount) external;
+
+    /**
+     * @dev Burns the amount of token passed as `amount`
+     */
+    function burn(uint256 amount) external;
+
+    /**
+     * @dev Pauses the power token contract
+     */
+    function pause() external;
+
+    /**
+     * @dev Unpauses the power token contract
+     */
+    function resume() external;
 
     /**
      * @dev Moves `amount` tokens from the caller's account to `to`.
@@ -47,15 +53,6 @@ interface IPowerToken {
      * Emits a {Transfer} event.
      */
     function transfer(address to, uint256 amount) external returns (bool);
-
-    /**
-     * @dev Returns the remaining number of tokens that `spender` will be
-     * allowed to spend on behalf of `owner` through {transferFrom}. This is
-     * zero by default.
-     *
-     * This value changes when {approve} or {transferFrom} are called.
-     */
-    function allowance(address owner, address spender) external view returns (uint256);
 
     /**
      * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
@@ -87,15 +84,4 @@ interface IPowerToken {
         address to,
         uint256 amount
     ) external returns (bool);
-
-
-    /**
-     * @dev Mints the amount of token passed as `amount`
-     */
-    function mint(uint256 amount) external;
-
-    /**
-     * @dev Burns the amount of token passed as `amount`
-     */
-    function burn(uint256 amount) external;
 }

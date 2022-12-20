@@ -4,74 +4,179 @@ pragma solidity ^0.8.15;
 import "forge-std/Test.sol";
 import "src/Router/Router.sol";
 import "src/Router/Routes.sol";
+import "src/Router/IRouter.sol";
+import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
+import {Authority} from "src/Auth/Auth.sol";
+import {Deployer} from "deploy/Deployer.sol";
+
+// for ease of testing routes
+struct AdminRoutes {
+  address routerAdmin;
+  address agentFactoryAdmin;
+  address powerTokenAdmin;
+  address minerRegistryAdmin;
+  address poolFactoryAdmin;
+  address coreAuthorityAdmin;
+  address treasuryAdmin;
+}
+
+struct ContractRoutes {
+  address treasury;
+  address wFIL;
+  address minerRegistry;
+  address agentFactory;
+  address poolFactory;
+  address stats;
+  address powerToken;
+  address vcIssuer;
+  address coreAuthority;
+}
 
 contract RouterTest is Test {
   Router router;
-  address agentFactory;
-  address poolFactory;
-  address vcVerifier;
-  address stats;
-  address minerRegistry;
-  address authority;
-  address powerToken;
-  address wfilToken;
-  function setUp() public {
-    agentFactory = makeAddr("AGENT_FACTORY");
-    poolFactory = makeAddr("POOL_FACTORY");
-    vcVerifier = makeAddr("VC_VERIFIER");
-    stats = makeAddr("STATS");
-    minerRegistry = makeAddr("MINER_REGISTRY");
-    authority = makeAddr("AUTHORITY");
-    powerToken = makeAddr("POWER_TOKEN");
+  address routerAdmin;
+  ContractRoutes public contractRoutes;
+  AdminRoutes public adminRoutes;
 
-    router = new Router(
-      agentFactory,
-      poolFactory,
-      vcVerifier,
-      stats,
-      minerRegistry,
-      authority,
-      powerToken
+  MultiRolesAuthority authority;
+  function setUp() public {
+    routerAdmin = makeAddr("ROUTER_ADMIN");
+    authority = RoleAuthority.newMultiRolesAuthority(address(this), Authority(address(0)));
+
+    router = new Router(address(authority));
+
+    (, address[] memory adminRouteAddrs) = Deployer.setupAdminRoutes(
+      address(router),
+      routerAdmin,
+      makeAddr("AGENT_FACTORY_ADMIN"),
+      makeAddr("POWER_TOKEN_ADMIN"),
+      makeAddr("MINER_REGISTRY_ADMIN"),
+      makeAddr("POOL_FACTORY_ADMIN"),
+      makeAddr("CORE_AUTHORITY_ADMIN"),
+      makeAddr("TREASURY_ADMIN")
     );
+    (, address[] memory contractRouteAddrs) = Deployer.setupContractRoutes(
+      address(router),
+      makeAddr("TREASURY"),
+      makeAddr("WFIL"),
+      makeAddr("MINER_REGISTRY"),
+      makeAddr("AGENT_FACTORY"),
+      makeAddr("POOL_FACTORY"),
+      makeAddr("STATS"),
+      makeAddr("POWER_TOKEN"),
+      makeAddr("VC_ISSUER")
+    );
+
+    // for ease of testing routes
+    adminRoutes = AdminRoutes(
+      adminRouteAddrs[0],
+      adminRouteAddrs[1],
+      adminRouteAddrs[2],
+      adminRouteAddrs[3],
+      adminRouteAddrs[4],
+      adminRouteAddrs[5],
+      adminRouteAddrs[6]
+    );
+    contractRoutes = ContractRoutes(
+      contractRouteAddrs[0],
+      contractRouteAddrs[1],
+      contractRouteAddrs[2],
+      contractRouteAddrs[3],
+      contractRouteAddrs[4],
+      contractRouteAddrs[5],
+      contractRouteAddrs[6],
+      contractRouteAddrs[7],
+      address(authority)
+    );
+
+    RoleAuthority.initRouterRoles(address(router), routerAdmin);
   }
 
   function testGetAgentFactory() public {
-    assertEq(router.getRoute(Routes.AGENT_FACTORY), agentFactory);
+    assertEq(router.getRoute(ROUTE_AGENT_FACTORY), contractRoutes.agentFactory);
   }
 
   function testGetPoolFactory() public {
-    assertEq(router.getRoute(Routes.POOL_FACTORY), poolFactory);
-  }
-
-  function testGetVCVerifier() public {
-    assertEq(router.getRoute(Routes.VC_VERIFIER), vcVerifier);
+    assertEq(router.getRoute(ROUTE_POOL_FACTORY), contractRoutes.poolFactory);
   }
 
   function testGetStats() public {
-    assertEq(router.getRoute(Routes.STATS), stats);
+    assertEq(router.getRoute(ROUTE_STATS), contractRoutes.stats);
   }
 
   function testGetMinerRegistry() public {
-    assertEq(router.getRoute(Routes.MINER_REGISTRY), minerRegistry);
+    assertEq(router.getRoute(ROUTE_MINER_REGISTRY), contractRoutes.minerRegistry);
   }
 
   function testGetAuthority() public {
-    assertEq(router.getRoute(Routes.AUTHORITY), authority);
+    assertEq(router.getRoute(ROUTE_CORE_AUTHORITY), address(authority));
   }
 
   function testGetPowerToken() public {
-    assertEq(router.getRoute(Routes.POWER_TOKEN), powerToken);
+    assertEq(router.getRoute(ROUTE_POWER_TOKEN), contractRoutes.powerToken);
+  }
+
+  function testGetRouterAdmin() public {
+    assertEq(router.getRoute(ROUTE_ROUTER_ADMIN), address(routerAdmin));
+  }
+
+  function testGetPowerTokenAdmin() public {
+    assertEq(router.getRoute(ROUTE_POWER_TOKEN_ADMIN), adminRoutes.powerTokenAdmin);
+  }
+
+    function testGetMinerRegistryAdmin() public {
+    assertEq(router.getRoute(ROUTE_MINER_REGISTRY_ADMIN), adminRoutes.minerRegistryAdmin);
+  }
+
+    function testGetPoolFactoryAdmin() public {
+    assertEq(router.getRoute(ROUTE_POOL_FACTORY_ADMIN), adminRoutes.poolFactoryAdmin);
+  }
+
+    function testGetSystemAdmin() public {
+    assertEq(router.getRoute(ROUTE_CORE_AUTH_ADMIN), adminRoutes.coreAuthorityAdmin);
+  }
+
+  function testGetVCIssuer() public {
+    assertEq(router.getRoute(ROUTE_VC_ISSUER), contractRoutes.vcIssuer);
+  }
+
+  function testGetTreasury() public {
+    assertEq(router.getRoute(ROUTE_TREASURY), contractRoutes.treasury);
+  }
+
+  function testGetTreasuryAdmin() public {
+    assertEq(router.getRoute(ROUTE_TREASURY_ADMIN), adminRoutes.treasuryAdmin);
   }
 
   function testPushRoute() public {
     address newRoute = makeAddr("NEW_ROUTE");
-    router.pushRoute(Routes.AGENT_FACTORY, newRoute);
-    assertEq(router.getRoute(Routes.AGENT_FACTORY), newRoute);
+    vm.prank(routerAdmin);
+    router.pushRoute(ROUTE_AGENT_FACTORY, newRoute);
+    assertEq(router.getRoute(ROUTE_AGENT_FACTORY), newRoute);
   }
 
   function testPushRouteString() public {
     address newRoute = makeAddr("TEST_ROUTE");
+    vm.prank(routerAdmin);
     router.pushRoute("TEST_ROUTE", newRoute);
     assertEq(router.getRoute("TEST_ROUTE"), newRoute);
+  }
+
+  function testPushRoutes() public {
+    address[] memory routes = new address[](2);
+    address newRoute = makeAddr("NEW_ROUTE");
+    address newRoute2 = makeAddr("NEW_ROUTE2");
+
+    routes[0] = newRoute;
+    routes[1] = newRoute2;
+
+    bytes4[] memory routeIDs = new bytes4[](2);
+    routeIDs[0] = ROUTE_AGENT_FACTORY;
+    routeIDs[1] = ROUTE_POOL_FACTORY;
+
+    vm.prank(routerAdmin);
+    router.pushRoutes(routeIDs, routes);
+    assertEq(router.getRoute(ROUTE_AGENT_FACTORY), newRoute);
+    assertEq(router.getRoute(ROUTE_POOL_FACTORY), newRoute2);
   }
 }

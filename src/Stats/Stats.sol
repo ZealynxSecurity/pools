@@ -6,15 +6,15 @@ import {IPool4626} from "src/Pool/IPool4626.sol";
 import {IAgentFactory} from "src/Agent/IAgentFactory.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {IRouter} from "src/Router/IRouter.sol";
-import {Routes} from "src/Router/Routes.sol";
+import {ROUTE_POOL_FACTORY, ROUTE_AGENT_FACTORY} from "src/Router/Routes.sol";
 
 contract Stats is RouterAware {
   function getPoolFactory() internal view returns (IPoolFactory) {
-    return IPoolFactory(IRouter(router).getRoute(Routes.POOL_FACTORY));
+    return IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
   }
 
   function getAgentFactory() internal view returns (IAgentFactory) {
-    return IAgentFactory(IRouter(router).getRoute(Routes.AGENT_FACTORY));
+    return IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
   }
 
   function isDebtor(address agent) public view returns (bool) {

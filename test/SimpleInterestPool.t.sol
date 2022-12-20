@@ -6,6 +6,7 @@ import "src/Pool/SimpleInterestPool.sol";
 import "src/WFIL.sol";
 import "src/MockMiner.sol";
 import "src/Agent/IAgent.sol";
+import {IPoolFactory} from "src/Pool/IPoolFactory.sol";
 
 import "./BaseTest.sol";
 
@@ -18,10 +19,12 @@ contract SimpleInterestPoolStakingTest is BaseTest {
   string poolName = "TEST 20% Simple Interest Pool";
   uint256 baseInterestRate = 20e18;
 
+  IPoolFactory poolFactory;
   IPool4626 simpleInterestPool;
   Agent agent;
   MockMiner mockMiner;
   function setUp() public {
+    poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
     simpleInterestPool = poolFactory.createSimpleInterestPool(poolName, baseInterestRate);
 
     vm.deal(investor1, 10e18);
@@ -468,10 +471,12 @@ contract SimpleInterestPoolLendingTest is BaseTest {
   uint256 investor1UnderlyingAmount = 100000e18;
   uint256 borrowAmount = 100000e18;
 
+  IPoolFactory poolFactory;
   IPool4626 simpleInterestPool;
   address miner;
   address agent;
   function setUp() public {
+    poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
     simpleInterestPool = poolFactory.createSimpleInterestPool(poolName, baseInterestRate);
 
     vm.deal(investor1, 1000000e18);

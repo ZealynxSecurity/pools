@@ -1,31 +1,47 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import "src/Agent/Agent.sol";
-import "src/Router/RouterAware.sol";
+import "src/Auth/MultiRolesAuthority.sol";
+import {IMultiRolesAuthority} from "src/Auth/IMultiRolesAuthority.sol";
+import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {Agent} from "src/Agent/Agent.sol";
+import {RouterAware} from "src/Router/RouterAware.sol";
+import {IRouter} from "src/Router/IRouter.sol";
+import {
+  ROUTE_POWER_TOKEN,
+  ROUTE_VC_ISSUER,
+  ROUTE_MINER_REGISTRY
+  } from "src/Router/Routes.sol";
 
 contract AgentFactory is RouterAware {
   mapping(address => bool) public agents;
   string public verifierName;
-  string public verifiedVersion;
+  string public verifierVersion;
 
   constructor(string memory _name, string memory _version) {
     verifierName = _name;
-    verifiedVersion = _version;
+    verifierVersion = _version;
   }
 
-  function create() external returns (address) {
-    Agent agent = new Agent(router, verifierName, verifiedVersion);
+  function create(address operator) external returns (address) {
+    Agent agent = new Agent(router, verifierName, verifierVersion);
     agents[address(agent)] = true;
-    // What's the reasoning behind returning this address? Are we consuming it anywhere?
+
+    RoleAuthority.initAgentRoles(
+      router,
+      address(agent),
+      operator,
+      IRouter(router).getRoute(ROUTE_POWER_TOKEN),
+      IRouter(router).getRoute(ROUTE_VC_ISSUER),
+      IRouter(router).getRoute(ROUTE_MINER_REGISTRY)
+    );
+
     return address(agent);
   }
 
   function setVerifierName(string memory _name, string memory _version) external {
-    // TODO: Add Role based permissions
+    require(RoleAuthority.canCallSubAuthority(router, address(this)), "AgentFactory: Not authorized");
     verifierName = _name;
-    verifiedVersion = _version;
+    verifierVersion = _version;
   }
-
-
 }

@@ -7,6 +7,7 @@ import "src/Agent/AgentFactory.sol";
 import "src/MockMiner.sol";
 import "src/WFIL.sol";
 import "src/Pool/PoolFactory.sol";
+import "src/Pool/IPoolFactory.sol";
 import "src/Pool/IPool4626.sol";
 import "./BaseTest.sol";
 
@@ -26,7 +27,10 @@ contract IntegrationTest is BaseTest {
     Agent agent2;
     IPool4626 pool1;
     IPool4626 pool2;
+    IPoolFactory poolFactory;
+
     function setUp() public {
+      poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
       // create 2 pools
       pool1 = poolFactory.createSimpleInterestPool(poolName1, poolBaseInterestRate);
       pool2 = poolFactory.createSimpleInterestPool(poolName2, poolBaseInterestRate);
