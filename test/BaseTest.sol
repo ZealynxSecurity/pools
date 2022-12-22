@@ -3,6 +3,7 @@ pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
 import "src/MockMiner.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
@@ -19,9 +20,23 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {MinerData, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Stats} from "src/Stats/Stats.sol";
 import "src/Constants/Routes.sol";
+
+contract BasicRateModule is IRateModule {
+  using FixedPointMathLib for uint256;
+  uint256 rate;
+
+  constructor(uint256 _rate) {
+    rate = _rate;
+  }
+
+  function getRate(VerifiableCredential memory, uint256 amount) external view returns (uint256) {
+    return amount.mulWadUp(rate);
+  }
+}
 
 contract BaseTest is Test {
   address public constant ZERO_ADDRESS = address(0);
@@ -60,7 +75,7 @@ contract BaseTest is Test {
       address(wFIL),
       address(new MinerRegistry()),
       address(new AgentFactory(VERIFIED_NAME, VERIFIED_VERSION)),
-      address(new PoolFactory(wFIL, treasury)),
+      address(new PoolFactory(wFIL)),
       address(new Stats()),
       address(new PowerToken()),
       vcIssuer
@@ -111,7 +126,7 @@ contract BaseTest is Test {
     bytes32 r,
     bytes32 s
   ) {
-    uint256 qaPower = 10e10;
+    uint256 qaPower = 10e18;
 
     MinerData memory miner = MinerData(
       1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0

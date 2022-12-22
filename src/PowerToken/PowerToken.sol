@@ -16,8 +16,7 @@ contract PowerToken is
   RouterAware,
   ERC20("Tokenized Filecoin Power", "POW", 18)
   {
-    using SafeTransferLib for address;
-
+    using SafeTransferLib for ERC20;
     // @notice this contract can be paused, but we plan to burn the pauser role
     // once the contracts stabilize
     bool public paused = false;
@@ -36,13 +35,13 @@ contract PowerToken is
       IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
 
       // if from is a pool, to must be an agent
-      if (isPool(from, poolFactory)) {
+      if (poolFactory.isPool(from)) {
         require(isAgent(to, agentFactory), "PowerToken: Pool can only transfer power tokens to agents");
         _;
       }
       // if from is an agent, to must be a pool
       else if (isAgent(from, agentFactory)) {
-        require(isPool(to, poolFactory), "PowerToken: Agent can only transfer power tokens to pools");
+        require(poolFactory.isPool(to), "PowerToken: Agent can only transfer power tokens to pools");
         _;
       } else {
         revert("PowerToken: Invalid transfer");
@@ -70,11 +69,27 @@ contract PowerToken is
       return super.transfer(to, amount);
     }
 
+    function safeTransfer(
+      address to,
+      uint256 amount
+    ) public virtual override(IPowerToken) validFromTo(msg.sender, to) returns (bool) {
+      ERC20(address(this)).safeTransfer(to, amount);
+      return true;
+    }
+
     function approve(
       address spender,
       uint256 amount
     ) public virtual override(IPowerToken, ERC20) validFromTo(msg.sender, spender) returns (bool) {
       return super.approve(spender, amount);
+    }
+
+    function safeApprove(
+      address spender,
+      uint256 amount
+    ) public virtual override(IPowerToken) validFromTo(msg.sender, spender) returns (bool) {
+      ERC20(address(this)).safeApprove(spender, amount);
+      return true;
     }
 
     function transferFrom(
@@ -83,6 +98,15 @@ contract PowerToken is
       uint256 amount
     ) public virtual override(IPowerToken, ERC20) validFromTo(from, to) returns (bool) {
       return super.transferFrom(from, to, amount);
+    }
+
+    function safeTransferFrom(
+      address from,
+      address to,
+      uint256 amount
+    ) public virtual override(IPowerToken) validFromTo(msg.sender, to) returns (bool) {
+      ERC20(address(this)).safeTransferFrom(from, to, amount);
+      return true;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -105,17 +129,5 @@ contract PowerToken is
 
     function isAgent(address addr, IAgentFactory factory) internal view returns (bool) {
       return factory.agents(addr);
-    }
-
-    function isPool(address addr, IPoolFactory factory) internal view returns (bool) {
-      uint256 allPoolsLength = factory.allPoolsLength();
-
-      for (uint256 i = 0; i < allPoolsLength; i++) {
-        if (factory.allPools(i) == addr) {
-          return true;
-        }
-      }
-
-      return false;
     }
 }

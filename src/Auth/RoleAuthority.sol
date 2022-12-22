@@ -113,6 +113,42 @@ library RoleAuthority {
     subAuthority.transferOwnership(powerTokenAdmin);
   }
 
+  function initPoolRoles(
+    address router,
+    address pool,
+    address operator,
+    address poolFactory
+  ) internal {
+    MultiRolesAuthority subAuthority = newMultiRolesAuthority(address(this), Authority(address(0)));
+    setSubAuthority(router, pool, subAuthority);
+
+    // pool factory is able to draw up funds from the pool
+    subAuthority.setUserRole(poolFactory, ROLE_POOL_FACTORY, true);
+    subAuthority.setRoleCapability(ROLE_POOL_FACTORY, POOL_FLUSH_SELECTOR, true);
+
+    // pool itself should be able to add roles to its own authority
+    // in order to allow for enabling/disabling operators
+    subAuthority.setUserRole(pool, ROLE_POOL, true);
+    subAuthority.setRoleCapability(ROLE_POOL, AUTH_SET_USER_ROLE_SELECTOR, true);
+
+    subAuthority.setUserRole(msg.sender, ROLE_POOL_OWNER, true);
+    if (operator == address(0)) {
+      subAuthority.setUserRole(msg.sender, ROLE_POOL_OPERATOR, true);
+    } else {
+      subAuthority.setUserRole(operator, ROLE_POOL_OPERATOR, true);
+    }
+
+    subAuthority.setRoleCapability(ROLE_POOL_OWNER, POOL_ENABLE_OPERATOR_SELECTOR, true);
+    subAuthority.setRoleCapability(ROLE_POOL_OWNER, POOL_DISABLE_OPERATOR_SELECTOR, true);
+
+    // TODO: should this be possible?
+    // TODO: Should operator be able to change the rate module?
+    subAuthority.setRoleCapability(ROLE_POOL_OPERATOR, POOL_SET_RATE_MODULE_SELECTOR, true);
+    subAuthority.setRoleCapability(ROLE_POOL_OPERATOR, POOL_SET_RATE_MODULE_SELECTOR, true);
+
+    subAuthority.transferOwnership(msg.sender);
+  }
+
   function initAgentRoles(
     address router,
     address agent,
@@ -156,12 +192,15 @@ library RoleAuthority {
       subAuthority.setRoleCapability(ROLE_AGENT_OPERATOR, AGENT_REPAY_SELECTOR, true);
       subAuthority.setRoleCapability(ROLE_AGENT_OPERATOR, AGENT_MINT_POWER_SELECTOR, true);
       subAuthority.setRoleCapability(ROLE_AGENT_OPERATOR, AGENT_BURN_POWER_SELECTOR, true);
+      subAuthority.setRoleCapability(ROLE_AGENT_OPERATOR, AGENT_EXIT_SELECTOR, true);
+      subAuthority.setRoleCapability(ROLE_AGENT_OPERATOR, MAKE_PAYMENT_SELECTOR, true);
 
       // AGENT_OWNER role can call all functions that the operator can, but can also enable / disable operators & owners
-      subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_ENABLE_OPERATOR_SELECTOR, true);
-      subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_DISABLE_OPERATOR_SELECTOR, true);
-      subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_ENABLE_OWNER_SELECTOR, true);
-      subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_DISABLE_OWNER_SELECTOR, true);
+      subAuthority.setRoleCapability(ROLE_AGENT_OWNER, ENABLE_OPERATOR_SELECTOR, true);
+      subAuthority.setRoleCapability(ROLE_AGENT_OWNER, DISABLE_OPERATOR_SELECTOR, true);
+      // all the same roles as operator
+      subAuthority.setRoleCapability(ROLE_AGENT_OWNER, ENABLE_OWNER_SELECTOR, true);
+      subAuthority.setRoleCapability(ROLE_AGENT_OWNER, DISABLE_OWNER_SELECTOR, true);
       subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_ADD_MINER_SELECTOR, true);
       subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_REMOVE_MINER_ADDR_SELECTOR, true);
       subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_REMOVE_MINER_INDEX_SELECTOR, true);
@@ -171,6 +210,8 @@ library RoleAuthority {
       subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_WITHDRAW_SELECTOR, true);
       subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_BORROW_SELECTOR, true);
       subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_REPAY_SELECTOR, true);
+      subAuthority.setRoleCapability(ROLE_AGENT_OPERATOR, AGENT_EXIT_SELECTOR, true);
+      subAuthority.setRoleCapability(ROLE_AGENT_OPERATOR, MAKE_PAYMENT_SELECTOR, true);
       subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_MINT_POWER_SELECTOR, true);
       subAuthority.setRoleCapability(ROLE_AGENT_OWNER, AGENT_BURN_POWER_SELECTOR, true);
 

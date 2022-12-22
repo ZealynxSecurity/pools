@@ -3,19 +3,20 @@ pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
 import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {ROUTE_TREASURY} from "src/Constants/Routes.sol";
 
 contract PoolFactory is IPoolFactory, RouterAware {
   ERC20 public asset;
   address[] public allPools;
-  address public treasury;
 
-  constructor(ERC20 _asset, address _treasury) {
+  constructor(ERC20 _asset) {
     asset = _asset;
-    treasury = _treasury;
   }
 
   function createSymbol() internal view returns (string memory) {
@@ -34,13 +35,13 @@ contract PoolFactory is IPoolFactory, RouterAware {
   function createPool(
       string memory _name,
       string memory _symbol,
-      address rateModule,
-      address treasury,
-      address asset,
-      address powerToken
+      address operator,
+      address rateModule
     ) external returns (IPool pool) {
-    pool = new PoolTemplate(_name, _symbol, rateModule, treasury, asset, powerToken);
+    pool = new PoolTemplate(_name, _symbol, router, rateModule, address(asset));
     allPools.push(address(pool));
+
+    RoleAuthority.initPoolRoles(router, address(pool), operator, address(this));
   }
 
   function isPool(address pool) external view returns (bool) {

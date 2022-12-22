@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.15;
 
-import {IERC20} from "src/Types/Interfaces/IERC20.sol";
+import {ERC20} from "solmate/tokens/ERC20.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 
@@ -12,7 +12,6 @@ interface IPool  {
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
     event Borrow(
-        address indexed caller,
         address indexed agent,
         uint256 amount,
         uint256 powerTokenAmount,
@@ -38,6 +37,7 @@ interface IPool  {
     );
 
     // Basic Stats Getters **PURE**
+    function period() external view returns (uint256);
     function nextDueDate(Account memory account) external view returns (uint256);
     function nextDueDate(address agent) external view returns (uint256);
     function getAgentBorrowed(address agent) external view returns (uint256);
@@ -45,11 +45,11 @@ interface IPool  {
     function pmtPerPeriod(address agent) external view returns (uint256);
     function pmtPerPeriod(Account memory account) external view returns (uint256);
     // Would love to expose the public getter but not sure how to with the interitance structure we have
-    function getAsset() external view returns (IERC20);
+    function getAsset() external view returns (ERC20);
     function getAccount(address agent) external view returns (Account calldata);
     // Finance functions
-    function borrow(uint256 amount, address agent, VerifiableCredential memory vc, uint256 powerTokenAmount) external returns (uint256);
-    function exitPool(uint256 amount, address agent, VerifiableCredential memory vc) external;
+    function borrow(uint256 amount, VerifiableCredential memory vc, uint256 powerTokenAmount) external returns (uint256);
+    function exitPool(uint256 amount, VerifiableCredential memory vc) external;
     function makePayment(address agent, VerifiableCredential memory vc) external;
     // Admin Funcs
     function flush() external;

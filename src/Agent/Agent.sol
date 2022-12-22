@@ -139,9 +139,9 @@ contract Agent is IAgent, VCVerifier {
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) external {
+  ) external requiresAuth {
     require(isValid(vc, v, r, s), "Invalid VC");
-    _getPool(poolID).borrow(amount, address(this), vc, powerTokenAmount);
+    _getPool(poolID).borrow(amount, vc, powerTokenAmount);
   }
 
   function exit(
@@ -150,12 +150,17 @@ contract Agent is IAgent, VCVerifier {
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) external {
+  ) external requiresAuth {
     require(isValid(vc, v, r, s), "Invalid VC");
     IPool pool = _getPool(poolID);
     uint256 amount = pool.getAgentBorrowed(address(this));
     pool.getAsset().approve(address(pool), amount);
-    pool.exitPool(amount, address(this), vc);
+    pool.exitPool(amount, vc);
+  }
+
+  function makePayment(uint256 poolID, VerifiableCredential memory vc) external requiresAuth {
+    // TODO: validate VC here and pay off all other pools
+    _getPool(poolID).makePayment(address(this), vc);
   }
 
   /*//////////////////////////////////////////////

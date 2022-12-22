@@ -2,6 +2,7 @@
 pragma solidity ^0.8.15;
 
 import "src/MockMiner.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Authority} from "src/Auth/Auth.sol";
 import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
 import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
@@ -64,8 +65,8 @@ contract AgentBasicTest is BaseTest {
         assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_REPAY_SELECTOR));
         assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_MINT_POWER_SELECTOR));
         assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_BURN_POWER_SELECTOR));
-        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_ENABLE_OPERATOR_SELECTOR));
-        assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_DISABLE_OPERATOR_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), ENABLE_OPERATOR_SELECTOR));
+        assertTrue(customAuthority.canCall(address(investor1), address(agent), DISABLE_OPERATOR_SELECTOR));
         // Agent should be able to set roles on its own authorities
         assertTrue(customAuthority.canCall(address(agent), address(customAuthority), AUTH_SET_USER_ROLE_SELECTOR));
 
@@ -79,8 +80,8 @@ contract AgentBasicTest is BaseTest {
         assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_REPAY_SELECTOR));
         assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_MINT_POWER_SELECTOR));
         assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_BURN_POWER_SELECTOR));
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_ENABLE_OPERATOR_SELECTOR));
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), AGENT_DISABLE_OPERATOR_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), ENABLE_OPERATOR_SELECTOR));
+        assertTrue(!customAuthority.canCall(nonOperatorOwner, address(agent), DISABLE_OPERATOR_SELECTOR));
 
         vm.stopPrank();
     }
@@ -237,8 +238,6 @@ contract AgentTest is BaseTest {
             "TEST",
             "TEST",
             ZERO_ADDRESS,
-            ZERO_ADDRESS,
-            address(wFIL),
             ZERO_ADDRESS
         );
         // investor1 stakes 10 FIL
@@ -263,7 +262,6 @@ contract AgentTest is BaseTest {
         agent = _configureAgent(investor2, miner);
     }
 
-    // TODO:
     // function testBorrow() public {
     //     uint256 prevBalance = wFIL.balanceOf(address(agent));
     //     assertEq(prevBalance, 0, "Agents balance should be 0 before borrowing");
@@ -271,7 +269,7 @@ contract AgentTest is BaseTest {
 
     //     (VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) = issueGenericVC(address(agent));
     //     vm.startPrank(investor2);
-    //     agent.borrow(loanAmount, 0, vc, 0, v, r, s);
+      //     agent.borrow(loanAmount, 0, vc, 0, v, r, s);
     //     uint256 currBalance = wFIL.balanceOf(address(agent));
     //     Account memory account = pool.getAccount(address(agent));
     //     vm.roll(account.startEpoch + 1);

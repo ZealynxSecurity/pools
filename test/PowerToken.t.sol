@@ -32,8 +32,6 @@ contract PowerTokenTest is BaseTest {
         "TEST",
         "TEST",
         ZERO_ADDRESS,
-        ZERO_ADDRESS,
-        address(wFIL),
         ZERO_ADDRESS
     );
   }

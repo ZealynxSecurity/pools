@@ -10,9 +10,7 @@ interface IPoolFactory {
   function createPool(
     string memory _name,
     string memory _symbol,
-    address rateModule,
-    address treasury,
-    address asset,
-    address powerToken
+    address operator,
+    address rateModule
   ) external returns (IPool pool);
 }

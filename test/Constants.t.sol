@@ -7,6 +7,7 @@ import {VerifiableCredential, MinerData} from "src/VCVerifier/VCVerifier.sol";
 
 contract ConstantsTest is Test {
   VerifiableCredential vc;
+  MsgSigTester tester;
 
   function setUp() public {
     address issuer = makeAddr("ISSUER");
@@ -20,6 +21,8 @@ contract ConstantsTest is Test {
       block.number + 100,
       miner
     );
+
+    tester = new MsgSigTester();
   }
 
   /**
@@ -38,12 +41,11 @@ contract ConstantsTest is Test {
     assertEq(AGENT_REMOVE_MINER_ADDR_SELECTOR, bytes4(keccak256(bytes("removeMiner(address)"))));
     assertEq(AGENT_REMOVE_MINER_INDEX_SELECTOR, bytes4(keccak256(bytes("removeMiner(uint256)"))));
     assertEq(AGENT_REVOKE_OWNERSHIP_SELECTOR, bytes4(keccak256(bytes("revokeOwnership(address,address)"))));
-    assertEq(AGENT_ENABLE_OPERATOR_SELECTOR, bytes4(keccak256(bytes("enableOperator(address)"))));
-    assertEq(AGENT_DISABLE_OPERATOR_SELECTOR, bytes4(keccak256(bytes("disableOperator(address)"))));
-    assertEq(AGENT_ENABLE_OWNER_SELECTOR, bytes4(keccak256(bytes("enableOwner(address)"))));
-    assertEq(AGENT_DISABLE_OWNER_SELECTOR, bytes4(keccak256(bytes("disableOwner(address)"))));
+    assertEq(ENABLE_OPERATOR_SELECTOR, bytes4(keccak256(bytes("enableOperator(address)"))));
+    assertEq(DISABLE_OPERATOR_SELECTOR, bytes4(keccak256(bytes("disableOperator(address)"))));
+    assertEq(ENABLE_OWNER_SELECTOR, bytes4(keccak256(bytes("enableOwner(address)"))));
+    assertEq(DISABLE_OWNER_SELECTOR, bytes4(keccak256(bytes("disableOwner(address)"))));
     assertEq(AGENT_WITHDRAW_SELECTOR, bytes4(keccak256(bytes("withdrawBalance(address)"))));
-    assertEq(AGENT_BORROW_SELECTOR, bytes4(keccak256(bytes("borrow(uint256,uint256)"))));
     assertEq(AGENT_REPAY_SELECTOR, bytes4(keccak256(bytes("repay(uint256,uint256)"))));
 
     // AGENT FACTORY FUNCTION SIGNATURES
@@ -81,8 +83,6 @@ contract ConstantsTest is Test {
   // array types are harder to encode in the function signature
   // so we make a test contract to return the msg.sig within the call to check against our static values
   function testAddRmMinersFuncSigs() public {
-    MsgSigTester tester = new MsgSigTester();
-
     bytes4 addMinersSig = tester.addMiners(new address[](0));
     bytes4 rmMinersSig = tester.removeMiners(new address[](0));
 
@@ -91,8 +91,6 @@ contract ConstantsTest is Test {
   }
 
   function testMintBurnPower() public {
-    MsgSigTester tester = new MsgSigTester();
-
     bytes4 mintSig = tester.mintPower(0, vc, 0, bytes32(0), bytes32(0));
     bytes4 burnSig = tester.burnPower(0, vc, 0, bytes32(0), bytes32(0));
 
@@ -101,8 +99,6 @@ contract ConstantsTest is Test {
   }
 
   function testPushRoutes() public {
-    MsgSigTester tester = new MsgSigTester();
-
     bytes4 pushRoutesSig = tester.pushRoutes(new string[](0), new address[](0));
     bytes4 pushRoutesSig2 = tester.pushRoutes(new bytes4[](0), new address[](0));
 
@@ -111,19 +107,29 @@ contract ConstantsTest is Test {
   }
 
   function testPoolBorrowFuncSig() public {
-    MsgSigTester tester = new MsgSigTester();
-
-    bytes4 poolBorrowSig = tester.borrow(0, address(0), vc, 0);
-
+    bytes4 poolBorrowSig = tester.borrow(0, vc, 0);
     assertEq(poolBorrowSig, POOL_BORROW_SELECTOR);
   }
 
   function testExitPoolFuncSig() public {
-    MsgSigTester tester = new MsgSigTester();
-
-    bytes4 expitPoolSig = tester.borrow(0, address(0), vc, 0);
-
+    bytes4 expitPoolSig = tester.exit(0, vc, 0, 0x0, 0x0);
     assertEq(expitPoolSig, POOL_EXIT_SELECTOR);
+  }
+
+  function testAgentBorrowFuncSig() public {
+    bytes4 agentBorrowSig = tester.borrow(0, 0, vc, 0, 0, 0x0, 0x0);
+    assertEq(agentBorrowSig, AGENT_BORROW_SELECTOR);
+  }
+
+  function testAgentExitFuncSig() public {
+    bytes4 agentExitSig = tester.exit(0, vc, 0, 0x0, 0x0);
+    assertEq(agentExitSig, AGENT_EXIT_SELECTOR);
+  }
+
+  // NOTE: this func sig is the same for pools and for agents
+  function testMakePayment() public {
+    bytes4 makePmtFuncSig = tester.makePayment(address(0), vc);
+    assertEq(makePmtFuncSig, MAKE_PAYMENT_SELECTOR);
   }
 }
 
@@ -152,10 +158,9 @@ contract MsgSigTester {
     return msg.sig;
   }
 
-  // Finance functions
+  // Pool finance functions
   function borrow(
     uint256,
-    address,
     VerifiableCredential memory,
     uint256
   ) external pure returns (bytes4) {
@@ -164,7 +169,6 @@ contract MsgSigTester {
 
   function exitPool(
     uint256,
-    address,
     VerifiableCredential memory
   ) external pure returns (bytes4) {
     return msg.sig;
@@ -176,8 +180,32 @@ contract MsgSigTester {
   ) external pure returns (bytes4) {
     return msg.sig;
   }
-  // Admin Funcs
+
+  // Pool Admin Funcs
   function flush() external pure returns (bytes4) {
+    return msg.sig;
+  }
+
+  // Agent finance funcs
+  function borrow(
+    uint256,
+    uint256,
+    VerifiableCredential memory,
+    uint256,
+    uint8,
+    bytes32,
+    bytes32
+  ) external pure returns (bytes4) {
+    return msg.sig;
+  }
+
+  function exit(
+    uint256,
+    VerifiableCredential memory,
+    uint8,
+    bytes32,
+    bytes32
+  ) external pure returns (bytes4) {
     return msg.sig;
   }
 }
