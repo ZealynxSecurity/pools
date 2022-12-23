@@ -24,6 +24,14 @@ abstract contract VCVerifier is RouterAware, EIP712 {
   bytes32 public constant _MINER_DATA_TYPE_HASH =
     keccak256(abi.encodePacked(_MINER_DATA_TYPE));
 
+  uint256 latestVCEpochIssued;
+
+  modifier isValidVC(VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) {
+    require(isValid(vc, v, r, s), "Invalid VC");
+    latestVCEpochIssued = vc.epochIssued;
+    _;
+  }
+
   function deriveMinerDataHash(MinerData memory miner) public pure returns(bytes32) {
     return keccak256(abi.encode(
       _MINER_DATA_TYPE_HASH,
@@ -74,6 +82,7 @@ abstract contract VCVerifier is RouterAware, EIP712 {
     // TODO: Verify this check is not needed - if another agent tried to use a credential, the recovered issuer would come back wrong
     require(vc.subject == address(this), "VCVerifier: VC not issued to this contract");
     require(block.number >= vc.epochIssued && block.number <= vc.epochValidUntil, "Verifiable Credential not in valid epoch range");
+    require(vc.epochIssued > latestVCEpochIssued, "VCVerifier: VC issued in the past");
 
     return true;
   }

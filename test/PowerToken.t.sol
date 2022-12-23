@@ -44,6 +44,9 @@ contract PowerTokenTest is BaseTest {
     uint256 bal = powerToken.balanceOf(address(agent));
     assertEq(bal, vc.miner.qaPower, "agent should have 10e18 power tokens");
 
+    // issue new vc at newer block
+    vm.roll(block.number + 1);
+    (vc, v, r, s) = issueGenericVC(address(agent));
     vm.prank(agentOwner);
     agent.burnPower(vc.miner.qaPower, vc, v, r, s);
 

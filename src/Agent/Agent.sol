@@ -106,17 +106,15 @@ contract Agent is IAgent, VCVerifier {
                 POWER TOKEN FUNCTIONS
   //////////////////////////////////////////////////*/
 
-  function mintPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external requiresAuth {
+  function mintPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external requiresAuth isValidVC(vc, v, r, s) {
     require(!redZone, "Agent: Cannot mint power while Agent is in the red zone");
-    require(isValid(vc, v, r, s), "Invalid VC");
     require(vc.miner.qaPower >= powerTokensMinted + amount, "Cannot mint more power than the miner has");
 
     IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN)).mint(amount);
     powerTokensMinted += amount;
   }
 
-  function burnPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external requiresAuth {
-    require(isValid(vc, v, r, s), "Invalid VC");
+  function burnPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external requiresAuth isValidVC(vc, v, r, s) {
     IERC20 powerToken = IERC20(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
     require(amount <= powerToken.balanceOf(address(this)), "Agent: Cannot burn more power than the agent holds");
 
@@ -139,8 +137,7 @@ contract Agent is IAgent, VCVerifier {
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) external requiresAuth {
-    require(isValid(vc, v, r, s), "Invalid VC");
+  ) external requiresAuth isValidVC(vc, v, r, s) {
     _getPool(poolID).borrow(amount, vc, powerTokenAmount);
   }
 
@@ -150,8 +147,7 @@ contract Agent is IAgent, VCVerifier {
     uint8 v,
     bytes32 r,
     bytes32 s
-  ) external requiresAuth {
-    require(isValid(vc, v, r, s), "Invalid VC");
+  ) external requiresAuth isValidVC(vc, v, r, s) {
     IPool pool = _getPool(poolID);
     uint256 amount = pool.getAgentBorrowed(address(this));
     pool.getAsset().approve(address(pool), amount);

@@ -8,6 +8,10 @@ import "src/VCVerifier/VCVerifier.sol";
 import "./BaseTest.sol";
 
 contract VCVerifierMock is VCVerifier {
+  function _cacheLastValidEpoch(uint256 epoch) public {
+    latestVCEpochIssued = epoch;
+  }
+
   constructor(
     address _router,
     string memory verifiedName,
@@ -93,6 +97,24 @@ contract VCVerifierTest is BaseTest {
     // NOTE - this test fails with "mismatching issuer"
     // because ECRecover won't recover the right result with the wrong subject
     vm.expectRevert("VCVerifier: Mismatching issuer");
+    vcv.isValid(vc, v, r, s);
+  }
+
+  function testIsValidWithStaleVC() public {
+    (
+      VerifiableCredential memory vc,
+      uint8 v, bytes32 r, bytes32 s
+    ) = issueGenericVC(address(vcv));
+
+    // fast foward time to issue a new vc that gets cached
+    vm.roll(block.number + 100);
+
+    (
+      VerifiableCredential memory newVC,,,
+    ) = issueGenericVC(address(vcv));
+    vcv._cacheLastValidEpoch(newVC.epochIssued);
+
+    vm.expectRevert("VCVerifier: VC issued in the past");
     vcv.isValid(vc, v, r, s);
   }
 }
