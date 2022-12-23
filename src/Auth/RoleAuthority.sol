@@ -87,9 +87,7 @@ library RoleAuthority {
   function initPowerTokenRoles(
     address router,
     address powerToken,
-    address powerTokenAdmin,
-    // the agentFactory must be able to set AGENT role on the power token
-    address agentFactory
+    address powerTokenAdmin
   ) internal {
     // calling contract starts as the owner of the sub authority so we can add roles and capabilities
     MultiRolesAuthority subAuthority = newMultiRolesAuthority(address(this), Authority(address(0)));
@@ -97,17 +95,11 @@ library RoleAuthority {
 
     // set necessary roles
     subAuthority.setUserRole(powerTokenAdmin, ROLE_POWER_TOKEN_ADMIN, true);
-    subAuthority.setUserRole(agentFactory, ROLE_AGENT_FACTORY, true);
 
     // set necessary role capabilities
     // Power token admin can pause/unpause the contract
-    subAuthority.setRoleCapability(ROLE_POWER_TOKEN_ADMIN, POWER_TOKEN_PAUSE_SELECTOR, true);
-    subAuthority.setRoleCapability(ROLE_POWER_TOKEN_ADMIN, POWER_TOKEN_RESUME_SELECTOR, true);
-    subAuthority.setRoleCapability(ROLE_AGENT_FACTORY, AUTH_SET_USER_ROLE_SELECTOR, true);
-
-    // Agents can mint/burn power tokens
-    subAuthority.setRoleCapability(ROLE_AGENT, POWER_TOKEN_MINT_SELECTOR, true);
-    subAuthority.setRoleCapability(ROLE_AGENT, POWER_TOKEN_BURN_SELECTOR, true);
+    subAuthority.setRoleCapability(ROLE_POWER_TOKEN_ADMIN, PAUSE_SELECTOR, true);
+    subAuthority.setRoleCapability(ROLE_POWER_TOKEN_ADMIN, RESUME_SELECTOR, true);
 
     // change the owner of the sub authority to the power token admin
     subAuthority.transferOwnership(powerTokenAdmin);
@@ -153,7 +145,6 @@ library RoleAuthority {
     address router,
     address agent,
     address operator,
-    address powerToken,
     address vcIssuer,
     address minerRegistry
     ) internal {
@@ -162,10 +153,6 @@ library RoleAuthority {
 
       // the miner registry's Authority must know about this agent
       IMultiRolesAuthority(address(getSubAuthority(router, minerRegistry)))
-      .setUserRole(agent, ROLE_AGENT, true);
-
-      // the power token's Authority must know about this agent too
-      IMultiRolesAuthority(address(getSubAuthority(router, powerToken)))
       .setUserRole(agent, ROLE_AGENT, true);
 
       // the agent is a VCVerifier, which needs to know who is the VC_ISSUER

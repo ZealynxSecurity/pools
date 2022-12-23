@@ -47,6 +47,8 @@ Two routes should be called special attention to:
 1. `AUTH_SET_USER_ROLE_SELECTOR` - if a role has this capability, it can add roles for other users to the given authority.
 2. `AUTH_SET_TARGET_CUSTOM_AUTHORITY_SELECTOR` - if a role has this capability, it can add custom authorities for targets to the given authority. This is primarily used by the factories, so they can assign new custom targets for each custom authority they deploy for each agent/pool.
 
+Also note that any ROLE with a * next to it, is enforced outside the MultiRolesAuthority system. For instance, a few contracts require an `onlyAgent` modifier, which instead of using the roles system, just checks the agent against the agent factory contract.
+
 
 
 | Authority | Role       | Capabilities (each capability corresponds to 1 function call) |
@@ -59,9 +61,8 @@ Two routes should be called special attention to:
 |**Miner Registry** | ROLE_MINER_REGISTRY_ADMIN | - OWNER |
 |**Miner Registry** | ROLE_AGENT_FACTORY | - AUTH_SET_USER_ROLE_SELECTOR |
 |**Miner Registry** | ROLE_AGENT | - MINER_REGISTRY_ADD_MINER_SELECTOR<br /> - MINER_REGISTRY_RM_MINER_SELECTOR<br /> - MINER_REGISTRY_ADD_MINERS_SELECTOR<br /> - MINER_REGISTRY_RM_MINERS_SELECTOR |
-| **Power Token** | ROLE_POWER_TOKEN_ADMIN | - OWNER (not full access)<br /> - POWER_TOKEN_PAUSE_SELECTOR<br /> - POWER_TOKEN_RESUME_SELECTOR |
-| **Power Token** | ROLE_AGENT_FACTORY | - AUTH_SET_USER_ROLE_SELECTOR |
-| **Power Token** | ROLE_AGENT | - POWER_TOKEN_MINT_SELECTOR<br />- POWER_TOKEN_BURN_SELECTOR |
+| **Power Token** | ROLE_POWER_TOKEN_ADMIN | - OWNER (not full access)<br /> - PAUSE_SELECTOR<br /> - RESUME_SELECTOR |
+| **Power Token** | ROLE_AGENT* | - POWER_TOKEN_MINT_SELECTOR<br />- POWER_TOKEN_BURN_SELECTOR |
 | **Agent** | ROLE_VC_ISSUER | - ISSUE OFF-CHAIN VERIFIABLE CREDENTIALS |
 | **Agent** | ROLE_AGENT_OPERATOR |  - AGENT_ADD_MINER_SELECTOR<br /> - AGENT_REMOVE_MINER_ADDR_SELECTOR<br /> - AGENT_REMOVE_MINER_INDEX_SELECTOR<br /> - AGENT_REVOKE_OWNERSHIP_SELECTOR<br /> - AGENT_MINT_POWER_SELECTOR<br /> - AGENT_BURN_POWER_SELECTOR<br /> - AGENT_WITHDRAW_SELECTOR<br /> - AGENT_BORROW_SELECTOR<br /> - AGENT_REPAY_SELECTOR<br /> - AGENT_MINT_POWER_SELECTOR<br /> - AGENT_BURN_POWER_SELECTOR<br /> |
 | **Agent** | ROLE_AGENT_OWNER | - ENABLE_OPERATOR_SELECTOR<br /> - DISABLE_OPERATOR_SELECTOR<br /> - AGENT_ADD_MINER_SELECTOR<br /> - AGENT_REMOVE_MINER_ADDR_SELECTOR<br /> - AGENT_REMOVE_MINER_INDEX_SELECTOR<br /> - AGENT_REVOKE_OWNERSHIP_SELECTOR<br /> - AGENT_MINT_POWER_SELECTOR<br /> - AGENT_BURN_POWER_SELECTOR<br /> - AGENT_WITHDRAW_SELECTOR<br /> - AGENT_BORROW_SELECTOR<br /> - AGENT_REPAY_SELECTOR<br /> - AGENT_MINT_POWER_SELECTOR<br /> - AGENT_BURN_POWER_SELECTOR<br /> |

@@ -31,8 +31,7 @@ library Deployer {
     RoleAuthority.initPowerTokenRoles(
       address(router),
       IRouter(router).getRoute(ROUTE_POWER_TOKEN),
-      IRouter(router).getRoute(ROUTE_POWER_TOKEN_ADMIN),
-      IRouter(router).getRoute(ROUTE_AGENT_FACTORY)
+      IRouter(router).getRoute(ROUTE_POWER_TOKEN_ADMIN)
     );
 
     RoleAuthority.initRouterRoles(

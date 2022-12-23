@@ -78,6 +78,9 @@ contract ConstantsTest is Test {
 
     // POOL ADMIN FUNCTION SIGNATURES
     assertEq(POOL_FLUSH_SELECTOR, bytes4(keccak256(bytes("flush()"))));
+
+    assertEq(PAUSE_SELECTOR, bytes4(keccak256(bytes("pause()"))));
+    assertEq(RESUME_SELECTOR, bytes4(keccak256(bytes("resume()"))));
   }
 
   // array types are harder to encode in the function signature

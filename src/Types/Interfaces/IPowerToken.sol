@@ -53,7 +53,6 @@ interface IPowerToken {
      * Emits a {Transfer} event.
      */
     function transfer(address to, uint256 amount) external returns (bool);
-    function safeTransfer(address to, uint256 amount) external returns (bool);
 
     /**
      * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
@@ -70,7 +69,6 @@ interface IPowerToken {
      * Emits an {Approval} event.
      */
     function approve(address spender, uint256 amount) external returns (bool);
-    function safeApprove(address spender, uint256 amount) external returns (bool);
 
 
     /**
@@ -83,11 +81,6 @@ interface IPowerToken {
      * Emits a {Transfer} event.
      */
     function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) external returns (bool);
-    function safeTransferFrom(
         address from,
         address to,
         uint256 amount

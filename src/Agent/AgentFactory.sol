@@ -29,7 +29,6 @@ contract AgentFactory is RouterAware {
       router,
       address(agent),
       operator,
-      IRouter(router).getRoute(ROUTE_POWER_TOKEN),
       IRouter(router).getRoute(ROUTE_VC_ISSUER),
       IRouter(router).getRoute(ROUTE_MINER_REGISTRY)
     );
