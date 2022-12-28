@@ -7,6 +7,4 @@ interface IStats {
 
   function hasPenalties(address agent) external returns (bool);
   function hasPenalties(address agent, uint256 poolID) external returns (bool);
-
-  function isAgent(address agent) external returns (bool);
 }

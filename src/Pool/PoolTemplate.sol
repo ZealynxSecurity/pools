@@ -5,11 +5,10 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
-import {Agent} from "src/Agent/Agent.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
 
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
@@ -19,7 +18,7 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {ROLE_POOL_OPERATOR, ROLE_POOL_OWNER} from "src/Constants/Roles.sol";
+import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
 
 /// NOTE: this pool uses accrual basis accounting to compute share prices
@@ -44,13 +43,13 @@ contract PoolTemplate is IPool, RouterAware, ERC4626 {
     //////////////////////////////////////*/
 
     modifier requiresAuth() {
-        require(RoleAuthority.canCallSubAuthority(router, address(this)), "Pool: Not authorized");
+        require(AuthController.canCallSubAuthority(router, address(this)), "Pool: Not authorized");
         _;
     }
 
     modifier onlyAgent(address caller) {
         require(
-            IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY)).agents(caller),
+            IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY)).isAgent(caller),
             "Pool: Caller is not an agent"
         );
         _;
@@ -78,6 +77,7 @@ contract PoolTemplate is IPool, RouterAware, ERC4626 {
     /*////////////////////////////////////////////////////////
                       Pool Borrowing Functions
     ////////////////////////////////////////////////////////*/
+
     function getAgentBorrowed(address agent) public view returns (uint256) {
         return accounts[agent].totalBorrowed;
     }
@@ -112,26 +112,26 @@ contract PoolTemplate is IPool, RouterAware, ERC4626 {
 
     function enableOperator(address newOperator) external requiresAuth {
         IMultiRolesAuthority(
-            address(RoleAuthority.getSubAuthority(router, address(this)))
-        ).setUserRole(newOperator, ROLE_POOL_OPERATOR, true);
+            address(AuthController.getSubAuthority(router, address(this)))
+        ).setUserRole(newOperator, uint8(Roles.ROLE_POOL_OPERATOR), true);
     }
 
     function disableOperator(address operator) external requiresAuth {
         IMultiRolesAuthority(
-            address(RoleAuthority.getSubAuthority(router, address(this)))
-        ).setUserRole(operator, ROLE_POOL_OPERATOR, false);
+            address(AuthController.getSubAuthority(router, address(this)))
+        ).setUserRole(operator, uint8(Roles.ROLE_POOL_OPERATOR), false);
     }
 
     function enableOwner(address newOwner) external requiresAuth {
         IMultiRolesAuthority(
-            address(RoleAuthority.getSubAuthority(router, address(this)))
-        ).setUserRole(newOwner, ROLE_POOL_OWNER, true);
+            address(AuthController.getSubAuthority(router, address(this)))
+        ).setUserRole(newOwner, uint8(Roles.ROLE_POOL_OWNER), true);
     }
 
     function disableOwner(address owner) external requiresAuth {
         IMultiRolesAuthority(
-            address(RoleAuthority.getSubAuthority(router, address(this)))
-        ).setUserRole(owner, ROLE_POOL_OWNER, false);
+            address(AuthController.getSubAuthority(router, address(this)))
+        ).setUserRole(owner, uint8(Roles.ROLE_POOL_OWNER), false);
     }
 
     function borrow(
@@ -192,16 +192,29 @@ contract PoolTemplate is IPool, RouterAware, ERC4626 {
         uint256 newPowerTokenAmount = account.powerTokensStaked - powerTokenAmount;
         // Get the new rate from the rate module
         uint256 _pmtPerPeriod = IRateModule(rateModule).getRate(vc, account.powerTokensStaked - powerTokenAmount);
-        // Update the account information
-        accounts[msg.sender] = Account(
-            account.startEpoch,
-            _pmtPerPeriod,
-            newPowerTokenAmount,
-            account.totalBorrowed - amount,
-            account.nextDueDate
-        );
 
         totalBorrowed -= amount;
+        if (totalBorrowed == 0) {
+            // if account is paid off, reset account info
+            accounts[msg.sender] = Account(
+                0,
+                0,
+                0,
+                0,
+                0
+            );
+
+        } else {
+            // else handle a partial payment
+            accounts[msg.sender] = Account(
+                account.startEpoch,
+                _pmtPerPeriod,
+                newPowerTokenAmount,
+                account.totalBorrowed - amount,
+                account.nextDueDate
+            );
+
+        }
         // Return the power tokens to the agent
         getPowerToken().transfer(msg.sender, powerTokenAmount);
     }

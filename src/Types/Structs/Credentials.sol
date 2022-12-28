@@ -23,3 +23,10 @@ struct VerifiableCredential {
   uint256 epochValidUntil;
   MinerData miner;
 }
+
+struct SignedCredential {
+  VerifiableCredential vc;
+  uint8 v;
+  bytes32 r;
+  bytes32 s;
+}

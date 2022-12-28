@@ -3,7 +3,171 @@ pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
 import "src/Constants/FuncSigs.sol";
-import {VerifiableCredential, MinerData} from "src/VCVerifier/VCVerifier.sol";
+import "src/Types/Structs/Filecoin.sol";
+import {VerifiableCredential, MinerData, SignedCredential} from "src/VCVerifier/VCVerifier.sol";
+import {AgentSigTester} from "./helpers/AgentTester.sol";
+
+contract AgentConstantsTest is Test {
+  SignedCredential sc;
+  AgentSigTester tester;
+
+  function setUp() public {
+    address issuer = makeAddr("ISSUER");
+
+    MinerData memory miner = MinerData(1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
+
+   VerifiableCredential memory vc = VerifiableCredential(
+      issuer,
+      makeAddr("SUBJECT"),
+      block.number,
+      block.number + 100,
+      miner
+    );
+
+    sc = SignedCredential(vc, 0, 0x0, 0x0);
+
+    tester = new AgentSigTester();
+  }
+
+  function testAddMiners() public {
+    bytes4 funcSig = tester.addMiners(new address[](0));
+    assertEq(funcSig, AGENT_ADD_MINERS_SELECTOR);
+  }
+
+  function testRemoveMiner() public {
+    bytes4 funcSig = tester.removeMiner(
+      makeAddr("MINER"),
+      makeAddr("OWNER"),
+      sc
+    );
+    assertEq(funcSig, AGENT_REMOVE_MINER_SELECTOR);
+  }
+
+  function testChangeMinerWorker() public {
+    bytes4 funcSig = tester.changeMinerWorker(
+      makeAddr("MINER"),
+      ChangeWorkerAddressParams(
+        bytes(""),
+        new bytes[](0)
+      )
+    );
+    assertEq(funcSig, AGENT_CHANGE_MINER_WORKER_SELECTOR);
+  }
+
+  function testChangeMultiaddrs() public {
+    bytes4 funcSig = tester.changeMultiaddrs(
+      makeAddr("MINER"),
+      ChangeMultiaddrsParams(
+        new bytes[](0)
+      )
+    );
+    assertEq(funcSig, AGENT_CHANGE_MINER_MULTIADDRS_SELECTOR);
+  }
+
+  function testChangePeerID() public {
+    bytes4 funcSig = tester.changePeerID(
+      makeAddr("MINER"),
+      ChangePeerIDParams(
+        bytes("")
+      )
+    );
+    assertEq(funcSig, AGENT_CHANGE_MINER_PEERID_SELECTOR);
+  }
+
+  function testSetOperator() public {
+    bytes4 funcSig = tester.setOperatorRole(
+      makeAddr("OPERATOR"),
+      true
+    );
+    assertEq(funcSig, SET_OPERATOR_ROLE_SELECTOR);
+  }
+
+  function testSetOwner() public {
+    bytes4 funcSig = tester.setOwnerRole(
+      makeAddr("OWNER"),
+      true
+    );
+    assertEq(funcSig, SET_OWNER_ROLE_SELECTOR);
+  }
+
+  function testMintPower() public {
+    bytes4 funcSig = tester.mintPower(
+      0,
+      sc
+    );
+    assertEq(funcSig, AGENT_MINT_POWER_SELECTOR);
+  }
+
+  function testBurnPower() public {
+    bytes4 funcSig = tester.burnPower(
+      0,
+      sc
+    );
+    assertEq(funcSig, AGENT_BURN_POWER_SELECTOR);
+  }
+
+  function testWithdrawBalance() public {
+    bytes4 funcSig = tester.withdrawBalance(
+      address(0),
+      0
+    );
+    assertEq(funcSig, AGENT_WITHDRAW_SELECTOR);
+  }
+
+  function testWithdrawBalanceWithCred() public {
+    bytes4 funcSig = tester.withdrawBalance(
+      address(0),
+      0,
+      sc
+    );
+    assertEq(funcSig, AGENT_WITHDRAW_WITH_CRED_SELECTOR);
+  }
+
+  function testPullFundsFromMiners() public {
+    bytes4 funcSig = tester.pullFundsFromMiners(
+      new address[](0),
+      new uint256[](0)
+    );
+    assertEq(funcSig, AGENT_PULL_FUNDS_SELECTOR);
+  }
+
+  function testPushFundsToMiners() public {
+    bytes4 funcSig = tester.pushFundsToMiners(
+      new address[](0),
+      new uint256[](0)
+    );
+    assertEq(funcSig, AGENT_PUSH_FUNDS_SELECTOR);
+  }
+
+  function testBorrow() public {
+    bytes4 funcSig = tester.borrow(
+      0,
+      0,
+      sc,
+      0
+    );
+
+    assertEq(funcSig, AGENT_BORROW_SELECTOR);
+  }
+
+  function testExit() public {
+    bytes4 funcSig = tester.exit(
+      0,
+      0,
+      sc
+    );
+    assertEq(funcSig, AGENT_EXIT_SELECTOR);
+  }
+
+  function testMakePayments() public {
+    bytes4 funcSig = tester.makePayments(
+      new uint256[](0),
+      new uint256[](0),
+      sc
+    );
+    assertEq(funcSig, AGENT_MAKE_PAYMENTS_SELECTOR);
+  }
+}
 
 contract ConstantsTest is Test {
   VerifiableCredential vc;
@@ -25,6 +189,7 @@ contract ConstantsTest is Test {
     tester = new MsgSigTester();
   }
 
+
   /**
    * @dev Function signatures _must_ match the msg.sig value inside the function being called
    * This test could be beefed up to call a fake interface with the same function signature
@@ -36,18 +201,6 @@ contract ConstantsTest is Test {
     assertEq(ROUTER_PUSH_ROUTE_BYTES_SELECTOR, bytes4(keccak256(bytes("pushRoute(bytes4,address)"))));
     assertEq(ROUTER_PUSH_ROUTE_STRING_SELECTOR, bytes4(keccak256(bytes("pushRoute(string,address)"))));
 
-    // AGENT FUNCTION SIGNATURES
-    assertEq(AGENT_ADD_MINER_SELECTOR, bytes4(keccak256(bytes("addMiner(address)"))));
-    assertEq(AGENT_REMOVE_MINER_ADDR_SELECTOR, bytes4(keccak256(bytes("removeMiner(address)"))));
-    assertEq(AGENT_REMOVE_MINER_INDEX_SELECTOR, bytes4(keccak256(bytes("removeMiner(uint256)"))));
-    assertEq(AGENT_REVOKE_OWNERSHIP_SELECTOR, bytes4(keccak256(bytes("revokeOwnership(address,address)"))));
-    assertEq(ENABLE_OPERATOR_SELECTOR, bytes4(keccak256(bytes("enableOperator(address)"))));
-    assertEq(DISABLE_OPERATOR_SELECTOR, bytes4(keccak256(bytes("disableOperator(address)"))));
-    assertEq(ENABLE_OWNER_SELECTOR, bytes4(keccak256(bytes("enableOwner(address)"))));
-    assertEq(DISABLE_OWNER_SELECTOR, bytes4(keccak256(bytes("disableOwner(address)"))));
-    assertEq(AGENT_WITHDRAW_SELECTOR, bytes4(keccak256(bytes("withdrawBalance(address)"))));
-    assertEq(AGENT_REPAY_SELECTOR, bytes4(keccak256(bytes("repay(uint256,uint256)"))));
-
     // AGENT FACTORY FUNCTION SIGNATURES
     assertEq(AGENT_FACTORY_SET_VERIFIER_NAME_SELECTOR, bytes4(keccak256(bytes("setVerifierName(string,string)"))));
 
@@ -58,10 +211,6 @@ contract ConstantsTest is Test {
     // AUTH FUNCTION SIGNATURES
     assertEq(AUTH_SET_USER_ROLE_SELECTOR, bytes4(keccak256(bytes("setUserRole(address,uint8,bool)"))));
     assertEq(AUTH_SET_TARGET_CUSTOM_AUTHORITY_SELECTOR, bytes4(keccak256(bytes("setTargetCustomAuthority(address,address)"))));
-
-    // POWER TOKEN FUNCTION SIGNATURES
-    assertEq(POWER_TOKEN_MINT_SELECTOR, bytes4(keccak256(bytes("mint(uint256)"))));
-    assertEq(POWER_TOKEN_BURN_SELECTOR, bytes4(keccak256(bytes("burn(uint256)"))));
 
     // ERC20 FUNCTION SIGNATURES
     assertEq(ERC20_TRANSFER_SELECTOR, bytes4(keccak256(bytes("transfer(address,uint256)"))));
@@ -93,14 +242,6 @@ contract ConstantsTest is Test {
     assertEq(rmMinersSig, MINER_REGISTRY_RM_MINERS_SELECTOR);
   }
 
-  function testMintBurnPower() public {
-    bytes4 mintSig = tester.mintPower(0, vc, 0, bytes32(0), bytes32(0));
-    bytes4 burnSig = tester.burnPower(0, vc, 0, bytes32(0), bytes32(0));
-
-    assertEq(mintSig, AGENT_MINT_POWER_SELECTOR);
-    assertEq(burnSig, AGENT_BURN_POWER_SELECTOR);
-  }
-
   function testPushRoutes() public {
     bytes4 pushRoutesSig = tester.pushRoutes(new string[](0), new address[](0));
     bytes4 pushRoutesSig2 = tester.pushRoutes(new bytes4[](0), new address[](0));
@@ -115,26 +256,11 @@ contract ConstantsTest is Test {
   }
 
   function testExitPoolFuncSig() public {
-    bytes4 expitPoolSig = tester.exit(0, vc, 0, 0x0, 0x0);
+    bytes4 expitPoolSig = tester.exitPool(0, vc);
     assertEq(expitPoolSig, POOL_EXIT_SELECTOR);
   }
-
-  function testAgentBorrowFuncSig() public {
-    bytes4 agentBorrowSig = tester.borrow(0, 0, vc, 0, 0, 0x0, 0x0);
-    assertEq(agentBorrowSig, AGENT_BORROW_SELECTOR);
-  }
-
-  function testAgentExitFuncSig() public {
-    bytes4 agentExitSig = tester.exit(0, vc, 0, 0x0, 0x0);
-    assertEq(agentExitSig, AGENT_EXIT_SELECTOR);
-  }
-
-  // NOTE: this func sig is the same for pools and for agents
-  function testMakePayment() public {
-    bytes4 makePmtFuncSig = tester.makePayment(address(0), vc);
-    assertEq(makePmtFuncSig, MAKE_PAYMENT_SELECTOR);
-  }
 }
+
 
 contract MsgSigTester {
   function addMiners(address[] calldata) external pure returns (bytes4) {
@@ -142,14 +268,6 @@ contract MsgSigTester {
   }
 
   function removeMiners(address[] calldata) external pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  function mintPower(uint256, VerifiableCredential memory, uint8, bytes32, bytes32) public pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  function burnPower(uint256, VerifiableCredential memory, uint8, bytes32, bytes32) public pure returns (bytes4) {
     return msg.sig;
   }
 
@@ -186,29 +304,6 @@ contract MsgSigTester {
 
   // Pool Admin Funcs
   function flush() external pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  // Agent finance funcs
-  function borrow(
-    uint256,
-    uint256,
-    VerifiableCredential memory,
-    uint256,
-    uint8,
-    bytes32,
-    bytes32
-  ) external pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  function exit(
-    uint256,
-    VerifiableCredential memory,
-    uint8,
-    bytes32,
-    bytes32
-  ) external pure returns (bytes4) {
     return msg.sig;
   }
 }

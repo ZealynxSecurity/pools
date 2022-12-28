@@ -15,18 +15,18 @@ contract MockMinerTest is Test {
       assertEq(miner.unlockDuration(), 100);
       assertEq(miner.unlockAmount(), 100);
       assertEq(address(miner).balance, 100);
-      assertEq(address(this), miner.currentOwner());
+      assertEq(address(this), miner.get_owner(address(miner)));
     }
 
     function testChangeOwner() public {
       address bob = address(0x1);
-      miner.changeOwnerAddress(bob);
+      miner.change_owner_address(address(miner), bob);
       // become bob
       vm.startPrank(bob);
       // call changeOwnerAddress as bob
-      miner.changeOwnerAddress(bob);
-      assertEq(bob, miner.currentOwner());
-      assertEq(address(0), miner.nextOwner());
+      miner.change_owner_address(address(miner), bob);
+      assertEq(bob,  miner.get_owner(address(miner)));
+      assertEq(address(0), miner.next_owner(address(miner)));
     }
 
     function testAmountLocked() public {
@@ -50,9 +50,9 @@ contract MockMinerTest is Test {
       require(alice.balance == 0);
 
       // change the owner so we can withdraw balance to fresh address
-      miner.changeOwnerAddress(alice);
+      miner.change_owner_address(address(miner), alice);
       vm.startPrank(alice);
-      miner.changeOwnerAddress(alice);
+      miner.change_owner_address(address(miner), alice);
 
       uint256 initialBalance = alice.balance;
       miner.withdrawBalance(0);

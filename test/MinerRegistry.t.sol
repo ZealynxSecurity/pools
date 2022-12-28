@@ -18,26 +18,16 @@ contract MinerRegistryTest is BaseTest {
   }
 
   function testAddMiner() public {
-    (, MockMiner miner) = configureAgent(agentOwner);
-    assertTrue(registry.minerRegistered(address(miner)), "Miner not registered");
+    (Agent agent, MockMiner miner) = configureAgent(agentOwner);
+    assertTrue(registry.minerRegistered(agent.id(), address(miner)), "Miner not registered");
   }
 
   function testAddMiners() public {
     (Agent agent,) = configureAgent(agentOwner);
     vm.prank(address(agent));
     registry.addMiners(miners);
-    assertTrue(registry.minerRegistered(address(miner1)), "Miner 1 not registered");
-    assertTrue(registry.minerRegistered(address(miner2)), "Miner 2 not registered");
-  }
-
-  function testRmMiners() public {
-    (Agent agent,) = configureAgent(agentOwner);
-    vm.startPrank(address(agent));
-    registry.addMiners(miners);
-    registry.removeMiners(miners);
-    vm.stopPrank();
-    assertTrue(!registry.minerRegistered(address(miner1)), "Miner 1 not removed");
-    assertTrue(!registry.minerRegistered(address(miner2)), "Miner 2 not removed");
+    assertTrue(registry.minerRegistered(agent.id(), address(miner1)), "Miner 1 not registered");
+    assertTrue(registry.minerRegistered(agent.id(), address(miner2)), "Miner 2 not registered");
   }
 
   function testRmMiner() public {
@@ -46,27 +36,27 @@ contract MinerRegistryTest is BaseTest {
     registry.addMiners(miners);
     registry.removeMiner(miner1);
     vm.stopPrank();
-    assertTrue(!registry.minerRegistered(address(miner1)), "Miner 1 not removed");
-    assertTrue(registry.minerRegistered(address(miner2)), "Miner 2 wrongly removed");
+    assertTrue(!registry.minerRegistered(agent.id(), address(miner1)), "Miner 1 not removed");
+    assertTrue(registry.minerRegistered(agent.id(), address(miner2)), "Miner 2 wrongly removed");
   }
 
   function testNonAgentAddMiner() public {
-    vm.expectRevert("MinerRegistry: Not authorized");
+    vm.expectRevert("onlyAgent: Not authorized");
     registry.addMiner(miner1);
   }
 
   function testNonAgentAddMiners() public {
-    vm.expectRevert("MinerRegistry: Not authorized");
+    vm.expectRevert("onlyAgent: Not authorized");
     registry.addMiner(miner1);
   }
 
   function testNonAgentRmMiners() public {
-    vm.expectRevert("MinerRegistry: Not authorized");
+    vm.expectRevert("onlyAgent: Not authorized");
     registry.removeMiners(miners);
   }
 
   function testNonAgentRmMiner() public {
-    vm.expectRevert("MinerRegistry: Not authorized");
+    vm.expectRevert("onlyAgent: Not authorized");
     registry.removeMiner(miner1);
   }
 }

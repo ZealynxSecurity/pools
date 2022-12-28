@@ -2,17 +2,30 @@
 pragma solidity ^0.8.15;
 
 import {RouterAware} from "src/Router/RouterAware.sol";
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
+import {Auth} from "src/Auth/Auth.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
+import {ROUTE_AGENT_FACTORY} from "src/Constants/Routes.sol";
 
-contract MinerRegistry is RouterAware {
-  mapping(address => bool) public minerRegistered;
+contract MinerRegistry is IMinerRegistry, RouterAware {
+  // maps agent ID => miner => registered status
+  mapping(uint256 => mapping(address => bool)) public minerRegistered;
 
   /*///////////////////////////////////////////////////////////////
                             MODIFIERS
   //////////////////////////////////////////////////////////////*/
 
-  modifier requiresAuth() virtual {
-    require(RoleAuthority.canCallSubAuthority(router, address(this)), "MinerRegistry: Not authorized");
+  modifier requiresAuth {
+    AuthController.requiresSubAuth(router, address(this));
+    _;
+  }
+
+  modifier onlyAgent {
+    AuthController.onlyAgent(router, msg.sender);
     _;
   }
 
@@ -20,39 +33,47 @@ contract MinerRegistry is RouterAware {
                     REGISTRY STATE MUTATING FUNCS
   //////////////////////////////////////////////////////////////*/
 
-  function addMiners(address[] calldata miners) external requiresAuth {
-    for (uint256 i = 0; i < miners.length; i++) {
+  function addMiners(address[] calldata miners) external onlyAgent {
+    for (uint256 i = 0; i < miners.length; ++i) {
       _addMiner(miners[i]);
     }
   }
 
-  function removeMiners(address[] calldata miners) external requiresAuth {
-    for (uint256 i = 0; i < miners.length; i++) {
+  function removeMiners(address[] calldata miners) external onlyAgent {
+    for (uint256 i = 0; i < miners.length; ++i) {
       _removeMiner(miners[i]);
     }
   }
 
-  function addMiner(address miner) external requiresAuth {
-    require(minerRegistered[miner] == false, "Miner already registered");
-    minerRegistered[miner] = true;
+  function addMiner(address miner) external onlyAgent {
+    _addMiner(miner);
   }
 
-  function removeMiner(address miner) external requiresAuth {
-    require(minerRegistered[miner] == true, "Miner not registered");
-    minerRegistered[miner] = false;
+  function removeMiner(address miner) external onlyAgent {
+    _removeMiner(miner);
   }
 
   /*///////////////////////////////////////////////////////////////
                           INTERNAL FUNCS
   //////////////////////////////////////////////////////////////*/
 
+  function _getIDFromAgent(address agent) internal view returns (uint256) {
+    return IAgent(agent).id();
+  }
+
   function _addMiner(address miner) internal {
-    require(minerRegistered[miner] == false, "Miner already registered");
-    minerRegistered[miner] = true;
+    uint256 id = _getIDFromAgent(msg.sender);
+    require(minerRegistered[id][miner] == false, "Miner already registered");
+    minerRegistered[id][miner] = true;
+
+    emit AddMiner(msg.sender, miner);
   }
 
   function _removeMiner(address miner) internal {
-    require(minerRegistered[miner] == true, "Miner not registered");
-    minerRegistered[miner] = false;
+    uint256 id = _getIDFromAgent(msg.sender);
+    require(minerRegistered[id][miner], "Miner not registered");
+    minerRegistered[id][miner] = false;
+
+    emit RemoveMiner(msg.sender, miner);
   }
 }

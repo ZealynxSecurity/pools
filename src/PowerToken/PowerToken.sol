@@ -4,13 +4,14 @@ pragma solidity ^0.8.15;
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {ROUTE_POOL_FACTORY, ROUTE_AGENT_FACTORY} from "src/Constants/Routes.sol";
+import {GetRoute} from "src/Router/GetRoute.sol";
 
 contract PowerToken is
   IPowerToken,
@@ -26,41 +27,22 @@ contract PowerToken is
     //////////////////////////////////////////////////////////////*/
 
     modifier requiresAuth() {
-      require(
-        RoleAuthority.canCallSubAuthority(router, address(this)),
-        "PowerToken: Not authorized"
-      );
+      AuthController.requiresSubAuth(router, address(this));
       _;
     }
 
     modifier onlyAgent() {
-      require(
-        IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY)).agents(msg.sender),
-        "PowerToken: Not authorized"
-      );
+      AuthController.onlyAgent(router, msg.sender);
       _;
     }
 
     modifier validFromTo(address from, address to) {
-      IPoolFactory poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
-      IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
-
-      // if from is a pool, to must be an agent
-      if (poolFactory.isPool(from)) {
-        require(agentFactory.agents(to), "PowerToken: Pool can only transfer power tokens to agents");
-        _;
-      }
-      // if from is an agent, to must be a pool
-      else if (agentFactory.agents(from)) {
-        require(poolFactory.isPool(to), "PowerToken: Agent can only transfer power tokens to pools");
-        _;
-      } else {
-        revert("PowerToken: Invalid transfer");
-      }
+      _validFromTo(from, to);
+      _;
     }
 
     modifier notPaused() {
-      require(!paused, "PowerToken: Contract is paused");
+      _notPaused();
       _;
     }
 
@@ -112,5 +94,29 @@ contract PowerToken is
     function resume() external requiresAuth {
       paused = false;
       emit ResumeContract();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    function _validFromTo(address from, address to) internal view {
+      IPoolFactory poolFactory = GetRoute.poolFactory(router);
+      IAgentFactory agentFactory = GetRoute.agentFactory(router);
+
+      // if from is a pool, to must be an agent
+      if (poolFactory.isPool(from)) {
+        require(agentFactory.isAgent(to), "PowerToken: Pool can only transfer power tokens to agents");
+      }
+      // if from is an agent, to must be a pool
+      else if (agentFactory.isAgent(from)) {
+        require(poolFactory.isPool(to), "PowerToken: Agent can only transfer power tokens to pools");
+      } else {
+        revert("PowerToken: Invalid transfer");
+      }
+    }
+
+    function _notPaused() internal view {
+      require(!paused, "PowerToken: Contract is paused");
     }
 }

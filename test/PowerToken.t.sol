@@ -12,12 +12,10 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 
 contract PowerTokenTest is BaseTest {
   IPool pool;
+  SignedCredential public sc;
   VerifiableCredential public vc;
   IAgent agent;
   address public agentOwner;
-  uint8 public v;
-  bytes32 public r;
-  bytes32 public s;
   PowerToken public powerToken;
   IPoolFactory public poolFactory;
 
@@ -28,7 +26,8 @@ contract PowerTokenTest is BaseTest {
 
     (agent,) = configureAgent(agentOwner);
 
-    (vc, v, r, s) = issueGenericVC(address(agent));
+    sc = issueGenericSC(address(agent));
+    vc = sc.vc;
 
     pool = poolFactory.createPool(
         "TEST",
@@ -40,15 +39,15 @@ contract PowerTokenTest is BaseTest {
 
   function testMintBurnPower() public {
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
     uint256 bal = powerToken.balanceOf(address(agent));
     assertEq(bal, vc.miner.qaPower, "agent should have 10e18 power tokens");
 
     // issue new vc at newer block
     vm.roll(block.number + 1);
-    (vc, v, r, s) = issueGenericVC(address(agent));
+    sc = issueGenericSC(address(agent));
     vm.prank(agentOwner);
-    agent.burnPower(vc.miner.qaPower, vc, v, r, s);
+    agent.burnPower(vc.miner.qaPower, sc);
 
     bal = powerToken.balanceOf(address(agent));
     assertEq(bal, 0, "agent should have 0 power tokens");
@@ -57,7 +56,7 @@ contract PowerTokenTest is BaseTest {
   function testTransferFromAgentPool() public {
     uint256 stakeAmount = vc.miner.qaPower - 100;
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
 
     vm.prank(address(agent));
     powerToken.approve(address(pool), stakeAmount);
@@ -71,23 +70,23 @@ contract PowerTokenTest is BaseTest {
   function testMintTooMuchPower() public {
     vm.prank(agentOwner);
     vm.expectRevert("Cannot mint more power than the miner has");
-    agent.mintPower(vc.miner.qaPower + 1, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower + 1, sc);
   }
 
   function testNonAgentMint() public {
-    vm.expectRevert("PowerToken: Not authorized");
+    vm.expectRevert("onlyAgent: Not authorized");
     powerToken.mint(1e18);
   }
 
   function testAgentOwnerNoMint() public {
-    vm.expectRevert("PowerToken: Not authorized");
+    vm.expectRevert("onlyAgent: Not authorized");
     vm.prank(agentOwner);
     powerToken.mint(1e18);
   }
 
   function testTransferAgentPool() public {
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
 
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
@@ -98,7 +97,7 @@ contract PowerTokenTest is BaseTest {
 
   function testTransferPoolNonAgent() public {
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
 
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
@@ -110,7 +109,7 @@ contract PowerTokenTest is BaseTest {
 
   function testTransferPoolAgent() public {
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
 
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
@@ -152,7 +151,7 @@ contract PowerTokenTest is BaseTest {
   function testSafeTransferFromAgentPool() public {
     uint256 stakeAmount = vc.miner.qaPower - 100;
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
 
     vm.prank(address(agent));
     powerToken.approve(address(pool), stakeAmount);
@@ -165,7 +164,7 @@ contract PowerTokenTest is BaseTest {
 
   function testSafeTransferAgentPool() public {
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
 
     vm.prank(address(agent));
     SafeTransferLib.safeTransfer(ERC20(powerToken), address(pool), 100);
@@ -177,7 +176,7 @@ contract PowerTokenTest is BaseTest {
   // for some reason vm.expectRevert("TRANSFER_FAILED") and vm.expectRevert("PowerToken: Pool can only transfer power tokens to agents") don't work here
   function testFailSafeTransferPoolNonAgent() public {
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
 
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
@@ -189,7 +188,7 @@ contract PowerTokenTest is BaseTest {
 
   function testSafeTransferPoolAgent() public {
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
 
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
@@ -243,7 +242,7 @@ contract PowerTokenTest is BaseTest {
   }
 
   function testPauseNonAdmin() public {
-    vm.expectRevert("PowerToken: Not authorized");
+    vm.expectRevert("requiresSubAuth: Not authorized");
     powerToken.pause();
   }
 
@@ -273,7 +272,7 @@ contract PowerTokenTest is BaseTest {
 
     vm.startPrank(address(agent));
     vm.expectRevert("PowerToken: Contract is paused");
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(vc.miner.qaPower, sc);
 
     vm.stopPrank();
   }

@@ -1,24 +1,19 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 
 interface IVCVerifier {
   function digest(
     VerifiableCredential memory vc
   ) external view returns(bytes32);
 
-  function isValid(
-    VerifiableCredential memory vc,
-    uint8 v,
-    bytes32 r,
-    bytes32 s
+  // validates a signed credential
+  function isValidCredential(
+    SignedCredential memory
   ) external view returns (bool);
 
   function recover(
-    VerifiableCredential memory vc,
-    uint8 v,
-    bytes32 r,
-    bytes32 s
+    SignedCredential memory
   ) external view returns (bool);
 }

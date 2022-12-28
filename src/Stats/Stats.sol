@@ -44,11 +44,6 @@ contract Stats is RouterAware {
     return false;
   }
 
-  function isAgent(address agent) public view returns (bool) {
-    return _getAgentFactory().agents(agent);
-  }
-
-
   function _getPool(uint256 poolID) internal view returns (IPool) {
     return IPool(IPoolFactory(_getPoolFactory()).allPools(poolID));
   }

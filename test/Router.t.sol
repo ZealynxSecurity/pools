@@ -41,7 +41,7 @@ contract RouterTest is Test {
   MultiRolesAuthority authority;
   function setUp() public {
     routerAdmin = makeAddr("ROUTER_ADMIN");
-    authority = RoleAuthority.newMultiRolesAuthority(address(this), Authority(address(0)));
+    authority = AuthController.newMultiRolesAuthority(address(this), Authority(address(0)));
 
     router = new Router(address(authority));
 
@@ -53,7 +53,8 @@ contract RouterTest is Test {
       makeAddr("MINER_REGISTRY_ADMIN"),
       makeAddr("POOL_FACTORY_ADMIN"),
       makeAddr("CORE_AUTHORITY_ADMIN"),
-      makeAddr("TREASURY_ADMIN")
+      makeAddr("TREASURY_ADMIN"),
+      makeAddr("AGENT_POLICE_ADMIN")
     );
     (, address[] memory contractRouteAddrs) = Deployer.setupContractRoutes(
       address(router),
@@ -61,6 +62,7 @@ contract RouterTest is Test {
       makeAddr("WFIL"),
       makeAddr("MINER_REGISTRY"),
       makeAddr("AGENT_FACTORY"),
+      makeAddr("AGENT_POLICE"),
       makeAddr("POOL_FACTORY"),
       makeAddr("STATS"),
       makeAddr("POWER_TOKEN"),
@@ -89,7 +91,7 @@ contract RouterTest is Test {
       address(authority)
     );
 
-    RoleAuthority.initRouterRoles(address(router), routerAdmin);
+    AuthController.transferCoreAuthorityOwnership(address(router), routerAdmin);
   }
 
   function testGetAgentFactory() public {
@@ -117,7 +119,7 @@ contract RouterTest is Test {
   }
 
   function testGetRouterAdmin() public {
-    assertEq(router.getRoute(ROUTE_ROUTER_ADMIN), address(routerAdmin));
+    assertEq(router.getRoute(ROUTE_SYSTEM_ADMIN), address(routerAdmin));
   }
 
   function testGetPowerTokenAdmin() public {

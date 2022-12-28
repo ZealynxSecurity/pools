@@ -1,44 +1,43 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {
   ROUTE_POWER_TOKEN,
   ROUTE_VC_ISSUER,
   ROUTE_MINER_REGISTRY
 } from "src/Constants/Routes.sol";
 
-contract AgentFactory is RouterAware {
-  mapping(address => bool) public agents;
-  string public verifierName;
-  string public verifierVersion;
-
-  constructor(string memory _name, string memory _version) {
-    verifierName = _name;
-    verifierVersion = _version;
-  }
+contract AgentFactory is IAgentFactory, RouterAware {
+  mapping(address => uint256) public agents;
+  // we start at ID 1 because ID 0 is reserved for empty agent ID
+  uint256 public agentCount = 0;
 
   function create(address operator) external returns (address) {
-    Agent agent = new Agent(router, verifierName, verifierVersion);
-    agents[address(agent)] = true;
+    agentCount++;
+    Agent agent = new Agent(router, agentCount);
+    agents[address(agent)] = agentCount;
 
-    RoleAuthority.initAgentRoles(
+    if (operator != address(0)) {
+      operator = msg.sender;
+    }
+
+    AuthController.initAgentRoles(
       router,
       address(agent),
-      operator,
-      IRouter(router).getRoute(ROUTE_VC_ISSUER),
-      IRouter(router).getRoute(ROUTE_MINER_REGISTRY)
+      operator
     );
+
+    emit CreateAgent(agent.id(), address(agent), operator);
 
     return address(agent);
   }
 
-  function setVerifierName(string memory _name, string memory _version) external {
-    require(RoleAuthority.canCallSubAuthority(router, address(this)), "AgentFactory: Not authorized");
-    verifierName = _name;
-    verifierVersion = _version;
+  function isAgent(address agent) external view returns (bool) {
+    return agents[agent] > 0;
   }
 }

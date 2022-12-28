@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
 
 abstract contract RouterAware {
   address public router;
@@ -14,7 +14,7 @@ abstract contract RouterAware {
       return;
     }
 
-    require(RoleAuthority.canCallSubAuthority(router, address(this)), "RouterAware: Not authorized");
+    require(AuthController.canCallSubAuthority(router, address(this)), "RouterAware: Not authorized");
     router = _router;
   }
 }

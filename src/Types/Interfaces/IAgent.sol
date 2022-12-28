@@ -1,15 +1,135 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {SignedCredential} from "src/Types/Structs/Credentials.sol";
+import "src/Types/Structs/Filecoin.sol";
 
 interface IAgent {
-  function miners(uint256 index) external returns (address);
-  function withdrawBalance(address miner) external returns (uint256);
-  function borrow(uint256 amount, uint256 poolID, VerifiableCredential memory vc, uint256 powerTokenAmount, uint8 v, bytes32 r, bytes32 s) external;
-  function exit(uint256 poolID, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external;
-  function revokeOwnership(address newOwner, address miner) external;
-  // for dealing with power tokens
-  function mintPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external;
-  function burnPower(uint256 amount, VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) external;
+
+  /*//////////////////////////////////////////////////
+                        EVENTS
+  //////////////////////////////////////////////////*/
+
+  event ChangeMultiaddrs(address indexed miner, bytes[] newMultiaddrs);
+
+  event ChangeMinerWorker(address indexed miner, bytes newWorker, bytes[] newControlAddresses);
+
+  event ChangePeerID(address indexed miner, bytes newPeerID);
+
+  event SetOperatorRole(address indexed operator, bool enabled);
+
+  event SetOwnerRole(address indexed owner, bool enabled);
+
+  event WithdrawBalance(address indexed receiver, uint256 amount);
+
+  event PullFundsFromMiners(address[] miners, uint256[] amounts);
+
+  event PushFundsToMiners(address[] miners, uint256[] amounts);
+
+  /*//////////////////////////////////////////////////
+                        GETTERS
+  //////////////////////////////////////////////////*/
+
+  function id() external view returns (uint256);
+
+  function powerTokensMinted() external view returns (uint256);
+
+  // powerTokensMinted - powerTokensBurned
+  function totalPowerTokensStaked() external view returns (uint256);
+
+  function powerTokensStaked(uint256 poolID) external view returns (uint256 powerTokensStaked);
+
+  function poolIDs(uint256 idx) external view returns (uint256 poolID);
+
+  function stakedPoolsCount() external view returns (uint256);
+
+  /*//////////////////////////////////////////////////
+        MINER OWNERSHIP/WORKER/OPERATOR CHANGES
+  //////////////////////////////////////////////////*/
+
+  function addMiners(address[] calldata miners) external;
+
+  function removeMiner(
+    address newMinerOwner,
+    address miner,
+    SignedCredential memory sc
+  ) external;
+
+  function changeMinerWorker(
+    address miner,
+    ChangeWorkerAddressParams calldata params
+  ) external;
+
+  function changeMultiaddrs(
+    address miner,
+    ChangeMultiaddrsParams calldata params
+  ) external;
+
+  function changePeerID(
+    address miner,
+    ChangePeerIDParams calldata params
+  ) external;
+
+  /*//////////////////////////////////////////////////
+          AGENT OWNERSHIP / OPERATOR CHANGES
+  //////////////////////////////////////////////////*/
+
+  function setOperatorRole(address operator, bool enabled) external;
+
+  function setOwnerRole(address owner, bool enabled) external;
+
+  /*//////////////////////////////////////////////////
+                POWER TOKEN FUNCTIONS
+  //////////////////////////////////////////////////*/
+
+  function mintPower(
+    uint256 amount,
+    SignedCredential memory sc
+  ) external;
+
+  function burnPower(
+    uint256 amount,
+    SignedCredential memory sc
+  ) external returns (uint256 burnedAmt);
+
+  /*//////////////////////////////////////////////
+                FINANCIAL FUNCTIONS
+  //////////////////////////////////////////////*/
+
+  function withdrawBalance(address receiver, uint256 amount) external;
+
+  function withdrawBalance(
+    address receiver,
+    uint256 amount,
+    SignedCredential memory signedCredential
+  ) external;
+
+  function borrow(
+    uint256 amount,
+    uint256 poolID,
+    SignedCredential memory vc,
+    uint256 powerTokenAmount
+  ) external;
+
+  function exit(
+    uint256 poolID,
+    uint256 assetAmount,
+    SignedCredential memory vc
+  ) external;
+
+  function makePayments(
+    uint256[] calldata poolIDs,
+    uint256[] calldata amounts,
+    SignedCredential memory vc
+  ) external;
+
+  function pullFundsFromMiners(
+    address[] calldata miners,
+    uint256[] calldata amounts
+  ) external;
+
+  function pushFundsToMiners(
+    address[] calldata miners,
+    uint256[] calldata amounts
+  ) external;
 }

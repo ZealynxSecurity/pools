@@ -3,7 +3,7 @@ pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
 import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
@@ -41,7 +41,7 @@ contract PoolFactory is IPoolFactory, RouterAware {
     pool = new PoolTemplate(_name, _symbol, router, rateModule, address(asset));
     allPools.push(address(pool));
 
-    RoleAuthority.initPoolRoles(router, address(pool), operator, address(this));
+    AuthController.initPoolRoles(router, address(pool), operator, address(this));
   }
 
   function isPool(address pool) external view returns (bool) {

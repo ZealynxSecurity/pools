@@ -4,10 +4,11 @@ pragma solidity ^0.8.15;
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
-import {ROLE_VC_ISSUER} from "src/Constants/Roles.sol";
-import {MinerData, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {MinerData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
+import {ROUTE_VC_ISSUER} from "src/Constants/Routes.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 
 abstract contract VCVerifier is RouterAware, EIP712 {
   constructor(string memory _name, string memory _version)
@@ -23,14 +24,6 @@ abstract contract VCVerifier is RouterAware, EIP712 {
 
   bytes32 public constant _MINER_DATA_TYPE_HASH =
     keccak256(abi.encodePacked(_MINER_DATA_TYPE));
-
-  uint256 latestVCEpochIssued;
-
-  modifier isValidVC(VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s) {
-    require(isValid(vc, v, r, s), "Invalid VC");
-    latestVCEpochIssued = vc.epochIssued;
-    _;
-  }
 
   function deriveMinerDataHash(MinerData memory miner) public pure returns(bytes32) {
     return keccak256(abi.encode(
@@ -73,23 +66,33 @@ abstract contract VCVerifier is RouterAware, EIP712 {
       return ECDSA.recover(digest(vc), v, r, s);
   }
 
+  // TODO: Use error library
   function isValid(
+    address agent,
     VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s
   ) public view returns (bool) {
     address issuer = recover(vc, v, r, s);
-    require(issuer == vc.issuer, "VCVerifier: Mismatching issuer");
-    require(isValidIssuer(issuer), "VCVerifier: VC issued by unknown issuer");
-    // TODO: Verify this check is not needed - if another agent tried to use a credential, the recovered issuer would come back wrong
-    require(vc.subject == address(this), "VCVerifier: VC not issued to this contract");
+    require(issuer == vc.issuer, "VCVerifier: Not authorized");
+    require(isValidIssuer(issuer), "VCVerifier: Not authorized");
+    require(vc.subject == agent, "VCVerifier: Not authorized");
     require(block.number >= vc.epochIssued && block.number <= vc.epochValidUntil, "Verifiable Credential not in valid epoch range");
-    require(vc.epochIssued > latestVCEpochIssued, "VCVerifier: VC issued in the past");
 
     return true;
   }
 
   function isValidIssuer(address issuer) internal view returns (bool) {
-    return IMultiRolesAuthority(
-      address(RoleAuthority.getSubAuthority(router, address(this)))
-    ).doesUserHaveRole(issuer, ROLE_VC_ISSUER);
+    return IRouter(router).getRoute(ROUTE_VC_ISSUER) == issuer;
+  }
+
+  function _isValidVC(address agent, SignedCredential memory signedCredential) internal view returns (bool) {
+    require(isValid(
+      agent,
+      signedCredential.vc,
+      signedCredential.v,
+      signedCredential.r,
+      signedCredential.s
+    ), "Invalid VC");
+
+    return true;
   }
 }

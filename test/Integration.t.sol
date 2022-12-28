@@ -20,10 +20,7 @@ contract IntegrationTest is BaseTest {
   IERC4626 pool4626;
   IERC20 pool20;
 
-  VerifiableCredential vc;
-  uint8 v;
-  bytes32 r;
-  bytes32 s;
+  SignedCredential signedCred;
 
   address investor1 = makeAddr("INVESTOR1");
   address investor2 = makeAddr("INVESTOR2");
@@ -54,7 +51,7 @@ contract IntegrationTest is BaseTest {
 
     (agent,) = configureAgent(minerOwner);
 
-    (vc, v, r, s) = issueGenericVC(address(agent));
+    signedCred = issueGenericSC(address(agent));
   }
 
 function testSingleDepositBorrowRepayWithdraw() public {
@@ -70,11 +67,11 @@ function testSingleDepositBorrowRepayWithdraw() public {
     // agent mints some power to borrow against
     uint256 agentPowerAmount = 1e18;
     vm.startPrank(address(agent));
-    agent.mintPower(agentPowerAmount, vc, v, r, s);
+    agent.mintPower(agentPowerAmount, signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     powerToken.approve(address(pool), agentPowerAmount);
 
-    pool.borrow(borrowAmount, vc, agentPowerAmount);
+    pool.borrow(borrowAmount, signedCred.vc, agentPowerAmount);
     vm.stopPrank();
 
     uint256 poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));
@@ -91,7 +88,7 @@ function testSingleDepositBorrowRepayWithdraw() public {
     // agent repays the borrow amount
     vm.startPrank(address(agent));
     wFIL.approve(address(pool), borrowAmount);
-    pool.exitPool(borrowAmount, vc);
+    pool.exitPool(borrowAmount, signedCred.vc);
     vm.stopPrank();
 
     poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));

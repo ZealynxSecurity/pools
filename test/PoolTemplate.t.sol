@@ -21,10 +21,7 @@ contract PoolTemplateStakingTest is BaseTest {
   IERC4626 pool4626;
   IERC20 pool20;
 
-  VerifiableCredential vc;
-  uint8 v;
-  bytes32 r;
-  bytes32 s;
+  SignedCredential signedCred;
 
   address investor1 = makeAddr("INVESTOR1");
   address investor2 = makeAddr("INVESTOR2");
@@ -55,7 +52,7 @@ contract PoolTemplateStakingTest is BaseTest {
 
     (agent,) = configureAgent(minerOwner);
 
-    (vc, v, r, s) = issueGenericVC(address(agent));
+    signedCred = issueGenericSC(address(agent));
   }
 
   function testAsset() public {
@@ -443,10 +440,7 @@ contract PoolTemplateBorrowingTest is BaseTest {
   IERC4626 pool4626;
   IERC20 pool20;
 
-  VerifiableCredential vc;
-  uint8 v;
-  bytes32 r;
-  bytes32 s;
+  SignedCredential signedCred;
 
   uint256 borrowAmount = 0.5e18;
   uint256 investor1UnderlyingAmount = 1e18;
@@ -477,7 +471,7 @@ contract PoolTemplateBorrowingTest is BaseTest {
 
     (agent,) = configureAgent(minerOwner);
 
-    (vc, v, r, s) = issueGenericVC(address(agent));
+    signedCred = issueGenericSC(address(agent));
   }
 
   function testBorrow() public {
@@ -489,13 +483,13 @@ contract PoolTemplateBorrowingTest is BaseTest {
 
     uint256 powerAmtStake = 1e18;
     vm.startPrank(address(agent));
-    agent.mintPower(vc.miner.qaPower, vc, v, r, s);
+    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     // note that borrow
     powerToken.approve(address(pool), powerAmtStake);
 
     uint256 startEpoch = block.number;
-    pool.borrow(borrowAmount, vc, powerAmtStake);
+    pool.borrow(borrowAmount, signedCred.vc, powerAmtStake);
     uint256 postMinerBal = wFIL.balanceOf(address(agent));
 
     vm.stopPrank();
@@ -512,7 +506,7 @@ contract PoolTemplateBorrowingTest is BaseTest {
     uint256 poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));
     uint256 agentPowTokenBal = IERC20(address(powerToken)).balanceOf(address(agent));
     assertEq(poolPowTokenBal, powerAmtStake);
-    assertEq(agentPowTokenBal, vc.miner.qaPower - powerAmtStake);
-    assertEq(poolPowTokenBal + agentPowTokenBal, vc.miner.qaPower);
+    assertEq(agentPowTokenBal, signedCred.vc.miner.qaPower - powerAmtStake);
+    assertEq(poolPowTokenBal + agentPowTokenBal, signedCred.vc.miner.qaPower);
   }
 }

@@ -3,7 +3,7 @@ pragma solidity ^0.8.15;
 
 import {ROUTE_CORE_AUTHORITY} from "src/Constants/Routes.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
 import {Auth} from "src/Auth/Auth.sol";
 
 contract Router is IRouter {
@@ -21,11 +21,8 @@ contract Router is IRouter {
  * @notice For deployment reasons, we also check to see if the caller is the core authority's owner
  * This allows us to pushRoutes to the router during deployment before setting up the router's roles
  */
-  modifier requiresAuth() virtual {
-    require(
-      RoleAuthority.canCall(address(this), address(this)),
-      "Router: Not authorized"
-    );
+  modifier requiresAuth {
+    AuthController.requiresCoreAuth(address(this), address(this));
     _;
   }
 
@@ -36,7 +33,6 @@ contract Router is IRouter {
   function getRoute(string memory id) public view returns (address) {
     return getRoute(bytes4(keccak256(bytes(id))));
   }
-
 
   function pushRoute(bytes4 id, address newRoute) public requiresAuth {
     route[id] = newRoute;

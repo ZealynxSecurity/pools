@@ -5,10 +5,12 @@ import "forge-std/Test.sol";
 import "src/MockMiner.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
+import {GetRoute} from "src/Router/GetRoute.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
+import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
-import {RoleAuthority} from "src/Auth/RoleAuthority.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
 import {WFIL} from "src/WFIL.sol";
 import {PowerToken} from "src/PowerToken/PowerToken.sol";
 import {PoolFactory} from "src/Pool/PoolFactory.sol";
@@ -21,7 +23,7 @@ import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
-import {MinerData, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {MinerData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {Stats} from "src/Stats/Stats.sol";
 import "src/Constants/Routes.sol";
 
@@ -56,7 +58,6 @@ contract BaseTest is Test {
   constructor() {
     // deploys the coreAuthority and the router
     (router, coreAuthority) = Deployer.init();
-
     // these two route setting calls are separate because they blow out the call stack if they're one func
     Deployer.setupAdminRoutes(
       address(router),
@@ -66,7 +67,8 @@ contract BaseTest is Test {
       makeAddr('MINER_REGISTRY_ADMIN'),
       makeAddr('POOL_FACTORY_ADMIN'),
       msg.sender,
-      makeAddr('TREASURY_ADMIN')
+      makeAddr('TREASURY_ADMIN'),
+      makeAddr('AGENT_POLICE_ADMIN')
     );
     vcIssuer = vm.addr(vcIssuerPk);
     Deployer.setupContractRoutes(
@@ -74,7 +76,8 @@ contract BaseTest is Test {
       treasury,
       address(wFIL),
       address(new MinerRegistry()),
-      address(new AgentFactory(VERIFIED_NAME, VERIFIED_VERSION)),
+      address(new AgentFactory()),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, 1000)),
       address(new PoolFactory(wFIL)),
       address(new Stats()),
       address(new PowerToken()),
@@ -100,6 +103,9 @@ contract BaseTest is Test {
   }
 
   function _configureAgent(address minerOwner, MockMiner miner) public returns (Agent) {
+    address[] memory miners = new address[](1);
+    miners[0] = address(miner);
+
     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
     vm.startPrank(minerOwner);
     // create a agent for miner
@@ -108,23 +114,20 @@ contract BaseTest is Test {
         agentFactory.create(address(0))
       ));
     // propose the change owner to the agent
-    miner.changeOwnerAddress(address(agent));
+    miner.change_owner_address(address(miner), address(agent));
     // confirm change owner address (agent1 now owns miner)
-    agent.addMiner(address(miner));
-    require(miner.currentOwner() == address(agent), "Miner owner not set");
+    agent.addMiners(miners);
+    require(miner.get_owner(address(miner)) == address(agent), "Miner owner not set");
     require(agent.hasMiner(address(miner)), "Miner not registered");
 
     vm.stopPrank();
     return agent;
   }
 
-  function issueGenericVC(
+  function issueGenericSC(
     address agent
   ) public returns (
-    VerifiableCredential memory vc,
-    uint8 v,
-    bytes32 r,
-    bytes32 s
+    SignedCredential memory
   ) {
     uint256 qaPower = 10e18;
 
@@ -132,7 +135,7 @@ contract BaseTest is Test {
       1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0
     );
 
-    vc = VerifiableCredential(
+    VerifiableCredential memory vc = VerifiableCredential(
       vcIssuer,
       agent,
       block.number,
@@ -140,17 +143,16 @@ contract BaseTest is Test {
       miner
     );
 
-    (v, r, s) = issueVC(vc);
+    return issueSC(vc);
   }
 
-  function issueVC(
+  function issueSC(
     VerifiableCredential memory vc
   ) public returns (
-    uint8 v,
-    bytes32 r,
-    bytes32 s
+    SignedCredential memory
   ) {
-    bytes32 digest = IVCVerifier(vc.subject).digest(vc);
-    (v, r, s) = vm.sign(vcIssuerPk, digest);
+    bytes32 digest = GetRoute.vcVerifier(router).digest(vc);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(vcIssuerPk, digest);
+    return SignedCredential(vc, v, r, s);
   }
 }
