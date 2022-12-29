@@ -10,6 +10,8 @@ interface IAgent {
                         EVENTS
   //////////////////////////////////////////////////*/
 
+  event MigrateMiner(address indexed oldAgent, address indexed newAgent, address indexed miner);
+
   event ChangeMultiaddrs(address indexed miner, bytes[] newMultiaddrs);
 
   event ChangeMinerWorker(address indexed miner, bytes newWorker, bytes[] newControlAddresses);
@@ -32,14 +34,10 @@ interface IAgent {
 
   function id() external view returns (uint256);
 
-  function powerTokensMinted() external view returns (uint256);
-
   // powerTokensMinted - powerTokensBurned
   function totalPowerTokensStaked() external view returns (uint256);
 
   function powerTokensStaked(uint256 poolID) external view returns (uint256 powerTokensStaked);
-
-  function poolIDs(uint256 idx) external view returns (uint256 poolID);
 
   function stakedPoolsCount() external view returns (uint256);
 
@@ -54,6 +52,8 @@ interface IAgent {
     address miner,
     SignedCredential memory sc
   ) external;
+
+  function migrateMiner(address newAgent, address miner) external;
 
   function changeMinerWorker(
     address miner,

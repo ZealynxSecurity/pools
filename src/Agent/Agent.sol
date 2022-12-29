@@ -38,12 +38,6 @@ import {Roles} from "src/Constants/Roles.sol";
 
 contract Agent is IAgent, RouterAware {
   uint256 public id;
-  uint256 public powerTokensMinted = 0;
-
-  // map pool ID to powerTokensStaked in that pool
-  mapping (uint256 => uint256) public powerTokensStaked;
-  // pool IDs of pools that this agent has staked in
-  uint256[] public poolIDs;
 
   /*//////////////////////////////////////
                 MODIFIERS
@@ -91,14 +85,20 @@ contract Agent is IAgent, RouterAware {
                         GETTERS
   //////////////////////////////////////////////////*/
 
+  function powerTokensStaked(uint256 poolID) public view returns (uint256) {
+    // TODO: use IDs
+    return GetRoute.pool(router, poolID).getAccount(address(this)).powerTokensStaked;
+  }
+
   function hasMiner(address miner) public view returns (bool) {
     return GetRoute.minerRegistry(router).minerRegistered(id, miner);
   }
 
   function totalPowerTokensStaked() public view returns (uint256) {
+    uint256[] memory poolIDs = _getStakedPoolIDs();
     uint256 staked = 0;
     for (uint256 i = 0; i < poolIDs.length; i++) {
-      staked += powerTokensStaked[poolIDs[i]];
+      staked += powerTokensStaked(poolIDs[i]);
     }
 
     return staked;
@@ -106,7 +106,7 @@ contract Agent is IAgent, RouterAware {
 
   // returns the number of pools the agent has an active staked in
   function stakedPoolsCount() external view returns (uint256) {
-    return poolIDs.length;
+    return _getStakedPoolIDs().length;
   }
 
   /*//////////////////////////////////////////////
@@ -133,6 +133,20 @@ contract Agent is IAgent, RouterAware {
     SignedCredential memory signedCredential
   ) external notOverPowered requiresAuth isValidCredential(signedCredential) {
     _removeMiner(newMinerOwner, miner);
+  }
+
+  function migrateMiner(address newAgent, address miner) external requiresAuth {
+    uint256 newId = IAgent(newAgent).id();
+    // first check to make sure the agentFactory knows about this "agent"
+    require(GetRoute.agentFactory(router).agents(newAgent) == newId);
+    // then make sure this is the same agent, just upgraded
+    require(newId == id, "Cannot migrate miner to a different agent");
+    // check to ensure this miner was registered to the original agent
+    require(GetRoute.minerRegistry(router).minerRegistered(id, miner), "Miner not registered");
+    // propose an ownership change (must be accepted in v2 agent)
+    _changeMinerOwner(miner, newAgent);
+
+    emit MigrateMiner(msg.sender, newAgent, miner);
   }
 
   function changeMinerWorker(
@@ -187,12 +201,14 @@ contract Agent is IAgent, RouterAware {
     uint256 amount,
     SignedCredential memory signedCredential
   ) external notOverPowered requiresAuth isValidCredential(signedCredential) {
+    IPowerToken powerToken = GetRoute.powerToken(router);
     // check
-    require(signedCredential.vc.miner.qaPower >= powerTokensMinted + amount, "Cannot mint more power than the miner has");
-    // effect
-    powerTokensMinted += amount;
+    require(
+      signedCredential.vc.miner.qaPower >= powerToken.powerTokensMinted(id) + amount,
+      "Cannot mint more power than the miner has"
+    );
     // interact
-    GetRoute.powerToken(router).mint(amount);
+    powerToken.mint(amount);
   }
 
   function burnPower(
@@ -202,8 +218,6 @@ contract Agent is IAgent, RouterAware {
     IERC20 powerToken = GetRoute.powerToken20(router);
     // check
     require(amount <= powerToken.balanceOf(address(this)), "Agent: Cannot burn more power than the agent holds");
-    // effect
-    powerTokensMinted -= amount;
     // interact
     IPowerToken(address(powerToken)).burn(amount);
 
@@ -282,14 +296,12 @@ contract Agent is IAgent, RouterAware {
     requiresAuth
     isValidCredential(signedCredential)
   {
-    powerTokensStaked[poolID] += powerTokenAmount;
-
     IPool pool = GetRoute.pool(router, poolID);
 
     // TODO: Use agent ID here instead of address
     // first time staking, add the poolID to the list of pools this agent is staking in
     if (pool.getAgentBorrowed(address(this)) == 0) {
-      poolIDs.push(poolID);
+      GetRoute.agentPolice(router).addPoolToList(poolID);
     }
 
     pool.borrow(amount, signedCredential, powerTokenAmount);
@@ -300,8 +312,6 @@ contract Agent is IAgent, RouterAware {
     uint256 assetAmount,
     SignedCredential memory signedCredential
   ) external requiresAuth isValidCredential(signedCredential) {
-    IERC20 powerToken = GetRoute.powerToken20(router);
-    uint256 preExitPowerTokenBal = powerToken.balanceOf(address(this));
     // TODO: optimize with https://github.com/glif-confidential/pools/issues/148
     IPool pool = GetRoute.pool(router, poolID);
     uint256 borrowedAmount = pool.getAgentBorrowed(address(this));
@@ -313,12 +323,7 @@ contract Agent is IAgent, RouterAware {
 
     if (borrowedAmount == assetAmount) {
       // remove poolID from list of pools this agent is staking in
-      _removePoolFromStakingList(poolID);
-      // TODO: handle dust?
-      powerTokensStaked[poolID] = 0;
-    } else {
-      // handle partial exit
-      powerTokensStaked[poolID] -= powerToken.balanceOf(address(this)) - preExitPowerTokenBal;
+      GetRoute.agentPolice(router).removePoolFromList(poolID);
     }
   }
 
@@ -363,11 +368,15 @@ contract Agent is IAgent, RouterAware {
     return true;
   }
 
+  function _changeMinerOwner(address miner, address owner) internal {
+    IMockMiner(miner).change_owner_address(miner, owner);
+  }
+
   function _addMiner(address miner) internal {
     // Confirm the miner is valid and can be added
     require(_canAddMiner(miner), "Cannot add miner unless it is set as the nextOwner on the miner and no beneficiary address is set");
 
-    IMockMiner(miner).change_owner_address(miner, address(this));
+    _changeMinerOwner(miner, address(this));
 
     GetRoute.minerRegistry(router).addMiner(miner);
   }
@@ -380,7 +389,7 @@ contract Agent is IAgent, RouterAware {
     require(_canRemoveMiner(miner), "Cannot remove miner unless all loans are paid off or it isn't needed for collateral");
 
     // set the miners owner to the new owner
-    IMockMiner(miner).change_owner_address(miner, newOwner);
+    _changeMinerOwner(miner, newOwner);
 
     // Remove the miner from the central registry
     GetRoute.minerRegistry(router).removeMiner(miner);
@@ -437,22 +446,10 @@ contract Agent is IAgent, RouterAware {
     IWFIL(address(wFIL20)).deposit{value: amount - wFILBal}();
   }
 
-  function _removePoolFromStakingList(uint256 poolID) internal {
-    for (uint256 i = 0; i < poolIDs.length; i++) {
-      if (poolIDs[i] == poolID) {
-        poolIDs[i] = poolIDs[poolIDs.length - 1];
-        poolIDs.pop();
-        break;
-      }
-    }
-  }
-
   function _burnPower(uint256 amount) internal returns (uint256) {
     IERC20 powerToken = GetRoute.powerToken20(router);
     // check
     require(amount <= powerToken.balanceOf(address(this)), "Agent: Cannot burn more power than the agent holds");
-    // effect
-    powerTokensMinted -= amount;
     // interact
     IPowerToken(address(powerToken)).burn(amount);
 
@@ -497,6 +494,10 @@ contract Agent is IAgent, RouterAware {
     SignedCredential memory signedCredential
   ) internal view returns (bool) {
     return GetRoute.agentPolice(router).isValidCredential(agent, signedCredential);
+  }
+
+  function _getStakedPoolIDs() internal view returns (uint256[] memory) {
+    return GetRoute.agentPolice(router).poolIDs(id);
   }
 }
 

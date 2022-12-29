@@ -12,6 +12,7 @@ import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {WFIL} from "src/WFIL.sol";
 
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
+import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouterAware} from "src/Types/Interfaces/IRouter.sol";
@@ -582,7 +583,8 @@ contract AgentPoliceTest is BaseTest {
         police.checkPower(address(agent), sc);
         assertTrue(police.isOverPowered(address(agent)), "Agent should be overed powered");
         police.forceBurnPower(address(agent), sc);
-        assertEq(agent.powerTokensMinted(), sc.vc.miner.qaPower, "Agent should have 5e18 power tokens minted");
+
+        assertEq(IPowerToken(powerToken).powerTokensMinted(agent.id()), sc.vc.miner.qaPower, "Agent should have 5e18 power tokens minted");
         assertEq(IERC20(address(powerToken)).totalSupply(), 5e18);
         assertEq(police.isOverPowered(address(agent)), false);
     }

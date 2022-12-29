@@ -9,6 +9,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
+import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
@@ -22,6 +23,8 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   // TODO: use bytes32/uint256 to store agent state in one uint256 like MRA
   mapping (uint256 => bool) private _isOverPowered;
   mapping (uint256 => bool) private _isOverLeveraged;
+
+  mapping (uint256 => uint256[]) private _poolIDs;
 
   constructor(
     string memory _name,
@@ -48,6 +51,19 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   modifier requiresAuth() {
     _requiresAuth();
     _;
+  }
+
+  modifier onlyAgent() {
+    AuthController.onlyAgent(router, msg.sender);
+    _;
+  }
+
+  /*//////////////////////////////////////////////
+                      GETTERS
+  //////////////////////////////////////////////*/
+
+  function poolIDs(uint256 agentID) external view returns (uint256[] memory) {
+    return _poolIDs[agentID];
   }
 
   // the first window deadline is epoch 0 + windowLength
@@ -118,16 +134,33 @@ contract AgentPolice is IAgentPolice, VCVerifier {
                       POLICING
   //////////////////////////////////////////////*/
 
+  /// @dev - the Agent itself checks to ensure no duplicate entries are added here
+  function addPoolToList(uint256 pool) public onlyAgent {
+    _poolIDs[_addressToID(msg.sender)].push(pool);
+  }
+
+  function removePoolFromList(uint256 pool) public onlyAgent {
+    uint256[] storage pools = _poolIDs[_addressToID(msg.sender)];
+    for (uint256 i = 0; i < pools.length; i++) {
+      if (pools[i] == pool) {
+        pools[i] = pools[pools.length - 1];
+        pools.pop();
+        break;
+      }
+    }
+  }
+
   // not protected - anyone can call when the conditions permit
   function forceBurnPower(
     address agent,
     SignedCredential memory signedCredential
   ) external _isValidCredential(agent, signedCredential)  {
-    require(isOverPowered(agent), "AgentPolice: Agent is not overpowered");
+    uint256 agentID = _addressToID(agent);
+    require(isOverPowered(agentID), "AgentPolice: Agent is not overpowered");
 
     // Compute the amount to burn
     IERC20 powerToken = GetRoute.powerToken20(router);
-    uint256 underPowerAmt = IAgent(agent).powerTokensMinted() - signedCredential.vc.miner.qaPower;
+    uint256 underPowerAmt = _powerTokensMinted(agentID) - signedCredential.vc.miner.qaPower;
     uint256 powerTokensLiquid = powerToken.balanceOf(agent);
     uint256 burnAmount = powerTokensLiquid >= underPowerAmt
       ? underPowerAmt
@@ -152,13 +185,13 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     require(isOverLeveraged(agent), "AgentPolice: Agent is not overleveraged");
 
     // then, we create a pro-rata split based on power token stakes to pay back each pool thats been borrowed from
-    (uint256[] memory poolIDs, uint256[] memory pmts) = _computeProRataPmts(agent);
+    (uint256[] memory pools, uint256[] memory pmts) = _computeProRataPmts(agent);
 
-    IAgent(agent).makePayments(poolIDs, pmts, signedCredential);
+    IAgent(agent).makePayments(pools, pmts, signedCredential);
 
     bool stillOverLeveraged = _updateLeverageTable(agent, signedCredential);
 
-    emit ForceMakePayments(agent, msg.sender, poolIDs, pmts, stillOverLeveraged);
+    emit ForceMakePayments(agent, msg.sender, pools, pmts, stillOverLeveraged);
   }
 
   function forcePullFundsFromMiners(
@@ -222,7 +255,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     address agent,
     SignedCredential memory sc
   ) internal returns (bool) {
-    bool overPowered = sc.vc.miner.qaPower < IAgent(agent).powerTokensMinted();
+    bool overPowered = sc.vc.miner.qaPower < _powerTokensMinted(agent);
 
     _isOverPowered[_addressToID(agent)] = overPowered;
 
@@ -238,5 +271,13 @@ contract AgentPolice is IAgentPolice, VCVerifier {
       AuthController.canCallSubAuthority(router, address(this)),
       "AgentPolice: Not authorized"
     );
+  }
+
+  function _powerTokensMinted(uint256 agent) internal view returns (uint256) {
+    return GetRoute.powerToken(router).powerTokensMinted(agent);
+  }
+
+  function _powerTokensMinted(address agent) internal view returns (uint256) {
+    return _powerTokensMinted(_addressToID(agent));
   }
 }

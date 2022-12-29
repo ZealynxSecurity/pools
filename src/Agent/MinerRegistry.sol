@@ -12,8 +12,16 @@ import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.so
 import {ROUTE_AGENT_FACTORY} from "src/Constants/Routes.sol";
 
 contract MinerRegistry is IMinerRegistry, RouterAware {
-  // maps agent ID => miner => registered status
-  mapping(uint256 => mapping(address => bool)) public minerRegistered;
+  // maps keccak256(agentID, minerAddr) => registered status
+  mapping(bytes32 => bool) private _minerRegistered;
+
+  /*///////////////////////////////////////////////////////////////
+                            GETTERS
+  //////////////////////////////////////////////////////////////*/
+
+  function minerRegistered(uint256 agentID, address miner) public view returns (bool) {
+    return _minerRegistered[_createMapKey(agentID, miner)];
+  }
 
   /*///////////////////////////////////////////////////////////////
                             MODIFIERS
@@ -63,17 +71,21 @@ contract MinerRegistry is IMinerRegistry, RouterAware {
 
   function _addMiner(address miner) internal {
     uint256 id = _getIDFromAgent(msg.sender);
-    require(minerRegistered[id][miner] == false, "Miner already registered");
-    minerRegistered[id][miner] = true;
+    require(minerRegistered(id, miner) == false, "Miner already registered");
+    _minerRegistered[_createMapKey(id, miner)] = true;
 
     emit AddMiner(msg.sender, miner);
   }
 
   function _removeMiner(address miner) internal {
     uint256 id = _getIDFromAgent(msg.sender);
-    require(minerRegistered[id][miner], "Miner not registered");
-    minerRegistered[id][miner] = false;
+    require(minerRegistered(id, miner), "Miner not registered");
+    _minerRegistered[_createMapKey(id, miner)] = false;
 
     emit RemoveMiner(msg.sender, miner);
+  }
+
+  function _createMapKey(uint256 agent, address miner) internal pure returns (bytes32) {
+    return keccak256(abi.encodePacked(agent, miner));
   }
 }

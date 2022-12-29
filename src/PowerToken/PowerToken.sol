@@ -9,6 +9,7 @@ import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.so
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {ROUTE_POOL_FACTORY, ROUTE_AGENT_FACTORY, ROUTE_TREASURY} from "src/Constants/Routes.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
@@ -22,6 +23,7 @@ contract PowerToken is
     // @notice this contract can be paused, but we plan to burn the pauser role
     // once the contracts stabilize
     bool public paused = false;
+    mapping(uint256 => uint256) public powerTokensMinted;
 
     /*//////////////////////////////////////////////////////////////
                               MODIFIERS
@@ -47,12 +49,20 @@ contract PowerToken is
       _;
     }
 
+    /*//////////////////////////////////////////////////////////////
+                          MINT/BURN POWER
+    //////////////////////////////////////////////////////////////*/
+
     function mint(uint256 _amount) public notPaused onlyAgent {
+      powerTokensMinted[_addressToID(msg.sender)] += _amount;
+
       _mint(msg.sender, _amount);
       emit MintPower(msg.sender, _amount);
     }
 
     function burn(uint256 _amount) public notPaused onlyAgent {
+      powerTokensMinted[_addressToID(msg.sender)] -= _amount;
+
       _burn(msg.sender, _amount);
       emit BurnPower(msg.sender, _amount);
     }
@@ -131,5 +141,9 @@ contract PowerToken is
 
     function _notPaused() internal view {
       require(!paused, "PowerToken: Contract is paused");
+    }
+
+    function _addressToID(address agent) internal view returns (uint256) {
+      return IAgent(agent).id();
     }
 }

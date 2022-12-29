@@ -26,6 +26,11 @@ interface IPowerToken {
     event ResumeContract();
 
     /**
+     * @dev Returns the amount of power tokens a particular agent has minted
+     */
+    function powerTokensMinted(uint256 agentID) external view returns (uint256);
+
+    /**
      * @dev Mints the amount of token passed as `amount`
      */
     function mint(uint256 amount) external;

@@ -63,6 +63,7 @@ interface IAgentPolice {
   /*//////////////////////////////////////////////
                       GETTERS
   //////////////////////////////////////////////*/
+  function poolIDs(uint256 agentID) external view returns (uint256[] memory);
 
   // the current length of a payment window
   // NOTE: this is a constant value
@@ -97,6 +98,10 @@ interface IAgentPolice {
   /*//////////////////////////////////////////////
                       POLICING
   //////////////////////////////////////////////*/
+
+  function addPoolToList(uint256 pool) external;
+
+  function removePoolFromList(uint256 pool) external;
 
   // if an agent is overPowered, this function is callable by anyone
   // NOTE: this function is non-destructive,
