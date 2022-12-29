@@ -2,7 +2,7 @@
 pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
-import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
+import {IBroker} from "src/Types/Interfaces/IBroker.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
@@ -27,6 +27,7 @@ contract IntegrationTest is BaseTest {
   address investor3 = makeAddr("INVESTOR3");
   address minerOwner = makeAddr("MINER_OWNER");
   address poolOperator = makeAddr("POOL_OPERATOR");
+  address poolAdmin = makeAddr("POOL_FACTORY_ADMIN");
 
   string poolName = "POOL_1";
   string poolSymbol = "POOL1";
@@ -35,12 +36,9 @@ contract IntegrationTest is BaseTest {
     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
-    pool = poolFactory.createPool(
-      poolName,
-      poolSymbol,
-      poolOperator,
-      address(new BasicRateModule(20e18))
-    );
+    vm.prank(poolAdmin);
+    pool = createPool(poolName, poolSymbol, poolOperator, 20e18);
+    vm.stopPrank();
     pool4626 = IERC4626(address(pool));
     pool20 = IERC20(address(pool));
 
@@ -71,7 +69,7 @@ function testSingleDepositBorrowRepayWithdraw() public {
     // approve the pool to pull the agent's power tokens on call to deposit
     powerToken.approve(address(pool), agentPowerAmount);
 
-    pool.borrow(borrowAmount, signedCred.vc, agentPowerAmount);
+    pool.borrow(borrowAmount, signedCred, agentPowerAmount);
     vm.stopPrank();
 
     uint256 poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));
@@ -88,7 +86,7 @@ function testSingleDepositBorrowRepayWithdraw() public {
     // agent repays the borrow amount
     vm.startPrank(address(agent));
     wFIL.approve(address(pool), borrowAmount);
-    pool.exitPool(borrowAmount, signedCred.vc);
+    pool.exitPool(address(agent), signedCred, borrowAmount);
     vm.stopPrank();
 
     poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));

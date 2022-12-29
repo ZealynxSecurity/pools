@@ -69,12 +69,27 @@ library AuthController {
     );
   }
 
+  function onlyPoolAccounting(address router, address poolAccounting) internal view {
+    require(
+      GetRoute.poolFactory(router).isPool(poolAccounting),
+      "onlyPoolAccounting: Not authorized"
+    );
+  }
+
+  function onlyPoolTemplate(address router, address poolTemplate) internal view {
+    require(
+      GetRoute.poolFactory(router).isPoolTemplate(poolTemplate),
+      "onlyPoolTemplate: Not authorized"
+    );
+  }
+
   function initFactoryRoles(
     address router,
     address agentFactory,
     address agentFactoryAdmin,
     address poolFactory,
-    address poolFactoryAdmin
+    address poolFactoryAdmin,
+    address poolDeployer
   ) internal {
     IMultiRolesAuthority authority = getCoreAuthority(router);
     // factories needs to be able to assign custom Authorities on a per agent/pool basis
@@ -93,6 +108,13 @@ library AuthController {
 
     MultiRolesAuthority poolFactoryAuthority = newMultiRolesAuthority(address(this), Authority(address(0)));
     setSubAuthority(router, poolFactory, poolFactoryAuthority);
+
+    // Setup custom roles and capabilities for the pool factory
+    poolFactoryAuthority.setUserRole(poolDeployer, uint8(Roles.ROLE_POOL_DEPLOYER), true);
+
+    poolFactoryAuthority.setRoleCapability(
+      uint8(Roles.ROLE_POOL_DEPLOYER), POOL_CREATE_POOL_SELECTOR, true
+    );
 
     agentFactoryAuthority.transferOwnership(agentFactoryAdmin);
     poolFactoryAuthority.transferOwnership(poolFactoryAdmin);

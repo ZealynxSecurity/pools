@@ -22,12 +22,16 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
-import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
+import {IBroker} from "src/Types/Interfaces/IBroker.sol";
+import {Account} from "src/Types/Structs/Account.sol";
+import {IBroker} from "src/Types/Interfaces/IBroker.sol";
 import {MinerData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
-import {Stats} from "src/Stats/Stats.sol";
+import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import "src/Constants/Routes.sol";
 
-contract BasicRateModule is IRateModule {
+
+//TODO: replace this with the actual broker
+contract BasicBroker is IBroker {
   using FixedPointMathLib for uint256;
   uint256 rate;
 
@@ -35,7 +39,7 @@ contract BasicRateModule is IRateModule {
     rate = _rate;
   }
 
-  function getRate(VerifiableCredential memory, uint256 amount) external view returns (uint256) {
+  function getRate(VerifiableCredential memory, uint256 amount, Account memory account) external view returns (uint256) {
     return amount.mulWadUp(rate);
   }
 }
@@ -79,7 +83,6 @@ contract BaseTest is Test {
       address(new AgentFactory()),
       address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, 1000)),
       address(new PoolFactory(wFIL)),
-      address(new Stats()),
       address(new PowerToken()),
       vcIssuer
     );
@@ -154,5 +157,35 @@ contract BaseTest is Test {
     bytes32 digest = GetRoute.vcVerifier(router).digest(vc);
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(vcIssuerPk, digest);
     return SignedCredential(vc, v, r, s);
+  }
+
+  function createPool(
+    string memory poolName,
+    string memory poolSymbol,
+    address poolOperator,
+    uint256 fee
+    ) internal returns(IPool)
+  {
+    address poolFactoryAdmin = IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN);
+    vm.startPrank(poolFactoryAdmin);
+
+    IPoolFactory poolFactory = GetRoute.poolFactory(router);
+
+    PoolTemplate template = new PoolTemplate();
+    BasicBroker broker = new BasicBroker(fee);
+
+    template.setRouter(router);
+    poolFactory.approveTemplate(address(template));
+    poolFactory.approveBroker(address(broker));
+
+    IPool pool = poolFactory.createPool(
+        poolName,
+        poolSymbol,
+        poolOperator,
+        address(broker),
+        address(template)
+    );
+    vm.stopPrank();
+    return pool;
   }
 }

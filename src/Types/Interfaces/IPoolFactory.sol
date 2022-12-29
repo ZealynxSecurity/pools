@@ -7,10 +7,17 @@ interface IPoolFactory {
   function allPools(uint256 poolID) external view returns (address);
   function allPoolsLength() external view returns (uint256);
   function isPool(address pool) external view returns (bool);
+  function isPoolTemplate(address pool) external view returns (bool);
   function createPool(
     string memory _name,
     string memory _symbol,
     address operator,
-    address rateModule
+    address broker,
+    address template
   ) external returns (IPool pool);
+  function approveBroker(address broker) external;
+  function revokeBroker(address broker) external;
+  function approveTemplate(address template) external;
+  function revokeTemplate(address template) external;
+
 }

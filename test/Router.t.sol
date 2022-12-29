@@ -26,7 +26,6 @@ struct ContractRoutes {
   address minerRegistry;
   address agentFactory;
   address poolFactory;
-  address stats;
   address powerToken;
   address vcIssuer;
   address coreAuthority;
@@ -64,7 +63,6 @@ contract RouterTest is Test {
       makeAddr("AGENT_FACTORY"),
       makeAddr("AGENT_POLICE"),
       makeAddr("POOL_FACTORY"),
-      makeAddr("STATS"),
       makeAddr("POWER_TOKEN"),
       makeAddr("VC_ISSUER")
     );
@@ -87,7 +85,6 @@ contract RouterTest is Test {
       contractRouteAddrs[4],
       contractRouteAddrs[5],
       contractRouteAddrs[6],
-      contractRouteAddrs[7],
       address(authority)
     );
 
@@ -100,10 +97,6 @@ contract RouterTest is Test {
 
   function testGetPoolFactory() public {
     assertEq(router.getRoute(ROUTE_POOL_FACTORY), contractRoutes.poolFactory);
-  }
-
-  function testGetStats() public {
-    assertEq(router.getRoute(ROUTE_STATS), contractRoutes.stats);
   }
 
   function testGetMinerRegistry() public {

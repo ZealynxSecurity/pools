@@ -26,6 +26,7 @@ library Deployer {
       IRouter(router).getRoute(ROUTE_AGENT_FACTORY),
       IRouter(router).getRoute(ROUTE_AGENT_FACTORY_ADMIN),
       IRouter(router).getRoute(ROUTE_POOL_FACTORY),
+      IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN),
       IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN)
     );
 
@@ -101,7 +102,6 @@ library Deployer {
     address agentFactory,
     address agentPolice,
     address poolFactory,
-    address stats,
     address powerToken,
     address vcIssuer
   ) internal returns (
@@ -124,33 +124,29 @@ library Deployer {
     // Add pool factory route
     routeIDs[4] = ROUTE_POOL_FACTORY;
     routeAddrs[4] = poolFactory;
-    // Add stats route
-    routeIDs[5] = ROUTE_STATS;
-    routeAddrs[5] = stats;
     // Add power token route
-    routeIDs[6] = ROUTE_POWER_TOKEN;
-    routeAddrs[6] = powerToken;
+    routeIDs[5] = ROUTE_POWER_TOKEN;
+    routeAddrs[5] = powerToken;
     // Add vc issuer route
-    routeIDs[7] = ROUTE_VC_ISSUER;
-    routeAddrs[7] = vcIssuer;
+    routeIDs[6] = ROUTE_VC_ISSUER;
+    routeAddrs[6] = vcIssuer;
     // Add agent police route
-    routeIDs[8] = ROUTE_AGENT_POLICE;
-    routeAddrs[8] = agentPolice;
+    routeIDs[7] = ROUTE_AGENT_POLICE;
+    routeAddrs[7] = agentPolice;
 
     IRouter(router).pushRoutes(routeIDs, routeAddrs);
   }
 
   function setRouterOnContracts(address router) internal {
-    bytes4[6] memory routerAwareRoutes = [
+    bytes4[5] memory routerAwareRoutes = [
       ROUTE_AGENT_FACTORY,
       ROUTE_MINER_REGISTRY,
       ROUTE_POOL_FACTORY,
-      ROUTE_STATS,
       ROUTE_POWER_TOKEN,
       ROUTE_AGENT_POLICE
     ];
 
-    for (uint256 i = 0; i < routerAwareRoutes.length; i++) {
+    for (uint256 i = 0; i < routerAwareRoutes.length; ++i) {
       IRouterAware(IRouter(router).getRoute(routerAwareRoutes[i])).setRouter(router);
     }
   }

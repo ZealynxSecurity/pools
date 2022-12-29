@@ -362,13 +362,14 @@ contract AgentTest is BaseTest {
     function setUp() public {
         powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
         IPoolFactory poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
-        pool = poolFactory.createPool(
+        pool = createPool(
             "TEST",
             "TEST",
             ZERO_ADDRESS,
-            address(new BasicRateModule(20e18))
+            2e18
         );
         pool4626 = IERC4626(address(pool));
+
         // investor1 stakes 10 FIL
         vm.deal(investor1, 11e18);
         stakeAmount = 10e18;
@@ -401,7 +402,6 @@ contract AgentTest is BaseTest {
         assertGt(account.pmtPerPeriod, 0);
         assertEq(account.powerTokensStaked, signedCred.vc.miner.qaPower);
         assertEq(account.totalBorrowed, borrowAmount);
-        assertEq(account.nextDueDate, borrowBlock + pool.period());
 
         // the agent staked all its power tokens in this example
         assertEq(
@@ -429,7 +429,6 @@ contract AgentTest is BaseTest {
 
         Account memory account = pool.getAccount(address(agent));
         assertEq(account.totalBorrowed, 0);
-        assertEq(account.nextDueDate, 0);
         assertEq(account.powerTokensStaked, 0);
         assertEq(account.pmtPerPeriod, 0);
     }
@@ -461,11 +460,11 @@ contract AgentPoliceTest is BaseTest {
         police = GetRoute.agentPolice(router);
         powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
         IPoolFactory poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
-        pool = poolFactory.createPool(
+        pool = createPool(
             "TEST",
             "TEST",
             ZERO_ADDRESS,
-            address(new BasicRateModule(20e18))
+            2e18
         );
         pool4626 = IERC4626(address(pool));
         // investor1 stakes 10 FIL
@@ -523,7 +522,7 @@ contract AgentPoliceTest is BaseTest {
 
         vm.startPrank(address(agent));
         wFIL.approve(address(pool), borrowAmount);
-        pool.exitPool(borrowAmount, signedCred.vc);
+        pool.exitPool(address(agent), signedCred, borrowAmount);
         agent.burnPower(2.5e18, signedCred);
         vm.stopPrank();
         police.checkPower(address(agent), sc);

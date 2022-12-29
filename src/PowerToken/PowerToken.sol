@@ -10,8 +10,9 @@ import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
-import {ROUTE_POOL_FACTORY, ROUTE_AGENT_FACTORY} from "src/Constants/Routes.sol";
+import {ROUTE_POOL_FACTORY, ROUTE_AGENT_FACTORY, ROUTE_TREASURY} from "src/Constants/Routes.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
+import {Unauthorized} from "src/Errors.sol";
 
 contract PowerToken is
   IPowerToken,
@@ -36,8 +37,8 @@ contract PowerToken is
       _;
     }
 
-    modifier validFromTo(address from, address to) {
-      _validFromTo(from, to);
+    modifier validTo(address to) {
+      _validTo(to);
       _;
     }
 
@@ -63,14 +64,14 @@ contract PowerToken is
     function transfer(
       address to,
       uint256 amount
-    ) public override(IPowerToken, ERC20) notPaused validFromTo(msg.sender, to) returns (bool) {
+    ) public override(IPowerToken, ERC20) notPaused validTo(to) returns (bool) {
       return super.transfer(to, amount);
     }
 
     function approve(
       address spender,
       uint256 amount
-    ) public override(IPowerToken, ERC20) notPaused validFromTo(msg.sender, spender) returns (bool) {
+    ) public override(IPowerToken, ERC20) notPaused validTo(spender) returns (bool) {
       return super.approve(spender, amount);
     }
 
@@ -78,7 +79,7 @@ contract PowerToken is
       address from,
       address to,
       uint256 amount
-    ) public override(IPowerToken, ERC20) notPaused validFromTo(from, to) returns (bool) {
+    ) public override(IPowerToken, ERC20) notPaused validTo(to) returns (bool) {
       return super.transferFrom(from, to, amount);
     }
 
@@ -100,19 +101,31 @@ contract PowerToken is
                           INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function _validFromTo(address from, address to) internal view {
+    function _validTo(address to) internal view {
       IPoolFactory poolFactory = GetRoute.poolFactory(router);
       IAgentFactory agentFactory = GetRoute.agentFactory(router);
+      address treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 
-      // if from is a pool, to must be an agent
-      if (poolFactory.isPool(from)) {
-        require(agentFactory.isAgent(to), "PowerToken: Pool can only transfer power tokens to agents");
-      }
-      // if from is an agent, to must be a pool
-      else if (agentFactory.isAgent(from)) {
-        require(poolFactory.isPool(to), "PowerToken: Agent can only transfer power tokens to pools");
-      } else {
-        revert("PowerToken: Invalid transfer");
+      // to address can be one of:
+      // agent
+      // pool accounting
+      // treasury
+      // bool isPoolAccounting = poolFactory.isPool(to);
+      // bool isAgent = agentFactory.isAgent(to);
+      // bool isTreasury = to == treasury;
+      // bool validToAddr = isPoolAccounting || isAgent || isTreasury;
+
+      if (!(
+        poolFactory.isPool(to) ||
+        agentFactory.isAgent(to) ||
+        to == treasury
+      )) {
+        revert Unauthorized(
+          address(this),
+          msg.sender,
+          msg.sig,
+          "PowerToken: Invalid to address"
+        );
       }
     }
 

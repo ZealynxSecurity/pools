@@ -8,6 +8,7 @@ remappings = [
   "forge-std/=lib/forge-std/src/",
   "@openzeppelin/=lib/openzeppelin-contracts/",
   "solmate/=lib/solmate/src/",
+  "bytes-utils/=lib/solidity-bytes-utils/contracts/",
   "src/=src/",
   "deploy/=deploy/"
 ]

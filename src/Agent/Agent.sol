@@ -292,7 +292,7 @@ contract Agent is IAgent, RouterAware {
       poolIDs.push(poolID);
     }
 
-    pool.borrow(amount, signedCredential.vc, powerTokenAmount);
+    pool.borrow(amount, signedCredential, powerTokenAmount);
   }
 
   function exit(
@@ -309,7 +309,7 @@ contract Agent is IAgent, RouterAware {
     require(borrowedAmount >= assetAmount, "Cannot exit more than borrowed");
 
     pool.getAsset().approve(address(pool), assetAmount);
-    pool.exitPool(assetAmount, signedCredential.vc);
+    pool.exitPool(address(this), signedCredential, assetAmount);
 
     if (borrowedAmount == assetAmount) {
       // remove poolID from list of pools this agent is staking in
@@ -339,7 +339,7 @@ contract Agent is IAgent, RouterAware {
 
     for (uint256 i = 0; i < _poolIDs.length; i++) {
       // TODO: pass amount here when the poolTemplate accepts it
-      GetRoute.pool(router, _poolIDs[i]).makePayment(address(this), _signedCredential.vc);
+      GetRoute.pool(router, _poolIDs[i]).makePayment(address(this), _amounts[i]);
     }
   }
 

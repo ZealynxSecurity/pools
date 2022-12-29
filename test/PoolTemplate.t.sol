@@ -2,7 +2,7 @@
 pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
-import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
+import {IBroker} from "src/Types/Interfaces/IBroker.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
@@ -36,11 +36,11 @@ contract PoolTemplateStakingTest is BaseTest {
     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
-    pool = poolFactory.createPool(
+    pool = createPool(
       poolName,
       poolSymbol,
       poolOperator,
-      address(new BasicRateModule(20e18))
+      20e18
     );
     pool4626 = IERC4626(address(pool));
     pool20 = IERC20(address(pool));
@@ -455,11 +455,11 @@ contract PoolTemplateBorrowingTest is BaseTest {
     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
-    pool = poolFactory.createPool(
+    pool = createPool(
       poolName,
       poolSymbol,
       poolOperator,
-      address(new BasicRateModule(20e18))
+      20e18
     );
     pool4626 = IERC4626(address(pool));
     pool20 = IERC20(address(pool));
@@ -489,7 +489,7 @@ contract PoolTemplateBorrowingTest is BaseTest {
     powerToken.approve(address(pool), powerAmtStake);
 
     uint256 startEpoch = block.number;
-    pool.borrow(borrowAmount, signedCred.vc, powerAmtStake);
+    pool.borrow(borrowAmount, signedCred, powerAmtStake);
     uint256 postMinerBal = wFIL.balanceOf(address(agent));
 
     vm.stopPrank();
@@ -500,7 +500,6 @@ contract PoolTemplateBorrowingTest is BaseTest {
     assertEq(account.totalBorrowed, borrowAmount);
     assertEq(account.powerTokensStaked, powerAmtStake);
     assertEq(account.startEpoch, startEpoch);
-    assertEq(account.nextDueDate, startEpoch + pool.period());
     assertGt(account.pmtPerPeriod, 0);
 
     uint256 poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));

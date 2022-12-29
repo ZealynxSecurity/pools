@@ -227,6 +227,7 @@ contract ConstantsTest is Test {
 
     // POOL ADMIN FUNCTION SIGNATURES
     assertEq(POOL_FLUSH_SELECTOR, bytes4(keccak256(bytes("flush()"))));
+    assertEq(POOL_SET_FEE_SELECTOR, bytes4(keccak256(bytes("setFee(uint256)"))));
 
     assertEq(PAUSE_SELECTOR, bytes4(keccak256(bytes("pause()"))));
     assertEq(RESUME_SELECTOR, bytes4(keccak256(bytes("resume()"))));
@@ -258,6 +259,16 @@ contract ConstantsTest is Test {
   function testExitPoolFuncSig() public {
     bytes4 expitPoolSig = tester.exitPool(0, vc);
     assertEq(expitPoolSig, POOL_EXIT_SELECTOR);
+  }
+
+  function testDeployPool() public {
+    bytes4 deployPoolFuncSig = tester.createPool("", "", address(0x0), address(0x0));
+    assertEq(deployPoolFuncSig, POOL_CREATE_POOL_SELECTOR);
+  }
+
+  function testSetFee() public {
+    bytes4 setFeeFuncSig = tester.setFee(0);
+    assertEq(setFeeFuncSig, POOL_SET_FEE_SELECTOR);
   }
 }
 
@@ -304,6 +315,19 @@ contract MsgSigTester {
 
   // Pool Admin Funcs
   function flush() external pure returns (bytes4) {
+    return msg.sig;
+  }
+
+  function setFee(uint256 _fee) external pure returns (bytes4) {
+    return msg.sig;
+  }
+
+  function createPool(
+      string memory _name,
+      string memory _symbol,
+      address operator,
+      address broker
+    ) external pure returns (bytes4) {
     return msg.sig;
   }
 }

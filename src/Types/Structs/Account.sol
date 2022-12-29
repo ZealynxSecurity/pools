@@ -9,5 +9,4 @@ struct Account {
     // the total amount borrowed by the agent
     uint256 powerTokensStaked;
     uint256 totalBorrowed;
-    uint256 nextDueDate;
 }

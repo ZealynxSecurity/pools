@@ -4,6 +4,7 @@ pragma solidity ^0.8.15;
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
+import {PoolAccounting} from "src/Pool/PoolAccounting.sol";
 import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
@@ -14,6 +15,17 @@ import {ROUTE_TREASURY} from "src/Constants/Routes.sol";
 contract PoolFactory is IPoolFactory, RouterAware {
   ERC20 public asset;
   address[] public allPools;
+  mapping(address => bool) public templates;
+  mapping(address => bool) public brokers;
+
+  /*//////////////////////////////////////
+                MODIFIERS
+  //////////////////////////////////////*/
+
+  modifier requiresAuth() virtual {
+    AuthController.requiresSubAuth(router, address(this));
+    _;
+  }
 
   constructor(ERC20 _asset) {
     asset = _asset;
@@ -36,9 +48,12 @@ contract PoolFactory is IPoolFactory, RouterAware {
       string memory _name,
       string memory _symbol,
       address operator,
-      address rateModule
-    ) external returns (IPool pool) {
-    pool = new PoolTemplate(_name, _symbol, router, rateModule, address(asset));
+      address broker,
+      address template
+    ) external requiresAuth returns (IPool pool) {
+    require(brokers[broker], "Pool: Broker not approved");
+    require(templates[template], "Pool: Template not approved");
+    pool = new PoolAccounting(_name, _symbol, router, broker, address(asset), template);
     allPools.push(address(pool));
 
     AuthController.initPoolRoles(router, address(pool), operator, address(this));
@@ -51,5 +66,26 @@ contract PoolFactory is IPoolFactory, RouterAware {
       }
     }
     return false;
+  }
+
+  function isPoolTemplate(address pool) external view returns (bool) {
+    return templates[pool];
+  }
+
+  function approveBroker(address broker) external requiresAuth {
+    brokers[broker] = true;
+  }
+
+  function approveTemplate(address template) external requiresAuth {
+    templates[template] = true;
+  }
+
+  // TODO: Not sure about side effects of removing live versions? Should be safe - deprecation
+  function revokeBroker(address broker) external requiresAuth {
+    brokers[broker] = false;
+  }
+
+  function revokeTemplate(address template) external requiresAuth {
+    templates[template] = false;
   }
 }

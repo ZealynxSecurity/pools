@@ -2,13 +2,15 @@
 pragma solidity ^0.8.15;
 
 import "./BaseTest.sol";
+import {ERC20} from "solmate/tokens/ERC20.sol";
 import {PowerToken} from "src/PowerToken/PowerToken.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {VerifiableCredential, MinerData} from "src/Types/Structs/Credentials.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
-import {ERC20} from "solmate/tokens/ERC20.sol";
+import {GetRoute} from "src/Router/GetRoute.sol";
+import {Decode} from "src/Errors.sol";
 
 contract PowerTokenTest is BaseTest {
   IPool pool;
@@ -22,18 +24,17 @@ contract PowerTokenTest is BaseTest {
   function setUp() public {
     agentOwner = makeAddr("OWNER");
     powerToken = PowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
-    poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+    poolFactory = GetRoute.poolFactory(router);
 
     (agent,) = configureAgent(agentOwner);
 
     sc = issueGenericSC(address(agent));
     vc = sc.vc;
-
-    pool = poolFactory.createPool(
+    pool = createPool(
         "TEST",
         "TEST",
         ZERO_ADDRESS,
-        ZERO_ADDRESS
+        0
     );
   }
 
@@ -102,9 +103,22 @@ contract PowerTokenTest is BaseTest {
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
 
-    vm.expectRevert("PowerToken: Pool can only transfer power tokens to agents");
     vm.prank(address(pool));
-    powerToken.transfer(makeAddr("RECIPIENT"), 100);
+    try powerToken.transfer(makeAddr("RECIPIENT"), 100) {
+        assertTrue(false, "testTransferPoolNonAgent should revert.");
+    } catch (bytes memory e) {
+      (
+        address target,
+        address caller,
+        bytes4 funcSig,
+        string memory reason
+      ) = Decode.unauthorizedError(e);
+
+      assertEq(target, address(powerToken), "target should be powerToken");
+      assertEq(caller, address(pool), "caller should be pool");
+      assertEq(funcSig, powerToken.transfer.selector, "funcSig should be transferFrom");
+      assertEq(reason, "PowerToken: Invalid to address");
+    }
   }
 
   function testTransferPoolAgent() public {
@@ -129,23 +143,42 @@ contract PowerTokenTest is BaseTest {
     assertEq(allowance, stakeAmount, "pool should have non 0 allowance");
   }
 
-  function testTransferFromNonAgentPool() public {
-    vm.expectRevert("PowerToken: Invalid transfer");
-    vm.prank(address(pool));
-    powerToken.transferFrom(makeAddr("TEST"), address(pool), 0);
-  }
-
   function testTransferFromAgentNonPool() public {
-    vm.expectRevert("PowerToken: Agent can only transfer power tokens to pools");
     vm.prank(address(agent));
-    powerToken.transferFrom(address(agent), makeAddr("TEST"), 0);
+    try powerToken.transferFrom(address(agent), makeAddr("TEST"), 0) {
+        assertTrue(false, "transferFromAgentNonPool should revert.");
+    } catch (bytes memory e) {
+      (
+        address target,
+        address caller,
+        bytes4 funcSig,
+        string memory reason
+      ) = Decode.unauthorizedError(e);
+
+      assertEq(target, address(powerToken), "target should be powerToken");
+      assertEq(caller, address(agent), "caller should be agent");
+      assertEq(funcSig, powerToken.transferFrom.selector, "funcSig should be transferFrom");
+      assertEq(reason, "PowerToken: Invalid to address");
+    }
   }
 
   function testTransferFromPoolNonAgent() public {
-    vm.expectRevert("PowerToken: Pool can only transfer power tokens to agents");
-    address testAddr = makeAddr("TEST");
-    vm.prank(testAddr);
-    powerToken.transferFrom(address(pool), testAddr, 0);
+    vm.prank(address(agent));
+    try powerToken.transferFrom(address(pool), makeAddr("testAddr"), 0) {
+        assertTrue(false, "testTransferFromPoolNonAgent should revert.");
+    } catch (bytes memory e) {
+      (
+        address target,
+        address caller,
+        bytes4 funcSig,
+        string memory reason
+      ) = Decode.unauthorizedError(e);
+
+      assertEq(target, address(powerToken), "target should be powerToken");
+      assertEq(caller, address(agent), "caller should be agent");
+      assertEq(funcSig, powerToken.transferFrom.selector, "funcSig should be transferFrom");
+      assertEq(reason, "PowerToken: Invalid to address");
+    }
   }
 
   function testSafeTransferFromAgentPool() public {
@@ -206,13 +239,6 @@ contract PowerTokenTest is BaseTest {
 
     uint256 allowance = powerToken.allowance(address(agent), address(pool));
     assertEq(allowance, stakeAmount, "pool should have non 0 allowance");
-  }
-
-  // for some reason vm.expectRevert("...") doesn't work here
-  function testFailSafeTransferFromNonAgentPool() public {
-    // vm.expectRevert("TRANSFER_FROM_FAILED");
-    vm.prank(address(pool));
-    SafeTransferLib.safeTransferFrom(ERC20(powerToken), makeAddr("TEST"), address(pool), 0);
   }
 
   // for some reason vm.expectRevert("...") doesn't work here
