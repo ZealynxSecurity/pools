@@ -15,9 +15,9 @@ abstract contract VCVerifier is RouterAware, EIP712 {
     EIP712(_name, _version) {}
 
   string internal constant _VERIFIABLE_CREDENTIAL_TYPE =
-    "VerifiableCredential(address issuer,address subject,uint256 epochIssued,uint256 epochValidUntil,MinerData miner)";
+    "VerifiableCredential(address issuer,address subject,uint256 epochIssued,uint256 epochValidUntil,uint256 cap,MinerData miner)";
   string internal constant _MINER_DATA_TYPE =
-    "MinerData(uint256 assets,uint256 expectedDailyRewards,uint256 exposureAtDefault,uint256 expectedLoss,uint256 liabilities,uint256 liquidationValue,uint256 lossGivenDefault,uint256 probabilityOfDefault,uint256 qaPower,uint256 rawPower,uint256 startEpoch,uint256 unexpectedLoss)";
+    "MinerData(uint256 assets,uint256 expectedDailyRewards,uint256 exposureAtDefault,uint256 expectedLoss,uint256 liabilities,uint256 lossGivenDefault,uint256 probabilityOfDefault,uint256 qaPower,uint256 rawPower,uint256 startEpoch,uint256 unexpectedLoss)";
 
   bytes32 public constant _VERIFIABLE_CREDENTIAL_TYPE_HASH =
     keccak256(abi.encodePacked(_VERIFIABLE_CREDENTIAL_TYPE, _MINER_DATA_TYPE));
@@ -33,7 +33,6 @@ abstract contract VCVerifier is RouterAware, EIP712 {
       miner.exposureAtDefault,
       miner.expectedLoss,
       miner.liabilities,
-      miner.liquidationValue,
       miner.lossGivenDefault,
       miner.probabilityOfDefault,
       miner.qaPower,
@@ -50,6 +49,7 @@ abstract contract VCVerifier is RouterAware, EIP712 {
       vc.subject,
       vc.epochIssued,
       vc.epochValidUntil,
+      vc.cap,
       deriveMinerDataHash(vc.miner)
     ));
   }

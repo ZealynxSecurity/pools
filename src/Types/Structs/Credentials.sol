@@ -7,7 +7,6 @@ struct MinerData {
   uint256 exposureAtDefault;
   uint256 expectedLoss;
   uint256 liabilities;
-  uint256 liquidationValue;
   uint256 lossGivenDefault;
   uint256 probabilityOfDefault;
   uint256 qaPower;
@@ -21,6 +20,7 @@ struct VerifiableCredential {
   address subject;
   uint256 epochIssued;
   uint256 epochValidUntil;
+  uint256 cap;
   MinerData miner;
 }
 

@@ -568,7 +568,7 @@ contract AgentPoliceTest is BaseTest {
         uint256 newQAPower = 5e18;
 
         MinerData memory minerData = MinerData(
-            1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, newQAPower, 5e18, 0, 0
+            1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, newQAPower, 5e18, 0, 0
         );
 
         VerifiableCredential memory _vc = VerifiableCredential(
@@ -576,6 +576,7 @@ contract AgentPoliceTest is BaseTest {
             address(agent),
             block.number,
             block.number + 100,
+            1000,
             minerData
         );
 
@@ -715,7 +716,7 @@ contract AgentPoliceTest is BaseTest {
         assertEq(agentPowTokenBal, signedCred.vc.miner.qaPower - powerTokenStake);
 
         MinerData memory minerData = MinerData(
-            1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, newQAPower, 5e18, 0, 0
+            1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, newQAPower, 5e18, 0, 0
         );
 
         VerifiableCredential memory _vc = VerifiableCredential(
@@ -723,6 +724,7 @@ contract AgentPoliceTest is BaseTest {
             address(agent),
             block.number,
             block.number + 100,
+            1000,
             minerData
         );
 

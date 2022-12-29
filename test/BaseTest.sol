@@ -135,7 +135,7 @@ contract BaseTest is Test {
     uint256 qaPower = 10e18;
 
     MinerData memory miner = MinerData(
-      1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0
+      1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 10, qaPower, 5e18, 0, 0
     );
 
     VerifiableCredential memory vc = VerifiableCredential(
@@ -143,6 +143,7 @@ contract BaseTest is Test {
       agent,
       block.number,
       block.number + 100,
+      1000,
       miner
     );
 

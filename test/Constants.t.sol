@@ -14,13 +14,14 @@ contract AgentConstantsTest is Test {
   function setUp() public {
     address issuer = makeAddr("ISSUER");
 
-    MinerData memory miner = MinerData(1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
+    MinerData memory miner = MinerData(1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
 
    VerifiableCredential memory vc = VerifiableCredential(
       issuer,
       makeAddr("SUBJECT"),
       block.number,
       block.number + 100,
+      1000,
       miner
     );
 
@@ -176,13 +177,14 @@ contract ConstantsTest is Test {
   function setUp() public {
     address issuer = makeAddr("ISSUER");
 
-    MinerData memory miner = MinerData(1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
+    MinerData memory miner = MinerData(1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 10, 10e18, 5e18, 0, 0);
 
     vc = VerifiableCredential(
       issuer,
       makeAddr("SUBJECT"),
       block.number,
       block.number + 100,
+      1000,
       miner
     );
 
