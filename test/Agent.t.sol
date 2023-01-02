@@ -486,6 +486,19 @@ contract AgentPoliceTest is BaseTest {
         vm.stopPrank();
     }
 
+    function testNextPmtWindowDeadline() public {
+        uint256 windowLength = police.windowLength();
+        require(block.number < windowLength);
+
+        uint256 nextPmtWindowDeadline = police.nextPmtWindowDeadline();
+        // first window's deadline is the windowLength
+        assertEq(nextPmtWindowDeadline, windowLength);
+
+        vm.roll(block.number + windowLength + 10);
+        nextPmtWindowDeadline = police.nextPmtWindowDeadline();
+        assertEq(nextPmtWindowDeadline, windowLength * 2);
+    }
+
     function testCheckOverPowered() public {
         uint256 powerTokenStake = 7.5e18;
         uint256 borrowAmount = 1000;

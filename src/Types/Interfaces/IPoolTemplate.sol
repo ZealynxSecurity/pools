@@ -26,17 +26,22 @@ interface IPoolTemplate  {
     );
 
     event ExitPool(
-        address indexed caller,
         address indexed agent,
-        uint256 amount
+        uint256 amount,
+        uint256 powerTokensReturned
     );
 
     event MakePayment(
-        address indexed caller,
         address indexed agent,
-        uint256 amount
+        uint256 pmt
     );
 
+    event StakeToPay(
+        address indexed agent,
+        uint256 pmt,
+        uint256 powerTokenAmount,
+        uint256 newRate
+    );
 
     // Finance functions
     function borrow(
@@ -58,6 +63,14 @@ interface IPoolTemplate  {
         address agent,
         Account memory account,
         uint256 pmt
+    ) external;
+
+    function stakeToPay(
+        uint256 pmt,
+        VerifiableCredential memory vc,
+        uint256 powerTokenAmount,
+        IBroker broker,
+        Account memory account
     ) external;
 }
 

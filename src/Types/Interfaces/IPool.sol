@@ -8,41 +8,13 @@ import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 
 /// NOTE: this pool uses accrual basis accounting to compute share prices
 interface IPool  {
-
-    /*//////////////////////////////////////////////////////////////
-                                 EVENTS
-    //////////////////////////////////////////////////////////////*/
-    event Borrow(
-        address indexed agent,
-        uint256 amount,
-        uint256 powerTokenAmount,
-        uint256 rate
-    );
-
-    event Flush(
-        address indexed caller,
-        address indexed treasury,
-        uint256 amount
-    );
-
-    event ExitPool(
-        address indexed caller,
-        address indexed agent,
-        uint256 amount
-    );
-
-    event MakePayment(
-        address indexed caller,
-        address indexed agent,
-        uint256 amount
-    );
-
     // Basic Stats Getters **PURE**
     function getAgentBorrowed(address agent) external view returns (uint256);
     function getAgentBorrowed(Account memory account) external view returns (uint256);
     function pmtPerPeriod(address agent) external view returns (uint256);
     function pmtPerPeriod(Account memory account) external view returns (uint256);
     function totalAssets() external view returns (uint256);
+    function totalBorrowed() external view returns (uint256);
     function getPowerToken() external view returns (IPowerToken);
     // Would love to expose the public getter but not sure how to with the interitance structure we have
     function getAsset() external view returns (ERC20);
@@ -65,6 +37,11 @@ interface IPool  {
     function makePayment(
         address agent,
         uint256 amount
+    ) external;
+    function stakeToPay(
+        uint256 pmt,
+        SignedCredential memory sc,
+        uint256 powerTokenAmount
     ) external;
     // Admin Funcs
     function flush() external;

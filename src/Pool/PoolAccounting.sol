@@ -131,7 +131,7 @@ contract PoolAccounting is IPool, RouterAware, ERC4626 {
     }
 
     function resetAccount(address owner) public onlyTemplate {
-        accounts[_addressToID(owner)] = Account(0,0,0,0);
+        accounts[_addressToID(owner)] = Account(0,0,0,0,0);
     }
 
     // NOTE: Making these seperate saves us a step but maybe there's a smarter way to do this; feels wrong idk
@@ -159,13 +159,33 @@ contract PoolAccounting is IPool, RouterAware, ERC4626 {
         GetRoute.powerToken(router).transferFrom(msg.sender, address(this), powerTokenAmount);
 
         template.borrow(
-            amount, sc.vc,
+            amount,
+            sc.vc,
             powerTokenAmount,
             broker,
             accounts[_addressToID(msg.sender)]
         );
         // interact
         SafeTransferLib.safeTransfer(asset, msg.sender, amount);
+    }
+
+    // makes payment using power tokens, priced at the average ratio of powerTokenStake : borrowAmount
+    function stakeToPay(
+        uint256 pmt,
+        SignedCredential memory sc,
+        uint256 powerTokenAmount
+    ) public onlyAgent isValidCredential(msg.sender, sc) {
+        // pull the powerTokens into the pool
+        GetRoute.powerToken(router).transferFrom(msg.sender, address(this), powerTokenAmount);
+
+        template.stakeToPay(
+            pmt,
+            sc.vc,
+            powerTokenAmount,
+            broker,
+            accounts[_addressToID(msg.sender)]
+        );
+        // no funds get transferred to the agent in this case, since they use the borrowed proceeds to make a payment
     }
 
     function makePayment(address agent, uint256 pmt) public {
@@ -179,8 +199,7 @@ contract PoolAccounting is IPool, RouterAware, ERC4626 {
         uint256 amount
     )
         public
-        onlyAgent
-        isValidCredential(msg.sender, sc)
+        isValidCredential(agent, sc)
         returns (uint256 powerTokensToReturn)
     {
         // Pull back the borrowed asset
@@ -225,7 +244,6 @@ contract PoolAccounting is IPool, RouterAware, ERC4626 {
         // effect
         uint256 flushAmount = feesCollected;
         feesCollected = 0;
-        emit Flush(address(this), treasury, flushAmount);
         // interact
         asset.transfer(treasury, flushAmount);
     }

@@ -68,7 +68,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
 
   // the first window deadline is epoch 0 + windowLength
   function nextPmtWindowDeadline() external view returns (uint256) {
-    return block.number + (block.number % windowLength);
+    return (windowLength + block.number - (block.number % windowLength));
   }
 
   function isOverPowered(address agent) public view returns (bool) {

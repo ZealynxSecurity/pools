@@ -8,7 +8,9 @@ import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {Account} from "src/Types/Structs/Account.sol";
+import {Decode} from "src/Errors.sol";
 import "./BaseTest.sol";
 
 contract PoolTemplateStakingTest is BaseTest {
@@ -430,7 +432,7 @@ contract PoolTemplateStakingTest is BaseTest {
     }
 }
 
-contract PoolTemplateBorrowingTest is BaseTest {
+contract PoolBorrowingTest is BaseTest {
   IAgent agent;
 
   IPoolFactory poolFactory;
@@ -508,4 +510,463 @@ contract PoolTemplateBorrowingTest is BaseTest {
     assertEq(agentPowTokenBal, signedCred.vc.miner.qaPower - powerAmtStake);
     assertEq(poolPowTokenBal + agentPowTokenBal, signedCred.vc.miner.qaPower);
   }
+
+  function testMultiBorrowNoDeficit() public {
+
+  }
+
+  // tests a deficit < borrow amt
+  function testBorrowDeficitWAdditionalProceeds() public {}
+
+  // tests a deficit > borrow amt
+  function testBorrowDeficitNoProceeds() public {}
+}
+
+contract PoolExitingTest is BaseTest {
+  IAgent agent;
+
+  IPoolFactory poolFactory;
+  IPowerToken powerToken;
+  // this isn't ideal but it also prepares us better to separate the pool token from the pool
+  IPool pool;
+  IERC4626 pool4626;
+  IERC20 pool20;
+
+  SignedCredential signedCred;
+
+  uint256 borrowAmount = 0.5e18;
+  uint256 investor1UnderlyingAmount = 1e18;
+  address investor1 = makeAddr("INVESTOR1");
+  address minerOwner = makeAddr("MINER_OWNER");
+  address poolOperator = makeAddr("POOL_OPERATOR");
+
+  string poolName = "POOL_1";
+  string poolSymbol = "POOL1";
+
+  uint256 borrowBlock;
+
+  function setUp() public {
+    poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+    powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
+    treasury = IRouter(router).getRoute(ROUTE_TREASURY);
+    pool = createPool(
+      poolName,
+      poolSymbol,
+      poolOperator,
+      20e18
+    );
+    pool4626 = IERC4626(address(pool));
+    pool20 = IERC20(address(pool));
+
+    vm.deal(investor1, 10e18);
+    vm.prank(investor1);
+    wFIL.deposit{value: 10e18}();
+    require(wFIL.balanceOf(investor1) == 10e18);
+
+    (agent,) = configureAgent(minerOwner);
+
+    signedCred = issueGenericSC(address(agent));
+
+    vm.startPrank(investor1);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
+    pool4626.deposit(investor1UnderlyingAmount, investor1);
+    vm.stopPrank();
+
+    uint256 powerAmtStake = 1e18;
+    vm.startPrank(address(agent));
+    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    // approve the pool to pull the agent's power tokens on call to deposit
+    // note that borrow
+    powerToken.approve(address(pool), powerAmtStake);
+    borrowBlock = block.number;
+    pool.borrow(borrowAmount, signedCred, powerAmtStake);
+
+    vm.stopPrank();
+  }
+
+  function testFullExit() public {
+    vm.prank(address(agent));
+    wFIL.approve(address(pool), borrowAmount);
+    // NOTE: anyone can exit anyone else - the returned tokens still go to the agent's account
+    pool.exitPool(address(agent), signedCred, borrowAmount);
+
+    Account memory account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, 0);
+    assertEq(account.powerTokensStaked, 0);
+    assertEq(account.startEpoch, 0);
+    assertEq(account.pmtPerPeriod, 0);
+    assertEq(account.epochsPaid, 0);
+    assertEq(pool.totalBorrowed(), 0);
+  }
+
+  function testPartialExitWithinCurrentWindow() public {
+    vm.prank(address(agent));
+    wFIL.approve(address(pool), borrowAmount);
+
+    uint256 poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));
+    pool.exitPool(address(agent), signedCred, borrowAmount / 2);
+
+    uint256 poolPowTokenBalAfter = IERC20(address(powerToken)).balanceOf(address(pool));
+
+    Account memory accountAfter = pool.getAccount(address(agent));
+
+    assertEq(accountAfter.totalBorrowed, borrowAmount / 2);
+    assertEq(accountAfter.powerTokensStaked, poolPowTokenBal - poolPowTokenBalAfter);
+    assertEq(accountAfter.startEpoch, borrowBlock);
+    assertGt(accountAfter.pmtPerPeriod, 0);
+    // exiting goes towards principal and does not credit partial payment on account
+    assertEq(pool.totalBorrowed(), borrowAmount / 2);
+  }
+}
+
+contract PoolMakePaymentTest is BaseTest {
+  IAgent agent;
+
+  IPoolFactory poolFactory;
+  IPowerToken powerToken;
+  // this isn't ideal but it also prepares us better to separate the pool token from the pool
+  IPool pool;
+  IERC4626 pool4626;
+  IERC20 pool20;
+
+  SignedCredential signedCred;
+
+  uint256 borrowAmount = 0.5e18;
+  uint256 powerAmtStake = 1e18;
+  uint256 investor1UnderlyingAmount = 1e18;
+  address investor1 = makeAddr("INVESTOR1");
+  address minerOwner = makeAddr("MINER_OWNER");
+  address poolOperator = makeAddr("POOL_OPERATOR");
+
+  string poolName = "POOL_1";
+  string poolSymbol = "POOL1";
+
+  uint256 borrowBlock;
+
+  function setUp() public {
+    poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+    powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
+    treasury = IRouter(router).getRoute(ROUTE_TREASURY);
+    pool = createPool(
+      poolName,
+      poolSymbol,
+      poolOperator,
+      20e18
+    );
+    pool4626 = IERC4626(address(pool));
+    pool20 = IERC20(address(pool));
+
+    vm.deal(investor1, 10e18);
+    vm.prank(investor1);
+    wFIL.deposit{value: 10e18}();
+    require(wFIL.balanceOf(investor1) == 10e18);
+
+    (agent,) = configureAgent(minerOwner);
+
+    signedCred = issueGenericSC(address(agent));
+
+    vm.startPrank(investor1);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
+    pool4626.deposit(investor1UnderlyingAmount, investor1);
+    vm.stopPrank();
+
+    vm.startPrank(address(agent));
+    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    // approve the pool to pull the agent's power tokens on call to deposit
+    // note that borrow
+    powerToken.approve(address(pool), powerAmtStake);
+    borrowBlock = block.number;
+    pool.borrow(borrowAmount, signedCred, powerAmtStake);
+
+    vm.stopPrank();
+  }
+
+  function testFullPayment() public {
+    vm.startPrank(address(agent));
+    Account memory account = pool.getAccount(address(agent));
+    assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
+    uint256 pmtPerPeriod = account.pmtPerPeriod;
+    wFIL.approve(address(pool), pmtPerPeriod);
+    pool.makePayment(address(agent), pmtPerPeriod);
+    vm.stopPrank();
+    account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, borrowAmount);
+    assertEq(account.powerTokensStaked, powerAmtStake);
+    assertEq(account.startEpoch, borrowBlock);
+    assertEq(account.pmtPerPeriod, pmtPerPeriod);
+    assertEq(pool.totalBorrowed(), borrowAmount);
+    // since we paid the full amount, the last payment epoch should be the end of the next payment window
+    uint256 nextPaymentWindowClose = GetRoute.agentPolice(router).nextPmtWindowDeadline();
+    assertEq(account.epochsPaid, nextPaymentWindowClose);
+  }
+
+  function testPartialPmtWithinCurrentWindow() public {
+    vm.startPrank(address(agent));
+    Account memory account = pool.getAccount(address(agent));
+    assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
+    uint256 pmtPerPeriod = account.pmtPerPeriod;
+    uint256 partialPayment = pmtPerPeriod / 2;
+    wFIL.approve(address(pool), partialPayment);
+    pool.makePayment(address(agent), partialPayment);
+    vm.stopPrank();
+    account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, borrowAmount);
+    assertEq(account.powerTokensStaked, powerAmtStake);
+    assertEq(account.startEpoch, borrowBlock);
+    assertEq(account.pmtPerPeriod, pmtPerPeriod);
+    assertEq(pool.totalBorrowed(), borrowAmount);
+    // since we paid the full amount, the last payment epoch should be the end of the next payment window
+    uint256 nextPaymentWindowClose = GetRoute.agentPolice(router).nextPmtWindowDeadline();
+
+    assertEq(account.epochsPaid, GetRoute.agentPolice(router).windowLength() / 2, "Account epochsPaid shold be half the window length");
+    assertLt(account.epochsPaid, nextPaymentWindowClose, "Account epochsPaid should be less than the nextPmtWindowDeadline");
+  }
+
+  function testForwardPayment() public {
+    vm.startPrank(address(agent));
+    Account memory account = pool.getAccount(address(agent));
+    assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
+    uint256 pmtPerPeriod = account.pmtPerPeriod;
+    uint256 forwardPayment = pmtPerPeriod * 2;
+    wFIL.approve(address(pool), forwardPayment);
+    pool.makePayment(address(agent), forwardPayment);
+    vm.stopPrank();
+    account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, borrowAmount);
+    assertEq(account.powerTokensStaked, powerAmtStake);
+    assertEq(account.startEpoch, borrowBlock);
+    assertEq(account.pmtPerPeriod, pmtPerPeriod);
+    assertEq(pool.totalBorrowed(), borrowAmount);
+    // since we paid the full amount, the last payment epoch should be the end of the next payment window
+    uint256 nextPaymentWindowClose = GetRoute.agentPolice(router).nextPmtWindowDeadline();
+
+    assertEq(account.epochsPaid, nextPaymentWindowClose * 2, "Account epochsPaid should be 2 nextPmtWindowDeadlines forward");
+  }
+
+  function testMultiPartialPaymentsToPmtPerPeriod() public {
+    vm.startPrank(address(agent));
+    Account memory account = pool.getAccount(address(agent));
+    assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
+    uint256 pmtPerPeriod = account.pmtPerPeriod;
+    wFIL.approve(address(pool), pmtPerPeriod);
+
+    uint256 partialPayment = pmtPerPeriod / 2;
+    pool.makePayment(address(agent), partialPayment);
+
+    // roll forward in time for shits and gigs
+    vm.roll(block.number + 1);
+
+    pool.makePayment(address(agent), partialPayment);
+    vm.stopPrank();
+
+    account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, borrowAmount);
+    assertEq(account.powerTokensStaked, powerAmtStake);
+    assertEq(account.startEpoch, borrowBlock);
+    assertEq(account.pmtPerPeriod, pmtPerPeriod);
+    assertEq(pool.totalBorrowed(), borrowAmount);
+    // since we paid the full amount, the last payment epoch should be the end of the next payment window
+    uint256 nextPaymentWindowClose = GetRoute.agentPolice(router).nextPmtWindowDeadline();
+
+    assertEq(account.epochsPaid, nextPaymentWindowClose, "Account epochsPaid should be the nextPmtWindowDeadline");
+  }
+
+  function testLatePayment() public {
+    IAgentPolice police = GetRoute.agentPolice(router);
+    // capture original next payment deadline
+    uint256 originalPaymentClose = police.nextPmtWindowDeadline();
+
+    vm.startPrank(address(agent));
+    Account memory account = pool.getAccount(address(agent));
+    assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
+
+    // fast forward 2 window deadlines
+    vm.roll(block.number + police.windowLength()*2);
+
+    uint256 pmtPerPeriod = account.pmtPerPeriod;
+    wFIL.approve(address(pool), pmtPerPeriod);
+
+
+    pool.makePayment(address(agent), pmtPerPeriod);
+    vm.stopPrank();
+
+    account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, borrowAmount);
+    assertEq(account.powerTokensStaked, powerAmtStake);
+    assertEq(account.startEpoch, borrowBlock);
+    assertEq(account.pmtPerPeriod, pmtPerPeriod);
+    assertEq(pool.totalBorrowed(), borrowAmount);
+    uint256 nextWindowClose = police.nextPmtWindowDeadline();
+    assertEq(account.epochsPaid, originalPaymentClose, "Account epochsPaid should be the original payment close, the account should not be up to date");
+    assertLt(originalPaymentClose, nextWindowClose, "The next payment window should be greater than the original payment window");
+  }
+}
+
+contract PoolStakeToPayTest is BaseTest {
+  IAgent agent;
+
+  IPoolFactory poolFactory;
+  IPowerToken powerToken;
+  // this isn't ideal but it also prepares us better to separate the pool token from the pool
+  IPool pool;
+  IERC4626 pool4626;
+  IERC20 pool20;
+
+  SignedCredential signedCred;
+
+  uint256 borrowAmount = 0.5e18;
+  uint256 powerAmtStake = 1e18;
+  uint256 investor1UnderlyingAmount = 1e18;
+  address investor1 = makeAddr("INVESTOR1");
+  address minerOwner = makeAddr("MINER_OWNER");
+  address poolOperator = makeAddr("POOL_OPERATOR");
+
+  string poolName = "POOL_1";
+  string poolSymbol = "POOL1";
+
+  uint256 borrowBlock;
+
+  function setUp() public {
+    poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+    powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
+    treasury = IRouter(router).getRoute(ROUTE_TREASURY);
+    pool = createPool(
+      poolName,
+      poolSymbol,
+      poolOperator,
+      20e18
+    );
+    pool4626 = IERC4626(address(pool));
+    pool20 = IERC20(address(pool));
+
+    vm.deal(investor1, 10e18);
+    vm.prank(investor1);
+    wFIL.deposit{value: 10e18}();
+    require(wFIL.balanceOf(investor1) == 10e18);
+
+    (agent,) = configureAgent(minerOwner);
+
+    signedCred = issueGenericSC(address(agent));
+
+    vm.startPrank(investor1);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
+    pool4626.deposit(investor1UnderlyingAmount, investor1);
+    vm.stopPrank();
+
+    vm.startPrank(address(agent));
+    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    // approve the pool to pull the agent's power tokens on call to deposit
+    // note that borrow
+    powerToken.approve(address(pool), powerAmtStake);
+    borrowBlock = block.number;
+    pool.borrow(borrowAmount, signedCred, powerAmtStake);
+
+    vm.stopPrank();
+  }
+
+  function testFullPayment() public {
+    vm.startPrank(address(agent));
+    Account memory account = pool.getAccount(address(agent));
+    assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
+    uint256 pmtPerPeriod = account.pmtPerPeriod;
+    IERC20(address(powerToken)).approve(address(pool), powerAmtStake);
+    pool.stakeToPay(pmtPerPeriod, signedCred, powerAmtStake);
+    vm.stopPrank();
+    account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, borrowAmount + pmtPerPeriod);
+    // double power was staked
+    assertEq(account.powerTokensStaked, powerAmtStake * 2);
+    assertEq(account.startEpoch, borrowBlock);
+    assertEq(account.pmtPerPeriod, pmtPerPeriod);
+    assertEq(pool.totalBorrowed(), borrowAmount + pmtPerPeriod);
+    // since we paid the full amount, the last payment epoch should be the end of the next payment window
+    uint256 nextPaymentWindowClose = GetRoute.agentPolice(router).nextPmtWindowDeadline();
+    assertEq(account.epochsPaid, nextPaymentWindowClose);
+  }
+
+  function testPartialPmtWithinCurrentWindow() public {
+    vm.startPrank(address(agent));
+    Account memory account = pool.getAccount(address(agent));
+    assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
+    uint256 pmtPerPeriod = account.pmtPerPeriod;
+    uint256 partialPayment = pmtPerPeriod / 2;
+    IERC20(address(powerToken)).approve(address(pool), powerAmtStake);
+    pool.stakeToPay(partialPayment, signedCred, powerAmtStake);
+    vm.stopPrank();
+    account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, borrowAmount + partialPayment);
+    assertEq(account.powerTokensStaked, powerAmtStake * 2);
+    assertEq(account.startEpoch, borrowBlock);
+    assertEq(account.pmtPerPeriod, pmtPerPeriod);
+    assertEq(pool.totalBorrowed(), borrowAmount + partialPayment);
+
+    // since we paid exactly half of what we owe, epochsPaid should be windowLength / 2
+    assertEq(account.epochsPaid, GetRoute.agentPolice(router).windowLength() / 2, "Account epochsPaid should be greater than 0");
+  }
+
+  function testForwardPayment() public {
+    vm.startPrank(address(agent));
+    Account memory account = pool.getAccount(address(agent));
+    assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
+    uint256 pmtPerPeriod = account.pmtPerPeriod;
+    uint256 forwardPayment = pmtPerPeriod * 2;
+    IERC20(address(powerToken)).approve(address(pool), powerAmtStake);
+    pool.stakeToPay(forwardPayment, signedCred, powerAmtStake);
+    vm.stopPrank();
+    account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, borrowAmount + forwardPayment);
+    assertEq(account.powerTokensStaked, powerAmtStake * 2);
+    assertEq(account.startEpoch, borrowBlock);
+    assertEq(account.pmtPerPeriod, pmtPerPeriod);
+    assertEq(pool.totalBorrowed(), borrowAmount + forwardPayment);
+    // since we paid the full amount, the last payment epoch should be the end of the next payment window
+    uint256 nextPaymentWindowClose = GetRoute.agentPolice(router).nextPmtWindowDeadline();
+
+    assertEq(account.epochsPaid, nextPaymentWindowClose * 2, "Account epochsPaid should be 2 nextPmtWindowDeadlines forward");
+  }
+
+  function testLatePayment() public {
+    IAgentPolice police = GetRoute.agentPolice(router);
+    vm.startPrank(address(agent));
+    Account memory account = pool.getAccount(address(agent));
+    assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
+
+    // fast forward 2 window deadlines
+    vm.roll(block.number + police.windowLength()*2);
+
+    uint256 pmtPerPeriod = account.pmtPerPeriod;
+    IERC20(address(powerToken)).approve(address(pool), powerAmtStake);
+    // issue new cred in valid epoch range
+    signedCred = issueGenericSC(address(agent));
+
+    try pool.stakeToPay(pmtPerPeriod, signedCred, powerAmtStake) {
+      assertTrue(false, "testTransferPoolNonAgent should revert.");
+    } catch (bytes memory err) {
+      (,,,,,string memory reason) = Decode.insufficientPowerError(err);
+
+      assertEq(reason, "PoolTemplate: additional power insufficient to make payment to bring account current", "reason should be the expected reason");
+    }
+
+    vm.stopPrank();
+
+    account = pool.getAccount(address(agent));
+
+    assertEq(account.totalBorrowed, borrowAmount);
+    assertEq(account.powerTokensStaked, powerAmtStake);
+    assertEq(account.startEpoch, borrowBlock);
+    assertEq(account.pmtPerPeriod, pmtPerPeriod);
+    assertEq(pool.totalBorrowed(), borrowAmount);
+    assertEq(account.epochsPaid, 0, "Account epochsPaid should not have changed");
+  }
+
+  function testChangedPmtPerPeriod() internal {}
 }

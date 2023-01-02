@@ -40,7 +40,7 @@ contract BasicBroker is IBroker {
   }
 
   function getRate(VerifiableCredential memory, uint256 amount, Account memory account) external view returns (uint256) {
-    return amount.mulWadUp(rate);
+    return amount.mulWadUp(rate).divWadUp(100e18);
   }
 }
 
