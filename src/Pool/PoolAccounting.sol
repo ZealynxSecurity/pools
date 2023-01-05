@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.15;
 
+import {PoolToken} from "./Tokens/PoolToken.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
@@ -26,13 +27,14 @@ import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
 
 /// NOTE: this pool uses accrual basis accounting to compute share prices
-contract PoolAccounting is IPool, RouterAware, ERC4626 {
+contract PoolAccounting is IPool, RouterAware {
     using FixedPointMathLib for uint256;
     // NEEDED
     address public treasury; // This is the account we flush too
     IPoolTemplate public template; // This module handles the primary logic for borrowing and payments
     IBroker public broker; // This module handles logic for approving borrow requests and setting rates/account health
-
+    ERC20 public asset; 
+    PoolToken public share; 
     uint256 public fee = 0.025e18; // 2.5%
     uint256 public feesCollected = 0;
     uint256 public totalBorrowed = 0;
@@ -70,16 +72,18 @@ contract PoolAccounting is IPool, RouterAware, ERC4626 {
     // This is just the approval module, and the treasury address
     // Everything else is accesible through the router (power token for example)
     constructor(
-        string memory _name,
-        string memory _symbol,
         address _router,
         address _broker,
         address _asset,
+        address _share,
         address _template
-    ) ERC4626(ERC20(_asset), _name, _symbol) {
+    ) {
+        share = PoolToken(_share);
+        asset = ERC20(_asset);
         broker = IBroker(_broker);
         router = _router;
         template = IPoolTemplate(_template);
+        asset.approve(_template, type(uint256).max);
     }
 
     function getFee(uint256 amount) public view returns (uint256) {
@@ -105,7 +109,7 @@ contract PoolAccounting is IPool, RouterAware, ERC4626 {
         return account.pmtPerPeriod;
     }
 
-    function totalAssets() public view override(IPool, ERC4626) returns (uint256) {
+    function totalAssets() public view override returns (uint256) {
         return asset.balanceOf(address(this)) + totalBorrowed;
     }
 
@@ -214,31 +218,6 @@ contract PoolAccounting is IPool, RouterAware, ERC4626 {
         GetRoute.powerToken(router).transfer(sc.vc.subject, powerTokensToReturn);
     }
 
-    // ERC4626 accounting crutch
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public override virtual returns (uint256 shares) {
-        shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
-
-        if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
-
-            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
-        }
-        if(assets > asset.balanceOf(address(this))) {
-            assets = asset.balanceOf(address(this));
-        }
-
-        beforeWithdraw(assets, shares);
-
-        _burn(owner, shares);
-
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
-
-        SafeTransferLib.safeTransfer(asset, receiver, assets);
-    }
 
     function flush() public virtual {
         // effect
@@ -257,6 +236,92 @@ contract PoolAccounting is IPool, RouterAware, ERC4626 {
 
     function _addressToID(address agent) internal view returns (uint256) {
         return IAgent(agent).id();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            4626 FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+
+    function deposit(uint256 assets, address receiver) public virtual returns (uint256 shares) {
+        shares = template.deposit(assets, receiver, share, asset);
+    }
+
+    function mint(uint256 shares, address receiver) public virtual returns (uint256 assets) {
+        assets = template.mint(shares, receiver, share, asset);
+    }
+
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address owner
+    ) public virtual returns (uint256 shares) {
+        shares = template.withdraw(assets, receiver, owner, share, asset);
+    }
+
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address owner
+    ) public virtual returns (uint256 assets) {
+        assets = template.redeem(shares, receiver, owner, share, asset);
+    }
+
+
+    /*//////////////////////////////////////////////////////////////
+                            4626 LOGIC
+    //////////////////////////////////////////////////////////////*/
+    // TODO: Move these into a shared library
+    function convertToShares(uint256 assets) public view virtual returns (uint256) {
+        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
+    }
+
+    function convertToAssets(uint256 shares) public view virtual returns (uint256) {
+        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
+    }
+
+    function previewDeposit(uint256 assets) public view virtual returns (uint256) {
+        return convertToShares(assets);
+    }
+
+    function previewMint(uint256 shares) public view virtual returns (uint256) {
+        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
+    }
+
+    function previewWithdraw(uint256 assets) public view virtual returns (uint256) {
+        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
+    }
+
+    function previewRedeem(uint256 shares) public view virtual returns (uint256) {
+        return convertToAssets(shares);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                     DEPOSIT/WITHDRAWAL LIMIT LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function maxDeposit(address) public view virtual returns (uint256) {
+        return type(uint256).max;
+    }
+
+    function maxMint(address) public view virtual returns (uint256) {
+        return type(uint256).max;
+    }
+
+    function maxWithdraw(address owner) public view virtual returns (uint256) {
+        return convertToAssets(share.balanceOf(owner));
+    }
+
+    function maxRedeem(address owner) public view virtual returns (uint256) {
+        return share.balanceOf(owner);
     }
 }
 

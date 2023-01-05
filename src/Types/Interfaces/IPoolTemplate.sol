@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.15;
 
+import {PoolToken} from "src/Pool/Tokens/PoolToken.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
@@ -72,5 +73,37 @@ interface IPoolTemplate  {
         IBroker broker,
         Account memory account
     ) external;
+
+    function deposit(
+        uint256 assets, 
+        address receiver, 
+        PoolToken share, 
+        ERC20 asset
+    ) external returns (uint256 shares);
+
+    function mint(
+        uint256 shares, 
+        address receiver, 
+        PoolToken share, 
+        ERC20 asset
+    ) external returns (uint256 assets);
+
+
+
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address owner,
+        PoolToken share,
+        ERC20 asset
+    ) external returns (uint256 shares);
+
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address owner,
+        PoolToken share,
+        ERC20 asset
+    ) external  returns (uint256 assets);
 }
 

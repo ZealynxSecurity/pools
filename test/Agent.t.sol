@@ -376,7 +376,7 @@ contract AgentTest is BaseTest {
         stakeAmount = 10e18;
         vm.startPrank(investor1);
         wFIL.deposit{value: stakeAmount}();
-        wFIL.approve(address(pool), stakeAmount);
+        wFIL.approve(address(pool.template()), stakeAmount);
         pool4626.deposit(stakeAmount, investor1);
         vm.stopPrank();
 
@@ -473,7 +473,7 @@ contract AgentPoliceTest is BaseTest {
         stakeAmount = 10e18;
         vm.startPrank(investor1);
         wFIL.deposit{value: stakeAmount}();
-        wFIL.approve(address(pool), stakeAmount);
+        wFIL.approve(address(pool.template()), stakeAmount);
         pool4626.deposit(stakeAmount, investor1);
         vm.stopPrank();
 

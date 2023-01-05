@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.15;
 
+import {PoolToken} from "./Tokens/PoolToken.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
@@ -29,12 +30,14 @@ import {
     InsufficientLiquidity,
     InsufficientPower
 } from "src/Errors.sol";
+import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 
 uint256 constant DUST = 1000;
 
 /// NOTE: this pool uses accrual basis accounting to compute share prices
 contract PoolTemplate is IPoolTemplate, RouterAware {
     using FixedPointMathLib for uint256;
+    // TODO: can we do better?
 
     /*//////////////////////////////////////
                 MODIFIERS
@@ -262,5 +265,74 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
 
         return true;
     }
+
+    /// ERC4626 functions
+    
+    function deposit(uint256 assets, address receiver, PoolToken share, ERC20 asset) public virtual returns (uint256 shares) {
+        IPool pool = IPool(msg.sender);
+        // Check for rounding error since we round down in previewDeposit.
+        require((shares = pool.previewDeposit(assets)) != 0, "ZERO_SHARES");
+
+        // Need to transfer before minting or ERC777s could reenter.
+        SafeTransferLib.safeTransferFrom(ERC20(asset), receiver, msg.sender, assets);
+
+        share.mint(receiver, shares);
+
+        //emit Deposit(msg.sender, receiver, assets, shares);
+
+    }
+
+    function mint(uint256 shares, address receiver, PoolToken share, ERC20 asset) public virtual returns (uint256 assets) {
+        IPool pool = IPool(msg.sender);
+        // Check for rounding error since we round down in previewDeposit.
+        require((assets = pool.previewMint(shares)) != 0, "ZERO_ASSETS");
+
+        // Need to transfer before minting or ERC777s could reenter.
+        SafeTransferLib.safeTransferFrom(ERC20(asset), receiver, msg.sender, assets);
+
+        share.mint(receiver, shares);
+
+        //emit Deposit(msg.sender, receiver, assets, shares);
+
+    }
+
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address owner,
+        PoolToken share,
+        ERC20 asset
+    ) public virtual returns (uint256 shares) {
+        IPool pool = IPool(msg.sender);
+        shares = pool.previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
+
+        share.burn(owner, shares);
+
+        //emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
+        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, receiver, assets);
+    }
+
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address owner,
+        PoolToken share,
+        ERC20 asset
+    ) public virtual returns (uint256 assets) {
+        IPool pool = IPool(msg.sender);
+        // TODO: store allowance once
+
+        // Check for rounding error since we round down in previewRedeem.
+        require((assets = pool.previewRedeem(shares)) != 0, "ZERO_ASSETS");
+
+        share.burn(owner, shares);
+
+        //emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
+        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, receiver, assets);
+    }
+
+
 }
 

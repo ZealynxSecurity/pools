@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import {PoolToken} from "./Tokens/PoolToken.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
@@ -45,15 +46,19 @@ contract PoolFactory is IPoolFactory, RouterAware {
   }
 
   function createPool(
-      string memory _name,
-      string memory _symbol,
+      string calldata name,
+      string calldata symbol,
       address operator,
       address broker,
       address template
     ) external requiresAuth returns (IPool pool) {
     require(brokers[broker], "Pool: Broker not approved");
     require(templates[template], "Pool: Template not approved");
-    pool = new PoolAccounting(_name, _symbol, router, broker, address(asset), template);
+    // Create custom ERC20 for the pools
+    // TODO: What should the token symbol and name be?
+    PoolToken token = new PoolToken(name, symbol);
+    pool = new PoolAccounting(router, broker, address(asset), address(token), template);
+    token.transferOwnership(address(pool.template()));
     allPools.push(address(pool));
 
     AuthController.initPoolRoles(router, address(pool), operator, address(this));

@@ -9,8 +9,8 @@ interface IPoolFactory {
   function isPool(address pool) external view returns (bool);
   function isPoolTemplate(address pool) external view returns (bool);
   function createPool(
-    string memory _name,
-    string memory _symbol,
+    string calldata name,
+    string calldata symbol,
     address operator,
     address broker,
     address template

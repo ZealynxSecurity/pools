@@ -15,9 +15,7 @@ contract IntegrationTest is BaseTest {
 
   IPoolFactory poolFactory;
   IPowerToken powerToken;
-  // this isn't ideal but it also prepares us better to separate the pool token from the pool
   IPool pool;
-  IERC4626 pool4626;
   IERC20 pool20;
 
   SignedCredential signedCred;
@@ -39,8 +37,7 @@ contract IntegrationTest is BaseTest {
     vm.prank(poolAdmin);
     pool = createPool(poolName, poolSymbol, poolOperator, 20e18);
     vm.stopPrank();
-    pool4626 = IERC4626(address(pool));
-    pool20 = IERC20(address(pool));
+    pool20 = IERC20(address(pool.share()));
 
     vm.deal(investor1, 10e18);
     vm.prank(investor1);
@@ -58,8 +55,8 @@ function testSingleDepositBorrowRepayWithdraw() public {
     // deposit some funds for investor 1
     uint256 investor1UnderlyingAmount = 1e18;
     vm.startPrank(investor1);
-    wFIL.approve(address(pool), investor1UnderlyingAmount);
-    pool4626.deposit(investor1UnderlyingAmount, investor1);
+    wFIL.approve(address(pool.template()), investor1UnderlyingAmount);
+    pool.deposit(investor1UnderlyingAmount, investor1);
     vm.stopPrank();
 
     // agent mints some power to borrow against
@@ -101,10 +98,10 @@ function testSingleDepositBorrowRepayWithdraw() public {
     assertEq(agentAssetBal, 0, "agent should haven no assets");
 
     vm.prank(investor1);
-    pool4626.withdraw(investor1UnderlyingAmount, investor1, investor1);
-    assertEq(pool4626.convertToAssets(pool20.balanceOf(investor1)), 0);
+    pool.withdraw(investor1UnderlyingAmount, investor1, investor1);
+    assertEq(pool.convertToAssets(pool20.balanceOf(investor1)), 0);
 
-    assertEq(pool4626.totalAssets(), 0);
+    assertEq(pool.totalAssets(), 0);
     assertEq(pool20.balanceOf(investor1), 0);
     assertEq(wFIL.balanceOf(address(pool)), 0, "Pool should have no assets");
     assertEq(wFIL.balanceOf(investor1), investor1OriginalWFILBal, "investor1 should have its assets back");
