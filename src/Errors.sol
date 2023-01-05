@@ -28,8 +28,24 @@ error InsufficientPower(
   string reason
 );
 
+error InsufficientPayment(
+  address target,
+  address caller,
+  uint256 amount,
+  uint256 requires,
+  bytes4 funcSig,
+  string reason
+);
+
 error AccountDNE(
   address agent,
+  bytes4 funcSig,
+  string reason
+);
+
+error InvalidParams(
+  address target,
+  address caller,
   bytes4 funcSig,
   string reason
 );
@@ -85,6 +101,26 @@ library Decode {
       require(
         selector == InsufficientPower.selector,
         "decodeInsufficientPower: selector mismatch"
+      );
+
+      (target, caller, amount, available, funcSig, reason) = abi.decode(
+        params,
+        (address, address, uint256, uint256, bytes4, string)
+      );
+  }
+
+  function insufficientPaymentError(bytes memory b) internal pure returns (
+    address target,
+    address caller,
+    uint256 amount,
+    uint256 available,
+    bytes4 funcSig,
+    string memory reason
+  ) {
+      (bytes4 selector, bytes memory params) = generic(b);
+      require(
+        selector == InsufficientPayment.selector,
+        "decodeInsufficientPayment: selector mismatch"
       );
 
       (target, caller, amount, available, funcSig, reason) = abi.decode(

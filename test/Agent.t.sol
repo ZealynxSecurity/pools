@@ -5,6 +5,7 @@ import "src/MockMiner.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Authority} from "src/Auth/Auth.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
+import {AccountHelpers} from "src/Pool/Account.sol";
 import {Auth} from "src/Auth/Auth.sol";
 import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
 import {Agent} from "src/Agent/Agent.sol";
@@ -29,6 +30,7 @@ import "src/Constants/FuncSigs.sol";
 import "./BaseTest.sol";
 
 contract AgentBasicTest is BaseTest {
+    using AccountHelpers for Account;
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner1 = makeAddr("MINER_OWNER_1");
@@ -344,6 +346,7 @@ contract AgentBasicTest is BaseTest {
 }
 
 contract AgentTest is BaseTest {
+    using AccountHelpers for Account;
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner = makeAddr("MINER_OWNER");
@@ -362,7 +365,6 @@ contract AgentTest is BaseTest {
 
     function setUp() public {
         powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
-        IPoolFactory poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
         pool = createPool(
             "TEST",
             "TEST",
@@ -398,9 +400,19 @@ contract AgentTest is BaseTest {
         uint256 currBalance = wFIL.balanceOf(address(agent));
         assertEq(currBalance, borrowAmount);
 
-        Account memory account = pool.getAccount(address(agent));
+        Account memory account = AccountHelpers.getAccount(router, address(agent), pool.id());
         assertEq(account.startEpoch, borrowBlock);
-        assertGt(account.pmtPerPeriod, 0);
+        assertGt(account.pmtPerEpoch(), 0);
+
+
+        uint256 rate = pool.implementation().getRate(
+            borrowAmount,
+            signedCred.vc.miner.qaPower,
+            GetRoute.agentPolice(router).windowLength(),
+            account,
+            signedCred.vc
+        );
+        assertEq(account.perEpochRate, rate);
         assertEq(account.powerTokensStaked, signedCred.vc.miner.qaPower);
         assertEq(account.totalBorrowed, borrowAmount);
 
@@ -428,10 +440,10 @@ contract AgentTest is BaseTest {
         assertEq(IERC20(address(wFIL)).balanceOf(address(agent)), 0);
         assertEq(IERC20(address(wFIL)).balanceOf(address(pool)), stakeAmount);
 
-        Account memory account = pool.getAccount(address(agent));
+        Account memory account = AccountHelpers.getAccount(router, address(agent), pool.id());
         assertEq(account.totalBorrowed, 0);
         assertEq(account.powerTokensStaked, 0);
-        assertEq(account.pmtPerPeriod, 0);
+        assertEq(account.pmtPerEpoch(), 0);
     }
 
     function testPullFundsFromMiners() public {}
@@ -460,7 +472,6 @@ contract AgentPoliceTest is BaseTest {
     function setUp() public {
         police = GetRoute.agentPolice(router);
         powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
-        IPoolFactory poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
         pool = createPool(
             "TEST",
             "TEST",

@@ -6,6 +6,7 @@ import "src/MockMiner.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
+import {AccountHelpers} from "src/Pool/Account.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
@@ -22,27 +23,14 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
-import {IBroker} from "src/Types/Interfaces/IBroker.sol";
+import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {IBroker} from "src/Types/Interfaces/IBroker.sol";
+import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {MinerData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
+import {RouterAware} from "src/Router/RouterAware.sol";
+import {MockPoolImplementation} from "test/helpers/MockPoolImplementation.sol";
 import "src/Constants/Routes.sol";
-
-
-//TODO: replace this with the actual broker
-contract BasicBroker is IBroker {
-  using FixedPointMathLib for uint256;
-  uint256 rate;
-
-  constructor(uint256 _rate) {
-    rate = _rate;
-  }
-
-  function getRate(VerifiableCredential memory, uint256 amount, Account memory account) external view returns (uint256) {
-    return amount.mulWadUp(rate).divWadUp(100e18);
-  }
-}
 
 contract BaseTest is Test {
   address public constant ZERO_ADDRESS = address(0);
@@ -82,7 +70,8 @@ contract BaseTest is Test {
       address(new MinerRegistry()),
       address(new AgentFactory()),
       address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, 1000)),
-      address(new PoolFactory(wFIL)),
+      // 2e16 = 2% treasury fee, fee threshold is 10000000
+      address(new PoolFactory(wFIL, 2e16, 0)),
       address(new PowerToken()),
       vcIssuer
     );
@@ -173,11 +162,11 @@ contract BaseTest is Test {
     IPoolFactory poolFactory = GetRoute.poolFactory(router);
 
     PoolTemplate template = new PoolTemplate();
-    BasicBroker broker = new BasicBroker(fee);
+    MockPoolImplementation broker = new MockPoolImplementation(fee, router);
 
     template.setRouter(router);
     poolFactory.approveTemplate(address(template));
-    poolFactory.approveBroker(address(broker));
+    poolFactory.approveImplementation(address(broker));
 
     IPool pool = poolFactory.createPool(
         poolName,

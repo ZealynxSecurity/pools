@@ -14,6 +14,7 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {SignedCredential} from "src/Types/Structs/Credentials.sol";
+import {Window} from "src/Types/Structs/Window.sol";
 import {Roles} from "src/Constants/Roles.sol";
 
 contract AgentPolice is IAgentPolice, VCVerifier {
@@ -66,8 +67,13 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     return _poolIDs[agentID];
   }
 
+  function windowInfo() external view returns (Window memory) {
+    uint256 deadline = nextPmtWindowDeadline();
+    return Window(deadline - windowLength, deadline, windowLength);
+  }
+
   // the first window deadline is epoch 0 + windowLength
-  function nextPmtWindowDeadline() external view returns (uint256) {
+  function nextPmtWindowDeadline() public view returns (uint256) {
     return (windowLength + block.number - (block.number % windowLength));
   }
 

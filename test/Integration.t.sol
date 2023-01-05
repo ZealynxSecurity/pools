@@ -2,7 +2,6 @@
 pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
-import {IBroker} from "src/Types/Interfaces/IBroker.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";

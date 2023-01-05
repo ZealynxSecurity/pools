@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
+import {Account} from "src/Types/Structs/Account.sol";
+
 /**
  * @dev Router interface provides functions for getting routes
  * to other contracts
@@ -14,6 +16,8 @@ interface IRouter {
     function pushRoute(string memory id, address newRoute) external;
     function pushRoutes(bytes4[] calldata id, address[] calldata newRoute) external;
     function pushRoutes(string[] calldata id, address[] calldata newRoute) external;
+    function getAccount(uint256 agentID, uint256 poolID) external view returns (Account memory);
+    function setAccount(uint256 agentID, uint256 poolID, Account memory account) external;
 }
 
 interface IRouterAware {

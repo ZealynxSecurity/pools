@@ -56,4 +56,8 @@ library GetRoute {
     require(poolID <= _poolFactory.allPoolsLength(), "Invalid pool ID");
     return IPool(_poolFactory.allPools(poolID));
   }
+
+  function treasury(address router) internal view returns (address) {
+    return IRouter(router).getRoute(ROUTE_TREASURY);
+  }
 }

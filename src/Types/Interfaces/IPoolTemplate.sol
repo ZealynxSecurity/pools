@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.15;
 
-import {PoolToken} from "src/Pool/Tokens/PoolToken.sol";
+import {PoolToken} from "src/Pool/PoolToken.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {IBroker} from "src/Types/Interfaces/IBroker.sol";
+import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 
 /// NOTE: this pool uses accrual basis accounting to compute share prices
 interface IPoolTemplate  {
@@ -49,14 +49,13 @@ interface IPoolTemplate  {
         uint256 ask,
         VerifiableCredential memory vc,
         uint256 powerTokenAmount,
-        IBroker broker,
+        IPoolImplementation broker,
         Account memory account
     ) external returns (uint256);
 
     function exitPool(
         uint256 amount,
         VerifiableCredential memory vc,
-        IBroker broker,
         Account memory account
     ) external returns (uint256 powerTokensToReturn);
 
@@ -67,24 +66,25 @@ interface IPoolTemplate  {
     ) external;
 
     function stakeToPay(
-        uint256 pmt,
+        uint256 borrowAmount,
+        uint256 pmtLessFees,
         VerifiableCredential memory vc,
         uint256 powerTokenAmount,
-        IBroker broker,
+        IPoolImplementation broker,
         Account memory account
     ) external;
 
     function deposit(
-        uint256 assets, 
-        address receiver, 
-        PoolToken share, 
+        uint256 assets,
+        address receiver,
+        PoolToken share,
         ERC20 asset
     ) external returns (uint256 shares);
 
     function mint(
-        uint256 shares, 
-        address receiver, 
-        PoolToken share, 
+        uint256 shares,
+        address receiver,
+        PoolToken share,
         ERC20 asset
     ) external returns (uint256 assets);
 

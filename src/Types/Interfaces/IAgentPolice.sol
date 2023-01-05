@@ -2,6 +2,7 @@
 pragma solidity ^0.8.15;
 
 import {SignedCredential} from "src/Types/Structs/Credentials.sol";
+import {Window} from "src/Types/Structs/Window.sol";
 
 interface IAgentPolice {
   /*//////////////////////////////////////////////
@@ -70,6 +71,8 @@ interface IAgentPolice {
   function windowLength() external view returns (uint256);
   // the current window deadline where an agent has to make a payment to each pool
   function nextPmtWindowDeadline() external view returns (uint256);
+  // the full window info
+  function windowInfo() external view returns (Window memory);
 
   // when an agent has minted more power than they have
   function isOverPowered(address agent) external view returns (bool);

@@ -6,6 +6,7 @@ import "src/Constants/FuncSigs.sol";
 import "src/Types/Structs/Filecoin.sol";
 import {VerifiableCredential, MinerData, SignedCredential} from "src/VCVerifier/VCVerifier.sol";
 import {AgentSigTester} from "./helpers/AgentTester.sol";
+import {PoolFactorySigTester} from "./helpers/PoolFactoryTester.sol";
 
 contract AgentConstantsTest is Test {
   SignedCredential sc;
@@ -170,6 +171,48 @@ contract AgentConstantsTest is Test {
   }
 }
 
+contract PoolFactoryConstantsTest is Test {
+  PoolFactorySigTester tester;
+  function setUp() public {
+    tester = new PoolFactorySigTester();
+  }
+
+  function testApproveImplementation() public {
+    bytes4 funcSig = tester.approveImplementation(address(0));
+    assertEq(funcSig, POOL_FACTORY_APPROVE_IMPLEMENTATION_SELECTOR);
+  }
+
+  function testRevokeImplementation() public {
+    bytes4 funcSig = tester.revokeImplementation(address(0));
+    assertEq(funcSig, POOL_FACTORY_REVOKE_IMPLEMENTATION_SELECTOR);
+  }
+
+  function testApproveTemplate() public {
+    bytes4 funcSig = tester.approveTemplate(address(0));
+    assertEq(funcSig, POOL_FACTORY_APPROVE_TEMPLATE_SELECTOR);
+  }
+
+  function testRevokeTemplate() public {
+    bytes4 funcSig = tester.revokeTemplate(address(0));
+    assertEq(funcSig, POOL_FACTORY_REVOKE_TEMPLATE_SELECTOR);
+  }
+
+  function testSetTreasuryFeeRate() public {
+    bytes4 funcSig = tester.setTreasuryFeeRate(0);
+    assertEq(funcSig, POOL_FACTORY_SET_TREASURY_FEE_SELECTOR);
+  }
+
+  function testCreatePool() public {
+    bytes4 funcSig = tester.createPool("", "", address(0), address(0));
+    assertEq(funcSig, POOL_FACTORY_CREATE_POOL_SELECTOR);
+  }
+
+  function testSetFeeThreshold() public {
+    bytes4 funcSig = tester.setFeeThreshold(0);
+    assertEq(funcSig, POOL_FACTORY_SET_FEE_THRESHOLD_SELECTOR);
+  }
+}
+
 contract ConstantsTest is Test {
   VerifiableCredential vc;
   MsgSigTester tester;
@@ -262,16 +305,6 @@ contract ConstantsTest is Test {
     bytes4 expitPoolSig = tester.exitPool(0, vc);
     assertEq(expitPoolSig, POOL_EXIT_SELECTOR);
   }
-
-  function testDeployPool() public {
-    bytes4 deployPoolFuncSig = tester.createPool("", "", address(0x0), address(0x0));
-    assertEq(deployPoolFuncSig, POOL_CREATE_POOL_SELECTOR);
-  }
-
-  function testSetFee() public {
-    bytes4 setFeeFuncSig = tester.setFee(0);
-    assertEq(setFeeFuncSig, POOL_SET_FEE_SELECTOR);
-  }
 }
 
 
@@ -312,24 +345,6 @@ contract MsgSigTester {
     address,
     VerifiableCredential memory
   ) external pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  // Pool Admin Funcs
-  function flush() external pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  function setFee(uint256 _fee) external pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  function createPool(
-      string memory _name,
-      string memory _symbol,
-      address operator,
-      address broker
-    ) external pure returns (bytes4) {
     return msg.sig;
   }
 }

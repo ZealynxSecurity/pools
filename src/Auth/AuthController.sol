@@ -112,9 +112,19 @@ library AuthController {
     // Setup custom roles and capabilities for the pool factory
     poolFactoryAuthority.setUserRole(poolDeployer, uint8(Roles.ROLE_POOL_DEPLOYER), true);
 
-    poolFactoryAuthority.setRoleCapability(
-      uint8(Roles.ROLE_POOL_DEPLOYER), POOL_CREATE_POOL_SELECTOR, true
-    );
+    bytes4[5] memory deployerCapabilities = [
+      POOL_FACTORY_CREATE_POOL_SELECTOR,
+      POOL_FACTORY_APPROVE_IMPLEMENTATION_SELECTOR,
+      POOL_FACTORY_REVOKE_IMPLEMENTATION_SELECTOR,
+      POOL_FACTORY_APPROVE_TEMPLATE_SELECTOR,
+      POOL_FACTORY_REVOKE_TEMPLATE_SELECTOR
+    ];
+
+    for (uint256 i = 0; i < deployerCapabilities.length; ++i) {
+      poolFactoryAuthority.setRoleCapability(
+        uint8(Roles.ROLE_POOL_DEPLOYER), deployerCapabilities[i], true
+      );
+    }
 
     agentFactoryAuthority.transferOwnership(agentFactoryAdmin);
     poolFactoryAuthority.transferOwnership(poolFactoryAdmin);

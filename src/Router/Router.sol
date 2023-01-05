@@ -5,9 +5,12 @@ import {ROUTE_CORE_AUTHORITY} from "src/Constants/Routes.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Auth} from "src/Auth/Auth.sol";
+import {Account} from "src/Types/Structs/Account.sol";
+import {AccountHelpers} from "src/Pool/Account.sol";
 
 contract Router is IRouter {
   mapping(bytes4 => address) public route;
+  mapping(bytes4 => Account) private _accounts;
 
   constructor(
     address coreAuthority
@@ -23,6 +26,11 @@ contract Router is IRouter {
  */
   modifier requiresAuth {
     AuthController.requiresCoreAuth(address(this), address(this));
+    _;
+  }
+
+  modifier onlyPoolTemplate() {
+    AuthController.onlyPoolTemplate(address(this), msg.sender);
     _;
   }
 
@@ -56,5 +64,27 @@ contract Router is IRouter {
     for (uint i = 0; i < ids.length; i++) {
       pushRoute(ids[i], newRoutes[i]);
     }
+  }
+
+  function getAccount(
+    uint256 agentID,
+    uint256 poolID
+  ) public view returns (Account memory) {
+    return _accounts[createAccountKey(agentID, poolID)];
+  }
+
+  function setAccount(
+    uint256 agentID,
+    uint256 poolID,
+    Account memory account
+  ) public onlyPoolTemplate {
+    _accounts[createAccountKey(agentID, poolID)] = account;
+  }
+
+  function createAccountKey(
+    uint256 agentID,
+    uint256 poolID
+  ) public pure returns (bytes4) {
+    return bytes4(keccak256(abi.encodePacked(agentID, poolID)));
   }
 }

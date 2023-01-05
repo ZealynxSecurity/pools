@@ -4,6 +4,7 @@ pragma solidity ^0.8.15;
 import {Authority} from "src/Auth/Auth.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
+import {AccountHelpers} from "src/Pool/Account.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
@@ -86,8 +87,7 @@ contract Agent is IAgent, RouterAware {
   //////////////////////////////////////////////////*/
 
   function powerTokensStaked(uint256 poolID) public view returns (uint256) {
-    // TODO: use IDs
-    return GetRoute.pool(router, poolID).getAccount(address(this)).powerTokensStaked;
+    return AccountHelpers.getAccount(router, id, poolID).powerTokensStaked;
   }
 
   function hasMiner(address miner) public view returns (bool) {
