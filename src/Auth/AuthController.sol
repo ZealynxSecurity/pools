@@ -8,6 +8,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {ROUTE_CORE_AUTHORITY} from "src/Constants/Routes.sol";
 import {Roles} from "src/Constants/Roles.sol";
+import {Unauthorized} from "src/Errors.sol";
 import "src/Constants/FuncSigs.sol";
 
 library AuthController {
@@ -67,6 +68,17 @@ library AuthController {
       GetRoute.agentFactory(router).isAgent(agent),
       "onlyAgent: Not authorized"
     );
+  }
+
+  function onlyAgentPolice(address router, address agentPolice) internal view {
+    if (!(address(GetRoute.agentPolice(router)) == agentPolice)) {
+      revert Unauthorized(
+        address(this),
+        agentPolice,
+        msg.sig,
+        "onlyAgentPolice: Not authorized"
+      );
+    }
   }
 
   function onlyPoolAccounting(address router, address poolAccounting) internal view {

@@ -89,9 +89,9 @@ interface IAgentPolice {
   //////////////////////////////////////////////*/
 
   // checks if an agent is overPowered and changes state appropriately
-  function checkPower(address agent, SignedCredential memory signedCredential) external;
+  function checkPower(address agent, SignedCredential memory signedCredential) external returns (bool);
   // checks if an agent is overLeveraged and changes state appropriately
-  function checkLeverage(address agent, SignedCredential memory signedCredential) external;
+  function checkLeverage(address agent, SignedCredential memory signedCredential) external returns (bool);
     // checks if an agent is in default and makes the appropriate changes in the pools
   function checkDefault(address agent, SignedCredential memory signedCredential) external;
 

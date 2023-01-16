@@ -15,6 +15,7 @@ import {WFIL} from "src/WFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
@@ -25,6 +26,7 @@ import {Account} from "src/Types/Structs/Account.sol";
 
 import {ROUTE_AGENT_FACTORY_ADMIN, ROUTE_MINER_REGISTRY} from "src/Constants/Routes.sol";
 import {Roles} from "src/Constants/Roles.sol";
+import {Decode} from "src/Errors.sol";
 import "src/Constants/FuncSigs.sol";
 
 import "./BaseTest.sol";
@@ -404,7 +406,6 @@ contract AgentTest is BaseTest {
         assertEq(account.startEpoch, borrowBlock);
         assertGt(account.pmtPerEpoch(), 0);
 
-
         uint256 rate = pool.implementation().getRate(
             borrowAmount,
             signedCred.vc.miner.qaPower,
@@ -527,16 +528,19 @@ contract AgentPoliceTest is BaseTest {
         );
     }
 
-    // get a weird error when using expectRevert here:
-    // [FAIL. Reason: Error != expected error: NH{q != Agent: Cannot perform action when overpowered]
-    function testFailBorrowWhenOverPowered() public {
+    function testBorrowWhenOverPowered() public {
         uint256 borrowAmount = 0.5e18;
         uint256 powerTokenStake = 7.5e18;
         uint256 newQAPower = 5e18;
         SignedCredential memory sc = makeAgentOverPowered(powerTokenStake, borrowAmount, newQAPower);
 
         vm.prank(address(agent));
-        agent.borrow(borrowAmount, 0, sc, powerTokenStake);
+        try agent.borrow(borrowAmount, 0, sc, powerTokenStake) {
+            assertTrue(false, "Call to borrow shoudl err when over pwered");
+        } catch (bytes memory err) {
+            (, string memory reason) = Decode.overPoweredError(err);
+            assertEq(reason, "Agent: Cannot perform action while overpowered");
+        }
     }
 
     function testRecoverOverPoweredByBurn() public {
@@ -576,15 +580,24 @@ contract AgentPoliceTest is BaseTest {
         makeAgentOverPowered(powerTokenStake, borrowAmount, newQAPower);
 
         signedCred = issueGenericSC(address(agent));
-        vm.expectRevert("Agent: Cannot perform action while overpowered");
         vm.startPrank(address(agent));
-        agent.removeMiner(address(this), address(miner), signedCred);
+        try agent.removeMiner(address(this), address(miner), signedCred) {
+            assertTrue(false, "Call to borrow shoudl err when over pwered");
+        } catch (bytes memory err) {
+            (, string memory reason) = Decode.overPoweredError(err);
+            assertEq(reason, "Agent: Cannot perform action while overpowered");
+        }
     }
 
     function testForceBurnPowerWhenNotOverPowered() public {
         signedCred = issueGenericSC(address(agent));
-        vm.expectRevert("AgentPolice: Agent is not overpowered");
-        police.forceBurnPower(address(agent), signedCred);
+
+        try police.forceBurnPower(address(agent), signedCred) {
+            assertTrue(false, "Call to borrow shoudl err when over pwered");
+        } catch (bytes memory err) {
+            (, string memory reason) = Decode.notOverPoweredError(err);
+            assertEq(reason, "AgentPolice: Agent is not overpowered");
+        }
     }
 
     // agent does not end up overpowered because the agent has enough power tokens liquid to cover the decrease in real power
@@ -656,11 +669,14 @@ contract AgentPoliceTest is BaseTest {
         _miners[1] = address(secondMiner);
 
         vm.prank(IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN));
-        vm.expectRevert("AgentPolice: Agent is not overleveraged");
-        police.forcePullFundsFromMiners(address(agent), _miners, new uint256[](2));
+        try police.forcePullFundsFromMiners(address(agent), _miners, new uint256[](2)) {
+            assertTrue(false, "Call to borrow shoudl err when over pwered");
+        } catch (bytes memory err) {
+            (, string memory reason) = Decode.notOverLeveragedError(err);
+            assertEq(reason, "AgentPolice: Agent is not overleveraged");
+        }
     }
 
-    // TODO: once overLeveraged is implement
     function testForcePullFundsFromMiners() internal {
         address[] memory minersToAdd = new address[](1);
         // prepare a second miner to draw funds from
@@ -695,8 +711,12 @@ contract AgentPoliceTest is BaseTest {
 
     function testSetWindowLengthNonAdmin() public {
         uint256 newWindowPeriod = 100;
-        vm.expectRevert("AgentPolice: Not authorized");
-        police.setWindowLength(newWindowPeriod);
+        try police.setWindowLength(newWindowPeriod) {
+            assertTrue(false, "Should have reverted with Unauthorized error");
+        } catch (bytes memory err) {
+            (,,, string memory reason) = Decode.unauthorizedError(err);
+            assertEq(reason, "AgentPolice: Unauthorized");
+        }
     }
 
     function testSetWindowLength() public {
@@ -725,8 +745,12 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testLockoutNonAdmin() public {
-        vm.expectRevert("AgentPolice: Not authorized");
-        police.lockout(address(this));
+        try police.lockout(address(this)) {
+            assertTrue(false, "Should have reverted with Unauthorized error");
+        } catch (bytes memory err) {
+            (,,, string memory reason) = Decode.unauthorizedError(err);
+            assertEq(reason, "AgentPolice: Unauthorized");
+        }
     }
 
     function makeAgentOverPowered(uint256 powerTokenStake, uint256 borrowAmount, uint256 newQAPower) internal returns (
@@ -739,20 +763,7 @@ contract AgentPoliceTest is BaseTest {
         uint256 agentPowTokenBal = IERC20(powerToken).balanceOf(address(agent));
         assertEq(agentPowTokenBal, signedCred.vc.miner.qaPower - powerTokenStake);
 
-        MinerData memory minerData = MinerData(
-            1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, newQAPower, 5e18, 0, 0
-        );
-
-        VerifiableCredential memory _vc = VerifiableCredential(
-            vcIssuer,
-            address(agent),
-            block.number,
-            block.number + 100,
-            1000,
-            minerData
-        );
-
-        sc = issueSC(_vc);
+        sc = issueSC(createCustomCredential(address(agent), newQAPower, 10e18, 5e18, 1e18));
 
         // no funds get burned here
         police.checkPower(address(agent), sc);
@@ -764,5 +775,100 @@ contract AgentPoliceTest is BaseTest {
 
     function testMakePayments() public {
         // TODO:
+    }
+}
+
+contract AgentDefaultTest is BaseTest {
+    using AccountHelpers for Account;
+
+    address investor1 = makeAddr("INVESTOR_1");
+    address investor2 = makeAddr("INVESTOR_2");
+    address minerOwner = makeAddr("MINER_OWNER");
+    string poolName = "FIRST POOL NAME";
+    uint256 baseInterestRate = 20e18;
+    uint256 stakeAmount;
+
+    IAgent agent;
+    MockMiner miner;
+    IPool pool1;
+    IPool pool2;
+    IERC4626 pool46261;
+    IERC4626 pool46262;
+    IPoolImplementation poolImpl;
+
+    SignedCredential signedCred;
+    IAgentPolice police;
+
+    address powerToken;
+
+    function setUp() public {
+        police = GetRoute.agentPolice(router);
+        powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
+
+        pool1 = createPool(
+            "TEST1",
+            "TEST1",
+            ZERO_ADDRESS,
+            2e18
+        );
+        pool46261 = IERC4626(address(pool1));
+
+        pool2 = createPool(
+            "TEST2",
+            "TEST2",
+            ZERO_ADDRESS,
+            2e18
+        );
+        pool46262 = IERC4626(address(pool2));
+        // investor1 stakes 10 FIL
+        vm.deal(investor1, 11e18);
+        stakeAmount = 5e18;
+        vm.startPrank(investor1);
+        wFIL.deposit{value: stakeAmount*2}();
+        wFIL.approve(address(pool1.template()), stakeAmount);
+        wFIL.approve(address(pool2.template()), stakeAmount);
+        pool46261.deposit(stakeAmount, investor1);
+        pool46262.deposit(stakeAmount, investor1);
+        vm.stopPrank();
+
+        (agent, miner) = configureAgent(minerOwner);
+        // mint some power for the agent
+        signedCred = issueGenericSC(address(agent));
+        vm.startPrank(address(agent));
+        agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+        IERC20(powerToken).approve(address(pool1), signedCred.vc.miner.qaPower);
+        IERC20(powerToken).approve(address(pool2), signedCred.vc.miner.qaPower);
+
+        agent.borrow(stakeAmount / 2, pool1.id(), signedCred, signedCred.vc.miner.qaPower / 2);
+        agent.borrow(stakeAmount / 2, pool2.id(), signedCred, signedCred.vc.miner.qaPower / 2);
+        vm.stopPrank();
+    }
+
+    function testCheckOverLeveraged() public {
+        // 0 expected daily rewards
+        SignedCredential memory sc = issueSC(createCustomCredential(address(agent), 5e18, 0, 5e18, 4e18));
+
+        police.checkLeverage(address(agent), sc);
+
+        assertTrue(police.isOverLeveraged(address(agent)), "Agent should be over leveraged");
+    }
+
+    // in this test, we check default
+    // resulting in pools borrowAmounts being written down by the power token weighted agent liquidation value
+    function testCheckDefault() public {
+        // this credential gives a 1e18 liquidation value, and overleverage / overpowered
+        SignedCredential memory sc = issueSC(createCustomCredential(address(agent), 5e18, 0, 5e18, 4e18));
+
+        police.checkDefault(address(agent), sc);
+
+        assertTrue(police.isOverLeveraged(address(agent)), "Agent should be over leveraged");
+        assertTrue(police.isOverPowered(address(agent)), "Agent should be over powered");
+        assertTrue(police.isInDefault(address(agent)), "Agent should be in default");
+        uint256 pool1PostDefaultTotalBorrowed = pool1.totalBorrowed();
+        uint256 pool2PostDefaultTotalBorrowed = pool2.totalBorrowed();
+
+        // since _total_ MLV is 1e18, each pool should be be left with 1e18/2
+        assertEq(pool1PostDefaultTotalBorrowed, 1e18 / 2, "Wrong write down amount");
+        assertEq(pool2PostDefaultTotalBorrowed, 1e18 / 2, "Wrong write down amount");
     }
 }

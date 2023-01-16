@@ -6,8 +6,8 @@ import {Window} from "src/Types/Structs/Window.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
-import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
+import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {InvalidParams} from "src/Errors.sol";
@@ -41,6 +41,12 @@ library AccountHelpers {
     uint256 poolID
   ) internal view returns (Account memory) {
     return IRouter(router).getAccount(agentID, poolID);
+  }
+
+  function exists(
+    Account memory account
+  ) internal pure returns (bool) {
+    return account.startEpoch != 0;
   }
 
   /*////////////////////////////////////////////////////////

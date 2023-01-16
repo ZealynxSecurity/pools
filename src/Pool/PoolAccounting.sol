@@ -56,6 +56,11 @@ contract PoolAccounting is IPool, RouterAware {
         _;
     }
 
+    modifier onlyAgentPolice() {
+        AuthController.onlyAgentPolice(router, msg.sender);
+        _;
+    }
+
     modifier onlyTemplate() {
         AuthController.onlyPoolTemplate(router, msg.sender);
         _;
@@ -325,6 +330,26 @@ contract PoolAccounting is IPool, RouterAware {
         uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
+    }
+
+    function rebalanceTotalBorrowed(
+        uint256 agentID,
+        uint256 realAccountValue
+    ) external onlyAgentPolice {
+        uint256 prevAccountBorrowed = AccountHelpers.getAccount(router, agentID, id).totalBorrowed;
+
+        // rebalance the books
+        if (realAccountValue > prevAccountBorrowed) {
+            // we have more assets than we thought
+            // here we just write up to the actual account borrowed amount
+            totalBorrowed += prevAccountBorrowed;
+        } else {
+            // we have less assets than we thought
+            // so we write down the diff of what we actually have from what we thought we had
+            totalBorrowed -= (prevAccountBorrowed - realAccountValue);
+        }
+
+        emit RebalanceTotalBorrowed(agentID, realAccountValue, totalBorrowed);
     }
 
     function previewDeposit(uint256 assets) public view virtual returns (uint256) {

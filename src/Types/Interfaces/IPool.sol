@@ -9,6 +9,12 @@ import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol"
 import {IPoolTemplate} from "src/Types/Interfaces/IPoolTemplate.sol";
 
 interface IPool {
+    event RebalanceTotalBorrowed(
+        uint256 indexed agentID,
+        uint256 realAccountValue,
+        uint256 totalBorrowed
+    );
+
     function id() external view returns (uint256);
 
     function implementation() external view returns (IPoolImplementation);
@@ -42,6 +48,10 @@ interface IPool {
         uint256 pmt,
         SignedCredential memory sc,
         uint256 powerTokenAmount
+    ) external;
+    function rebalanceTotalBorrowed(
+        uint256 agentID,
+        uint256 realAccountValue
     ) external;
     // Admin Funcs
     function harvestFunds(uint256 harvestAmount) external;

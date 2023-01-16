@@ -279,7 +279,7 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         Account memory account,
         bytes4 sig
     ) internal pure returns (bool) {
-        if (account.startEpoch == 0) {
+        if (!account.exists()) {
             revert AccountDNE(
                 agent,
                 sig,
@@ -294,4 +294,3 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         return IPool(pool).id();
     }
 }
-

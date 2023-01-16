@@ -36,6 +36,11 @@ import {
   ROUTE_AGENT_POLICE
 } from "src/Constants/Routes.sol";
 import {Roles} from "src/Constants/Roles.sol";
+import {
+  OverPowered,
+  OverLeveraged,
+  InDefault
+} from "src/Errors.sol";
 
 contract Agent is IAgent, RouterAware {
   uint256 public id;
@@ -469,24 +474,21 @@ contract Agent is IAgent, RouterAware {
   }
 
   function _notOverPowered() internal view {
-    require(
-      !GetRoute.agentPolice(router).isOverPowered(id),
-      "Agent: Cannot perform action while overpowered"
-    );
+    if (GetRoute.agentPolice(router).isOverPowered(id)) {
+      revert OverPowered(id, "Agent: Cannot perform action while overpowered");
+    }
   }
 
   function _notOverLeveraged() internal view {
-    require(
-      !GetRoute.agentPolice(router).isOverLeveraged(id),
-      "Agent: Cannot perform action while overleveraged"
-    );
+    if (GetRoute.agentPolice(router).isOverLeveraged(id)) {
+      revert OverLeveraged(id, "Agent: Cannot perform action while overleveraged");
+    }
   }
 
   function _notInDefault() internal view {
-    require(
-      !GetRoute.agentPolice(router).isInDefault(id),
-      "Agent: Cannot perform action while in default"
-    );
+    if (GetRoute.agentPolice(router).isInDefault(id)) {
+      revert InDefault(id, "Agent: Cannot perform action while in default");
+    }
   }
 
   function _isValidCredential(

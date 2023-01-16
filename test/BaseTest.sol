@@ -116,15 +116,37 @@ contract BaseTest is Test {
     return agent;
   }
 
+  function createCustomCredential(
+      address agent,
+      uint256 qaPower,
+      uint256 expectedDailyRewards,
+      uint256 assets,
+      uint256 liabilities
+    ) internal view returns (VerifiableCredential memory vc) {
+      MinerData memory _miner = MinerData(
+          assets, expectedDailyRewards, 0, 0.5e18, liabilities, 10e18, 10, qaPower, 5e18, 0, 0
+      );
+
+      vc = VerifiableCredential(
+          vcIssuer,
+          address(agent),
+          block.number,
+          block.number + 100,
+          1000,
+          _miner
+      );
+  }
+
   function issueGenericSC(
     address agent
   ) public returns (
     SignedCredential memory
   ) {
     uint256 qaPower = 10e18;
+    uint256 expectedDailyRewards = 20e18;
 
     MinerData memory miner = MinerData(
-      1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 10, qaPower, 5e18, 0, 0
+      1e10, expectedDailyRewards, 0, 0.5e18, 10e18, 10e18, 10, qaPower, 5e18, 0, 0
     );
 
     VerifiableCredential memory vc = VerifiableCredential(
