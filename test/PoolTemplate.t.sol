@@ -14,14 +14,13 @@ import "./BaseTest.sol";
 
 // a value we use to test approximation of the cursor according to a window start/close
 // TODO: investigate how to get this to 0 or 1
-uint256 constant EPOCH_CURSOR_ACCEPTANCE_DELTA = 3;
+uint256 constant EPOCH_CURSOR_ACCEPTANCE_DELTA = 1;
 
 contract PoolTemplateStakingTest is BaseTest {
   IAgent agent;
 
   IPoolFactory poolFactory;
   IPowerToken powerToken;
-  // this isn't ideal but it also prepares us better to separate the pool token from the pool
   IPool pool;
   IERC20 pool20;
 
@@ -695,6 +694,7 @@ contract PoolMakePaymentTest is BaseTest {
     vm.startPrank(address(agent));
 
     Account memory account = AccountHelpers.getAccount(router, address(agent), pool.id());
+    // This should be equal to the window start, not necesarily 0 - same is true of all instances
     assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");
     uint256 pmtPerEpoch = account.pmtPerEpoch();
     uint256 minPaymentToCloseWindow = account.getMinPmtForWindowClose(police.windowInfo(), router, pool.implementation());
@@ -1009,7 +1009,7 @@ contract PoolStakeToPayTest is BaseTest {
     assertGt(account.epochsPaid, 0, "Account epochsPaid should be greater than 0");
   }
 
-  function testForwardPayment() public {
+  function testForwardStakedPayment() public {
     vm.startPrank(address(agent));
     Account memory account = AccountHelpers.getAccount(router, address(agent), pool.id());
     assertEq(account.epochsPaid, 0, "Account should not have epochsPaid > 0 before making a payment");

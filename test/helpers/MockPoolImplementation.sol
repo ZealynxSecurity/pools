@@ -27,7 +27,7 @@ contract MockPoolImplementation is IPoolImplementation, RouterAware {
   ) external view returns (uint256) {
     // hardcode 20% rate (per annum)
     uint256 apy = 0.2e18;
-    return apy.divWadUp(EPOCHS_IN_YEAR*1e18);
+    return apy / EPOCHS_IN_YEAR;
   }
 
   function getPenalty(

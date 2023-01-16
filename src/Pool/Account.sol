@@ -181,12 +181,11 @@ library AccountHelpers {
     return pmtPerEpoch(account) * GetRoute.agentPolice(router).windowLength();
   }
 
-  /// @dev computes the minimum payment amount for a singe epoch
+  /// @dev computes the minimum payment amount for a singel epoch
   /// @notice we divide out the 1e18 WAD base to get a % rate
   function pmtPerEpoch(Account memory account) internal pure returns (uint256) {
     return account.totalBorrowed
-      .mulWadUp(account.perEpochRate)
-      .divWadUp(FixedPointMathLib.WAD);
+      .mulWadDown(account.perEpochRate);
   }
 
   /// @dev computes the number of FIL needed to pay in order to bring an account to a deficit of 0 (meaning the account is "current" and epochsPaid is the start of the current window period)
@@ -209,8 +208,9 @@ library AccountHelpers {
     Account memory account,
     uint256 payment
   ) internal pure returns (uint256) {
+
     // if we use divWadUp here, we get off by one errors (short) with rounding
-    return payment.divWadUp(pmtPerEpoch(account)*1e18);
+    return payment / (pmtPerEpoch(account));
   }
 
   /// @dev computes the min payment to close the current window, using the existing rate in the account
@@ -231,7 +231,7 @@ library AccountHelpers {
     address router,
     IPoolImplementation pool
   ) internal view returns (uint256) {
-    return _getMinPmtForEpochCursor(account, window.start, router, pool);
+    return _getMinPmtForEpochCursor(account, window.start + 1, router, pool);
   }
 
   /// @dev given an `epochValue`, compute the min payment (less fees) to get `account.epochsPaid === epochValue`
@@ -257,8 +257,7 @@ library AccountHelpers {
     );
 
     // pmt = epochsToPay * pmtPerEpoch * (1 + fee)
-    return (epochValue - account.epochsPaid)
-      .mulWadUp(pmtPerEpoch(account)*FixedPointMathLib.WAD)
+    return ( (epochValue - account.epochsPaid) * pmtPerEpoch(account) )
       .mulWadUp(
         fee + FixedPointMathLib.WAD
       );
@@ -272,7 +271,7 @@ library AccountHelpers {
     uint256 denominator = treasuryFeeRate.mulWadUp(account.perEpochRate);
 
     // 1 / denominator
-    return FixedPointMathLib.divWadUp(FixedPointMathLib.WAD, denominator*1e18);
+    return uint256(1).divWadUp(denominator);
   }
 
   function computeFeePerPmt(
@@ -284,7 +283,7 @@ library AccountHelpers {
       uint256 protocolFee = _computeProtocolFee(account, treasuryFeeRate);
 
       // protocol fee * pmt
-      fee = protocolFee.mulWadUp(pmt).divWadUp(FixedPointMathLib.WAD);
+      fee = protocolFee.mulWadUp(pmt);
 
       remainingPmt = pmt - fee;
   }
