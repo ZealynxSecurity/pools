@@ -499,6 +499,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testNextPmtWindowDeadline() public {
+        vm.roll(0);
         uint256 windowLength = police.windowLength();
         require(block.number < windowLength);
 

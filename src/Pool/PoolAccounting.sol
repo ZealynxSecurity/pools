@@ -27,7 +27,6 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
-
 contract PoolAccounting is IPool, RouterAware {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;

@@ -13,11 +13,10 @@ interface IPoolImplementation {
         VerifiableCredential memory vc
     ) external view returns (uint256);
 
-    function getPenalty(
+    function rateSpike(
         uint256 penaltyEpochs,
         uint256 windowLength,
-        Account memory account,
-        VerifiableCredential memory vc
+        Account memory account
     ) external view returns (uint256);
 
     /*//////////////////////////////////////////////////////////////

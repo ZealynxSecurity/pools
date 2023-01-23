@@ -30,13 +30,13 @@ contract MockPoolImplementation is IPoolImplementation, RouterAware {
     return apy / EPOCHS_IN_YEAR;
   }
 
-  function getPenalty(
+  function rateSpike(
     uint256 penaltyEpochs,
     uint256 windowLength,
-    Account memory account,
-    VerifiableCredential memory vc
+    Account memory account
   ) external pure returns (uint256) {
-    return 0;
+    uint256 penalty = 5e16;
+    return penalty / EPOCHS_IN_YEAR;
   }
 
   function beforeBorrow(

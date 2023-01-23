@@ -33,6 +33,7 @@ import {MockPoolImplementation} from "test/helpers/MockPoolImplementation.sol";
 import "src/Constants/Routes.sol";
 
 contract BaseTest is Test {
+  uint256 public constant WINDOW_LENGTH = 1000;
   address public constant ZERO_ADDRESS = address(0);
   address public treasury = makeAddr('TREASURY');
   address public router;
@@ -69,9 +70,9 @@ contract BaseTest is Test {
       address(wFIL),
       address(new MinerRegistry()),
       address(new AgentFactory()),
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, 1000)),
-      // 2e16 = 2% treasury fee, fee threshold is 10000000
-      address(new PoolFactory(wFIL, 2e16, 0)),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH)),
+      // 1e17 = 10% treasury fee on yield
+      address(new PoolFactory(wFIL, 1e17, 0)),
       address(new PowerToken()),
       vcIssuer
     );
@@ -79,6 +80,8 @@ contract BaseTest is Test {
     Deployer.setRouterOnContracts(address(router));
     // initialize the system's authentication system
     Deployer.initRoles(address(router), address(0));
+    // roll forward at least 1 window length so our computations dont overflow/underflow
+    vm.roll(block.number + WINDOW_LENGTH);
   }
 
   function configureAgent(address minerOwner) public returns (Agent, MockMiner) {
@@ -154,7 +157,7 @@ contract BaseTest is Test {
       agent,
       block.number,
       block.number + 100,
-      1000,
+      expectedDailyRewards * 5,
       miner
     );
 

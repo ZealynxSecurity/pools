@@ -362,7 +362,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
       ).getMinPmtForWindowClose(
         window,
         router,
-        IPoolImplementation(GetRoute.poolFactory(router).allPools(stakedPools[i]))
+        GetRoute.pool(router, stakedPools[i]).implementation()
       );
     }
 

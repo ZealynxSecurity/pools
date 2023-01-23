@@ -30,7 +30,8 @@ import {
     AccountDNE,
     InsufficientLiquidity,
     InsufficientPower,
-    InsufficientPayment
+    InsufficientPayment,
+    Unauthorized
 } from "src/Errors.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 
@@ -65,6 +66,16 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         _;
     }
 
+    modifier accountNotInPenalty(address agent, Account memory account) {
+        _accountNotInPenalty(agent, account);
+        _;
+    }
+
+    modifier accountCurrent(address agent, Account memory account) {
+        _accountCurrent(agent, account);
+        _;
+    }
+
     /*////////////////////////////////////////////////////////
                       Pool Borrowing Functions
     ////////////////////////////////////////////////////////*/
@@ -75,12 +86,19 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         uint256 powerTokenAmount,
         IPoolImplementation poolImpl,
         Account memory account
-    ) public onlyAccounting returns (uint256) {
+    ) public onlyAccounting accountNotInPenalty(vc.subject, account) returns (uint256) {
         IPool pool = IPool(msg.sender);
         // check
         _checkLiquidity(ask, pool.totalAssets());
 
-        // TODO: require(amount <= vc.amount) https://github.com/glif-confidential/pools/issues/120
+        if (ask > vc.cap) {
+            revert Unauthorized(
+                vc.subject,
+                address(this),
+                msg.sig,
+                "Borrowed ask exceeds vc cap"
+            );
+        }
 
         account.borrow(
             router,
@@ -116,11 +134,18 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         Window memory window = GetRoute.agentPolice(router).windowInfo();
 
         // uses the old rate to compute how much is owed up to the current window
-        uint256 deficit = account.getDeficit(window);
+        uint256 deficit = account.getDeficit(window, pool.implementation());
+
         // ensure this payment can bring the account current
-        _checkPaymentSize(pmtLessFee, deficit);
+        AccountHelpers._amountGt(pmtLessFee, deficit);
         // bring account current
-        account.epochsPaid = window.start;
+        account.epochsPaid = account.epochsPaid < window.start ? window.start : account.epochsPaid;
+
+        // NOTE: If we borrow _after_ the credit the math works out but they're getting the "old rate" for the amount they're paying off for this payment
+
+
+        // credit the account with any remaining payment leftover after getting out of deficit
+        account.credit(pmtLessFee - deficit);
         /// @dev we get a new rate
         /// @notice the pool implementation may choose to not allow this in which case, stakeToPay will revert
         account.borrow(
@@ -130,8 +155,6 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
             vc,
             poolImpl
         );
-        // credit the account with any remaining payment leftover after getting out of deficit
-        account.credit(pmtLessFee - deficit);
         account.save(router, vc.subject, _id(msg.sender));
 
         pool.increaseTotalBorrowed(borrowAmount);
@@ -149,20 +172,42 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         Account memory account,
         uint256 pmtLessFees
     ) public onlyAccounting accountExists(agent, account) {
-        _checkPaymentSize(pmtLessFees, account.perEpochRate);
+        Window memory window = GetRoute.agentPolice(router).windowInfo();
+        uint256 penaltyEpochs = account.getPenaltyEpochs(window);
 
-        account.credit(pmtLessFees);
+        if (penaltyEpochs > 0) {
+            account.creditInPenalty(
+                pmtLessFees,
+                penaltyEpochs,
+                IPool(msg.sender).implementation().rateSpike(
+                    penaltyEpochs,
+                    window.length,
+                    account
+                )
+            );
+        } else {
+            account.credit(pmtLessFees);
+        }
+
         account.save(router, agent, _id(msg.sender));
 
         emit MakePayment(agent, pmtLessFees);
     }
 
+
+    /// @notice an Agent cannot exitPool unless their account is current
     function exitPool(
         uint256 amount,
         VerifiableCredential memory vc,
         Account memory account
-    ) public onlyAccounting accountExists(vc.subject, account) returns (uint256) {
-        require(amount <= account.totalBorrowed, "Amount to exit must be less than the total borrowed");
+    )
+        public
+        onlyAccounting
+        accountCurrent(vc.subject, account)
+        returns (uint256)
+    {
+        AccountHelpers._amountGt(account.totalBorrowed, amount);
+
         IPool pool = IPool(msg.sender);
 
         pool.reduceTotalBorrowed(amount);
@@ -261,19 +306,6 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         }
     }
 
-    function _checkPaymentSize(uint256 amount, uint256 minSize) internal view {
-        if (amount < minSize) {
-            revert InsufficientPayment(
-                address(this),
-                msg.sender,
-                amount,
-                minSize,
-                msg.sig,
-                "PoolTemplate: Payment size too small"
-            );
-        }
-    }
-
     function _accountExists(
         address agent,
         Account memory account,
@@ -284,6 +316,35 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
                 agent,
                 sig,
                 "PoolTemplate: Account does not exist"
+            );
+        }
+
+        return true;
+    }
+
+    function _accountCurrent(address agent, Account memory account) internal view returns (bool) {
+        if (GetRoute.agentPolice(router).windowInfo().start > account.epochsPaid) {
+            revert Unauthorized(
+                agent,
+                address(this),
+                msg.sig,
+                "Account is not current"
+            );
+        }
+
+        return true;
+    }
+
+    function _accountNotInPenalty(
+        address agent,
+        Account memory account
+    ) internal view returns (bool) {
+        if (account.getPenaltyEpochs(GetRoute.agentPolice(router).windowInfo()) > 0) {
+            revert Unauthorized(
+                agent,
+                address(this),
+                msg.sig,
+                "PoolTemplate: Cannot perform action while in penalty"
             );
         }
 

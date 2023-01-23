@@ -21,11 +21,10 @@ contract PoolImplementation is IPoolImplementation {
     return 0;
   }
 
-  function getPenalty(
+  function rateSpike(
     uint256 penaltyEpochs,
     uint256 windowLength,
-    Account memory account,
-    VerifiableCredential memory vc
+    Account memory account
   ) external pure returns (uint256) {
     return 0;
   }

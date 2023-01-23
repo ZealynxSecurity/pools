@@ -39,6 +39,7 @@ import {Roles} from "src/Constants/Roles.sol";
 import {
   OverPowered,
   OverLeveraged,
+  InvalidParams,
   InDefault
 } from "src/Errors.sol";
 
@@ -337,6 +338,14 @@ contract Agent is IAgent, RouterAware {
     uint256[] calldata _amounts,
     SignedCredential memory _signedCredential
   ) external requiresAuth isValidCredential(_signedCredential) {
+    if (_poolIDs.length != _amounts.length) {
+      revert InvalidParams(
+        msg.sender,
+        address(this),
+        msg.sig,
+        "Pool IDs and amounts must be same length"
+      );
+    }
     require(_poolIDs.length == _amounts.length, "Pool IDs and amounts must be same length");
 
     uint256 total = 0;
@@ -348,8 +357,29 @@ contract Agent is IAgent, RouterAware {
     _poolFundsInWFIL(total);
 
     for (uint256 i = 0; i < _poolIDs.length; i++) {
-      // TODO: pass amount here when the poolTemplate accepts it
       GetRoute.pool(router, _poolIDs[i]).makePayment(address(this), _amounts[i]);
+    }
+  }
+
+  function stakeToMakePayments(
+    uint256[] calldata _poolIDs,
+    uint256[] calldata _amounts,
+    uint256[] calldata _powerTokenTokenAmounts,
+    SignedCredential memory _signedCredential
+  ) external requiresAuth isValidCredential(_signedCredential) {
+    if (_poolIDs.length != _amounts.length || _poolIDs.length != _powerTokenTokenAmounts.length) {
+      revert InvalidParams(
+        msg.sender,
+        address(this),
+        msg.sig,
+        "Pool IDs, amounts, and power token amounts must be same length"
+      );
+    }
+
+    for (uint256 i = 0; i < _poolIDs.length; i++) {
+      GetRoute.pool(router, _poolIDs[i]).stakeToPay(
+        _amounts[i], _signedCredential, _powerTokenTokenAmounts[i]
+      );
     }
   }
 

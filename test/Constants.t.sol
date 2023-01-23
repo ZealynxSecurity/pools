@@ -169,6 +169,16 @@ contract AgentConstantsTest is Test {
     );
     assertEq(funcSig, AGENT_MAKE_PAYMENTS_SELECTOR);
   }
+
+  function testStakeToMakePayments() public {
+    bytes4 funcSig = tester.stakeToMakePayments(
+      new uint256[](0),
+      new uint256[](0),
+      new uint256[](0),
+      sc
+    );
+    assertEq(funcSig, AGENT_STAKE_TO_MAKE_PAYMENTS_SELECTOR);
+  }
 }
 
 contract PoolFactoryConstantsTest is Test {
