@@ -19,6 +19,11 @@ interface IPoolImplementation {
         Account memory account
     ) external view returns (uint256);
 
+    function minCollateral(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) external view returns (uint256);
+
     /*//////////////////////////////////////////////////////////////
                             Optional hooks
     //////////////////////////////////////////////////////////////*/

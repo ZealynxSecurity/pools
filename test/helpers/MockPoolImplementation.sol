@@ -39,6 +39,14 @@ contract MockPoolImplementation is IPoolImplementation, RouterAware {
     return penalty / EPOCHS_IN_YEAR;
   }
 
+  function minCollateral(
+    Account memory account,
+    VerifiableCredential memory vc
+  ) external pure returns (uint256) {
+    // 10% of the borrow amount
+    return account.totalBorrowed.mulWadUp(1e17);
+  }
+
   function beforeBorrow(
     uint256 borrowAsk,
     uint256 powerTokenStake,

@@ -6,6 +6,7 @@ import {Agent} from "src/Agent/Agent.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import {
   ROUTE_POWER_TOKEN,
   ROUTE_VC_ISSUER,
@@ -19,7 +20,7 @@ contract AgentFactory is IAgentFactory, RouterAware {
 
   function create(address operator) external returns (address) {
     agentCount++;
-    Agent agent = new Agent(router, agentCount);
+    Agent agent = AgentDeployer.deploy(router, agentCount);
     agents[address(agent)] = agentCount;
 
     if (operator != address(0)) {

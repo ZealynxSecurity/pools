@@ -29,6 +29,15 @@ error InsufficientPower(
   string reason
 );
 
+error InsufficientCollateral(
+  address target,
+  address caller,
+  uint256 amount,
+  uint256 required,
+  bytes4 funcSig,
+  string reason
+);
+
 error InsufficientPayment(
   address target,
   address caller,
@@ -210,6 +219,26 @@ library Decode {
       (agent, reason) = abi.decode(
         params,
         (uint256, string)
+      );
+  }
+
+  function insufficientCollateralError(bytes memory b) internal pure returns (
+    address target,
+    address caller,
+    uint256 amount,
+    uint256 required,
+    bytes4 funcSig,
+    string memory reason
+  ) {
+      (bytes4 selector, bytes memory params) = generic(b);
+      require(
+        selector == InsufficientCollateral.selector,
+        "decodeInsufficientCollateral: selector mismatch"
+      );
+
+      (target, caller, amount, required, funcSig, reason) = abi.decode(
+        params,
+        (address, address, uint256, uint256, bytes4, string)
       );
   }
 

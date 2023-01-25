@@ -17,6 +17,7 @@ import {PowerToken} from "src/PowerToken/PowerToken.sol";
 import {PoolFactory} from "src/Pool/PoolFactory.sol";
 import {Router} from "src/Router/Router.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
@@ -86,38 +87,47 @@ contract BaseTest is Test {
   }
 
   function configureAgent(address minerOwner) public returns (Agent, MockMiner) {
-    vm.startPrank(minerOwner);
-    MockMiner miner = new MockMiner();
+    MockMiner miner = MockMiner(payable(_newMiner(minerOwner)));
 
     // give miner some fake rewards and vest them over 1000 epochs
     vm.deal(address(miner), 100e18);
+    vm.prank(minerOwner);
     miner.lockBalance(block.number, 1000, 100e18);
-    vm.stopPrank();
     // create an agent for miner
     Agent agent = _configureAgent(minerOwner, miner);
     return (agent, miner);
   }
 
   function _configureAgent(address minerOwner, MockMiner miner) public returns (Agent) {
-    address[] memory miners = new address[](1);
-    miners[0] = address(miner);
-
     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
-    vm.startPrank(minerOwner);
     // create a agent for miner
+    vm.prank(minerOwner);
     Agent agent = Agent(
       payable(
         agentFactory.create(address(0))
       ));
-    // propose the change owner to the agent
-    miner.change_owner_address(address(miner), address(agent));
+
+    _agentClaimOwnership(address(agent), address(miner), minerOwner);
+    return agent;
+  }
+
+  function _newMiner(address minerOwner) internal returns (address) {
+    vm.prank(minerOwner);
+    return address(new MockMiner());
+  }
+
+  function _agentClaimOwnership(address _agent, address _miner, address _minerOwner) internal {
+    IAgent agent = IAgent(_agent);
+    IMockMiner miner = IMockMiner(_miner);
+    address[] memory miners = new address[](1);
+    miners[0] = _miner;
+    vm.startPrank(_minerOwner);
+    miner.change_owner_address(_miner, _agent);
     // confirm change owner address (agent1 now owns miner)
     agent.addMiners(miners);
-    require(miner.get_owner(address(miner)) == address(agent), "Miner owner not set");
-    require(agent.hasMiner(address(miner)), "Miner not registered");
-
+    require(miner.get_owner(_miner) == _agent, "Miner owner not set");
+    require(agent.hasMiner(_miner), "Miner not registered");
     vm.stopPrank();
-    return agent;
   }
 
   function createCustomCredential(
@@ -148,9 +158,11 @@ contract BaseTest is Test {
   ) {
     uint256 qaPower = 10e18;
     uint256 expectedDailyRewards = 20e18;
+    uint256 assets = 10e18;
+    uint256 liabilities = 2e18;
 
     MinerData memory miner = MinerData(
-      1e10, expectedDailyRewards, 0, 0.5e18, 10e18, 10e18, 10, qaPower, 5e18, 0, 0
+      assets, expectedDailyRewards, 0, 0.5e18, liabilities, 10e18, 10, qaPower, 5e18, 0, 0
     );
 
     VerifiableCredential memory vc = VerifiableCredential(

@@ -29,6 +29,13 @@ contract PoolImplementation is IPoolImplementation {
     return 0;
   }
 
+  function minCollateral(
+    Account memory account,
+    VerifiableCredential memory vc
+  ) external pure returns (uint256) {
+    return 0;
+  }
+
   function beforeBorrow(
     uint256 borrowAsk,
     uint256 powerTokenStake,

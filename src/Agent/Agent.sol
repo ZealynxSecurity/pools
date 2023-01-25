@@ -7,6 +7,7 @@ import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
@@ -21,7 +22,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IStats} from "src/Types/Interfaces/IStats.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IMockMiner} from "src/Types/Interfaces/IMockMiner.sol"; // TODO: remove this for Filecoin.sol
-import {SignedCredential} from "src/Types/Structs/Credentials.sol";
+import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {
   ChangeWorkerAddressParams,
   ChangeMultiaddrsParams,
@@ -41,7 +42,8 @@ import {
   OverPowered,
   OverLeveraged,
   InvalidParams,
-  InDefault
+  InDefault,
+  InsufficientCollateral
 } from "src/Errors.sol";
 
 contract Agent is IAgent, RouterAware {
@@ -116,6 +118,18 @@ contract Agent is IAgent, RouterAware {
     return _getStakedPoolIDs().length;
   }
 
+  // returns the amount of funds an Agent can withdraw from a pool
+  function maxWithdraw(SignedCredential memory sc) external view returns (uint256) {
+    return _maxWithdraw(sc.vc);
+  }
+
+  // returns the total amount of FIL + WFIL held currently by the Agent
+  function liquidAssets() public view returns (uint256) {
+    uint256 filBal = address(this).balance;
+    uint256 wfilBal = GetRoute.wFIL20(router).balanceOf(address(this));
+    return filBal + wfilBal;
+  }
+
   /*//////////////////////////////////////////////
             PAYABLE / FALLBACK FUNCTIONS
   //////////////////////////////////////////////*/
@@ -137,9 +151,25 @@ contract Agent is IAgent, RouterAware {
   function removeMiner(
     address newMinerOwner,
     address miner,
-    SignedCredential memory signedCredential
-  ) external notOverPowered requiresAuth isValidCredential(signedCredential) {
-    _removeMiner(newMinerOwner, miner);
+    SignedCredential memory agentCred,
+    // a credential uniquely about the miner we wish to remove
+    SignedCredential memory minerCred
+  )
+    external
+    notOverPowered
+    notOverLeveraged
+    requiresAuth
+    isValidCredential(agentCred)
+  {
+    // also validate the minerCred against the miner to remove
+    _isValidCredential(miner, minerCred);
+    _checkRemoveMiner(agentCred.vc, minerCred.vc);
+
+    // set the miners owner to the new owner
+    _changeMinerOwner(miner, newMinerOwner);
+
+    // Remove the miner from the central registry
+    GetRoute.minerRegistry(router).removeMiner(miner);
   }
 
   function migrateMiner(address newAgent, address miner) external requiresAuth {
@@ -237,12 +267,8 @@ contract Agent is IAgent, RouterAware {
 
   function withdrawBalance(address receiver, uint256 amount) external requiresAuth {
     require(totalPowerTokensStaked() == 0, "Cannot withdraw funds while power tokens are staked");
-    _poolFundsInFIL(amount);
 
-    (bool success,) = receiver.call{value: amount}("");
-    require(success, "Withdrawal failed.");
-
-    emit WithdrawBalance(receiver, amount);
+    _withdrawBalance(receiver, amount);
   }
 
   function withdrawBalance(
@@ -250,13 +276,20 @@ contract Agent is IAgent, RouterAware {
     uint256 amount,
     SignedCredential memory signedCredential
   ) external requiresAuth isValidCredential(signedCredential) {
-    // TODO: permissions here
-    _poolFundsInFIL(amount);
+    uint256 maxWithdrawAmt = _maxWithdraw(signedCredential.vc);
 
-    (bool success,) = receiver.call{value: amount}("");
-    require(success, "Withdrawal failed.");
+    if (maxWithdrawAmt < amount) {
+      revert InsufficientCollateral(
+        address(this),
+        msg.sender,
+        amount,
+        maxWithdrawAmt,
+        msg.sig,
+        "Attempted to draw down too much collateral"
+      );
+    }
 
-    emit WithdrawBalance(receiver, amount);
+    _withdrawBalance(receiver, amount);
   }
 
   function pullFundsFromMiners(
@@ -414,9 +447,34 @@ contract Agent is IAgent, RouterAware {
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/
 
-  function _canRemoveMiner(address miner) internal view returns (bool) {
-    require(IMockMiner(miner).get_owner(miner) == address(this), "Agent does not own miner");
-    require(totalPowerTokensStaked() == 0, "Cannot remove miner while power tokens are staked");
+  function _checkRemoveMiner(
+    VerifiableCredential memory agentCred,
+    VerifiableCredential memory minerCred
+  ) internal view returns (bool) {
+    // if nothing is borrowed, can remove
+    if (totalPowerTokensStaked() == 0) {
+      return true;
+    }
+
+    uint256 maxWithdrawAmt = _maxWithdraw(agentCred);
+    uint256 minerLiquidationValue = _liquidationValue(
+      minerCred.miner.assets,
+      minerCred.miner.liabilities,
+      0
+    );
+
+    _canRemovePower(agentCred.miner.qaPower, minerCred.miner.qaPower);
+
+    if (maxWithdrawAmt <= minerLiquidationValue) {
+      revert InsufficientCollateral(
+        address(this),
+        msg.sender,
+        minerLiquidationValue,
+        maxWithdrawAmt,
+        msg.sig,
+        "Agent does not have enough collateral to remove Miner"
+      );
+    }
 
     return true;
   }
@@ -441,20 +499,6 @@ contract Agent is IAgent, RouterAware {
     _changeMinerOwner(miner, address(this));
 
     GetRoute.minerRegistry(router).addMiner(miner);
-  }
-
-  function _removeMiner(
-    address newOwner,
-    address miner
-  ) internal {
-    // Confirm the miner is valid and can be removed
-    require(_canRemoveMiner(miner), "Cannot remove miner unless all loans are paid off or it isn't needed for collateral");
-
-    // set the miners owner to the new owner
-    _changeMinerOwner(miner, newOwner);
-
-    // Remove the miner from the central registry
-    GetRoute.minerRegistry(router).removeMiner(miner);
   }
 
   function _pullFundsFromMiner(address miner, uint256 amount) internal {
@@ -488,7 +532,6 @@ contract Agent is IAgent, RouterAware {
     }
 
     require(filBal + wFILBal >= amount, "Not enough FIL or wFIL to push to miner");
-
 
     IWFIL(address(wFIL20)).withdraw(amount - filBal);
   }
@@ -555,8 +598,83 @@ contract Agent is IAgent, RouterAware {
     return GetRoute.agentPolice(router).isValidCredential(agent, signedCredential);
   }
 
+  // TODO: should we add any EDR for some number of days to this?
+  // thinking no... because assets can include this amount server side to give us more flexibility and cheaper gas
+  function _maxWithdraw(VerifiableCredential memory vc) internal view returns (uint256) {
+    uint256 liquid = liquidAssets();
+
+    // if nothing is borrowed, you can withdraw everything
+    if (totalPowerTokensStaked() == 0) {
+      return liquid;
+    }
+
+    uint256 liquidationValue = _liquidationValue(vc.miner.assets, vc.miner.liabilities, liquid);
+    uint256 minCollateral = _minCollateral(vc);
+
+    if (liquidationValue > minCollateral) {
+      // dont report a maxWithdraw that the Agent can't currently afford..
+      return Math.min(liquidationValue - minCollateral, liquid);
+    }
+
+    return 0;
+  }
+
+  function _minCollateral(
+    VerifiableCredential memory vc
+  ) internal view returns (uint256 minCollateral) {
+    uint256[] memory poolIDs = _getStakedPoolIDs();
+
+    for (uint256 i = 0; i < poolIDs.length; ++i) {
+      uint256 poolID = poolIDs[i];
+      minCollateral += GetRoute
+        .pool(router, poolID)
+        .implementation()
+        .minCollateral(
+          IRouter(router).getAccount(id, poolID),
+          vc
+        );
+    }
+  }
+
+  /// @dev ensure we don't remove too much power
+  function _canRemovePower(uint256 totalPower, uint256 powerToRemove) internal view {
+      // ensure that the power we're removing by removing a miner does not put us into an "overPowered" state
+      if (totalPower < powerToRemove + GetRoute.powerToken(router).powerTokensMinted(id)) {
+        revert InsufficientCollateral(
+          address(this),
+          msg.sender,
+          powerToRemove,
+          // TODO: here we should do totalPower - powMinted, but that could underflow..
+          0,
+          msg.sig,
+          "Attempted to remove a miner with too much power"
+        );
+      }
+  }
+
   function _getStakedPoolIDs() internal view returns (uint256[] memory) {
     return GetRoute.agentPolice(router).poolIDs(id);
+  }
+
+  function _liquidationValue(
+    uint256 assets,
+    uint256 liabilities,
+    uint256 liquid
+  ) internal pure returns (uint256) {
+    uint256 recoverableAssets = assets + liquid;
+    if (recoverableAssets < liabilities) {
+      return 0;
+    }
+    return recoverableAssets - liabilities;
+  }
+
+  function _withdrawBalance(address receiver, uint256 amount) internal {
+    _poolFundsInFIL(amount);
+
+    (bool success,) = receiver.call{value: amount}("");
+    require(success, "Withdrawal failed.");
+
+    emit WithdrawBalance(receiver, amount);
   }
 }
 

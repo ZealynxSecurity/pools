@@ -34,12 +34,19 @@ interface IAgent {
 
   function id() external view returns (uint256);
 
+  function hasMiner(address miner) external view returns (bool);
+
   // powerTokensMinted - powerTokensBurned
   function totalPowerTokensStaked() external view returns (uint256);
 
   function powerTokensStaked(uint256 poolID) external view returns (uint256 powerTokensStaked);
 
   function stakedPoolsCount() external view returns (uint256);
+
+  function maxWithdraw(SignedCredential memory sc) external view returns (uint256);
+
+  function liquidAssets() external view returns (uint256);
+
 
   /*//////////////////////////////////////////////////
         MINER OWNERSHIP/WORKER/OPERATOR CHANGES
@@ -50,7 +57,8 @@ interface IAgent {
   function removeMiner(
     address newMinerOwner,
     address miner,
-    SignedCredential memory sc
+    SignedCredential memory agentCred,
+    SignedCredential memory minerCred
   ) external;
 
   function migrateMiner(address newAgent, address miner) external;

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.15;
 
 import "src/MockMiner.sol";
-import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Authority} from "src/Auth/Auth.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
@@ -15,7 +14,6 @@ import {WFIL} from "src/WFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
-import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
@@ -619,7 +617,7 @@ contract AgentPoliceTest is BaseTest {
 
         signedCred = issueGenericSC(address(agent));
         vm.startPrank(address(agent));
-        try agent.removeMiner(address(this), address(miner), signedCred) {
+        try agent.removeMiner(address(this), address(miner), signedCred, signedCred) {
             assertTrue(false, "Call to borrow shoudl err when over pwered");
         } catch (bytes memory err) {
             (, string memory reason) = Decode.overPoweredError(err);
@@ -832,7 +830,6 @@ contract AgentDefaultTest is BaseTest {
     IPool pool2;
     IERC4626 pool46261;
     IERC4626 pool46262;
-    IPoolImplementation poolImpl;
 
     SignedCredential signedCred;
     IAgentPolice police;
@@ -908,5 +905,250 @@ contract AgentDefaultTest is BaseTest {
         // since _total_ MLV is 1e18, each pool should be be left with 1e18/2
         assertEq(pool1PostDefaultTotalBorrowed, 1e18 / 2, "Wrong write down amount");
         assertEq(pool2PostDefaultTotalBorrowed, 1e18 / 2, "Wrong write down amount");
+    }
+}
+
+contract AgentCollateralsTest is BaseTest {
+     using AccountHelpers for Account;
+
+    address investor1 = makeAddr("INVESTOR_1");
+    address investor2 = makeAddr("INVESTOR_2");
+    address minerOwner = makeAddr("MINER_OWNER");
+    string poolName = "FIRST POOL NAME";
+    uint256 baseInterestRate = 20e18;
+    uint256 stakeAmount;
+
+    IAgent agent;
+    MockMiner miner;
+    IPool pool1;
+    IPool pool2;
+    IERC4626 pool46261;
+    IERC4626 pool46262;
+
+    SignedCredential signedCred;
+    IAgentPolice police;
+
+    address powerToken;
+
+    uint256 borrowAmount = 10e18;
+
+    function setUp() public {
+        police = GetRoute.agentPolice(router);
+        powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
+
+        pool1 = createPool(
+            "TEST1",
+            "TEST1",
+            ZERO_ADDRESS,
+            2e18
+        );
+        pool46261 = IERC4626(address(pool1));
+
+        pool2 = createPool(
+            "TEST2",
+            "TEST2",
+            ZERO_ADDRESS,
+            2e18
+        );
+        pool46262 = IERC4626(address(pool2));
+        // investor1 stakes 10 FIL
+        vm.deal(investor1, 50e18);
+        stakeAmount = 20e18;
+        vm.startPrank(investor1);
+        wFIL.deposit{value: stakeAmount*2}();
+        wFIL.approve(address(pool1.template()), stakeAmount);
+        wFIL.approve(address(pool2.template()), stakeAmount);
+        pool46261.deposit(stakeAmount, investor1);
+        pool46262.deposit(stakeAmount, investor1);
+        vm.stopPrank();
+
+        (agent, miner) = configureAgent(minerOwner);
+        // mint some power for the agent
+        signedCred = issueGenericSC(address(agent));
+        vm.startPrank(address(agent));
+        agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+        IERC20(powerToken).approve(address(pool1), signedCred.vc.miner.qaPower);
+        IERC20(powerToken).approve(address(pool2), signedCred.vc.miner.qaPower);
+
+        agent.borrow(borrowAmount, pool1.id(), signedCred, signedCred.vc.miner.qaPower / 2);
+        agent.borrow(borrowAmount, pool2.id(), signedCred, signedCred.vc.miner.qaPower / 2);
+        vm.stopPrank();
+    }
+
+    function testGetMaxWithdrawUnderLiquidity() public {
+        /*
+            issue a new signed cred to make Agent's financial situation look like this:
+            - qap: 10e18
+            - pool 1 borrow amount 10e18
+            - pool 2 borrow amount 10e18
+            - pool1 power token stake 5e18
+            - pool2 power token stake 5e18
+            - agent assets: 10e18
+            - agent liabilities: 8e18
+            - agent liquid balance: 10e18
+
+            the agent should be able to withdraw:
+            liquid balance + assets - liabilities - minCollateralValuePool1 - minCollateralValuePool2
+
+            (both pools require 10% of their totalBorrwed amount)
+        */
+
+        SignedCredential memory sc = issueSC(createCustomCredential(
+            address(agent),
+            signedCred.vc.miner.qaPower,
+            signedCred.vc.miner.expectedDailyRewards,
+            signedCred.vc.miner.assets,
+            8e18
+        ));
+
+        // expected withdraw amount is the agents liquidation value minus the min collateral of both pools
+        uint256 liquidationValue = agent.liquidAssets() + sc.vc.miner.assets - sc.vc.miner.liabilities;
+        // the mock pool implementation returns 10% of totalBorrowed for minCollateral
+        Account memory account1 = AccountHelpers.getAccount(router, address(agent), pool1.id());
+        Account memory account2 = AccountHelpers.getAccount(router, address(agent), pool2.id());
+
+        uint256 minCollateralPool1 = pool1.implementation().minCollateral(account1, sc.vc);
+        uint256 minCollateralPool2 = pool2.implementation().minCollateral(account2, sc.vc);
+        uint256 expectedWithdrawAmount = liquidationValue - minCollateralPool1 - minCollateralPool2;
+
+        uint256 withdrawAmount = agent.maxWithdraw(sc);
+        assertEq(withdrawAmount, expectedWithdrawAmount, "Wrong withdraw amount");
+    }
+
+    function testWithdrawUnderMax(uint256 withdrawAmount) public {
+        vm.assume(withdrawAmount < agent.maxWithdraw(signedCred));
+
+        address receiver = makeAddr("RECEIVER");
+
+        assertEq(receiver.balance, 0, "Receiver should have no balance");
+        vm.prank(address(agent));
+        agent.withdrawBalance(receiver, withdrawAmount, signedCred);
+        assertEq(receiver.balance, withdrawAmount, "Wrong withdraw amount");
+    }
+
+    function testWithdrawrMax() public {
+        uint256 withdrawAmount = agent.maxWithdraw(signedCred);
+
+        address receiver = makeAddr("RECEIVER");
+
+        assertEq(receiver.balance, 0, "Receiver should have no balance");
+        vm.prank(address(agent));
+        agent.withdrawBalance(receiver, withdrawAmount, signedCred);
+        assertEq(receiver.balance, withdrawAmount, "Wrong withdraw amount");
+    }
+
+    function testWithdrawTooMuch(uint256 overWithdrawAmt) public {
+        address receiver = makeAddr("RECEIVER");
+        uint256 withdrawAmount = agent.maxWithdraw(signedCred);
+        vm.assume(overWithdrawAmt > withdrawAmount);
+        vm.prank(address(agent));
+        try agent.withdrawBalance(receiver, withdrawAmount * 2, signedCred) {
+            assertTrue(false, "Should not be able to withdraw more than the maxwithdraw amount");
+        } catch (bytes memory b) {
+            (,,,,, string memory reason) = Decode.insufficientCollateralError(b);
+
+            assertEq(reason, "Attempted to draw down too much collateral");
+        }
+    }
+
+    function testMaxWithdrawToLiquidityLimit() public {
+        uint256 LIQUID_AMOUNT = 10000;
+        address[] memory _miners = new address[](1);
+        uint256[] memory _amounts = new uint256[](1);
+        // push funds to the miner so that the agent's liquid balance is less than the withdrawAmount
+        _amounts[0] = agent.liquidAssets() - LIQUID_AMOUNT;
+        _miners[0] = address(miner);
+        vm.startPrank(address(agent));
+        agent.pushFundsToMiners(_miners, _amounts);
+
+        uint256 withdrawAmount = agent.maxWithdraw(signedCred);
+
+        assertEq(withdrawAmount, LIQUID_AMOUNT, "max withdraw should be the liquidity limit");
+        vm.stopPrank();
+    }
+
+    function testRemoveMiner() public {
+        address newMiner = _newMiner(minerOwner);
+        // add another miner to the agent
+        _agentClaimOwnership(address(agent), newMiner, minerOwner);
+
+        // in this example, remove a miner that has no power or assets
+        SignedCredential memory minerCred = issueSC(createCustomCredential(
+            newMiner,
+            0,
+            0,
+            0,
+            0
+        ));
+
+        address newMinerOwner = makeAddr("NEW_MINER_OWNER");
+
+        assertEq(agent.hasMiner(newMiner), true, "Agent should have miner before removing");
+        vm.prank(address(agent));
+        agent.removeMiner(newMinerOwner, newMiner, signedCred, minerCred);
+        assertEq(agent.hasMiner(newMiner), false, "Miner should be removed");
+    }
+
+    function testRemoveMinerWithTooMuchPower(uint256 powerAmount) public {
+        vm.assume(powerAmount <= signedCred.vc.miner.qaPower);
+        address newMiner = _newMiner(minerOwner);
+        // add another miner to the agent
+        _agentClaimOwnership(address(agent), newMiner, minerOwner);
+
+        // in this example, remove a miner that contributes all the borrowing power
+        SignedCredential memory minerCred = issueSC(createCustomCredential(
+            newMiner,
+            signedCred.vc.miner.qaPower,
+            0,
+            0,
+            0
+        ));
+
+        address newMinerOwner = makeAddr("NEW_MINER_OWNER");
+
+        assertEq(agent.hasMiner(newMiner), true, "Agent should have miner before removing");
+        vm.prank(address(agent));
+        try agent.removeMiner(newMinerOwner, newMiner, signedCred, minerCred) {
+            assertTrue(false, "Should not be able to remove a miner with too much power");
+        } catch (bytes memory b) {
+            (,,,,, string memory reason) = Decode.insufficientCollateralError(b);
+
+            assertEq(reason, "Attempted to remove a miner with too much power");
+            assertEq(agent.hasMiner(newMiner), true, "Miner should be removed");
+        }
+    }
+
+    function testRemoveMinerWithTooLargeLiquidationValue() public {
+        address newMiner = _newMiner(minerOwner);
+        // add another miner to the agent
+        _agentClaimOwnership(address(agent), newMiner, minerOwner);
+
+        // transfer out the balance of the agent to reduce the total collateral of the agent
+        address recipient = makeAddr("RECIPIENT");
+        uint256 withdrawAmount = agent.maxWithdraw(signedCred);
+        vm.prank(address(agent));
+        agent.withdrawBalance(recipient, withdrawAmount, signedCred);
+
+        // in this example, remove a miner that contributes all the assets
+        SignedCredential memory minerCred = issueSC(createCustomCredential(
+            newMiner,
+            0,
+            0,
+            signedCred.vc.miner.assets,
+            0
+        ));
+
+        address newMinerOwner = makeAddr("NEW_MINER_OWNER");
+
+        assertEq(agent.hasMiner(newMiner), true, "Agent should have miner before removing");
+        vm.prank(address(agent));
+        try agent.removeMiner(newMinerOwner, newMiner, signedCred, minerCred) {
+            assertTrue(false, "Should not be able to remove a miner with too much liquidation value");
+        } catch (bytes memory b) {
+            (,,,,, string memory reason) = Decode.insufficientCollateralError(b);
+
+            assertEq(reason, "Agent does not have enough collateral to remove Miner");
+            assertEq(agent.hasMiner(newMiner), true, "Miner should be removed");
+        }
     }
 }
