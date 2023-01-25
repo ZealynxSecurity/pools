@@ -446,6 +446,43 @@ contract AgentTest is BaseTest {
         assertEq(account.powerTokensStaked, 0);
         assertEq(account.pmtPerEpoch(), 0);
     }
+    function testRefinance() public {
+        IPool pool2 = createPool(
+            "TEST",
+            "TEST",
+            ZERO_ADDRESS,
+            2e18
+        );
+        IERC4626 pool24626 = IERC4626(address(pool2));
+        uint256 oldPoolID = pool.id();
+        uint256 newPoolID = pool2.id();
+        Account memory oldAccount;
+        Account memory newAccount;
+        // investor1 stakes 10 FIL
+        vm.deal(investor1, 11e18);
+        stakeAmount = 10e18;
+        vm.startPrank(investor1);
+        wFIL.deposit{value: stakeAmount}();
+        wFIL.approve(address(pool2.template()), stakeAmount);
+        pool24626.deposit(stakeAmount, investor1);
+        vm.stopPrank();
+
+        uint256 borrowAmount = 0.5e18;
+
+        vm.startPrank(address(agent));
+        agent.borrow(borrowAmount, 0, signedCred, signedCred.vc.miner.qaPower);
+        wFIL.approve(address(pool), borrowAmount);
+        IERC20(powerToken).approve(address(pool2),  10000000000000000000);
+        oldAccount = AccountHelpers.getAccount(router, address(agent), oldPoolID);
+        assertEq(oldAccount.totalBorrowed, borrowAmount);
+        agent.refinance(oldPoolID, newPoolID, 0, signedCred);
+        oldAccount = AccountHelpers.getAccount(router, address(agent), oldPoolID);
+        newAccount = AccountHelpers.getAccount(router, address(agent), newPoolID);
+        assertEq(oldAccount.totalBorrowed, 0);
+        assertEq(newAccount.totalBorrowed, borrowAmount);
+        vm.stopPrank();
+
+    }
 
     function testPullFundsFromMiners() public {}
 

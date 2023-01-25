@@ -5,6 +5,7 @@ import {Authority} from "src/Auth/Auth.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
+import {Account} from "src/Types/Structs/Account.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
@@ -311,6 +312,29 @@ contract Agent is IAgent, RouterAware {
     }
 
     pool.borrow(amount, signedCredential, powerTokenAmount);
+  }
+
+  function refinance(
+    uint256 oldPoolID,
+    uint256 newPoolID,
+    uint256 additionalPowerTokens,
+    SignedCredential memory signedCredential
+  ) external requiresAuth isValidCredential(signedCredential) {
+    Account memory account = AccountHelpers.getAccount(
+      router,
+      address(this),
+      oldPoolID
+    );
+    IPowerToken powerToken = GetRoute.powerToken(router);
+    IPool oldPool = GetRoute.pool(router, oldPoolID);
+    IPool newPool = GetRoute.pool(router, newPoolID);
+    uint256 powerTokensStaked = account.powerTokensStaked;
+    uint256 currentDebt = account.totalBorrowed;
+    // NOTE: This could be dangerous, we need to protect against re-entrancy in the pool borrow. Might be better to do this.
+    powerToken.mint(powerTokensStaked);
+    newPool.borrow(currentDebt, signedCredential, powerTokensStaked + additionalPowerTokens);
+    require(oldPool.exitPool(address(this), signedCredential, currentDebt) == powerTokensStaked, "Refinance failed");
+    powerToken.burn(powerTokensStaked);
   }
 
   function exit(

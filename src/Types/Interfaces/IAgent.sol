@@ -123,6 +123,13 @@ interface IAgent {
     SignedCredential memory vc
   ) external;
 
+  function refinance(
+    uint256 oldPoolID,
+    uint256 newPoolID,
+    uint256 additionalPowerTokens,
+    SignedCredential memory signedCredential
+  ) external;
+
   function pullFundsFromMiners(
     address[] calldata miners,
     uint256[] calldata amounts
