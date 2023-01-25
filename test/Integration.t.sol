@@ -7,6 +7,7 @@ import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import "./BaseTest.sol";
 
 contract IntegrationTest is BaseTest {
@@ -16,6 +17,8 @@ contract IntegrationTest is BaseTest {
   IPowerToken powerToken;
   IPool pool;
   IERC20 pool20;
+  IERC20 iou;
+  IOffRamp ramp;
 
   SignedCredential signedCred;
 
@@ -37,6 +40,8 @@ contract IntegrationTest is BaseTest {
     pool = createPool(poolName, poolSymbol, poolOperator, 20e18);
     vm.stopPrank();
     pool20 = IERC20(address(pool.share()));
+    iou = IERC20(address(pool.iou()));
+    ramp = IOffRamp(address(pool.ramp()));
 
     vm.deal(investor1, 10e18);
     vm.prank(investor1);
@@ -96,13 +101,31 @@ function testSingleDepositBorrowRepayWithdraw() public {
     assertEq(poolAssetBal, investor1UnderlyingAmount, "pool has incorrect asset bal");
     assertEq(agentAssetBal, 0, "agent should haven no assets");
 
-    vm.prank(investor1);
+    vm.startPrank(investor1);
     pool.withdraw(investor1UnderlyingAmount, investor1, investor1);
     assertEq(pool.convertToAssets(pool20.balanceOf(investor1)), 0);
 
+    assertEq(pool20.balanceOf(investor1), 0);
+    assertEq(iou.balanceOf(investor1), investor1UnderlyingAmount, "investor1 should have its assets back in iou tokens");
+    iou.approve(address(ramp), investor1UnderlyingAmount);
+    ramp.stake(investor1UnderlyingAmount);
+
+    assertEq(iou.balanceOf(investor1), 0);
+    assertEq(iou.balanceOf(address(ramp)), investor1UnderlyingAmount);
+    assertEq(ramp.iouTokensStaked(investor1), investor1UnderlyingAmount);
+
+    pool.harvestToRamp();
+
+    assertEq(wFIL.balanceOf(address(ramp)), investor1UnderlyingAmount);
+
+    vm.roll(block.number + 200);
+    ramp.realize();
+    ramp.claim();
+
+
+
     assertEq(pool.totalAssets(), 0);
     assertEq(pool20.balanceOf(investor1), 0);
-    assertEq(wFIL.balanceOf(address(pool)), 0, "Pool should have no assets");
     assertEq(wFIL.balanceOf(investor1), investor1OriginalWFILBal, "investor1 should have its assets back");
   }
 }

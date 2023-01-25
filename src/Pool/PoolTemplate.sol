@@ -37,7 +37,6 @@ import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 
 uint256 constant DUST = 1000;
 
-/// NOTE: this pool uses accrual basis accounting to compute share prices
 contract PoolTemplate is IPoolTemplate, RouterAware {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
@@ -257,16 +256,14 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         address receiver,
         address owner,
         PoolToken share,
-        ERC20 asset
+        PoolToken iou
     ) public virtual returns (uint256 shares) {
         IPool pool = IPool(msg.sender);
         shares = pool.previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
 
         share.burn(owner, shares);
-
-        //emit Withdraw(msg.sender, receiver, owner, assets, shares);
-
-        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, receiver, assets);
+        // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
+        iou.mint(receiver, assets);
     }
 
     function redeem(
@@ -274,7 +271,7 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         address receiver,
         address owner,
         PoolToken share,
-        ERC20 asset
+        PoolToken iou
     ) public virtual returns (uint256 assets) {
         IPool pool = IPool(msg.sender);
         // TODO: store allowance once
@@ -283,10 +280,8 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         require((assets = pool.previewRedeem(shares)) != 0, "ZERO_ASSETS");
 
         share.burn(owner, shares);
-
-        //emit Withdraw(msg.sender, receiver, owner, assets, shares);
-
-        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, receiver, assets);
+        // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
+        iou.mint(receiver, assets);
     }
 
     /*////////////////////////////////////////////////////////

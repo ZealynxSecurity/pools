@@ -381,7 +381,10 @@ contract Agent is IAgent, RouterAware {
     _poolFundsInWFIL(total);
 
     for (uint256 i = 0; i < _poolIDs.length; i++) {
-      GetRoute.pool(router, _poolIDs[i]).makePayment(address(this), _amounts[i]);
+      GetRoute.pool(router, _poolIDs[i]).makePayment(
+        address(this),
+        _amounts[i]
+      );
     }
   }
 

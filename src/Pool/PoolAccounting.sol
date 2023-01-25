@@ -4,6 +4,7 @@ pragma solidity ^0.8.15;
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
@@ -18,6 +19,7 @@ import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.so
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolTemplate} from "src/Types/Interfaces/IPoolTemplate.sol";
@@ -27,6 +29,8 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
+import {InsufficientLiquidity} from "src/Errors.sol";
+
 contract PoolAccounting is IPool, RouterAware {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
@@ -37,10 +41,13 @@ contract PoolAccounting is IPool, RouterAware {
     IPoolImplementation public implementation; // This module handles logic for approving borrow requests and setting rates/account health
     ERC20 public asset;
     PoolToken public share;
-
+    PoolToken public iou;
+    IOffRamp public ramp;
     uint256 public feesCollected = 0;
     uint256 public totalBorrowed = 0;
-
+    // Minimum liquidity to hold in-contract as a perentage of the total assets
+    uint256 public minimumLiquidity = 0;
+    bool public isShuttingDown = false;
     /*//////////////////////////////////////
                 MODIFIERS
     //////////////////////////////////////*/
@@ -65,9 +72,18 @@ contract PoolAccounting is IPool, RouterAware {
         _;
     }
 
-
     modifier isValidCredential(address agent, SignedCredential memory signedCredential) {
         _isValidCredential(agent, signedCredential);
+        _;
+    }
+
+    modifier isOpen() {
+        require(!isShuttingDown, "Pool is shutting down");
+        _;
+    }
+
+    modifier onlyIfSufficientLiquidity(uint256 ask) {
+        _onlyIfSufficientLiquidity(ask);
         _;
     }
 
@@ -80,7 +96,10 @@ contract PoolAccounting is IPool, RouterAware {
         address _poolImplementation,
         address _asset,
         address _share,
-        address _template
+        address _template,
+        address _ramp,
+        address _iou,
+        uint256 _minimumLiquidity
     ) {
         id = _id;
         router = _router;
@@ -88,12 +107,23 @@ contract PoolAccounting is IPool, RouterAware {
         template = IPoolTemplate(_template);
         share = PoolToken(_share);
         asset = ERC20(_asset);
+        iou = PoolToken(_iou);
+        ramp = IOffRamp(_ramp);
         asset.approve(_template, type(uint256).max);
+        minimumLiquidity = _minimumLiquidity;
     }
 
     /*////////////////////////////////////////////////////////
                       Pool Borrowing Functions
     ////////////////////////////////////////////////////////*/
+
+    function setMinimumLiquidity(uint256 _minimumLiquidity) public requiresAuth {
+        minimumLiquidity = _minimumLiquidity;
+    }
+
+    function shutDown() public requiresAuth {
+        isShuttingDown = true;
+    }
 
     function getAgentBorrowed(address agent) public view returns (uint256) {
         return AccountHelpers.getAccount(router, agent, id).totalBorrowed;
@@ -107,12 +137,36 @@ contract PoolAccounting is IPool, RouterAware {
         return asset.balanceOf(address(this)) + totalBorrowed - feesCollected;
     }
 
+    function totalBorrowableAssets() public view returns (uint256) {
+        uint256 _totalAssets = totalAssets();
+        uint256 _absMinLiquidity = getAbsMinLiquidity();
+
+        if (_totalAssets < _absMinLiquidity) return 0;
+        return totalAssets() - getAbsMinLiquidity();
+    }
+
     function getAsset() public view override returns (ERC20) {
         return ERC20(address(asset));
     }
 
     function getPowerToken() public view returns (IPowerToken) {
         return IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
+    }
+
+    /// @dev returns the amount of FIL the Pool aims to keep in reserves at the current epoch
+    function getAbsMinLiquidity() public view returns (uint256) {
+        return totalAssets().mulWadDown(minimumLiquidity);
+    }
+
+    function getLiquidFunds() public view returns (uint256) {
+        if(isShuttingDown) return 0;
+        // This will throw if there is no excess liquidity due to underflow
+
+        uint256 balance = asset.balanceOf(address(this));
+        // ensure we dont pay out treasury fees
+        if (balance <= feesCollected) return 0;
+
+        return balance -= feesCollected;
     }
 
     // NOTE: Making these seperate saves us a step but maybe there's a smarter way to do this; feels wrong idk
@@ -129,7 +183,14 @@ contract PoolAccounting is IPool, RouterAware {
         uint256 amount,
         SignedCredential memory sc,
         uint256 powerTokenAmount
-    ) public onlyAgent isValidCredential(msg.sender, sc) returns (uint256) {
+    )
+        public
+        onlyAgent
+        isOpen
+        isValidCredential(msg.sender, sc)
+        onlyIfSufficientLiquidity(amount)
+        returns (uint256)
+    {
         // pull the powerTokens into the pool
         GetRoute.powerToken(router).transferFrom(msg.sender, address(this), powerTokenAmount);
 
@@ -158,7 +219,13 @@ contract PoolAccounting is IPool, RouterAware {
         uint256 pmt,
         SignedCredential memory sc,
         uint256 powerTokenAmount
-    ) public onlyAgent isValidCredential(msg.sender, sc) {
+    )
+        public
+        onlyAgent
+        isOpen
+        isValidCredential(msg.sender, sc)
+        onlyIfSufficientLiquidity(pmt)
+    {
         // pull the powerTokens into the pool
         GetRoute.powerToken(router).transferFrom(msg.sender, address(this), powerTokenAmount);
 
@@ -183,7 +250,10 @@ contract PoolAccounting is IPool, RouterAware {
         // no funds get transferred to the agent in this case, since they use the borrowed proceeds to make a payment
     }
 
-    function makePayment(address agent, uint256 pmt) public {
+    function makePayment(
+        address agent,
+        uint256 pmt
+    ) public {
         Account memory account = _getAccount(agent);
 
         (,uint256 remainingPmt) = _accrueFees(pmt, account);
@@ -243,7 +313,7 @@ contract PoolAccounting is IPool, RouterAware {
 
     /// @notice we piggy back the fee collection off a transaction once accrued fees reach the threshold value
     /// anyone can call this function to send the fees to the treasury at any time
-    function harvestFunds(uint256 harvestAmount) public {
+    function harvestFees(uint256 harvestAmount) public {
         feesCollected -= harvestAmount;
         asset.transfer(GetRoute.treasury(router), harvestAmount);
     }
@@ -281,7 +351,21 @@ contract PoolAccounting is IPool, RouterAware {
         uint256 harvestAmount = feesCollected > liquidAssets
             ? liquidAssets : feesCollected;
         if (harvestAmount >= poolFactory.feeThreshold()) {
-            harvestFunds(harvestAmount);
+            harvestFees(harvestAmount);
+        }
+    }
+
+    function _onlyIfSufficientLiquidity(uint256 ask) internal view {
+        // checks to ensure the offramp's balance of assets is above the min liquidity requirements of the Pool
+        if (totalBorrowableAssets() < ask) {
+            revert InsufficientLiquidity(
+                address(this),
+                msg.sender,
+                ask,
+                totalBorrowableAssets(),
+                msg.sig,
+                "Pool has insufficient liquidity to borrow"
+            );
         }
     }
 
@@ -290,11 +374,11 @@ contract PoolAccounting is IPool, RouterAware {
     //////////////////////////////////////////////////////////////*/
 
 
-    function deposit(uint256 assets, address receiver) public virtual returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public virtual isOpen returns (uint256 shares) {
         shares = template.deposit(assets, receiver, share, asset);
     }
 
-    function mint(uint256 shares, address receiver) public virtual returns (uint256 assets) {
+    function mint(uint256 shares, address receiver) public virtual isOpen returns (uint256 assets) {
         assets = template.mint(shares, receiver, share, asset);
     }
 
@@ -303,7 +387,7 @@ contract PoolAccounting is IPool, RouterAware {
         address receiver,
         address owner
     ) public virtual returns (uint256 shares) {
-        shares = template.withdraw(assets, receiver, owner, share, asset);
+        shares = template.withdraw(assets, receiver, owner, share, iou);
     }
 
     function redeem(
@@ -311,7 +395,7 @@ contract PoolAccounting is IPool, RouterAware {
         address receiver,
         address owner
     ) public virtual returns (uint256 assets) {
-        assets = template.redeem(shares, receiver, owner, share, asset);
+        assets = template.redeem(shares, receiver, owner, share, iou);
     }
 
 
@@ -369,6 +453,25 @@ contract PoolAccounting is IPool, RouterAware {
 
     function previewRedeem(uint256 shares) public view virtual returns (uint256) {
         return convertToAssets(shares);
+    }
+
+    /// @dev harvests liquid funds and sends them to the Offramp when the liquidity reserves are low
+    function harvestToRamp() public {
+        // distribute funds to the offramp when we are below the liquidity threshold
+        uint256 exitDemand = ramp.totalIOUStaked();
+        uint256 rampAssets = asset.balanceOf(address(ramp));
+
+        // only send funds to the offramp if our liquidityReserves are less than the min liquidity reserve requirement
+        if (rampAssets < exitDemand) {
+            // distribute the difference between the min liquidity reserve requirement and our liquidity reserves
+            // if our liquid funds are not enough to cover, send the max amount of funds
+            uint256 toDistribute = Math.min(
+                exitDemand - rampAssets,
+                getLiquidFunds()
+            );
+            asset.approve(address(ramp), toDistribute);
+            ramp.distribute(address(this), toDistribute);
+        }
     }
 
     /*//////////////////////////////////////////////////////////////

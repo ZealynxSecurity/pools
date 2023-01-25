@@ -172,18 +172,14 @@ library AuthController {
     MultiRolesAuthority subAuthority = newMultiRolesAuthority(address(this), Authority(address(0)));
     setSubAuthority(router, pool, subAuthority);
 
-    // pool factory is able to draw up funds from the pool
-    subAuthority.setUserRole(poolFactory, uint8(Roles.ROLE_POOL_FACTORY), true);
-    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_FACTORY), POOL_FLUSH_SELECTOR, true);
-
     // pool itself should be able to add roles to its own authority
     // in order to allow for enabling/disabling operators
     subAuthority.setUserRole(pool, uint8(Roles.ROLE_POOL), true);
     subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL), AUTH_SET_USER_ROLE_SELECTOR, true);
 
-    subAuthority.setUserRole(msg.sender, uint8(Roles.ROLE_POOL_OWNER), true);
+    subAuthority.setUserRole(pool, uint8(Roles.ROLE_POOL_OWNER), true);
     if (operator == address(0)) {
-      subAuthority.setUserRole(msg.sender, uint8(Roles.ROLE_POOL_OPERATOR), true);
+      subAuthority.setUserRole(pool, uint8(Roles.ROLE_POOL_OPERATOR), true);
     } else {
       subAuthority.setUserRole(operator, uint8(Roles.ROLE_POOL_OPERATOR), true);
     }
@@ -191,12 +187,12 @@ library AuthController {
     subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OWNER), POOL_ENABLE_OPERATOR_SELECTOR, true);
     subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OWNER), POOL_DISABLE_OPERATOR_SELECTOR, true);
 
-    // TODO: should this be possible?
-    // TODO: Should operator be able to change the rate module?
     subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), POOL_SET_RATE_MODULE_SELECTOR, true);
-    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), POOL_SET_RATE_MODULE_SELECTOR, true);
+    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), OFFRAMP_SET_CONVERSION_WINDOW_SELECTOR, true);
+    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), POOL_SET_MIN_LIQUIDITY_SELECTOR, true);
+    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), POOL_SHUT_DOWN_SELECTOR, true);
 
-    subAuthority.transferOwnership(msg.sender);
+    subAuthority.transferOwnership(pool);
   }
 
   function initAgentPoliceRoles(

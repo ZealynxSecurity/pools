@@ -37,6 +37,7 @@ contract BaseTest is Test {
   address public constant ZERO_ADDRESS = address(0);
   address public treasury = makeAddr('TREASURY');
   address public router;
+  address public systemAdmin = makeAddr('SYSTEM_ADMIN');
 
   // just used for testing
   uint256 public vcIssuerPk = 1;

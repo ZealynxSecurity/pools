@@ -6,12 +6,12 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {PoolAccounting} from "src/Pool/PoolAccounting.sol";
 import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
-import {PoolToken} from "src/Pool/PoolToken.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {ROUTE_TREASURY} from "src/Constants/Routes.sol";
+import {Deployer} from "deploy/Deployer.sol";
 
 contract PoolFactory is IPoolFactory, RouterAware {
   /**
@@ -65,23 +65,36 @@ contract PoolFactory is IPoolFactory, RouterAware {
     address implementation,
     address template
   ) external requiresAuth returns (IPool pool) {
+    address stakingAsset = address(asset);
     require(implementations[implementation], "Pool: Broker not approved");
     require(templates[template], "Pool: Template not approved");
 
     // Create custom ERC20 for the pools
-    // TODO: What should the token symbol and name be?
-    PoolToken token = new PoolToken(name, symbol);
+    // TODO: Token naming - https://github.com/glif-confidential/pools/issues/223
+    (
+      address shareToken,
+      address iouToken,
+      address ramp
+    ) = Deployer.deployPoolAncillaries(
+      router,
+      stakingAsset,
+      allPools.length,
+      name,
+      symbol
+    );
 
     pool = new PoolAccounting(
       allPools.length,
       router,
       implementation,
-      address(asset),
-      address(token),
-      template
+      stakingAsset,
+      shareToken,
+      template,
+      ramp,
+      iouToken,
+      0
     );
 
-    token.transferOwnership(address(pool.template()));
     allPools.push(address(pool));
 
     AuthController.initPoolRoles(router, address(pool), operator, address(this));

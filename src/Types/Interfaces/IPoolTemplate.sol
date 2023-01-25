@@ -62,7 +62,7 @@ interface IPoolTemplate  {
     function makePayment(
         address agent,
         Account memory account,
-        uint256 pmt
+        uint256 pmtLessFees
     ) external;
 
     function stakeToPay(
@@ -95,7 +95,7 @@ interface IPoolTemplate  {
         address receiver,
         address owner,
         PoolToken share,
-        ERC20 asset
+        PoolToken iou
     ) external returns (uint256 shares);
 
     function redeem(
@@ -103,7 +103,7 @@ interface IPoolTemplate  {
         address receiver,
         address owner,
         PoolToken share,
-        ERC20 asset
+        PoolToken iou
     ) external  returns (uint256 assets);
 }
 

@@ -20,3 +20,5 @@ For testing contracts, from the repository root, run `yarn test:contracts`. Unde
 ## Artifacts action
 
 On GitHub, you can run the `artifacts` action to generate typechain types as well as build artifacts like the `.bin` and `.abi` files for specific contracts
+
+

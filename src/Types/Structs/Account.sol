@@ -15,4 +15,6 @@ struct Account {
     uint256 totalBorrowed;
     // a cursor that represents the agent's payment history within the pool
     uint256 epochsPaid;
+    // The last epoch that this account's rate was updated
+    uint256 rateAdjEpoch;
 }

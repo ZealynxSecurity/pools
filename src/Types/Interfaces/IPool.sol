@@ -7,6 +7,7 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IPoolTemplate} from "src/Types/Interfaces/IPoolTemplate.sol";
+import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 
 interface IPool {
     event RebalanceTotalBorrowed(
@@ -21,6 +22,8 @@ interface IPool {
     // Basic Stats Getters **PURE**
     function template() external view returns (IPoolTemplate);
     function share() external view returns (PoolToken);
+    function iou() external view returns (PoolToken);
+    function ramp() external view returns (IOffRamp);
     function getAgentBorrowed(address agent) external view returns (uint256);
     function pmtPerPeriod(address agent) external view returns (uint256);
     function totalBorrowed() external view returns (uint256);
@@ -42,7 +45,7 @@ interface IPool {
     ) external returns (uint256);
     function makePayment(
         address agent,
-        uint256 amount
+        uint256 pmt
     ) external;
     function stakeToPay(
         uint256 pmt,
@@ -54,7 +57,8 @@ interface IPool {
         uint256 realAccountValue
     ) external;
     // Admin Funcs
-    function harvestFunds(uint256 harvestAmount) external;
+    function harvestFees(uint256 harvestAmount) external;
+    function harvestToRamp() external;
 
     /*//////////////////////////////////////////////////////////////
                         4626 DEPOSIT/WITHDRAWAL LOGIC
@@ -106,5 +110,12 @@ interface IPool {
 
     function maxRedeem(address owner) external view returns (uint256);
 
+    /*//////////////////////////////////////////////////////////////
+                            ADMIN FUNCS
+    //////////////////////////////////////////////////////////////*/
+
+    function setMinimumLiquidity(uint256 minLiquidity) external;
+
+    function shutDown() external;
 }
 

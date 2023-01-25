@@ -283,6 +283,9 @@ contract ConstantsTest is Test {
     // POOL ADMIN FUNCTION SIGNATURES
     assertEq(POOL_FLUSH_SELECTOR, bytes4(keccak256(bytes("flush()"))));
     assertEq(POOL_SET_FEE_SELECTOR, bytes4(keccak256(bytes("setFee(uint256)"))));
+    assertEq(OFFRAMP_SET_CONVERSION_WINDOW_SELECTOR, bytes4(keccak256(bytes("setConversionWindow(uint256)"))));
+    assertEq(POOL_SHUT_DOWN_SELECTOR, bytes4(keccak256(bytes("shutDown()"))));
+    assertEq(POOL_SET_MIN_LIQUIDITY_SELECTOR, bytes4(keccak256(bytes("setMinimumLiquidity(uint256)"))));
 
     assertEq(PAUSE_SELECTOR, bytes4(keccak256(bytes("pause()"))));
     assertEq(RESUME_SELECTOR, bytes4(keccak256(bytes("resume()"))));

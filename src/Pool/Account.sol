@@ -11,7 +11,9 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {InsufficientPayment, InvalidParams} from "src/Errors.sol";
+import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
 library AccountHelpers {
   using FixedPointMathLib for uint256;
@@ -79,6 +81,7 @@ library AccountHelpers {
     account.powerTokensStaked = 0;
     account.epochsPaid = 0;
     account.perEpochRate = 0;
+    account.rateAdjEpoch = 0;
   }
 
   /**
@@ -173,6 +176,7 @@ library AccountHelpers {
       account,
       vc
     );
+    account.rateAdjEpoch = block.number;
 
     // fresh account, set start epoch and epochsPaid to beginning of current window
     if (account.totalBorrowed == 0) {
