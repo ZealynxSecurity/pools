@@ -95,6 +95,11 @@ error InDefault(
   string reason
 );
 
+error TooManyPools(
+  uint256 agent,
+  string reason
+);
+
 library Decode {
   function unauthorizedError(bytes memory b) internal pure returns (
     address target,
@@ -230,15 +235,31 @@ library Decode {
     bytes4 funcSig,
     string memory reason
   ) {
+    (bytes4 selector, bytes memory params) = generic(b);
+    require(
+      selector == InsufficientCollateral.selector,
+      "decodeInsufficientCollateral: selector mismatch"
+    );
+
+    (target, caller, amount, required, funcSig, reason) = abi.decode(
+      params,
+      (address, address, uint256, uint256, bytes4, string)
+    );
+  }
+
+  function tooManyPoolsError(bytes memory b) internal pure returns (
+    uint256 agent,
+    string memory reason
+  ) {
       (bytes4 selector, bytes memory params) = generic(b);
       require(
-        selector == InsufficientCollateral.selector,
-        "decodeInsufficientCollateral: selector mismatch"
+        selector == TooManyPools.selector,
+        "decodeTooManyPools: selector mismatch"
       );
 
-      (target, caller, amount, required, funcSig, reason) = abi.decode(
+      (agent, reason) = abi.decode(
         params,
-        (address, address, uint256, uint256, bytes4, string)
+        (uint256, string)
       );
   }
 

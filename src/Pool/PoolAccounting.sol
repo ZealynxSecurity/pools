@@ -125,8 +125,8 @@ contract PoolAccounting is IPool, RouterAware {
         isShuttingDown = true;
     }
 
-    function getAgentBorrowed(address agent) public view returns (uint256) {
-        return AccountHelpers.getAccount(router, agent, id).totalBorrowed;
+    function getAgentBorrowed(uint256 agentID) public view returns (uint256) {
+        return AccountHelpers.getAccount(router, agentID, id).totalBorrowed;
     }
 
     function pmtPerPeriod(address agent) public view returns (uint256) {

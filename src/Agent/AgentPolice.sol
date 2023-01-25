@@ -33,6 +33,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   using FixedPointMathLib for uint256;
 
   uint256 public windowLength;
+  uint256 public maxPoolsPerAgent;
 
   // internally our mappings use AgentID to make upgrading easier
   // TODO: use bytes32/uint256 to store agent state in one uint256 like MRA
@@ -47,6 +48,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     uint256 _windowLength
   ) VCVerifier(_name, _version) {
     windowLength = _windowLength;
+    maxPoolsPerAgent = 10;
   }
 
   modifier _isValidCredential(address agent, SignedCredential memory signedCredential) {
@@ -258,6 +260,10 @@ contract AgentPolice is IAgentPolice, VCVerifier {
 
   function setWindowLength(uint256 _windowLength) external requiresAuth {
     windowLength = _windowLength;
+  }
+
+  function setMaxPoolsPerAgent(uint256 _maxPoolsPerAgent) external requiresAuth {
+    maxPoolsPerAgent = _maxPoolsPerAgent;
   }
 
   /*//////////////////////////////////////////////

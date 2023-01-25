@@ -24,7 +24,7 @@ interface IPool {
     function share() external view returns (PoolToken);
     function iou() external view returns (PoolToken);
     function ramp() external view returns (IOffRamp);
-    function getAgentBorrowed(address agent) external view returns (uint256);
+    function getAgentBorrowed(uint256 agentID) external view returns (uint256);
     function pmtPerPeriod(address agent) external view returns (uint256);
     function totalBorrowed() external view returns (uint256);
     function getPowerToken() external view returns (IPowerToken);

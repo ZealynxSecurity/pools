@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import "src/MockMiner.sol";
 import {Authority} from "src/Auth/Auth.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
@@ -1150,5 +1151,99 @@ contract AgentCollateralsTest is BaseTest {
             assertEq(reason, "Agent does not have enough collateral to remove Miner");
             assertEq(agent.hasMiner(newMiner), true, "Miner should be removed");
         }
+    }
+}
+
+contract AgentTooManyPoolsTest is BaseTest {
+     using AccountHelpers for Account;
+
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner = makeAddr("MINER_OWNER");
+
+    IAgent agent;
+    MockMiner miner;
+
+    SignedCredential signedCred;
+    IAgentPolice police;
+
+    address powerToken;
+
+    uint256 stakeAmountPerPool = 2e18;
+    uint256 borrowAmountPerPool = 1e18;
+    uint256 maxPools;
+    uint256 powerTokenStakePerPool;
+
+    function setUp() public {
+        police = GetRoute.agentPolice(router);
+        powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
+        // investor1 stakes 10 FIL
+        vm.deal(investor1, 50e18);
+        vm.prank(investor1);
+        wFIL.deposit{value: 50e18}();
+
+        (agent, miner) = configureAgent(minerOwner);
+        // mint some power for the agent
+        signedCred = issueGenericSC(address(agent));
+        vm.prank(address(agent));
+        agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+        maxPools = GetRoute.agentPolice(router).maxPoolsPerAgent();
+        powerTokenStakePerPool = signedCred.vc.miner.qaPower / (maxPools * 2);
+
+        for (uint256 i = 0; i <= maxPools; i++) {
+            string memory poolName = Strings.toString(i);
+            IPool _pool = createPool(
+                poolName,
+                poolName,
+                ZERO_ADDRESS,
+                2e18
+            );
+
+            _deposit(_pool);
+
+            vm.startPrank(address(agent));
+            IERC20(powerToken).approve(address(_pool), signedCred.vc.miner.qaPower);
+            agent.borrow(
+                borrowAmountPerPool,
+                _pool.id(),
+                signedCred,
+                powerTokenStakePerPool
+            );
+            vm.stopPrank();
+        }
+    }
+
+    function testTooManyPoolsBorrow() public {
+        // create maxPool + 1 pool
+        IPool pool = createPool(
+            "Too manyith pool",
+            "OOPS",
+            ZERO_ADDRESS,
+            2e18
+        );
+
+        _deposit(pool);
+
+        vm.startPrank(address(agent));
+        IERC20(powerToken).approve(address(pool), powerTokenStakePerPool);
+        try agent.borrow(
+            borrowAmountPerPool,
+            pool.id(),
+            signedCred,
+            powerTokenStakePerPool
+        ) {
+            assertTrue(false, "Agent should not be able to borrow from 11 pools");
+        } catch (bytes memory b) {
+            (,string memory reason) = Decode.tooManyPoolsError(b);
+
+            assertEq(reason, "Agent: Too many pools");
+        }
+        vm.stopPrank();
+    }
+
+    function _deposit(IPool pool) internal {
+        vm.startPrank(investor1);
+        wFIL.approve(address(pool.template()), stakeAmountPerPool);
+        pool.deposit(stakeAmountPerPool, investor1);
+        vm.stopPrank();
     }
 }

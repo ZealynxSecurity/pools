@@ -84,6 +84,8 @@ interface IAgentPolice {
   function isInDefault(address agent) external view returns (bool);
   function isInDefault(uint256 agentID) external view returns (bool);
 
+  function maxPoolsPerAgent() external view returns (uint256);
+
   /*//////////////////////////////////////////////
                       CHECKERS
   //////////////////////////////////////////////*/

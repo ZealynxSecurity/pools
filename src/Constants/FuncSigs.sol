@@ -36,11 +36,13 @@ bytes4 constant AGENT_MAKE_PAYMENTS_SELECTOR = 0x6e2612e5;
 bytes4 constant AGENT_STAKE_TO_MAKE_PAYMENTS_SELECTOR = 0x3629609c;
 bytes4 constant AGENT_PULL_FUNDS_SELECTOR = 0x17388a40;
 bytes4 constant AGENT_PUSH_FUNDS_SELECTOR = 0xdb77e33a;
-bytes4 constant AGENT_POLICE_SET_WINDOW_PERIOD_SELECTOR = 0x0;
-bytes4 constant AGENT_POLICE_LOCKOUT_SELECTOR = 0x0;
-
 bytes4 constant AGENT_MINT_POWER_SELECTOR = 0x57c1e094;
 bytes4 constant AGENT_BURN_POWER_SELECTOR = 0x38fa0698;
+
+// these are not being used right now because the agent police doesn't have roles besides its owner
+bytes4 constant AGENT_POLICE_SET_WINDOW_PERIOD_SELECTOR = 0x0;
+bytes4 constant AGENT_POLICE_SET_MAX_POOLS_PER_AGENT_SELECTOR = 0x0;
+bytes4 constant AGENT_POLICE_LOCKOUT_SELECTOR = 0x0;
 
 // AGENT FACTORY FUNCTION SIGNATURES
 bytes4 constant AGENT_FACTORY_SET_VERIFIER_NAME_SELECTOR = 0xcc86c93a;
