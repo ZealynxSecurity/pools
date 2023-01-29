@@ -784,7 +784,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testLockoutNonAdmin() public {
-        try police.lockout(address(this)) {
+        try police.lockout(address(0), address(0)) {
             assertTrue(false, "Should have reverted with Unauthorized error");
         } catch (bytes memory err) {
             (,,, string memory reason) = Decode.unauthorizedError(err);

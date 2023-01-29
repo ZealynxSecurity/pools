@@ -97,7 +97,7 @@ contract Agent is IAgent, RouterAware {
   //////////////////////////////////////////////////*/
 
   /**
-   * @dev Get the amount of power tokens staked by a specific pool
+   * @notice Get the amount of power tokens staked by a specific pool
    * @param poolID The id of the pool to check
    * @return tokensStaked Returns the amount of power tokens staked by the pool
    */
@@ -106,7 +106,7 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
-   * @dev Check if a miner is registered in the miner registry under this Agent
+   * @notice Check if a miner is registered in the miner registry under this Agent
    * @param miner The address of the miner to check for registration
    * @return hasMiner Returns true if the miner is registered, false otherwise
    */
@@ -115,7 +115,7 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
-   * @dev Get the total amount of power tokens staked across all Pools by this Agent
+   * @notice Get the total amount of power tokens staked across all Pools by this Agent
    * @return tokensStaked Returns the total amount of power tokens staked across all Pools
    */
   function totalPowerTokensStaked() public view returns (uint256 tokensStaked) {
@@ -129,17 +129,17 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
-   * @dev Get the number of pools that an Agent has staked power tokens in
+   * @notice Get the number of pools that an Agent has staked power tokens in
    * @return count Returns the number of pools that an Agent has staked power tokens in
    *
-   * @notice this corresponds to the number of Pools that an Agent is actively borrowing from
+   * @dev this corresponds to the number of Pools that an Agent is actively borrowing from
    */
   function stakedPoolsCount() public view returns (uint256) {
     return _getStakedPoolIDs().length;
   }
 
   /**
-   * @dev Get the maximum amount that can be withdrawn by an agent
+   * @notice Get the maximum amount that can be withdrawn by an agent
    * @param signedCredential The signed credential of the user attempting to withdraw
    * @return maxWithdrawAmount Returns the maximum amount that can be withdrawn
    */
@@ -148,10 +148,10 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
-   * @dev Get the total liquid assets of the Agent, not including any liquid assets on any of its staked Miners
+   * @notice Get the total liquid assets of the Agent, not including any liquid assets on any of its staked Miners
    * @return liquidAssets Returns the total liquid assets of the Agent in FIL and wFIL
    *
-   * @notice once assets are flushed down into Miners,
+   * @dev once assets are flushed down into Miners,
    * the liquidAssets will decrease,
    * but the total liquidationValue of the Agent should not change
    */
@@ -174,10 +174,10 @@ contract Agent is IAgent, RouterAware {
   //////////////////////////////////////////////////*/
 
   /**
-   * @dev Adds miner addresses to the miner registry
+   * @notice Adds miner addresses to the miner registry
    * @param miners The addresses of the miners to add
    *
-   * @notice under the hood this function calls `changeOwnerAddress` on the underlying Miner Actor to claim its ownership.
+   * @dev under the hood this function calls `changeOwnerAddress` on the underlying Miner Actor to claim its ownership.
    * The underlying Miner Actor's nextPendingOwner _must_ be the address of this Agent or else this call will fail.
    *
    * This function can only be called by the Agent's owner or operator
@@ -188,13 +188,13 @@ contract Agent is IAgent, RouterAware {
     }
   }
   /**
-   * @dev Removes a miner from the miner registry
+   * @notice Removes a miner from the miner registry
    * @param newMinerOwner The address that will become the new owner of the miner
    * @param miner The address of the miner to remove
    * @param agentCred The signed credential of the agent attempting to remove the miner
    * @param minerCred A credential uniquely about the miner to be removed
    *
-   * @notice under the hood this function:
+   * @dev under the hood this function:
    * - makes sure the Agent is not already overPowered or overLeveraged
    * - checks to make sure that removing the miner will not:
    *    - put the Agent into an overLeveraged state
@@ -229,7 +229,7 @@ contract Agent is IAgent, RouterAware {
     GetRoute.minerRegistry(router).removeMiner(miner);
   }
   /**
-   * @dev Migrates a miner from the current agent to a new agent
+   * @notice Migrates a miner from the current agent to a new agent
    * This function is useful for upgrading an agent to a new version
    * @param newAgent The address of the new agent to which the miner will be migrated
    * @param miner The address of the miner to be migrated
@@ -249,10 +249,10 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
-   * @dev Changes the worker address associated with a miner
+   * @notice Changes the worker address associated with a miner
    * @param miner The address of the miner whose worker address will be changed
    * @param params The parameters for changing the worker address, including the new worker address and the new control addresses
-   * @notice miner must be owned by this Agent in order for this call to execute
+   * @dev miner must be owned by this Agent in order for this call to execute
    */
   function changeMinerWorker(
     address miner,
@@ -262,10 +262,10 @@ contract Agent is IAgent, RouterAware {
     emit ChangeMinerWorker(miner, params.new_worker, params.new_control_addresses);
   }
   /**
-   * @dev Changes the miner's multiaddress
+   * @notice Changes the miner's multiaddress
    * @param miner The address of the miner whose multiaddress will be changed
    * @param params The parameters for changing the multiaddress
-   * @notice miner must be owned by this Agent in order for this call to execute
+   * @dev miner must be owned by this Agent in order for this call to execute
    */
   function changeMultiaddrs(
     address miner,
@@ -275,10 +275,10 @@ contract Agent is IAgent, RouterAware {
     emit ChangeMultiaddrs(miner, params.new_multi_addrs);
   }
   /**
-   * @dev Changes the miner's peerID
+   * @notice Changes the miner's peerID
    * @param miner The address of the miner whose peerID will be changed
    * @param params The parameters for changing the peerID
-   * @notice miner must be owned by this Agent in order for this call to execute
+   * @dev miner must be owned by this Agent in order for this call to execute
    */
   function changePeerID(
     address miner,
@@ -293,10 +293,10 @@ contract Agent is IAgent, RouterAware {
   //////////////////////////////////////////////////*/
 
   /**
-   * @dev Enables or disables the operator role for a specific address
+   * @notice Enables or disables the operator role for a specific address
    * @param operator The address of the operator whose role will be changed
    * @param enabled A boolean value that indicates whether the operator role should be enabled or disabled for this addr
-   * @notice only the owner of the agent can call this function
+   * @dev only the owner of the agent can call this function
    */
   function setOperatorRole(address operator, bool enabled) external requiresAuth {
     IMultiRolesAuthority(
@@ -306,10 +306,10 @@ contract Agent is IAgent, RouterAware {
     emit SetOperatorRole(operator, enabled);
   }
   /**
-   * @dev Enables or disables the owner role for a specific address
+   * @notice Enables or disables the owner role for a specific address
    * @param owner The address of the operator whose role will be changed
    * @param enabled A boolean value that indicates whether the owner role should be enabled or disabled for this addr
-   * @notice only the owner of the agent can call this function
+   * @dev only the owner of the agent can call this function
    */
   function setOwnerRole(address owner, bool enabled) external requiresAuth {
     IMultiRolesAuthority(
@@ -323,7 +323,7 @@ contract Agent is IAgent, RouterAware {
                 POWER TOKEN FUNCTIONS
   //////////////////////////////////////////////////*/
   /**
-   * @dev Allows an agent to mint power tokens
+   * @notice Allows an agent to mint power tokens
    * @param amount The amount of power tokens to mint
    * @param signedCredential The signed credential of the agent attempting to mint power tokens
    */
@@ -342,7 +342,7 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
-   * @dev Allows an agent to burn power tokens
+   * @notice Allows an agent to burn power tokens
    * @param amount The amount of power tokens to burn
    * @param signedCredential The signed credential of the agent attempting to burn power tokens
    * @return amount The amount of power tokens burned
@@ -365,10 +365,10 @@ contract Agent is IAgent, RouterAware {
   //////////////////////////////////////////////*/
 
   /**
-   * @dev Allows an agent to withdraw balance to a recipient. Only callable by the Agent's Owner(s)
+   * @notice Allows an agent to withdraw balance to a recipient. Only callable by the Agent's Owner(s)
    * @param receiver The address to which the funds will be withdrawn
    * @param amount The amount of balance to withdraw
-   * @notice This function will fail if there are any power tokens staked in any Pools.
+   * @dev This function will fail if there are any power tokens staked in any Pools.
    * It's a permissionless withdrawal as long as nothing is borrowed
    */
   function withdrawBalance(address receiver, uint256 amount) external requiresAuth {
@@ -378,11 +378,11 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
-   * @dev Allows an agent to withdraw balance to a recipient. Only callable by the Agent's Owner(s).
+   * @notice Allows an agent to withdraw balance to a recipient. Only callable by the Agent's Owner(s).
    * @param receiver The address to which the funds will be withdrawn
    * @param amount The amount of balance to withdraw
    * @param signedCredential The signed credential of the user attempting to withdraw balance
-   * @notice A credential must be passed when existing $FIL is borrowed in order to compute the max withdraw amount
+   * @dev A credential must be passed when existing $FIL is borrowed in order to compute the max withdraw amount
    */
   function withdrawBalance(
     address receiver,
@@ -406,10 +406,10 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
-   * @dev Allows an agent to pull up funds from multiple staked Miner Actors into the Agent
+   * @notice Allows an agent to pull up funds from multiple staked Miner Actors into the Agent
    * @param miners An array of miner addresses to pull funds from
    * @param amounts An array of amounts to pull from each miner
-   * @notice the amounts correspond to the miners array.
+   * @dev the amounts correspond to the miners array.
    * The Agent must own the miners its withdrawing funds from
    *
    * This function adds a native FIL balance to the Agent
@@ -427,16 +427,17 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
-   * @dev Allows an agent to push funds to multiple miners
-   * @param miners The addresses of the miners to which funds will be pushed
+   * @notice Allows an agent to push funds to multiple miners
+   * @param miners The addresses of the miners to push funds to
    * @param amounts The amounts of funds to push to each miner
-   * @notice the amounts correspond to the miners array.
+   * @dev the amounts correspond to the miners array
    * If the agents FIL balance is less than the total amount to push, the function will attempt to convert any wFIL before reverting
+   * This function cannot be called if the Agent is overLeveraged
    */
   function pushFundsToMiners(
     address[] calldata miners,
     uint256[] calldata amounts
-  ) external requiresAuth {
+  ) external notOverLeveraged requiresAuth {
     require(miners.length == amounts.length, "Miners and amounts must be same length");
 
     uint256 total = 0;
@@ -452,13 +453,14 @@ contract Agent is IAgent, RouterAware {
 
     emit PushFundsToMiners(miners, amounts);
   }
+
   /**
-   * @dev Allows an agent to borrow funds from a pool
+   * @notice Allows an agent to borrow funds from a pool
    * @param amount The amount of funds to borrow. Must be less than the `ask` in the `signedCredential`
    * @param poolID The ID of the pool from which to borrow
    * @param signedCredential The signed credential of the agent borrowing funds
    * @param powerTokenAmount The amount of power tokens to stake as collateral
-   * @notice Only Agents in good standing can borrow funds.
+   * @dev Only Agents in good standing can borrow funds.
    *
    * Every time an Agent borrows, they get a new rate
    *
@@ -488,15 +490,16 @@ contract Agent is IAgent, RouterAware {
 
     pool.borrow(amount, signedCredential, powerTokenAmount);
   }
+
   /**
-   * @dev Allows an agent to refinance their position from one pool to another
+   * @notice Allows an agent to refinance their position from one pool to another
    * This is useful in situations where the Agent is illiquid in power and FIL,
    * and can secure a better rate from a different pool
    * @param oldPoolID The ID of the pool to exit from
    * @param newPoolID The ID of the pool to borrow from
    * @param additionalPowerTokens The additional power tokens to stake as collateral in the new Pool
    * @param signedCredential The signed credential of the agent refinance the pool
-   * @notice This function acts like one Pool "buying out" the position of an Agent on another Pool
+   * @dev This function acts like one Pool "buying out" the position of an Agent on another Pool
    */
   function refinance(
     uint256 oldPoolID,
@@ -520,12 +523,13 @@ contract Agent is IAgent, RouterAware {
     require(oldPool.exitPool(address(this), signedCredential, currentDebt) == powStaked, "Refinance failed");
     powerToken.burn(powStaked);
   }
+
   /**
-   * @dev Allows an agent to exit a pool and repay a portion of the borrowed funds, and recouping power tokens
+   * @notice Allows an agent to exit a pool and repay a portion of the borrowed funds, and recouping power tokens
    * @param poolID The ID of the pool to exit
    * @param assetAmount The amount of funds to repay
    * @param signedCredential The signed credential of the agent exiting the pool
-   * @notice When an Agent exits a Pool, their payment rate does not change
+   * @dev When an Agent exits a Pool, their payment rate does not change
    */
   function exit(
     uint256 poolID,
@@ -546,8 +550,9 @@ contract Agent is IAgent, RouterAware {
       GetRoute.agentPolice(router).removePoolFromList(poolID);
     }
   }
+
   /**
-   * @dev Allows an agent to make payments to multiple pools
+   * @notice Allows an agent to make payments to multiple pools
    * @param _poolIDs The IDs of the pools to which payments will be made
    * @param _amounts The amounts of the payments to be made to each pool
    * @param _signedCredential The signed credential of the agent making the payments
@@ -582,16 +587,17 @@ contract Agent is IAgent, RouterAware {
       );
     }
   }
- /**
-  * @dev Allows an agent to stake power tokens in lieu of making payments (to multiple pools)
-  * @param _poolIDs The IDs of the pools to which payments will be made
-  * @param _amounts The amounts of the payments to be made to each pool
-  * @param _powerTokenTokenAmounts The amounts of power tokens to stake for each pool
-  * @param _signedCredential The signed credential of the agent making the payments
-  * @notice This function essentially borrows more funds in order to make a payment
-  * Pools do not have to support this, but they can if they'd like to
-  * Every time an Agent stakes power tokens to make a payment, they get a new payment rate
-  */
+
+  /**
+   * @notice Allows an agent to stake power tokens in lieu of making payments (to multiple pools)
+   * @param _poolIDs The IDs of the pools to which payments will be made
+   * @param _amounts The amounts of the payments to be made to each pool
+   * @param _powerTokenTokenAmounts The amounts of power tokens to stake for each pool
+   * @param _signedCredential The signed credential of the agent making the payments
+   * @dev This function essentially borrows more funds in order to make a payment
+   * Pools do not have to support this, but they can if they'd like to
+   * Every time an Agent stakes power tokens to make a payment, they get a new payment rate
+   */
   function stakeToMakePayments(
     uint256[] calldata _poolIDs,
     uint256[] calldata _amounts,
@@ -807,7 +813,7 @@ contract Agent is IAgent, RouterAware {
     }
   }
 
-  /// @dev ensure we don't remove too much power
+  /// @notice ensure we don't remove too much power
   function _canRemovePower(uint256 totalPower, uint256 powerToRemove) internal view {
       // ensure that the power we're removing by removing a miner does not put us into an "overPowered" state
       if (totalPower < powerToRemove + GetRoute.powerToken(router).powerTokensMinted(id)) {
