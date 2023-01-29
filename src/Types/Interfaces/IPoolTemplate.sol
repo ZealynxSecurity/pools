@@ -75,15 +75,20 @@ interface IPoolTemplate  {
         Account memory account
     ) external;
 
-    function mint(
-        uint256 shares,
-        address receiver
-    ) external returns (uint256 assets);
-
     function deposit(
         uint256 assets,
         address receiver
     ) external returns (uint256 shares);
+
+    function filToAsset(
+        ERC20 asset,
+        address receiver
+    ) external payable returns (uint256 assets);
+
+    function mint(
+        uint256 shares,
+        address receiver
+    ) external returns (uint256 assets);
 
     function withdraw(
         uint256 assets,

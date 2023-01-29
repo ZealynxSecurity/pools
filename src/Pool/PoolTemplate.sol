@@ -20,6 +20,7 @@ import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPoolTemplate} from "src/Types/Interfaces/IPoolTemplate.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
+import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";
@@ -222,14 +223,29 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
     ////////////////////////////////////////////////////////*/
 
 
-    function mint(uint256 shares, address receiver) public virtual returns (uint256 assets) {
+    function mint(uint256 shares, address receiver) public returns (uint256 assets) {
         IPool pool = IPool(msg.sender);
         pool.share().mint(receiver, shares);
         assets = pool.convertToAssets(shares);
     }
 
-    function deposit(uint256 , address ) public virtual returns (uint256 ) {
+    function deposit(uint256, address) public returns (uint256) {
         revert();
+    }
+
+    function filToAsset(ERC20 asset, address receiver) external payable returns (uint256) {
+        IWFIL wFIL = GetRoute.wFIL(router);
+
+        // in this Template, the asset must be wFIL
+        require(
+            address(asset) == address(wFIL),
+            "Asset must be wFIL to deposit FIL"
+        );
+        // handle FIL deposit
+        uint256 assets = msg.value;
+        wFIL.deposit{value: assets}();
+        wFIL.transfer(receiver, assets);
+        return assets;
     }
 
     function withdraw(
@@ -238,7 +254,7 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         address owner,
         PoolToken share,
         PoolToken iou
-    ) public virtual returns (uint256 shares) {
+    ) public returns (uint256 shares) {
         IPool pool = IPool(msg.sender);
         shares = pool.previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
 

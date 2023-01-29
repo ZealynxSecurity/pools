@@ -121,6 +121,18 @@ contract PoolAccounting is IPool, RouterAware {
         _;
     }
 
+    /*////////////////////////////////////////////////////////
+                      Payable Fallbacks
+    ////////////////////////////////////////////////////////*/
+
+    receive() external payable {
+        _depositFIL(msg.sender);
+    }
+
+    fallback() external payable {
+        _depositFIL(msg.sender);
+    }
+
     // The only things we need to pull into this contract are the ones unique to _each pool_
     // This is just the approval module, and the treasury address
     // Everything else is accesible through the router (power token for example)
@@ -384,11 +396,16 @@ contract PoolAccounting is IPool, RouterAware {
      * @return shares - the number of shares received in exchange for the deposit
      */
     function deposit(uint256 assets, address receiver) public isOpen returns (uint256 shares) {
-        require(assets > 0, "Pool: cannot deposit 0 assets");
-        shares = previewDeposit(assets);
-        SafeTransferLib.safeTransferFrom(ERC20(asset), receiver, address(this), assets);
-        template.mint(shares, receiver);
-        emit Deposit(msg.sender, receiver, assets, shares);
+        return _deposit(assets, receiver);
+    }
+
+    /**
+     * @dev Allows Staker to deposit native FIL and receive shares in return
+     * @param receiver The address that will receive the shares
+     * @return shares - the number of shares received in exchange for the deposit
+     */
+    function deposit(address receiver) public payable isOpen returns (uint256 shares) {
+        return _depositFIL(receiver);
     }
 
     /**
@@ -672,7 +689,6 @@ contract PoolAccounting is IPool, RouterAware {
 
         feesCollected += fee;
 
-
         // harvest when our Max(liquidAssets, feesCollected) surpass our fee harvest threshold
         uint256 liquidAssets = asset.balanceOf(address(this));
         uint256 harvestAmount = feesCollected > liquidAssets
@@ -694,6 +710,23 @@ contract PoolAccounting is IPool, RouterAware {
                 "Pool has insufficient liquidity to borrow"
             );
         }
+    }
+
+    function _deposit(uint256 assets, address receiver) internal returns (uint256 shares) {
+        require(assets > 0, "Pool: cannot deposit 0 assets");
+        shares = previewDeposit(assets);
+        SafeTransferLib.safeTransferFrom(ERC20(asset), receiver, address(this), assets);
+        template.mint(shares, receiver);
+        emit Deposit(msg.sender, receiver, assets, shares);
+    }
+
+    function _depositFIL(address receiver) internal returns (uint256 shares) {
+        uint256 assets = template.filToAsset{value: msg.value}(asset, address(this));
+        require(assets > 0, "Pool: cannot deposit 0 assets");
+
+        shares = previewDeposit(assets);
+        template.mint(shares, receiver);
+        emit Deposit(msg.sender, receiver, assets, shares);
     }
 }
 

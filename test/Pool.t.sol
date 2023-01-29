@@ -115,6 +115,39 @@ contract PoolTemplateStakingTest is BaseTest {
 
   }
 
+  function testDepositFil() public {
+    uint256 investor1UnderlyingAmount = 1e18;
+    vm.deal(investor1, investor1UnderlyingAmount);
+    vm.startPrank(investor1);
+    uint256 investor1ShareAmount = pool.deposit{value: investor1UnderlyingAmount}(investor1);
+    assertEq(wFIL.balanceOf(address(pool)), investor1UnderlyingAmount, "pool wfil balance = investor1 underlying amount");
+    // Expect exchange rate to be 1:1 on initial deposit.
+    assertEq(investor1UnderlyingAmount, investor1ShareAmount, "underlying amount = investor1 share amount");
+    // assertEq(pool.previewWithdraw(investor1ShareAmount), investor1UnderlyingAmount, "Preview Withdraw = investor1 underlying amount");
+    // assertEq(pool.totalAssets(), investor1UnderlyingAmount, "total assets = investor1 underlying amount");
+
+    // assertEq(pool.convertToAssets(pool20.balanceOf(investor1)), investor1UnderlyingAmount, "convertToAssets = investor1 underlying amount");
+    // assertEq(pool20.balanceOf(investor1), investor1ShareAmount, "Investor 1 balance of pool token = investor1 share amount");
+    // assertEq(pool20.totalSupply(), investor1ShareAmount, "Pool token total supply = investor1 share amount");
+  }
+
+  function testSendFilIntoPool() public {
+    uint256 investor1UnderlyingAmount = 1e18;
+    vm.deal(investor1, investor1UnderlyingAmount);
+    vm.startPrank(investor1);
+    address(pool).call{value: investor1UnderlyingAmount}("");
+    assertEq(wFIL.balanceOf(address(pool)), investor1UnderlyingAmount, "pool wfil balance = investor1 underlying amount");
+    uint256 investor1ShareAmount = pool20.balanceOf(investor1);
+    // Expect exchange rate to be 1:1 on initial deposit.
+    assertEq(investor1UnderlyingAmount, investor1ShareAmount, "underlying amount = investor1 share amount");
+    assertEq(pool.previewWithdraw(investor1ShareAmount), investor1UnderlyingAmount, "Preview Withdraw = investor1 underlying amount");
+    assertEq(pool.totalAssets(), investor1UnderlyingAmount, "total assets = investor1 underlying amount");
+
+    assertEq(pool.convertToAssets(pool20.balanceOf(investor1)), investor1UnderlyingAmount, "convertToAssets = investor1 underlying amount");
+    assertEq(pool20.balanceOf(investor1), investor1ShareAmount, "Investor 1 balance of pool token = investor1 share amount");
+    assertEq(pool20.totalSupply(), investor1ShareAmount, "Pool token total supply = investor1 share amount");
+  }
+
   function testSingleMintRedeem() public {
     uint256 investor1ShareAmount = 1e18;
 
@@ -1134,11 +1167,10 @@ contract TreasuryFeesTest is BaseTest {
 }
 
 contract PoolUpgradeTest is BaseTest {
-   using AccountHelpers for Account;
+  using AccountHelpers for Account;
 
   IAgent agent;
   IAgentPolice police;
-
 
   IPoolFactory poolFactory;
   IPowerToken powerToken;

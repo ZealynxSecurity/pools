@@ -94,6 +94,8 @@ interface IPool {
                         4626 DEPOSIT/WITHDRAWAL LOGIC
     //////////////////////////////////////////////////////////////*/
 
+    function deposit(address receiver) external payable returns (uint256 shares);
+
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
 
     function mint(uint256 shares, address receiver) external returns (uint256 assets);
