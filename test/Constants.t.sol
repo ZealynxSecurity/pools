@@ -286,6 +286,8 @@ contract ConstantsTest is Test {
     assertEq(OFFRAMP_SET_CONVERSION_WINDOW_SELECTOR, bytes4(keccak256(bytes("setConversionWindow(uint256)"))));
     assertEq(POOL_SHUT_DOWN_SELECTOR, bytes4(keccak256(bytes("shutDown()"))));
     assertEq(POOL_SET_MIN_LIQUIDITY_SELECTOR, bytes4(keccak256(bytes("setMinimumLiquidity(uint256)"))));
+    assertEq(POOL_SET_RAMP_SELECTOR, bytes4(keccak256(bytes("setRamp(address)"))));
+    assertEq(POOL_SET_TEMPLATE_SELECTOR, bytes4(keccak256(bytes("setTemplate(address)"))));
 
     assertEq(PAUSE_SELECTOR, bytes4(keccak256(bytes("pause()"))));
     assertEq(RESUME_SELECTOR, bytes4(keccak256(bytes("resume()"))));

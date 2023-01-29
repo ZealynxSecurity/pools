@@ -207,7 +207,6 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     // burn the amount
     uint256 amountBurned = IAgent(agent).burnPower(burnAmount, signedCredential);
 
-    // TODO: Is this at risk of reentrancy? Doesn't seem like it, since we know the agent is an agent, and the power token is the power token..
     // set overPowered if needed
     bool stillOverPowered = _updateOverPowered(agent, signedCredential);
 

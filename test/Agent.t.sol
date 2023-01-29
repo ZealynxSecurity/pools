@@ -352,6 +352,7 @@ contract AgentTest is BaseTest {
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner = makeAddr("MINER_OWNER");
     string poolName = "FIRST POOL NAME";
+    address poolOperator = makeAddr("POOL_OPERATOR");
     uint256 baseInterestRate = 20e18;
     uint256 stakeAmount;
 
@@ -369,7 +370,7 @@ contract AgentTest is BaseTest {
         pool = createPool(
             "TEST",
             "TEST",
-            ZERO_ADDRESS,
+            poolOperator,
             2e18
         );
         pool4626 = IERC4626(address(pool));
@@ -379,7 +380,7 @@ contract AgentTest is BaseTest {
         stakeAmount = 10e18;
         vm.startPrank(investor1);
         wFIL.deposit{value: stakeAmount}();
-        wFIL.approve(address(pool.template()), stakeAmount);
+        wFIL.approve(address(pool), stakeAmount);
         pool4626.deposit(stakeAmount, investor1);
         vm.stopPrank();
 
@@ -449,7 +450,7 @@ contract AgentTest is BaseTest {
         IPool pool2 = createPool(
             "TEST",
             "TEST",
-            ZERO_ADDRESS,
+            poolOperator,
             2e18
         );
         IERC4626 pool24626 = IERC4626(address(pool2));
@@ -462,7 +463,7 @@ contract AgentTest is BaseTest {
         stakeAmount = 10e18;
         vm.startPrank(investor1);
         wFIL.deposit{value: stakeAmount}();
-        wFIL.approve(address(pool2.template()), stakeAmount);
+        wFIL.approve(address(pool2), stakeAmount);
         pool24626.deposit(stakeAmount, investor1);
         vm.stopPrank();
 
@@ -492,6 +493,7 @@ contract AgentPoliceTest is BaseTest {
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner = makeAddr("MINER_OWNER");
+    address poolOperator = makeAddr("POOL_OPERATOR");
     string poolName = "FIRST POOL NAME";
     uint256 baseInterestRate = 20e18;
     uint256 stakeAmount;
@@ -512,7 +514,7 @@ contract AgentPoliceTest is BaseTest {
         pool = createPool(
             "TEST",
             "TEST",
-            ZERO_ADDRESS,
+            poolOperator,
             2e18
         );
         pool4626 = IERC4626(address(pool));
@@ -521,7 +523,7 @@ contract AgentPoliceTest is BaseTest {
         stakeAmount = 10e18;
         vm.startPrank(investor1);
         wFIL.deposit{value: stakeAmount}();
-        wFIL.approve(address(pool.template()), stakeAmount);
+        wFIL.approve(address(pool), stakeAmount);
         pool4626.deposit(stakeAmount, investor1);
         vm.stopPrank();
 
@@ -821,6 +823,7 @@ contract AgentDefaultTest is BaseTest {
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner = makeAddr("MINER_OWNER");
+    address poolOperator = makeAddr("POOL_OPERATOR");
     string poolName = "FIRST POOL NAME";
     uint256 baseInterestRate = 20e18;
     uint256 stakeAmount;
@@ -844,7 +847,7 @@ contract AgentDefaultTest is BaseTest {
         pool1 = createPool(
             "TEST1",
             "TEST1",
-            ZERO_ADDRESS,
+            poolOperator,
             2e18
         );
         pool46261 = IERC4626(address(pool1));
@@ -852,7 +855,7 @@ contract AgentDefaultTest is BaseTest {
         pool2 = createPool(
             "TEST2",
             "TEST2",
-            ZERO_ADDRESS,
+            poolOperator,
             2e18
         );
         pool46262 = IERC4626(address(pool2));
@@ -861,8 +864,8 @@ contract AgentDefaultTest is BaseTest {
         stakeAmount = 5e18;
         vm.startPrank(investor1);
         wFIL.deposit{value: stakeAmount*2}();
-        wFIL.approve(address(pool1.template()), stakeAmount);
-        wFIL.approve(address(pool2.template()), stakeAmount);
+        wFIL.approve(address(pool1), stakeAmount);
+        wFIL.approve(address(pool2), stakeAmount);
         pool46261.deposit(stakeAmount, investor1);
         pool46262.deposit(stakeAmount, investor1);
         vm.stopPrank();
@@ -915,6 +918,7 @@ contract AgentCollateralsTest is BaseTest {
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner = makeAddr("MINER_OWNER");
+    address poolOperator = makeAddr("POOL_OPERATOR");
     string poolName = "FIRST POOL NAME";
     uint256 baseInterestRate = 20e18;
     uint256 stakeAmount;
@@ -940,7 +944,7 @@ contract AgentCollateralsTest is BaseTest {
         pool1 = createPool(
             "TEST1",
             "TEST1",
-            ZERO_ADDRESS,
+            poolOperator,
             2e18
         );
         pool46261 = IERC4626(address(pool1));
@@ -948,7 +952,7 @@ contract AgentCollateralsTest is BaseTest {
         pool2 = createPool(
             "TEST2",
             "TEST2",
-            ZERO_ADDRESS,
+            poolOperator,
             2e18
         );
         pool46262 = IERC4626(address(pool2));
@@ -957,8 +961,8 @@ contract AgentCollateralsTest is BaseTest {
         stakeAmount = 20e18;
         vm.startPrank(investor1);
         wFIL.deposit{value: stakeAmount*2}();
-        wFIL.approve(address(pool1.template()), stakeAmount);
-        wFIL.approve(address(pool2.template()), stakeAmount);
+        wFIL.approve(address(pool1), stakeAmount);
+        wFIL.approve(address(pool2), stakeAmount);
         pool46261.deposit(stakeAmount, investor1);
         pool46262.deposit(stakeAmount, investor1);
         vm.stopPrank();
@@ -1159,6 +1163,7 @@ contract AgentTooManyPoolsTest is BaseTest {
 
     address investor1 = makeAddr("INVESTOR_1");
     address minerOwner = makeAddr("MINER_OWNER");
+    address poolOperator = makeAddr("POOL_OPERATOR");
 
     IAgent agent;
     MockMiner miner;
@@ -1194,7 +1199,7 @@ contract AgentTooManyPoolsTest is BaseTest {
             IPool _pool = createPool(
                 poolName,
                 poolName,
-                ZERO_ADDRESS,
+                poolOperator,
                 2e18
             );
 
@@ -1217,7 +1222,7 @@ contract AgentTooManyPoolsTest is BaseTest {
         IPool pool = createPool(
             "Too manyith pool",
             "OOPS",
-            ZERO_ADDRESS,
+            poolOperator,
             2e18
         );
 
@@ -1242,7 +1247,7 @@ contract AgentTooManyPoolsTest is BaseTest {
 
     function _deposit(IPool pool) internal {
         vm.startPrank(investor1);
-        wFIL.approve(address(pool.template()), stakeAmountPerPool);
+        wFIL.approve(address(pool), stakeAmountPerPool);
         pool.deposit(stakeAmountPerPool, investor1);
         vm.stopPrank();
     }

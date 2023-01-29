@@ -59,7 +59,7 @@ function testSingleDepositBorrowRepayWithdraw() public {
     // deposit some funds for investor 1
     uint256 investor1UnderlyingAmount = 1e18;
     vm.startPrank(investor1);
-    wFIL.approve(address(pool.template()), investor1UnderlyingAmount);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
     pool.deposit(investor1UnderlyingAmount, investor1);
     vm.stopPrank();
 
@@ -106,9 +106,6 @@ function testSingleDepositBorrowRepayWithdraw() public {
     assertEq(pool.convertToAssets(pool20.balanceOf(investor1)), 0);
 
     assertEq(pool20.balanceOf(investor1), 0);
-    assertEq(iou.balanceOf(investor1), investor1UnderlyingAmount, "investor1 should have its assets back in iou tokens");
-    iou.approve(address(ramp), investor1UnderlyingAmount);
-    ramp.stake(investor1UnderlyingAmount);
 
     assertEq(iou.balanceOf(investor1), 0);
     assertEq(iou.balanceOf(address(ramp)), investor1UnderlyingAmount);

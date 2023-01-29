@@ -82,6 +82,8 @@ interface IOffRamp {
 
   function stake(uint256 amount) external;
 
+  function stakeOnBehalf(uint256 amount, address recipient) external;
+
   function realize() external;
 
   function forceRealize(address victim) external;

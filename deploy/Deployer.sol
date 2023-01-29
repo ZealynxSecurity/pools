@@ -152,40 +152,4 @@ library Deployer {
       IRouterAware(IRouter(router).getRoute(routerAwareRoutes[i])).setRouter(router);
     }
   }
-
-  /// @dev this function creates the necessary surrounding contracts for Pool deployment
-  /// @notice its set public - this is to reduce the bytecode size of the PoolFactory
-  /// this function does not get embedded into the calling contract, reducing its bytesize
-  function deployPoolAncillaries(
-    address router,
-    // `exitAsset` is wFIL for v1 ramps/pools
-    address exitAsset,
-    uint256 poolID,
-    string memory name,
-    string memory symbol
-  ) public returns (
-    address shareToken,
-    address iouToken,
-    address ramp
-  ) {
-    // Create custom ERC20 for the pools
-    shareToken = address(new PoolToken(
-      router,
-      poolID,
-      name,
-      symbol
-    ));
-    iouToken = address(new PoolToken(
-      router,
-      poolID,
-      name,
-      symbol
-    ));
-    ramp = address(new OffRamp(
-      iouToken,
-      exitAsset,
-      router,
-      poolID
-    ));
-  }
 }

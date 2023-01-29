@@ -16,8 +16,11 @@ import {WFIL} from "src/WFIL.sol";
 import {PowerToken} from "src/PowerToken/PowerToken.sol";
 import {PoolFactory} from "src/Pool/PoolFactory.sol";
 import {Router} from "src/Router/Router.sol";
+import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
+import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
@@ -74,7 +77,7 @@ contract BaseTest is Test {
       address(new AgentFactory()),
       address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH)),
       // 1e17 = 10% treasury fee on yield
-      address(new PoolFactory(wFIL, 1e17, 0)),
+      address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0)),
       address(new PowerToken()),
       vcIssuer
     );
@@ -214,6 +217,21 @@ contract BaseTest is Test {
         address(template)
     );
     vm.stopPrank();
+
+    _configureOffRamp(pool);
+
     return pool;
+  }
+
+  function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
+    ramp = IOffRamp(new OffRamp(
+      router,
+      address(pool.iou()),
+      address(pool.asset()),
+      pool.id()
+    ));
+
+    vm.prank(address(GetRoute.poolFactory(router)));
+    pool.setRamp(ramp);
   }
 }

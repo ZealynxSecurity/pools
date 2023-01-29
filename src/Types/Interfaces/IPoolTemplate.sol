@@ -44,6 +44,7 @@ interface IPoolTemplate  {
         uint256 newRate
     );
 
+
     // Finance functions
     function borrow(
         uint256 ask,
@@ -74,21 +75,15 @@ interface IPoolTemplate  {
         Account memory account
     ) external;
 
-    function deposit(
-        uint256 assets,
-        address receiver,
-        PoolToken share,
-        ERC20 asset
-    ) external returns (uint256 shares);
-
     function mint(
         uint256 shares,
-        address receiver,
-        PoolToken share,
-        ERC20 asset
+        address receiver
     ) external returns (uint256 assets);
 
-
+    function deposit(
+        uint256 assets,
+        address receiver
+    ) external returns (uint256 shares);
 
     function withdraw(
         uint256 assets,

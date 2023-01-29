@@ -19,21 +19,21 @@ contract MockPoolImplementation is IPoolImplementation, RouterAware {
   }
 
   function getRate(
-    uint256 borrowAsk,
-    uint256 powerTokenStake,
-    uint256 windowLength,
-    Account memory account,
-    VerifiableCredential memory vc
-  ) external view returns (uint256) {
+    uint256 ,
+    uint256 ,
+    uint256 ,
+    Account memory,
+    VerifiableCredential memory 
+  ) external pure returns (uint256) {
     // hardcode 20% rate (per annum)
     uint256 apy = 0.2e18;
     return apy / EPOCHS_IN_YEAR;
   }
 
   function rateSpike(
-    uint256 penaltyEpochs,
-    uint256 windowLength,
-    Account memory account
+    uint256 ,
+    uint256 ,
+    Account memory 
   ) external pure returns (uint256) {
     uint256 penalty = 5e16;
     return penalty / EPOCHS_IN_YEAR;
@@ -41,33 +41,33 @@ contract MockPoolImplementation is IPoolImplementation, RouterAware {
 
   function minCollateral(
     Account memory account,
-    VerifiableCredential memory vc
+    VerifiableCredential memory 
   ) external pure returns (uint256) {
     // 10% of the borrow amount
     return account.totalBorrowed.mulWadUp(1e17);
   }
 
   function beforeBorrow(
-    uint256 borrowAsk,
-    uint256 powerTokenStake,
-    Account memory account,
-    VerifiableCredential memory vc
+    uint256 ,
+    uint256 ,
+    Account memory ,
+    VerifiableCredential memory 
   ) external pure {}
 
   function beforeExit(
-      uint256 exitAmount,
-      Account memory account,
-      VerifiableCredential memory vc
+      uint256 ,
+      Account memory ,
+      VerifiableCredential memory 
   ) external pure {}
 
   function beforeMakePayment(
-      uint256 paymentAmount,
-      Account memory account
+      uint256 ,
+      Account memory 
   ) external pure {}
 
   function beforeStakeToPay(
-      uint256 paymentAmount,
-      uint256 powerTokenAmount,
-      Account memory account
+      uint256 ,
+      uint256 ,
+      Account memory 
   ) external pure {}
 }

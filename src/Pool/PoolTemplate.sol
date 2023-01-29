@@ -3,7 +3,6 @@ pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
@@ -33,7 +32,6 @@ import {
     InsufficientPayment,
     Unauthorized
 } from "src/Errors.sol";
-import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 
 uint256 constant DUST = 1000;
 
@@ -223,32 +221,15 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
                     ERC-4626 VAULT FUNCTIONS
     ////////////////////////////////////////////////////////*/
 
-    function deposit(uint256 assets, address receiver, PoolToken share, ERC20 asset) public virtual returns (uint256 shares) {
+
+    function mint(uint256 shares, address receiver) public virtual returns (uint256 assets) {
         IPool pool = IPool(msg.sender);
-        // Check for rounding error since we round down in previewDeposit.
-        require((shares = pool.previewDeposit(assets)) != 0, "ZERO_SHARES");
-
-        // Need to transfer before minting or ERC777s could reenter.
-        SafeTransferLib.safeTransferFrom(ERC20(asset), receiver, msg.sender, assets);
-
-        share.mint(receiver, shares);
-
-        //emit Deposit(msg.sender, receiver, assets, shares);
-
+        pool.share().mint(receiver, shares);
+        assets = pool.convertToAssets(shares);
     }
 
-    function mint(uint256 shares, address receiver, PoolToken share, ERC20 asset) public virtual returns (uint256 assets) {
-        IPool pool = IPool(msg.sender);
-        // Check for rounding error since we round down in previewDeposit.
-        require((assets = pool.previewMint(shares)) != 0, "ZERO_ASSETS");
-
-        // Need to transfer before minting or ERC777s could reenter.
-        SafeTransferLib.safeTransferFrom(ERC20(asset), receiver, msg.sender, assets);
-
-        share.mint(receiver, shares);
-
-        //emit Deposit(msg.sender, receiver, assets, shares);
-
+    function deposit(uint256 , address ) public virtual returns (uint256 ) {
+        revert();
     }
 
     function withdraw(
@@ -262,8 +243,11 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         shares = pool.previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
 
         share.burn(owner, shares);
+
         // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
-        iou.mint(receiver, assets);
+        iou.mint(address(this), assets);
+        iou.approve(address(pool.ramp()), assets);
+        pool.ramp().stakeOnBehalf(assets, receiver);
     }
 
     function redeem(
@@ -280,8 +264,11 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         require((assets = pool.previewRedeem(shares)) != 0, "ZERO_ASSETS");
 
         share.burn(owner, shares);
+
         // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
-        iou.mint(receiver, assets);
+        iou.mint(address(this), assets);
+        iou.approve(address(pool.ramp()), assets);
+        pool.ramp().stakeOnBehalf(assets, receiver);
     }
 
     /*////////////////////////////////////////////////////////

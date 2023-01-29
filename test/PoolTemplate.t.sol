@@ -2,15 +2,22 @@
 pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
+import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
+import {IPoolTemplate} from "src/Types/Interfaces/IPoolTemplate.sol";
+import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
+import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {Decode} from "src/Errors.sol";
+import {PoolAccounting} from "src/Pool/PoolAccounting.sol";
+import {Roles} from "src/Constants/Roles.sol";
+import {ROUTE_POOL_FACTORY_ADMIN} from "src/Constants/Routes.sol";
 import "./BaseTest.sol";
 
 // a value we use to test approximation of the cursor according to a window start/close
@@ -61,7 +68,7 @@ contract PoolTemplateStakingTest is BaseTest {
   }
 
   function testAsset() public {
-    ERC20 asset = pool.getAsset();
+    ERC20 asset = pool.asset();
     assertEq(asset.name(), "Wrapped Filecoin");
     assertEq(asset.symbol(), "WFIL");
     assertEq(asset.decimals(), 18);
@@ -79,8 +86,8 @@ contract PoolTemplateStakingTest is BaseTest {
     uint256 investor1UnderlyingAmount = 1e18;
 
     vm.startPrank(investor1);
-    wFIL.approve(address(pool.template()), investor1UnderlyingAmount);
-    assertEq(wFIL.allowance(investor1, address(pool.template())), investor1UnderlyingAmount, "investor1 allowance");
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
+    assertEq(wFIL.allowance(investor1, address(pool)), investor1UnderlyingAmount, "investor1 allowance");
 
     uint256 investor1PreDepositBal = wFIL.balanceOf(investor1);
 
@@ -104,15 +111,16 @@ contract PoolTemplateStakingTest is BaseTest {
     assertEq(pool.convertToAssets(pool20.balanceOf(investor1)), 0, "convertToAssets = 0");
 
     assertEq(pool20.balanceOf(investor1), 0,  "Investor 1 balance of pool token = 0");
-    assertEq(iou.balanceOf(investor1), investor1UnderlyingAmount, "investor1 IOU balance = investor1 underlying amount");
+    assertEq(pool.ramp().iouTokensStaked(investor1), investor1UnderlyingAmount, "investor1 IOU balance = investor1 underlying amount");
+
   }
 
   function testSingleMintRedeem() public {
     uint256 investor1ShareAmount = 1e18;
 
     vm.startPrank(investor1);
-    wFIL.approve(address(pool.template()), investor1ShareAmount);
-    assertEq(wFIL.allowance(investor1, address(pool.template())), investor1ShareAmount);
+    wFIL.approve(address(pool), investor1ShareAmount);
+    assertEq(wFIL.allowance(investor1, address(pool)), investor1ShareAmount);
 
     uint256 investor1PreDepositBal = wFIL.balanceOf(investor1);
 
@@ -134,7 +142,8 @@ contract PoolTemplateStakingTest is BaseTest {
     assertEq(pool.convertToAssets(pool20.balanceOf(investor1)), 0);
 
     assertEq(pool20.balanceOf(investor1), 0);
-    assertEq(iou.balanceOf(investor1), investor1UnderlyingAmount);
+    assertEq(pool.ramp().iouTokensStaked(investor1), investor1UnderlyingAmount);
+
   }
 
   function testFailDepositWithNotEnoughApproval() public {
@@ -187,7 +196,7 @@ contract PoolTemplateStakingTest is BaseTest {
 
     function testMintZero() public {
       vm.prank(investor1);
-      vm.expectRevert("ZERO_ASSETS");
+      vm.expectRevert("Pool: cannot mint 0 shares");
       pool.mint(0, address(this));
       vm.stopPrank();
     }
@@ -252,7 +261,7 @@ contract PoolBorrowingTest is BaseTest {
   function testBorrow() public {
     vm.startPrank(investor1);
 
-    wFIL.approve(address(pool.template()), investor1UnderlyingAmount);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
     pool.deposit(investor1UnderlyingAmount, investor1);
     vm.stopPrank();
     uint256 prevMinerBal = wFIL.balanceOf(address(agent));
@@ -342,7 +351,7 @@ contract PoolExitingTest is BaseTest {
     signedCred = issueGenericSC(address(agent));
 
     vm.startPrank(investor1);
-    wFIL.approve(address(pool.template()), investor1UnderlyingAmount);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
     pool.deposit(investor1UnderlyingAmount, investor1);
     vm.stopPrank();
 
@@ -442,7 +451,7 @@ contract PoolMakePaymentTest is BaseTest {
     signedCred = issueGenericSC(address(agent));
 
     vm.startPrank(investor1);
-    wFIL.approve(address(pool.template()), investor1UnderlyingAmount);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
     pool.deposit(investor1UnderlyingAmount, investor1);
     vm.stopPrank();
 
@@ -713,7 +722,7 @@ contract PoolStakeToPayTest is BaseTest {
     signedCred = issueGenericSC(address(agent));
 
     vm.startPrank(investor1);
-    wFIL.approve(address(pool.template()), investor1UnderlyingAmount);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
     pool.deposit(investor1UnderlyingAmount, investor1);
     vm.stopPrank();
 
@@ -934,7 +943,7 @@ contract PoolPenaltiesTest is BaseTest {
     signedCred = issueGenericSC(address(agent));
 
     vm.startPrank(investor1);
-    wFIL.approve(address(pool.template()), investor1UnderlyingAmount);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
     pool.deposit(investor1UnderlyingAmount, investor1);
     vm.stopPrank();
 
@@ -1077,9 +1086,11 @@ contract TreasuryFeesTest is BaseTest {
   uint256 borrowBlock;
 
   function setUp() public {
-    poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
-    powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
-    treasury = IRouter(router).getRoute(ROUTE_TREASURY);
+    poolFactory = GetRoute.poolFactory(router);
+    powerToken = GetRoute.powerToken(router);
+    treasury = GetRoute.treasury(router);
+    police = GetRoute.agentPolice(router);
+
     pool = createPool(
       poolName,
       poolSymbol,
@@ -1098,7 +1109,7 @@ contract TreasuryFeesTest is BaseTest {
     signedCred = issueGenericSC(address(agent));
 
     vm.startPrank(investor1);
-    wFIL.approve(address(pool.template()), investor1UnderlyingAmount);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
     pool.deposit(investor1UnderlyingAmount, investor1);
     vm.stopPrank();
 
@@ -1110,8 +1121,6 @@ contract TreasuryFeesTest is BaseTest {
     borrowBlock = block.number;
     pool.borrow(borrowAmount, signedCred, powerAmtStake);
     vm.stopPrank();
-
-    police = GetRoute.agentPolice(router);
   }
 
   function testTreasuryFees() public {
@@ -1121,5 +1130,168 @@ contract TreasuryFeesTest is BaseTest {
     vm.stopPrank();
     uint256 treasuryBalance = wFIL.balanceOf(treasury);
     assertEq(treasuryBalance, (1e18 * .10), "Treasury should have received 10% fees");
+  }
+}
+
+contract PoolUpgradeTest is BaseTest {
+   using AccountHelpers for Account;
+
+  IAgent agent;
+  IAgentPolice police;
+
+
+  IPoolFactory poolFactory;
+  IPowerToken powerToken;
+  // this isn't ideal but it also prepares us better to separate the pool token from the pool
+  IPool pool;
+  IERC20 pool20;
+
+  SignedCredential signedCred;
+
+  uint256 borrowAmount = 5e18;
+  uint256 powerAmtStake = 1e18;
+  uint256 investor1UnderlyingAmount = 10e18;
+  address investor1 = makeAddr("INVESTOR1");
+  address minerOwner = makeAddr("MINER_OWNER");
+  address poolOperator = makeAddr("POOL_OPERATOR");
+
+  string poolName = "POOL_1";
+  string poolSymbol = "POOL1";
+
+  function setUp() public {
+    poolFactory = GetRoute.poolFactory(router);
+    powerToken = GetRoute.powerToken(router);
+    treasury = GetRoute.treasury(router);
+    police = GetRoute.agentPolice(router);
+    pool = createPool(
+      poolName,
+      poolSymbol,
+      poolOperator,
+      20e18
+    );
+    pool20 = IERC20(address(pool.share()));
+
+    vm.deal(investor1, 100e18);
+    vm.prank(investor1);
+    wFIL.deposit{value: 100e18}();
+    require(wFIL.balanceOf(investor1) == 100e18);
+
+    (agent,) = configureAgent(minerOwner);
+
+    signedCred = issueGenericSC(address(agent));
+
+    vm.startPrank(investor1);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
+    pool.deposit(investor1UnderlyingAmount, investor1);
+    vm.stopPrank();
+
+    vm.startPrank(address(agent));
+    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    // approve the pool to pull the agent's power tokens on call to deposit
+    // note that borrow
+    powerToken.approve(address(pool), powerAmtStake);
+    pool.borrow(borrowAmount, signedCred, powerAmtStake);
+    vm.stopPrank();
+  }
+
+  function testSetRamp() public {
+    address newRamp = makeAddr("NEW_RAMP");
+    vm.prank(poolOperator);
+    pool.setRamp(IOffRamp(newRamp));
+    assertEq(address(pool.ramp()), newRamp, "Ramp should be set");
+  }
+
+  function testEnablePoolOperator() public {
+    address operator = makeAddr("OPERATOR");
+    vm.prank(poolOperator);
+    pool.setOperatorRole(operator, true);
+    MultiRolesAuthority customAuthority = MultiRolesAuthority(address(coreAuthority.getTargetCustomAuthority(address(pool))));
+    assertTrue(customAuthority.doesUserHaveRole(operator, uint8(Roles.ROLE_POOL_OPERATOR)));
+  }
+
+  function testDisablePoolOperator() public {
+    address operator = makeAddr("OPERATOR");
+    vm.prank(poolOperator);
+    pool.setOperatorRole(operator, true);
+    MultiRolesAuthority customAuthority = MultiRolesAuthority(address(coreAuthority.getTargetCustomAuthority(address(pool))));
+    assertTrue(customAuthority.doesUserHaveRole(operator, uint8(Roles.ROLE_POOL_OPERATOR)));
+
+    vm.prank(operator);
+    pool.setOperatorRole(operator, false);
+    assertTrue(!(customAuthority.doesUserHaveRole(operator, uint8(Roles.ROLE_POOL_OPERATOR))));
+  }
+
+  function testShutDown() public {
+    assertTrue(!pool.isShuttingDown(), "Pool should not be shut down");
+    vm.prank(poolOperator);
+    pool.shutDown();
+    assertTrue(pool.isShuttingDown(), "Pool should be shut down");
+  }
+
+  function testSetTemplate() public {
+    address newTemplate = makeAddr("NEW_TEMPLATE");
+    // expect this call to revert because the template is not approved
+    vm.expectRevert("Pool: Invalid template");
+    vm.prank(poolOperator);
+    pool.setTemplate(IPoolTemplate(newTemplate));
+
+    // approve the template
+    vm.prank(IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN));
+    poolFactory.approveTemplate(newTemplate);
+
+    // now this should work
+    vm.prank(poolOperator);
+    pool.setTemplate(IPoolTemplate(newTemplate));
+    assertEq(address(pool.template()), newTemplate, "Template should be set");
+  }
+
+  function testSetMinimumLiquidity() public {
+    uint256 newMinLiq = 1.3e18;
+    vm.prank(poolOperator);
+    pool.setMinimumLiquidity(newMinLiq);
+    assertEq(pool.minimumLiquidity(), newMinLiq, "Minimum liquidity should be set");
+  }
+
+  function testUpgradePool() public {
+    // at this point, the pool has 1 staker, and 1 borrower
+
+    // get stats before upgrade
+    uint256 investorPoolShares = pool.share().balanceOf(investor1);
+    uint256 totalBorrowed = pool.totalBorrowed();
+    uint256 agentBorrowed = pool.getAgentBorrowed(agent.id());
+
+    // first shut down the pool
+    vm.startPrank(poolOperator);
+    pool.shutDown();
+    // then upgrade it
+    pool = poolFactory.upgradePool(pool.id());
+    vm.stopPrank();
+
+    uint256 investorPoolSharesNew = pool.share().balanceOf(investor1);
+    uint256 totalBorrowedNew = pool.totalBorrowed();
+    uint256 agentBorrowedNew = pool.getAgentBorrowed(agent.id());
+
+    assertEq(investorPoolSharesNew, investorPoolShares);
+    assertEq(totalBorrowedNew, totalBorrowed);
+    assertEq(agentBorrowedNew, agentBorrowed);
+
+    // now attempt to deposit and borrow again
+    vm.startPrank(investor1);
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
+    pool.deposit(investor1UnderlyingAmount, investor1);
+    vm.stopPrank();
+
+    vm.startPrank(address(agent));
+    powerToken.approve(address(pool), powerAmtStake);
+    pool.borrow(borrowAmount, signedCred, powerAmtStake);
+    vm.stopPrank();
+
+    investorPoolSharesNew = pool.share().balanceOf(investor1);
+    totalBorrowedNew = pool.totalBorrowed();
+    agentBorrowedNew = pool.getAgentBorrowed(agent.id());
+
+    assertGt(investorPoolSharesNew, investorPoolShares);
+    assertGt(totalBorrowedNew, totalBorrowed);
+    assertGt(agentBorrowedNew, agentBorrowed);
   }
 }

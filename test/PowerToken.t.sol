@@ -21,6 +21,8 @@ contract PowerTokenTest is BaseTest {
   PowerToken public powerToken;
   IPoolFactory public poolFactory;
 
+  address poolOperator = makeAddr("POOL_OPERATOR");
+
   function setUp() public {
     agentOwner = makeAddr("OWNER");
     powerToken = PowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
@@ -33,7 +35,7 @@ contract PowerTokenTest is BaseTest {
     pool = createPool(
         "TEST",
         "TEST",
-        ZERO_ADDRESS,
+        poolOperator,
         0
     );
   }

@@ -61,7 +61,7 @@ contract MockMiner is IMockMiner {
     unlockAmount = _unlockAmount;
   }
 
-  function change_owner_address(address miner, address newOwner) external {
+  function change_owner_address(address, address newOwner) external {
     if (msg.sender == _get_owner) {
       _next_owner = newOwner;
     } else if (msg.sender == _next_owner && newOwner == _next_owner) {

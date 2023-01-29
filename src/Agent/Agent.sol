@@ -538,7 +538,7 @@ contract Agent is IAgent, RouterAware {
 
     require(borrowedAmount >= assetAmount, "Cannot exit more than borrowed");
 
-    pool.getAsset().approve(address(pool), assetAmount);
+    pool.asset().approve(address(pool), assetAmount);
     pool.exitPool(address(this), signedCredential, assetAmount);
 
     if (borrowedAmount == assetAmount) {

@@ -71,7 +71,7 @@ library AuthController {
   }
 
   function onlyAgentPolice(address router, address agentPolice) internal view {
-    if (!(address(GetRoute.agentPolice(router)) == agentPolice)) {
+    if (address(GetRoute.agentPolice(router)) != agentPolice) {
       revert Unauthorized(
         address(this),
         agentPolice,
@@ -93,6 +93,17 @@ library AuthController {
       GetRoute.poolFactory(router).isPoolTemplate(poolTemplate),
       "onlyPoolTemplate: Not authorized"
     );
+  }
+
+  function onlyPoolFactory(address router, address poolFactory) internal view {
+    if (address(GetRoute.poolFactory(router)) != poolFactory) {
+      revert Unauthorized(
+        address(this),
+        poolFactory,
+        msg.sig,
+        "onlyPoolFactory: Not authorized"
+      );
+    }
   }
 
   function initFactoryRoles(
@@ -163,6 +174,13 @@ library AuthController {
     subAuthority.transferOwnership(powerTokenAdmin);
   }
 
+  /**
+   * @dev Initialize the roles for a new pool
+    * @param router The router address
+    * @param pool The Pool's address
+    * @param operator The operator's address
+    * @notice The Pool Factory owns the Pool's authority, just in case a Pool Operator loses their keys, a new Pool Factory _could_ be deployed to help recover the Pool's operator role
+   */
   function initPoolRoles(
     address router,
     address pool,
@@ -177,22 +195,49 @@ library AuthController {
     subAuthority.setUserRole(pool, uint8(Roles.ROLE_POOL), true);
     subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL), AUTH_SET_USER_ROLE_SELECTOR, true);
 
-    subAuthority.setUserRole(pool, uint8(Roles.ROLE_POOL_OWNER), true);
-    if (operator == address(0)) {
-      subAuthority.setUserRole(pool, uint8(Roles.ROLE_POOL_OPERATOR), true);
-    } else {
-      subAuthority.setUserRole(operator, uint8(Roles.ROLE_POOL_OPERATOR), true);
+    subAuthority.setUserRole(operator, uint8(Roles.ROLE_POOL_OPERATOR), true);
+
+    bytes4[6] memory capabilities = [
+      OFFRAMP_SET_CONVERSION_WINDOW_SELECTOR,
+      POOL_SET_MIN_LIQUIDITY_SELECTOR,
+      POOL_SHUT_DOWN_SELECTOR,
+      POOL_SET_RAMP_SELECTOR,
+      POOL_SET_TEMPLATE_SELECTOR,
+      SET_OPERATOR_ROLE_SELECTOR
+    ];
+
+    for (uint256 i = 0; i < capabilities.length; ++i) {
+      subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), capabilities[i], true);
     }
 
-    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OWNER), POOL_ENABLE_OPERATOR_SELECTOR, true);
-    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OWNER), POOL_DISABLE_OPERATOR_SELECTOR, true);
+    subAuthority.transferOwnership(poolFactory);
+  }
 
-    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), POOL_SET_RATE_MODULE_SELECTOR, true);
-    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), OFFRAMP_SET_CONVERSION_WINDOW_SELECTOR, true);
-    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), POOL_SET_MIN_LIQUIDITY_SELECTOR, true);
-    subAuthority.setRoleCapability(uint8(Roles.ROLE_POOL_OPERATOR), POOL_SHUT_DOWN_SELECTOR, true);
-
-    subAuthority.transferOwnership(pool);
+  /**
+   * @dev Transfers a MultiRolesAuthority from one pool to another
+   * @param router The router address
+   * @param pool The new Pool's address who gets the Authority
+   * @param oldPool The old Pool's address who removes the Authority
+   */
+  function upgradePoolRoles(
+    address router,
+    address pool,
+    address oldPool,
+    IMultiRolesAuthority authorityToTransfer
+  ) internal {
+    setSubAuthority(router, pool, Authority(address(authorityToTransfer)));
+    setSubAuthority(router, oldPool, Authority(address(0)));
+  }
+  /**
+   * @dev Checks to ensure the caller is an operator of the pool
+   * @param operator The Operator's address
+   * @param poolMRA The Pool's MultiRolesAuthority to check operator role against
+   */
+  function canUpgradePool(
+    address operator,
+    IMultiRolesAuthority poolMRA
+  ) internal view returns (bool) {
+    return poolMRA.doesUserHaveRole(operator, uint8(Roles.ROLE_POOL_OPERATOR));
   }
 
   function initAgentPoliceRoles(

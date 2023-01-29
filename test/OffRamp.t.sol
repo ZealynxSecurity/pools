@@ -4,13 +4,15 @@ pragma solidity ^0.8.15;
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
 import {console} from "forge-std/console.sol";
 import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 import {ROUTE_POOL_FACTORY} from "src/Constants/Routes.sol";
+import {PoolFactory} from "./helpers/MockPoolFactory.sol";
 
-import "./BaseTest.sol";
+import {BaseTest} from "./BaseTest.sol";
 
 contract OffRampTest is BaseTest {
   OffRamp ramp;
@@ -24,17 +26,15 @@ contract OffRampTest is BaseTest {
   uint256 conversionWindow;
   uint256 dust = 1000;
   uint256 maxSupply = 2000000000e18;
-  uint256 EPOCHS_IN_20_YEARS =  20 * EPOCHS_IN_YEAR;
+  uint256 EPOCHS_IN_20_YEARS = 20 * EPOCHS_IN_YEAR;
   function setUp() public {
     // mock the pool factory for offramp permissioning
-    // poolFactory = address(new MockPoolFactory());
-    // vm.prank(systemAdmin);
-    // IRouter(router).pushRoute(ROUTE_POOL_FACTORY, poolFactory);
-
+    PoolFactory factory = new PoolFactory(router);
+    IRouter(router).pushRoute(ROUTE_POOL_FACTORY, address(factory));
 
     // Our "asset" in most cases is wrapped fil
     iou = new PoolToken(router, 0, "iou", "iou");
-    ramp = new OffRamp(address(iou), address(wFIL), address(0), 0);
+    ramp = new OffRamp(router, address(iou), address(wFIL), 0);
     conversionWindow = ramp.conversionWindow();
   }
   function testDistributeSimple(uint256 initialBalance, uint256 timeChunk) public {
@@ -194,10 +194,13 @@ contract OffRampTest is BaseTest {
   }
 
   function _mintWFILToOfframp(uint256 amount) internal {
-    vm.deal(address(this), amount);
+    address investor = makeAddr("INVESTOR");
+    vm.deal(investor, amount);
+    vm.startPrank(investor);
     wFIL.deposit{value: amount}();
     wFIL.approve(address(ramp), amount);
-    ramp.distribute(address(this), amount);
+    ramp.distribute(investor, amount);
+    vm.stopPrank();
   }
 
   function _loadAssumptions(uint256 _initialBalance, uint256 _timeChunk) internal returns(uint256 initialBalance, uint256 timeChunk){
@@ -206,4 +209,3 @@ contract OffRampTest is BaseTest {
     timeChunk = bound(_timeChunk, conversionWindow, EPOCHS_IN_20_YEARS);
   }
 }
-

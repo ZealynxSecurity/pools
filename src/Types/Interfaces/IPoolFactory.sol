@@ -10,6 +10,7 @@ interface IPoolFactory {
   function allPoolsLength() external view returns (uint256);
   function isPool(address pool) external view returns (bool);
   function isPoolTemplate(address pool) external view returns (bool);
+  function isPoolImplementation(address poolImplementation) external view returns (bool);
   function createPool(
     string calldata name,
     string calldata symbol,
@@ -17,6 +18,7 @@ interface IPoolFactory {
     address implementation,
     address template
   ) external returns (IPool pool);
+  function upgradePool(uint256 poolId) external returns (IPool newPool);
   function approveImplementation(address implementation) external;
   function revokeImplementation(address implementation) external;
   function approveTemplate(address template) external;

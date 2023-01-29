@@ -52,9 +52,9 @@ contract OffRamp is IOffRamp, RouterAware {
     uint256 public poolID;
 
     constructor(
+        address _router,
         address _iouToken,
         address _exitToken,
-        address _router,
         uint256 _poolID
     ) {
         router = _router;
@@ -164,6 +164,23 @@ contract OffRamp is IOffRamp, RouterAware {
         ERC20(iouToken).safeTransferFrom(sender, address(this), amount);
         totalIOUStaked = totalIOUStaked + (amount);
         iouTokensStaked[sender] = iouTokensStaked[sender] + (amount);
+    }
+
+    ///@dev Deposits ious into the transmuter
+    ///
+    ///@param amount the amount of ious to stake
+    function stakeOnBehalf(uint256 amount, address recipient)
+        public
+        runPhasedDistribution()
+        updateAccount(msg.sender)
+        checkIfNewUser()
+    {
+        // requires approval of iouToken first
+        address sender = msg.sender;
+        //require tokens transferred in;
+        ERC20(iouToken).safeTransferFrom(sender, address(this), amount);
+        totalIOUStaked = totalIOUStaked + (amount);
+        iouTokensStaked[recipient] = iouTokensStaked[recipient] + (amount);
     }
 
     /// @dev Moves the realized staked iouTokens into the claimable bucket

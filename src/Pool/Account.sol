@@ -22,6 +22,9 @@ library AccountHelpers {
                         Agent Utils
   ////////////////////////////////////////////////////////*/
 
+  /**
+   * @dev Converts agent address to its ID
+   */
   function agentAddrToID(address agent) internal view returns (uint256) {
     return IAgent(agent).id();
   }
@@ -30,6 +33,12 @@ library AccountHelpers {
                       Account Getters
   ////////////////////////////////////////////////////////*/
 
+  /**
+   * @dev Gets account for an `agent` with respect to a specific `poolID`
+   * @param router the address of the router
+   * @param agent the address of the agent
+   * @param poolID the pool ID
+   */
   function getAccount(
     address router,
     address agent,
@@ -38,6 +47,12 @@ library AccountHelpers {
     return getAccount(router, agentAddrToID(agent), poolID);
   }
 
+  /**
+   * @dev Gets account for an `agent` with respect to a specific `poolID`
+   * @param router the address of the router
+   * @param agentID the agent's ID
+   * @param poolID the pool ID
+   */
   function getAccount(
     address router,
     uint256 agentID,
@@ -46,6 +61,9 @@ library AccountHelpers {
     return IRouter(router).getAccount(agentID, poolID);
   }
 
+  /**
+   * @dev Returns true if an account exists
+   */
   function exists(
     Account memory account
   ) internal pure returns (bool) {
@@ -56,6 +74,12 @@ library AccountHelpers {
                       Account Setters
   ////////////////////////////////////////////////////////*/
 
+  /**
+   * @dev Sets account for an `agent` with respect to a specific `poolID`
+   * @param router the address of the router
+   * @param agent the agent's address
+   * @param poolID the pool ID
+   */
   function setAccount(
     address router,
     address agent,
@@ -65,6 +89,12 @@ library AccountHelpers {
     setAccount(router, agentAddrToID(agent), poolID, account);
   }
 
+  /**
+   * @dev Sets account for an `agent` with respect to a specific `poolID`
+   * @param router the address of the router
+   * @param agentID the agent's ID
+   * @param poolID the pool ID
+   */
   function setAccount(
     address router,
     uint256 agentID,
@@ -74,7 +104,12 @@ library AccountHelpers {
     IRouter(router).setAccount(agentID, poolID, account);
   }
 
-  // in order to mutate the account, we have to manually reset all values (instead of setting the account to be a new instance of an empty Account struct)
+  /**
+   * @dev Resets an account to default values
+   *
+   * in order to mutate the account, we have to manually reset all values,
+   * instead of setting the account to be a new instance of an empty Account struct
+   */
   function reset(Account memory account) internal pure {
     account.startEpoch = 0;
     account.totalBorrowed = 0;
@@ -190,6 +225,12 @@ library AccountHelpers {
     return account.perEpochRate;
   }
 
+  /**
+   * @dev Saves an account in storage for an `agent` with respect to a specific `poolID`
+   * @param router the address of the router
+   * @param agent the agent's address
+   * @param poolID the pool ID
+   */
   function save(
     Account memory account,
     address router,
@@ -203,7 +244,9 @@ library AccountHelpers {
                   Computed Account Statistics
   ////////////////////////////////////////////////////////*/
 
-  /// @dev computes the minimum payment amount for a given window period
+  /**
+   * @dev Computes the minimum payment amount for a given window period
+   */
   function pmtPerPeriod(
     Account memory account,
     address router
@@ -211,12 +254,17 @@ library AccountHelpers {
     return pmtPerEpoch(account) * GetRoute.agentPolice(router).windowLength();
   }
 
-  /// @dev computes the minimum payment amount for a single epoch
+  /**
+   * @dev Computes the minimum payment amount for a single epoch
+   */
   function pmtPerEpoch(Account memory account) internal pure returns (uint256) {
     return pmtPerEpoch(account, account.perEpochRate);
   }
 
-  /// @dev computes the minimum payment amount for a single penalty epoch
+  /**
+   * @dev computes the minimum payment amount for a single penalty epoch
+   * @param rateSpike - the additional rate to apply to the regular perEpochRate
+   */
   function pmtPerPenaltyEpoch(
     Account memory account,
     uint256 rateSpike
@@ -224,15 +272,21 @@ library AccountHelpers {
     return pmtPerEpoch(account, account.perEpochRate + rateSpike);
   }
 
-  /// @dev computes the minimum payment amount for a singel epoch
-  /// @notice we divide out the 1e18 WAD base to get a % rate
+  /**
+   * @dev computes the minimum payment amount for a singel epoch
+   * @notice we divide out the 1e18 WAD base to get a % rate
+   */
   function pmtPerEpoch(Account memory account, uint256 rate) internal pure returns (uint256) {
     return account.totalBorrowed
       .mulWadDown(rate);
   }
 
-  /// @dev computes the number of FIL needed to pay in order to bring an account to a deficit of 0 (meaning the account is "current" and epochsPaid is the start of the current window period)
-  /// @notice includes penalties but does not include fees
+  /**
+   * @dev computes the number of FIL needed to pay in order to bring an account to a deficit of 0,
+   * meaning the account is "current" and epochsPaid is the start of the current window period
+   *
+   * @notice we divide out the 1e18 WAD base to get a % rate
+   */
   function getDeficit(
     Account memory account,
     Window memory window,
@@ -270,7 +324,11 @@ library AccountHelpers {
     deficit += pmtPerEpoch(account) * unaccountedMissedEpochs;
   }
 
-  /// @dev computes the number of epochsPaid forward that a payment will bring an account
+  /**
+   * @dev Computes the number of epochsPaid forward that a payment will bring an account
+   * @param payment - The amount of payment to credit
+   * @return epochs - THe amount of epochs to credit
+   */
   function getEpochsCredit(
     Account memory account,
     uint256 payment
@@ -280,9 +338,12 @@ library AccountHelpers {
     return payment / perEpochPmt;
   }
 
-  /// @dev computes the number of epochs that an Account is in penalty for
-  /// @notice this is the number of epochs behind the _last_ window's open
-  /// the paymentPerEpoch must apply the rateSpike to this number of epochs
+  /**
+   * @dev Computes the number of epochs that an Account is in penalty for
+   *
+   * @notice this is the number of epochs behind the _last_ window's open
+   * the paymentPerEpoch must apply the rateSpike to this number of epochs
+   */
   function getPenaltyEpochs(
     Account memory account,
     Window memory window
@@ -296,7 +357,14 @@ library AccountHelpers {
     }
   }
 
-  /// @dev computes the amount of epochs to move an in penalty agent forward for a given payment
+
+  /**
+   * @dev Computes the amount of epochs to move an in penalty agent forward for a given payment
+   * @param payment - The payment to compute epochs for
+   * @param penaltyEpochs - The amount of epochs in penantly this `account` is
+   * @param penaltyRate - The penalty rate to apply to the payment
+   * @return epochs - The number of epochs to move the account forward
+   */
   function getEpochsPenalty(
     Account memory account,
     uint256 payment,
@@ -316,7 +384,9 @@ library AccountHelpers {
       : penaltyEpochs + getEpochsCredit(account, payment - maxPenaltyPayment);
   }
 
-  /// @dev computes the min payment to close the current window, using the existing rate in the account
+  /**
+   * @dev Computes the min payment to close the current window, using the existing rate in the account
+   */
   function getMinPmtForWindowClose(
     Account memory account,
     Window memory window,
@@ -333,7 +403,9 @@ library AccountHelpers {
     );
   }
 
-  /// @dev computes the min payment to get current, using the existing rate in the account
+  /**
+   * @dev Computes the min payment to get current, using the existing rate in the account
+   */
   function getMinPmtForWindowStart(
     Account memory account,
     Window memory window,
@@ -349,16 +421,18 @@ library AccountHelpers {
     );
   }
 
-  /// @dev given an `epochValue`, compute the min payment (less fees) to get `account.epochsPaid === epochValue`
-  /// pass this amount as the `pmt` param in `makePayment`
-  /// @notice you can use this function to compute the `stakeToPay` pmt amount,
-  /// but it's not quite as accurate for epochValues past window.start of the current period
-  /// (since stakeToPay will give you a new rate)
-  /// @param account the account to compute the minimum payment target for
-  /// @param epochValue the epochValue represented the window that this payment will bring the account up to
-  /// @param router the router address to access global elements
-  /// @param window the current global window that the cursor is relative to
-  /// @param pool the pool implementation to access the rateSpike function
+  /**
+   * @dev given an `epochValue`, compute the min payment (less fees) to get `account.epochsPaid === epochValue`
+   * pass this amount as the `pmt` param in `makePayment`
+   * @notice you can use this function to compute the `stakeToPay` pmt amount,
+   * but it's not quite as accurate for epochValues past window.start of the current period
+   * (since stakeToPay will give you a new rate)
+   * @param account the account to compute the minimum payment target for
+   * @param epochValue the epochValue represented the window that this payment will bring the account up to
+   * @param router the router address to access global elements
+   * @param window the current global window that the cursor is relative to
+   * @param pool the pool implementation to access the rateSpike function
+   */
   function _getMinPmtForEpochCursor(
     Account memory account,
     uint256 epochValue,
@@ -415,15 +489,19 @@ library AccountHelpers {
 
     // pmt = basis / (1 - fee)
     payment = basis.divWadUp(FixedPointMathLib.WAD - GetRoute.poolFactory(router).treasuryFeeRate());
-    // 950000000
-    // 1100000000
   }
 
+  /**
+   * @dev Computes the treasury fee for a given payment
+   * @param pmt - the payment amount
+   * @param treasuryFeeRate - the treasury fee rate
+   * @return fee - the fee amount
+   */
   function computeFeePerPmt(
     Account memory,
-    uint256 pmt, // 1100000000
+    uint256 pmt,
     uint256 treasuryFeeRate
-  ) internal view returns (uint256 fee, uint256 remainingPmt) {
+  ) internal pure returns (uint256 fee, uint256 remainingPmt) {
     // protocol fee * pmt
     fee = treasuryFeeRate.mulWadUp(pmt);
     // 900000000

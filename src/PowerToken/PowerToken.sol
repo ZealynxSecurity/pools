@@ -6,7 +6,7 @@ import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
+import {IPowerTokenPlus} from "src/Types/Interfaces/IPowerTokenPlus.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -16,7 +16,7 @@ import {GetRoute} from "src/Router/GetRoute.sol";
 import {Unauthorized} from "src/Errors.sol";
 
 contract PowerToken is
-  IPowerToken,
+  IPowerTokenPlus,
   RouterAware,
   ERC20("Tokenized Filecoin Power", "POW", 18)
   {
@@ -74,14 +74,14 @@ contract PowerToken is
     function transfer(
       address to,
       uint256 amount
-    ) public override(IPowerToken, ERC20) notPaused validTo(to) returns (bool) {
+    ) public override notPaused validTo(to) returns (bool) {
       return super.transfer(to, amount);
     }
 
     function approve(
       address spender,
       uint256 amount
-    ) public override(IPowerToken, ERC20) notPaused validTo(spender) returns (bool) {
+    ) public override notPaused validTo(spender) returns (bool) {
       return super.approve(spender, amount);
     }
 
@@ -89,8 +89,20 @@ contract PowerToken is
       address from,
       address to,
       uint256 amount
-    ) public override(IPowerToken, ERC20) notPaused validTo(to) returns (bool) {
+    ) public override notPaused validTo(to) returns (bool) {
       return super.transferFrom(from, to, amount);
+    }
+
+    function permit(
+      address owner,
+      address spender,
+      uint256 amount,
+      uint256 deadline,
+      uint8 v,
+      bytes32 r,
+      bytes32 s
+    ) public override notPaused validTo(spender) {
+      super.permit(owner, spender, amount, deadline, v, r, s);
     }
 
     /*//////////////////////////////////////////////////////////////

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {MultiRolesAuthority, AuthController} from "src/Auth/AuthController.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
+import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
 import {Authority} from "src/Auth/Auth.sol";
 import "src/VCVerifier/VCVerifier.sol";
 import "./BaseTest.sol";

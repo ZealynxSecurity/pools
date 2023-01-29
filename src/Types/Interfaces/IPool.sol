@@ -10,54 +10,84 @@ import {IPoolTemplate} from "src/Types/Interfaces/IPoolTemplate.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 
 interface IPool {
+
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    event Deposit(
+        address indexed caller,
+        address indexed owner,
+        uint256 assets,
+        uint256 shares
+    );
+
+    event Withdraw(
+        address indexed caller,
+        address indexed receiver,
+        address indexed owner,
+        uint256 assets,
+        uint256 shares
+    );
+
     event RebalanceTotalBorrowed(
         uint256 indexed agentID,
         uint256 realAccountValue,
         uint256 totalBorrowed
     );
 
-    function id() external view returns (uint256);
+    event SetOperatorRole(address indexed operator, bool enabled);
+
+    /*////////////////////////////////////////////////////////
+                            GETTERS
+    ////////////////////////////////////////////////////////*/
+
+    function asset() external view returns (ERC20);
+
+    function share() external view returns (PoolToken);
+
+    function template() external view returns (IPoolTemplate);
 
     function implementation() external view returns (IPoolImplementation);
-    // Basic Stats Getters **PURE**
-    function template() external view returns (IPoolTemplate);
-    function share() external view returns (PoolToken);
+
     function iou() external view returns (PoolToken);
+
     function ramp() external view returns (IOffRamp);
-    function getAgentBorrowed(uint256 agentID) external view returns (uint256);
-    function pmtPerPeriod(address agent) external view returns (uint256);
+
+    function id() external view returns (uint256);
+
+    function minimumLiquidity() external view returns (uint256);
+
+    function getAbsMinLiquidity() external view returns (uint256);
+
+    function isShuttingDown() external view returns (bool);
+
     function totalBorrowed() external view returns (uint256);
-    function getPowerToken() external view returns (IPowerToken);
-    // Would love to expose the public getter but not sure how to with the interitance structure we have
-    function getAsset() external view returns (ERC20);
-    function reduceTotalBorrowed(uint256 amount) external;
-    function increaseTotalBorrowed(uint256 amount) external;
-    // Finance functions
-    function borrow(
-        uint256 amount,
-        SignedCredential memory sc,
-        uint256 powerTokenAmount
-    ) external returns (uint256);
-    function exitPool(
-        address agent,
-        SignedCredential memory sc,
-        uint256 amount
-    ) external returns (uint256);
-    function makePayment(
-        address agent,
-        uint256 pmt
-    ) external;
-    function stakeToPay(
-        uint256 pmt,
-        SignedCredential memory sc,
-        uint256 powerTokenAmount
-    ) external;
-    function rebalanceTotalBorrowed(
-        uint256 agentID,
-        uint256 realAccountValue
-    ) external;
-    // Admin Funcs
+
+    function getAgentBorrowed(uint256 agentID) external view returns (uint256);
+
+    function getLiquidAssets() external view returns (uint256);
+
+    /*//////////////////////////////////////////////////////////////
+                            BORROWER FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    function borrow(uint256 amount, SignedCredential memory sc, uint256 powerTokenAmount) external;
+
+    function exitPool( address agent, SignedCredential memory sc, uint256 amount) external returns (uint256);
+
+    function makePayment(address agent,uint256 pmt) external;
+
+    function stakeToPay(uint256 pmt, SignedCredential memory sc, uint256 powerTokenAmount) external;
+
+    function rebalanceTotalBorrowed(uint256 agentID, uint256 realAccountValue) external;
+
+    /*//////////////////////////////////////////////////////////////
+                            FEE LOGIC
+    //////////////////////////////////////////////////////////////*/
+
     function harvestFees(uint256 harvestAmount) external;
+
     function harvestToRamp() external;
 
     /*//////////////////////////////////////////////////////////////
@@ -68,17 +98,9 @@ interface IPool {
 
     function mint(uint256 shares, address receiver) external returns (uint256 assets);
 
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) external returns (uint256 shares);
+    function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
 
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) external returns (uint256 assets);
+    function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
 
     /*//////////////////////////////////////////////////////////////
                             ACCOUNTING LOGIC
@@ -114,8 +136,26 @@ interface IPool {
                             ADMIN FUNCS
     //////////////////////////////////////////////////////////////*/
 
+    function shutDown() external;
+
+    function decommissionPool(IPool newPool) external returns (uint256 borrowedAmount);
+
+    function jumpStartTotalBorrowed(uint256 amount) external;
+
+    function setRamp(IOffRamp newRamp) external;
+
+    function setTemplate(IPoolTemplate newTemplate) external;
+
     function setMinimumLiquidity(uint256 minLiquidity) external;
 
-    function shutDown() external;
+    function setOperatorRole(address operator, bool enabled) external;
+
+    /*////////////////////////////////////////////////////////
+                    ONLY CALLABLE BY TEMPLATE
+    ////////////////////////////////////////////////////////*/
+
+    function reduceTotalBorrowed(uint256 amount) external;
+
+    function increaseTotalBorrowed(uint256 amount) external;
 }
 
