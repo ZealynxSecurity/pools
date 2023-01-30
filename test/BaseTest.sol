@@ -92,10 +92,6 @@ contract BaseTest is Test {
   function configureAgent(address minerOwner) public returns (Agent, MockMiner) {
     MockMiner miner = MockMiner(payable(_newMiner(minerOwner)));
 
-    // give miner some fake rewards and vest them over 1000 epochs
-    vm.deal(address(miner), 100e18);
-    vm.prank(minerOwner);
-    miner.lockBalance(block.number, 1000, 100e18);
     // create an agent for miner
     Agent agent = _configureAgent(minerOwner, miner);
     return (agent, miner);

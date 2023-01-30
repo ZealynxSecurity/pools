@@ -95,7 +95,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   /**
    * @notice `windowInfo` returns the current window start, length, and deadline
    */
-  function windowInfo() external view returns (Window memory) {
+  function windowInfo() public view returns (Window memory) {
     uint256 deadline = nextPmtWindowDeadline();
     return Window(deadline - windowLength, deadline, windowLength);
   }
@@ -305,13 +305,16 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     requiresAuth
     onlyIfAgentOverLeveraged(agent)
   {
-    uint256 totalPmt = GetRoute.wFIL20(router).balanceOf(agent);
+    IAgent _agent = IAgent(agent);
     // then, we create a pro-rata split based on power token stakes to pay back each pool thats been borrowed from
-    (uint256[] memory pools, uint256[] memory pmts) = _computeProRataAmts(agent, totalPmt);
+    (
+      uint256[] memory pools,
+      uint256[] memory pmts
+    ) = _computeProRataAmts(agent, _totalOwed(_agent.id()));
 
-    IAgent(agent).makePayments(pools, pmts, signedCredential);
+    _agent.makePayments(pools, pmts, signedCredential);
 
-    bool stillOverLeveraged = _updateOverLeveraged(IAgent(agent).id(), signedCredential);
+    bool stillOverLeveraged = _updateOverLeveraged(_agent.id(), signedCredential);
 
     emit ForceMakePayments(agent, msg.sender, pools, pmts, stillOverLeveraged);
   }
@@ -382,14 +385,15 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     uint256[] memory _amts
   ) {
     IAgent agent = IAgent(_agent);
-    uint256 poolCount = agent.stakedPoolsCount();
+
+    _pools = _poolIDs[agent.id()];
+    uint256 poolCount = _pools.length;
 
     _amts = new uint256[](poolCount);
 
     uint256 powerTokensStaked = agent.totalPowerTokensStaked();
 
     for (uint256 i = 0; i < poolCount; ++i) {
-      _pools[i] = i;
       _amts[i] = _totalAmount * (agent.powerTokensStaked(_pools[i]) / powerTokensStaked);
     }
   }
@@ -446,13 +450,8 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     return GetRoute.powerToken(router).powerTokensMinted(agent);
   }
 
-  function _updateOverLeveraged(
-    uint256 agentID,
-    SignedCredential memory signedCredential
-  ) internal returns (bool) {
-    Window memory window = GetRoute.agentPolice(router).windowInfo();
-    uint256 totalOwed;
-
+  /// @dev returns the total amount owed across all pools to get to the next window close
+  function _totalOwed(uint256 agentID) internal view returns (uint256 totalOwed) {
     uint256[] memory stakedPools = _poolIDs[agentID];
     // loop through all and add up all the owed amounts to get to the next window close
     for (uint256 i = 0; i < stakedPools.length; ++i) {
@@ -461,18 +460,24 @@ contract AgentPolice is IAgentPolice, VCVerifier {
         agentID,
         stakedPools[i]
       ).getMinPmtForWindowClose(
-        window,
+        windowInfo(),
         router,
         GetRoute.pool(router, stakedPools[i]).implementation()
       );
     }
+  }
+
+  function _updateOverLeveraged(
+    uint256 agentID,
+    SignedCredential memory signedCredential
+  ) internal returns (bool) {
     // expected per epoch rewards = expected daily rewards / epochs in a day
     // expected earnings = expected per epoch rewards * epochs until window close
     uint256 perEpochExpRewards = signedCredential.vc.miner.expectedDailyRewards / EPOCHS_IN_DAY;
-    uint256 expectedEarnings = perEpochExpRewards * (window.deadline - block.number);
+    uint256 expectedEarnings = perEpochExpRewards * (nextPmtWindowDeadline() - block.number);
 
     // if the agent owes more than their total expected rewards in the window period, they're overleveraged
-    bool overLeveraged = totalOwed > expectedEarnings;
+    bool overLeveraged = _totalOwed(agentID) > expectedEarnings;
 
     _agentState[createKey(LEVERAGE, agentID)] = overLeveraged;
 

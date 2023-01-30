@@ -22,8 +22,10 @@ import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {Account} from "src/Types/Structs/Account.sol";
+import {Window} from "src/Types/Structs/Window.sol";
 
 import {ROUTE_AGENT_FACTORY_ADMIN, ROUTE_MINER_REGISTRY} from "src/Constants/Routes.sol";
+import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {Decode} from "src/Errors.sol";
 import "src/Constants/FuncSigs.sol";
@@ -490,6 +492,8 @@ contract AgentTest is BaseTest {
 }
 
 contract AgentPoliceTest is BaseTest {
+    using AccountHelpers for Account;
+
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner = makeAddr("MINER_OWNER");
@@ -684,16 +688,11 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testForcePullFundsFromMinersWhenNotOverleveraged() public {
-        address[] memory minersToAdd = new address[](1);
         // prepare a second miner to draw funds from
+        vm.prank(minerOwner);
         MockMiner secondMiner = new MockMiner();
 
-        secondMiner.change_owner_address(address(secondMiner), address(agent));
-        require(secondMiner.next_owner(address(secondMiner)) == address(agent), "Agent not set as owner");
-        minersToAdd[0] = address(secondMiner);
-
-        vm.prank(minerOwner);
-        agent.addMiners(minersToAdd);
+        _agentClaimOwnership(address(agent), address(secondMiner), minerOwner);
         // give the miners some funds to pull
         vm.deal(address(miner), 1e18);
         vm.deal(address(secondMiner), 2e18);
@@ -716,36 +715,61 @@ contract AgentPoliceTest is BaseTest {
         }
     }
 
-    function testForcePullFundsFromMiners() internal {
-        address[] memory minersToAdd = new address[](1);
-        // prepare a second miner to draw funds from
-        MockMiner secondMiner = new MockMiner();
-
-        secondMiner.change_owner_address(address(secondMiner), address(agent));
-        require(secondMiner.next_owner(address(secondMiner)) == address(agent), "Agent not set as owner");
-        minersToAdd[0] = address(secondMiner);
+    function testForcePullFundsFromMiners() public {
+        makeAgentOverLeveraged(1e18, 1e18);
 
         vm.prank(minerOwner);
-        agent.addMiners(minersToAdd);
+        MockMiner secondMiner = new MockMiner();
+        _agentClaimOwnership(address(agent), address(secondMiner), minerOwner);
+
         // give the miners some funds to pull
-        vm.deal(address(miner), 1e18);
-        vm.deal(address(secondMiner), 2e18);
+        uint256 FUND_AMOUNT = 50e18;
+        vm.deal(address(miner), FUND_AMOUNT);
+        vm.deal(address(secondMiner), FUND_AMOUNT);
 
         IERC20 wFIL20 = IERC20(address(wFIL));
-
-        assertEq(wFIL20.balanceOf(address(agent)), 0);
+        uint256 agentBalance = wFIL20.balanceOf(address(agent));
+        // empty out agent wallet for testing
+        vm.prank(address(agent));
+        wFIL20.transfer(minerOwner, agentBalance);
+        // assertEq(wFIL20.balanceOf(address(agent)), 0);
 
         // create calldata for pullFundsFromMiners
         address[] memory _miners = new address[](2);
         _miners[0] = address(miner);
         _miners[1] = address(secondMiner);
 
-        vm.prank(IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN));
-        police.forcePullFundsFromMiners(address(agent), _miners, new uint256[](2));
+        uint256 FORCE_PULL_AMNT = 10e18;
+        uint256[] memory _amounts = new uint256[](2);
+        _amounts[0] = FORCE_PULL_AMNT;
+        _amounts[1] = FORCE_PULL_AMNT;
 
-        assertEq(address(agent).balance, 3e18);
-        assertEq(address(miner).balance, 0);
-        assertEq(address(secondMiner).balance, 0);
+        assertEq(address(agent).balance, 0, "agent should have no FIL");
+
+        vm.prank(IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN));
+        police.forcePullFundsFromMiners(address(agent), _miners, _amounts);
+
+        assertEq(address(agent).balance, FORCE_PULL_AMNT * 2, "Agent should have 2 times the force pull amount of FIL");
+    }
+
+    function testForceMakePayments() public {
+        // give the agent enough funcds to get current
+        address funder = makeAddr("FUNDER");
+        vm.deal(funder, 100e18);
+
+        SignedCredential memory signedCredential = makeAgentOverLeveraged(1e18, 1e18);
+
+        vm.startPrank(funder);
+        wFIL.deposit{value: 100e18}();
+        wFIL.transfer(address(agent), 100e18);
+        vm.stopPrank();
+
+        vm.prank(IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN));
+        police.forceMakePayments(address(agent), signedCredential);
+
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+        assertEq(account.epochsPaid, police.windowInfo().deadline, "Agent should have paid up to current epoch");
     }
 
     function testSetWindowLengthNonAdmin() public {
@@ -812,8 +836,23 @@ contract AgentPoliceTest is BaseTest {
         assertTrue(police.isOverPowered(agent.id()));
     }
 
-    function testMakePayments() public {
-        // TODO:
+    function makeAgentOverLeveraged(uint256 borrowAmount, uint256 powerTokenStake) internal returns (
+        SignedCredential memory sc
+    ) {
+        vm.prank(address(agent));
+        agent.borrow(borrowAmount, 0, signedCred, powerTokenStake);
+
+        sc = issueSC(createCustomCredential(
+            address(agent),
+            10e18,
+            // 0 expected daily rewards
+            0,
+            5e18,
+            0
+        ));
+
+        police.checkLeverage(address(agent), sc);
+        assertTrue(police.isOverLeveraged(agent.id()));
     }
 }
 

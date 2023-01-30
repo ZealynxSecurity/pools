@@ -561,7 +561,7 @@ contract Agent is IAgent, RouterAware {
     uint256[] calldata _poolIDs,
     uint256[] calldata _amounts,
     SignedCredential memory _signedCredential
-  ) external requiresAuth isValidCredential(_signedCredential) {
+  ) external requiresAuthOrPolice isValidCredential(_signedCredential) {
     if (_poolIDs.length != _amounts.length) {
       revert InvalidParams(
         msg.sender,
@@ -581,10 +581,9 @@ contract Agent is IAgent, RouterAware {
     _poolFundsInWFIL(total);
 
     for (uint256 i = 0; i < _poolIDs.length; i++) {
-      GetRoute.pool(router, _poolIDs[i]).makePayment(
-        address(this),
-        _amounts[i]
-      );
+      IPool pool = GetRoute.pool(router, _poolIDs[i]);
+      pool.asset().approve(address(pool), _amounts[i]);
+      pool.makePayment(address(this), _amounts[i]);
     }
   }
 
