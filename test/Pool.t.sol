@@ -17,6 +17,7 @@ import {Window} from "src/Types/Structs/Window.sol";
 import {Decode} from "src/Errors.sol";
 import {PoolAccounting} from "src/Pool/PoolAccounting.sol";
 import {Roles} from "src/Constants/Roles.sol";
+import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {ROUTE_POOL_FACTORY_ADMIN} from "src/Constants/Routes.sol";
 import "./BaseTest.sol";
 
@@ -25,6 +26,7 @@ import "./BaseTest.sol";
 uint256 constant EPOCH_CURSOR_ACCEPTANCE_DELTA = 1;
 
 contract PoolTemplateStakingTest is BaseTest {
+  using Credentials for VerifiableCredential;
   IAgent agent;
 
   IPoolFactory poolFactory;
@@ -250,6 +252,7 @@ contract PoolTemplateStakingTest is BaseTest {
 
 contract PoolBorrowingTest is BaseTest {
   using AccountHelpers for Account;
+  using Credentials for VerifiableCredential;
 
   IAgent agent;
 
@@ -301,7 +304,7 @@ contract PoolBorrowingTest is BaseTest {
 
     uint256 powerAmtStake = 1e18;
     vm.startPrank(address(agent));
-    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     // note that borrow
     powerToken.approve(address(pool), powerAmtStake);
@@ -323,8 +326,8 @@ contract PoolBorrowingTest is BaseTest {
     uint256 poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));
     uint256 agentPowTokenBal = IERC20(address(powerToken)).balanceOf(address(agent));
     assertEq(poolPowTokenBal, powerAmtStake);
-    assertEq(agentPowTokenBal, signedCred.vc.miner.qaPower - powerAmtStake);
-    assertEq(poolPowTokenBal + agentPowTokenBal, signedCred.vc.miner.qaPower);
+    assertEq(agentPowTokenBal, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - powerAmtStake);
+    assertEq(poolPowTokenBal + agentPowTokenBal, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
   }
 
   function testMultiBorrowNoDeficit() public {
@@ -340,6 +343,7 @@ contract PoolBorrowingTest is BaseTest {
 
 contract PoolExitingTest is BaseTest {
   using AccountHelpers for Account;
+  using Credentials for VerifiableCredential;
 
   IAgent agent;
 
@@ -390,7 +394,7 @@ contract PoolExitingTest is BaseTest {
 
     uint256 powerAmtStake = 1e18;
     vm.startPrank(address(agent));
-    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     // note that borrow
     powerToken.approve(address(pool), powerAmtStake);
@@ -437,6 +441,7 @@ contract PoolExitingTest is BaseTest {
 
 contract PoolMakePaymentTest is BaseTest {
   using AccountHelpers for Account;
+  using Credentials for VerifiableCredential;
 
   IAgent agent;
   IAgentPolice police;
@@ -489,7 +494,7 @@ contract PoolMakePaymentTest is BaseTest {
     vm.stopPrank();
 
     vm.startPrank(address(agent));
-    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     // note that borrow
     powerToken.approve(address(pool), powerAmtStake);
@@ -707,8 +712,8 @@ contract PoolMakePaymentTest is BaseTest {
 
 contract PoolStakeToPayTest is BaseTest {
   using AccountHelpers for Account;
+  using Credentials for VerifiableCredential;
 
-  using AccountHelpers for Account;
 
   IAgent agent;
 
@@ -760,7 +765,7 @@ contract PoolStakeToPayTest is BaseTest {
     vm.stopPrank();
 
     vm.startPrank(address(agent));
-    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     // note that borrow
     powerToken.approve(address(pool), powerAmtStake);
@@ -929,6 +934,7 @@ contract PoolStakeToPayTest is BaseTest {
 
 contract PoolPenaltiesTest is BaseTest {
   using AccountHelpers for Account;
+  using Credentials for VerifiableCredential;
 
   IAgent agent;
   IAgentPolice police;
@@ -981,7 +987,7 @@ contract PoolPenaltiesTest is BaseTest {
     vm.stopPrank();
 
     vm.startPrank(address(agent));
-    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     // note that borrow
     powerToken.approve(address(pool), powerAmtStake);
@@ -1093,6 +1099,7 @@ contract PoolPenaltiesTest is BaseTest {
 
 contract TreasuryFeesTest is BaseTest {
   using AccountHelpers for Account;
+  using Credentials for VerifiableCredential;
 
   IAgent agent;
   IAgentPolice police;
@@ -1147,7 +1154,7 @@ contract TreasuryFeesTest is BaseTest {
     vm.stopPrank();
 
     vm.startPrank(address(agent));
-    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     // note that borrow
     powerToken.approve(address(pool), powerAmtStake);
@@ -1168,6 +1175,7 @@ contract TreasuryFeesTest is BaseTest {
 
 contract PoolUpgradeTest is BaseTest {
   using AccountHelpers for Account;
+  using Credentials for VerifiableCredential;
 
   IAgent agent;
   IAgentPolice police;
@@ -1218,7 +1226,7 @@ contract PoolUpgradeTest is BaseTest {
     vm.stopPrank();
 
     vm.startPrank(address(agent));
-    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     // note that borrow
     powerToken.approve(address(pool), powerAmtStake);

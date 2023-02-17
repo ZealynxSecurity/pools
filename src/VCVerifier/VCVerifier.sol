@@ -6,7 +6,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
-import {MinerData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
+import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {ROUTE_VC_ISSUER} from "src/Constants/Routes.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 
@@ -15,32 +15,15 @@ abstract contract VCVerifier is RouterAware, EIP712 {
     EIP712(_name, _version) {}
 
   string internal constant _VERIFIABLE_CREDENTIAL_TYPE =
-    "VerifiableCredential(address issuer,address subject,uint256 epochIssued,uint256 epochValidUntil,uint256 cap,MinerData miner)";
+    "VerifiableCredential(address issuer,address subject,uint256 epochIssued,uint256 epochValidUntil,uint256 cap,AgentData miner)";
   string internal constant _MINER_DATA_TYPE =
-    "MinerData(uint256 assets,uint256 expectedDailyRewards,uint256 exposureAtDefault,uint256 expectedLoss,uint256 liabilities,uint256 lossGivenDefault,uint256 probabilityOfDefault,uint256 qaPower,uint256 rawPower,uint256 startEpoch,uint256 unexpectedLoss)";
+    "AgentData(uint256 assets,uint256 expectedDailyRewards,uint256 exposureAtDefault,uint256 expectedLoss,uint256 liabilities,uint256 lossGivenDefault,uint256 probabilityOfDefault,uint256 qaPower,uint256 rawPower,uint256 startEpoch,uint256 unexpectedLoss)";
 
   bytes32 public constant _VERIFIABLE_CREDENTIAL_TYPE_HASH =
     keccak256(abi.encodePacked(_VERIFIABLE_CREDENTIAL_TYPE, _MINER_DATA_TYPE));
 
   bytes32 public constant _MINER_DATA_TYPE_HASH =
     keccak256(abi.encodePacked(_MINER_DATA_TYPE));
-
-  function deriveMinerDataHash(MinerData memory miner) public pure returns(bytes32) {
-    return keccak256(abi.encode(
-      _MINER_DATA_TYPE_HASH,
-      miner.assets,
-      miner.expectedDailyRewards,
-      miner.exposureAtDefault,
-      miner.expectedLoss,
-      miner.liabilities,
-      miner.lossGivenDefault,
-      miner.probabilityOfDefault,
-      miner.qaPower,
-      miner.rawPower,
-      miner.startEpoch,
-      miner.unexpectedLoss
-    ));
-  }
 
   function deriveStructHash(VerifiableCredential memory vc) public pure returns(bytes32) {
     return keccak256(abi.encode(
@@ -50,7 +33,7 @@ abstract contract VCVerifier is RouterAware, EIP712 {
       vc.epochIssued,
       vc.epochValidUntil,
       vc.cap,
-      deriveMinerDataHash(vc.miner)
+      vc.claim
     ));
   }
 

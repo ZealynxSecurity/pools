@@ -1,7 +1,7 @@
 import * as ethers from "ethers";
 import { _TypedDataEncoder } from "ethers/lib/utils";
 
-type MinerData = {
+type AgentData = {
   assets: ethers.BigNumberish;
   expectedDailyRewards: ethers.BigNumberish;
   exposureAtDefault: ethers.BigNumberish;
@@ -21,7 +21,7 @@ type VerifiableCredential = {
   subject: string;
   epochIssued: ethers.BigNumberish;
   epochValidUntil: ethers.BigNumberish;
-  miner: MinerData;
+  agent: AgentData;
 };
 
 function encodeType(
@@ -52,10 +52,10 @@ async function main() {
     { name: "subject", type: "address" },
     { name: "epochIssued", type: "uint256" },
     { name: "epochValidUntil", type: "uint256" },
-    { name: "miner", type: "MinerData" },
+    { name: "miner", type: "AgentData" },
   ];
 
-  const minerDataFields: ethers.TypedDataField[] = [
+  const agentDataFields: ethers.TypedDataField[] = [
     { name: "assets", type: "uint256" },
     { name: "expectedDailyRewards", type: "uint256" },
     { name: "exposureAtDefault", type: "uint256" },
@@ -72,7 +72,7 @@ async function main() {
 
   const types: Record<string, ethers.TypedDataField[]> = {
     VerifiableCredential: vcDataFields,
-    MinerData: minerDataFields,
+    AgentData: agentDataFields,
   };
 
   const value: VerifiableCredential = {
@@ -80,7 +80,7 @@ async function main() {
     subject: wallet.address,
     epochIssued: "100",
     epochValidUntil: "100",
-    miner: {
+    agent: {
       assets: "100",
       expectedDailyRewards: "100",
       exposureAtDefault: "100",

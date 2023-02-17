@@ -39,7 +39,7 @@ contract VCVerifierTest is BaseTest {
   function testVerifyCredentialFromWrongIssuer() public {
     uint256 qaPower = 10e10;
 
-    MinerData memory miner = MinerData(
+    AgentData memory _agent = AgentData(
       1e10, 100, 0, 0.5e18, 10e18, 10e18, 10, qaPower, 5e18, 0, 0
     );
 
@@ -49,7 +49,7 @@ contract VCVerifierTest is BaseTest {
       block.number,
       block.number + 100,
       100,
-      miner
+      abi.encode(_agent)
     );
 
     bytes32 digest = vcv.digest(vc);
@@ -78,7 +78,7 @@ contract VCVerifierTest is BaseTest {
   function issueSC(address _agent) internal returns (SignedCredential memory) {
     uint256 qaPower = 10e18;
 
-    MinerData memory miner = MinerData(
+    AgentData memory agent = AgentData(
       1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0
     );
 
@@ -88,7 +88,7 @@ contract VCVerifierTest is BaseTest {
       block.number,
       block.number + 100,
       1000,
-      miner
+      abi.encode(agent)
     );
 
     bytes32 digest = vcv.digest(vc);

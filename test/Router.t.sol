@@ -29,6 +29,7 @@ struct ContractRoutes {
   address powerToken;
   address vcIssuer;
   address coreAuthority;
+  address credParser;
 }
 
 contract RouterTest is Test {
@@ -64,7 +65,8 @@ contract RouterTest is Test {
       makeAddr("AGENT_POLICE"),
       makeAddr("POOL_FACTORY"),
       makeAddr("POWER_TOKEN"),
-      makeAddr("VC_ISSUER")
+      makeAddr("VC_ISSUER"),
+      makeAddr("CRED_PARSER")
     );
 
     // for ease of testing routes
@@ -85,7 +87,8 @@ contract RouterTest is Test {
       contractRouteAddrs[4],
       contractRouteAddrs[5],
       contractRouteAddrs[6],
-      address(authority)
+      address(authority),
+      contractRouteAddrs[8]
     );
 
     AuthController.transferCoreAuthorityOwnership(address(router), routerAdmin);

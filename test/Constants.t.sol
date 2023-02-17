@@ -4,7 +4,7 @@ pragma solidity ^0.8.15;
 import "forge-std/Test.sol";
 import "src/Constants/FuncSigs.sol";
 import "src/Types/Structs/Filecoin.sol";
-import {VerifiableCredential, MinerData, SignedCredential} from "src/VCVerifier/VCVerifier.sol";
+import {VerifiableCredential, AgentData, SignedCredential} from "src/VCVerifier/VCVerifier.sol";
 import {AgentSigTester} from "./helpers/AgentTester.sol";
 import {PoolFactorySigTester} from "./helpers/PoolFactoryTester.sol";
 
@@ -15,7 +15,7 @@ contract AgentConstantsTest is Test {
   function setUp() public {
     address issuer = makeAddr("ISSUER");
 
-    MinerData memory miner = MinerData(1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
+    AgentData memory agent = AgentData(1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
 
    VerifiableCredential memory vc = VerifiableCredential(
       issuer,
@@ -23,7 +23,7 @@ contract AgentConstantsTest is Test {
       block.number,
       block.number + 100,
       1000,
-      miner
+      abi.encode(agent)
     );
 
     sc = SignedCredential(vc, 0, 0x0, 0x0);
@@ -230,7 +230,7 @@ contract ConstantsTest is Test {
   function setUp() public {
     address issuer = makeAddr("ISSUER");
 
-    MinerData memory miner = MinerData(1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 10, 10e18, 5e18, 0, 0);
+    AgentData memory agent = AgentData(1e10, 20e18, 0, 0.5e18, 10e18, 10e18, 10, 10e18, 5e18, 0, 0);
 
     vc = VerifiableCredential(
       issuer,
@@ -238,7 +238,7 @@ contract ConstantsTest is Test {
       block.number,
       block.number + 100,
       1000,
-      miner
+      abi.encode(agent)
     );
 
     tester = new MsgSigTester();

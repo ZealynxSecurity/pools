@@ -19,4 +19,5 @@ bytes4 constant ROUTE_VC_ISSUER = bytes4(keccak256(bytes("ROUTER_VC_ISSUER")));
 bytes4 constant ROUTE_TREASURY = bytes4(keccak256(bytes("ROUTER_TREASURY")));
 bytes4 constant ROUTE_TREASURY_ADMIN = bytes4(keccak256(bytes("ROUTER_TREASURY_ADMIN")));
 bytes4 constant ROUTE_AGENT_POLICE = bytes4(keccak256(bytes("ROUTER_AGENT_POLICE")));
+bytes4 constant ROUTE_CRED_PARSER = bytes4(keccak256(bytes("ROUTER_CRED_PARSER")));
 bytes4 constant ROUTE_AGENT_POLICE_ADMIN = bytes4(keccak256(bytes("ROUTER_AGENT_POLICE_ADMIN")));

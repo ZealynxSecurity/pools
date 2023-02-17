@@ -30,10 +30,11 @@ import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
-import {MinerData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
+import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {MockPoolImplementation} from "test/helpers/MockPoolImplementation.sol";
+import {CredParser} from "src/Credentials/CredParser.sol";
 import "src/Constants/Routes.sol";
 
 contract BaseTest is Test {
@@ -80,7 +81,8 @@ contract BaseTest is Test {
       // 1e17 = 10% treasury fee on yield
       address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0)),
       address(new PowerToken()),
-      vcIssuer
+      vcIssuer,
+      address(new CredParser())
     );
     // any contract that extends RouterAware gets its router set here
     Deployer.setRouterOnContracts(address(router));
@@ -138,7 +140,7 @@ contract BaseTest is Test {
       uint256 assets,
       uint256 liabilities
     ) internal view returns (VerifiableCredential memory vc) {
-      MinerData memory _miner = MinerData(
+      AgentData memory _miner = AgentData(
           assets, expectedDailyRewards, 0, 0.5e18, liabilities, 10e18, 10, qaPower, 5e18, 0, 0
       );
 
@@ -148,7 +150,7 @@ contract BaseTest is Test {
           block.number,
           block.number + 100,
           1000,
-          _miner
+          abi.encode(_miner)
       );
   }
 
@@ -162,7 +164,7 @@ contract BaseTest is Test {
     uint256 assets = 10e18;
     uint256 liabilities = 2e18;
 
-    MinerData memory miner = MinerData(
+    AgentData memory miner = AgentData(
       assets, expectedDailyRewards, 0, 0.5e18, liabilities, 10e18, 10, qaPower, 5e18, 0, 0
     );
 
@@ -172,7 +174,7 @@ contract BaseTest is Test {
       block.number,
       block.number + 100,
       expectedDailyRewards * 5,
-      miner
+      abi.encode(miner)
     );
 
     return issueSC(vc);

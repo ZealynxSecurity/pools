@@ -7,12 +7,14 @@ import {PowerToken} from "src/PowerToken/PowerToken.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
-import {VerifiableCredential, MinerData} from "src/Types/Structs/Credentials.sol";
+import {VerifiableCredential, AgentData} from "src/Types/Structs/Credentials.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Decode} from "src/Errors.sol";
+import {Credentials} from "src/Types/Structs/Credentials.sol";
 
 contract PowerTokenTest is BaseTest {
+  using Credentials for VerifiableCredential;
   IPool pool;
   SignedCredential public sc;
   VerifiableCredential public vc;
@@ -41,26 +43,27 @@ contract PowerTokenTest is BaseTest {
   }
 
   function testMintBurnPower() public {
-    vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, sc);
+    vm.startPrank(agentOwner);
+    agent.mintPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
+    vm.stopPrank();
     uint256 bal = powerToken.balanceOf(address(agent));
-    assertEq(bal, vc.miner.qaPower, "agent should have 10e18 power tokens");
+    assertEq(bal, vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), "agent should have 10e18 power tokens");
 
     // issue new vc at newer block
     vm.roll(block.number + 1);
     sc = issueGenericSC(address(agent));
-    vm.prank(agentOwner);
-    agent.burnPower(vc.miner.qaPower, sc);
-
+    vm.startPrank(agentOwner);
+    agent.burnPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
+    vm.stopPrank();
     bal = powerToken.balanceOf(address(agent));
     assertEq(bal, 0, "agent should have 0 power tokens");
   }
 
   function testTransferFromAgentPool() public {
-    uint256 stakeAmount = vc.miner.qaPower - 100;
-    vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, sc);
-
+    uint256 stakeAmount = vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - 100;
+    vm.startPrank(agentOwner);
+    agent.mintPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
+    vm.stopPrank();
     vm.prank(address(agent));
     powerToken.approve(address(pool), stakeAmount);
 
@@ -71,9 +74,11 @@ contract PowerTokenTest is BaseTest {
   }
 
   function testMintTooMuchPower() public {
-    vm.prank(agentOwner);
+    vm.startPrank(agentOwner);
+    uint256 qa = vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER));
     vm.expectRevert("Cannot mint more power than the miner has");
-    agent.mintPower(vc.miner.qaPower + 1, sc);
+    agent.mintPower(qa + 1, sc);
+    vm.stopPrank();
   }
 
   function testNonAgentMint() public {
@@ -88,20 +93,20 @@ contract PowerTokenTest is BaseTest {
   }
 
   function testTransferAgentPool() public {
-    vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, sc);
-
+    vm.startPrank(agentOwner);
+    agent.mintPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
+    vm.stopPrank();
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
 
-    assertEq(powerToken.balanceOf(address(agent)), vc.miner.qaPower - 100, "agent should have 10e18 - 100 power tokens");
+    assertEq(powerToken.balanceOf(address(agent)), vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - 100, "agent should have 10e18 - 100 power tokens");
     assertEq(powerToken.balanceOf(address(pool)), 100, "pool should have 100 power tokens");
   }
 
   function testTransferPoolNonAgent() public {
-    vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, sc);
-
+    vm.startPrank(agentOwner);
+    agent.mintPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
+    vm.stopPrank();
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
 
@@ -124,16 +129,16 @@ contract PowerTokenTest is BaseTest {
   }
 
   function testTransferPoolAgent() public {
-    vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, sc);
-
+    vm.startPrank(agentOwner);
+    agent.mintPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
+    vm.stopPrank();
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
 
     vm.prank(address(pool));
     powerToken.transfer(address(agent), 100);
 
-    assertEq(powerToken.balanceOf(address(agent)), vc.miner.qaPower, "agent has wrong balanceof power tokens");
+    assertEq(powerToken.balanceOf(address(agent)), vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), "agent has wrong balanceof power tokens");
   }
 
   function testAgentApprovePool() public {
@@ -146,7 +151,7 @@ contract PowerTokenTest is BaseTest {
   }
 
   function testTransferFromAgentNonPool() public {
-    vm.prank(address(agent));
+    vm.startPrank(address(agent));
     try powerToken.transferFrom(address(agent), makeAddr("TEST"), 0) {
         assertTrue(false, "transferFromAgentNonPool should revert.");
     } catch (bytes memory e) {
@@ -162,6 +167,7 @@ contract PowerTokenTest is BaseTest {
       assertEq(funcSig, powerToken.transferFrom.selector, "funcSig should be transferFrom");
       assertEq(reason, "PowerToken: Invalid to address");
     }
+    vm.stopPrank();
   }
 
   function testTransferFromPoolNonAgent() public {
@@ -184,9 +190,10 @@ contract PowerTokenTest is BaseTest {
   }
 
   function testSafeTransferFromAgentPool() public {
-    uint256 stakeAmount = vc.miner.qaPower - 100;
-    vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, sc);
+    uint256 stakeAmount = vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - 100;
+    vm.startPrank(agentOwner);
+    agent.mintPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
+    vm.stopPrank();
 
     vm.prank(address(agent));
     powerToken.approve(address(pool), stakeAmount);
@@ -198,20 +205,20 @@ contract PowerTokenTest is BaseTest {
   }
 
   function testSafeTransferAgentPool() public {
-    vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, sc);
-
+    vm.startPrank(agentOwner);
+    agent.mintPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
+    vm.stopPrank();
     vm.prank(address(agent));
     SafeTransferLib.safeTransfer(ERC20(powerToken), address(pool), 100);
 
-    assertEq(powerToken.balanceOf(address(agent)), vc.miner.qaPower - 100, "agent should have 10e18 - 100 power tokens");
+    assertEq(powerToken.balanceOf(address(agent)), vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - 100, "agent should have 10e18 - 100 power tokens");
     assertEq(powerToken.balanceOf(address(pool)), 100, "pool should have 100 power tokens");
   }
 
   // for some reason vm.expectRevert("TRANSFER_FAILED") and vm.expectRevert("PowerToken: Pool can only transfer power tokens to agents") don't work here
   function testFailSafeTransferPoolNonAgent() public {
     vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, sc);
+    agent.mintPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
 
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
@@ -222,16 +229,16 @@ contract PowerTokenTest is BaseTest {
   }
 
   function testSafeTransferPoolAgent() public {
-    vm.prank(agentOwner);
-    agent.mintPower(vc.miner.qaPower, sc);
-
+    vm.startPrank(agentOwner);
+    agent.mintPower(vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), sc);
+    vm.stopPrank();
     vm.prank(address(agent));
     powerToken.transfer(address(pool), 100);
 
     vm.prank(address(pool));
     SafeTransferLib.safeTransfer(ERC20(powerToken), address(agent), 100);
 
-    assertEq(powerToken.balanceOf(address(agent)), vc.miner.qaPower, "agent has wrong balanceof power tokens");
+    assertEq(powerToken.balanceOf(address(agent)), vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), "agent has wrong balanceof power tokens");
   }
 
   function testAgentSafeApprovePool() public {
@@ -299,8 +306,9 @@ contract PowerTokenTest is BaseTest {
     vm.stopPrank();
 
     vm.startPrank(address(agent));
+    uint256 qa = vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER));
     vm.expectRevert("PowerToken: Contract is paused");
-    agent.mintPower(vc.miner.qaPower, sc);
+    agent.mintPower(qa, sc);
 
     vm.stopPrank();
   }

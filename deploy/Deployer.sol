@@ -65,8 +65,8 @@ library Deployer {
   ) internal returns (
     bytes4[] memory routeIDs, address[] memory routeAddrs
   ) {
-    routeIDs = new bytes4[](8);
-    routeAddrs = new address[](8);
+    routeIDs = new bytes4[](9);
+    routeAddrs = new address[](9);
     // Add router admin route
     routeIDs[0] = ROUTE_SYSTEM_ADMIN;
     routeAddrs[0] = systemAdmin;
@@ -104,7 +104,8 @@ library Deployer {
     address agentPolice,
     address poolFactory,
     address powerToken,
-    address vcIssuer
+    address vcIssuer,
+    address credParser
   ) internal returns (
     bytes4[] memory routeIDs, address[] memory routeAddrs
   ) {
@@ -134,6 +135,9 @@ library Deployer {
     // Add agent police route
     routeIDs[7] = ROUTE_AGENT_POLICE;
     routeAddrs[7] = agentPolice;
+    // Add cred parser
+    routeIDs[8] = ROUTE_CRED_PARSER;
+    routeAddrs[8] = credParser;
 
     IRouter(router).pushRoutes(routeIDs, routeAddrs);
   }

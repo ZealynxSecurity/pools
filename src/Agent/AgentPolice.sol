@@ -16,7 +16,7 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
-import {SignedCredential} from "src/Types/Structs/Credentials.sol";
+import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Roles} from "src/Constants/Roles.sol";
@@ -27,6 +27,7 @@ import {
   NotInDefault,
   Unauthorized
 } from "src/Errors.sol";
+import {ROUTE_CRED_PARSER } from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
 string constant POWER = "POWER";
@@ -35,6 +36,7 @@ string constant LEVERAGE = "LEVERAGE";
 contract AgentPolice is IAgentPolice, VCVerifier {
   using AccountHelpers for Account;
   using FixedPointMathLib for uint256;
+  using Credentials for VerifiableCredential;
 
   /// @notice `windowLength` is the number of epochs between window.start and window.deadline
   uint256 public windowLength;
@@ -199,9 +201,9 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   function checkDefault(address agent, SignedCredential memory signedCredential) public {
     bool overPowered = checkPower(agent, signedCredential);
     bool overLeveraged = checkLeverage(agent, signedCredential);
-
+    address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
     if (overPowered && overLeveraged) {
-      uint256 liquidationValue = signedCredential.vc.miner.assets - signedCredential.vc.miner.liabilities;
+      uint256 liquidationValue = signedCredential.vc.getAssets(credParser) - signedCredential.vc.getLiabilities(credParser);
       // write down each pool by the power token stake weight of the agent liquidation value
       _proRataPoolRebalance(agent, liquidationValue);
     }
@@ -274,7 +276,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
 
     // Compute the amount to burn
     IERC20 powerToken = GetRoute.powerToken20(router);
-    uint256 underPowerAmt = _powerTokensMinted(agentID) - signedCredential.vc.miner.qaPower;
+    uint256 underPowerAmt = _powerTokensMinted(agentID) - signedCredential.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER));
     uint256 powerTokensLiquid = powerToken.balanceOf(agent);
     uint256 burnAmount = powerTokensLiquid >= underPowerAmt
       ? underPowerAmt
@@ -424,7 +426,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     SignedCredential memory sc
   ) internal returns (bool) {
     uint256 agentID = _addressToID(agent);
-    bool overPowered = sc.vc.miner.qaPower < _powerTokensMinted(agentID);
+    bool overPowered = sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) < _powerTokensMinted(agentID);
 
     _agentState[createKey(POWER, agentID)] = overPowered;
 
@@ -473,7 +475,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   ) internal returns (bool) {
     // expected per epoch rewards = expected daily rewards / epochs in a day
     // expected earnings = expected per epoch rewards * epochs until window close
-    uint256 perEpochExpRewards = signedCredential.vc.miner.expectedDailyRewards / EPOCHS_IN_DAY;
+    uint256 perEpochExpRewards = signedCredential.vc.getExpectedDailyRewards(IRouter(router).getRoute(ROUTE_CRED_PARSER)) / EPOCHS_IN_DAY;
     uint256 expectedEarnings = perEpochExpRewards * (nextPmtWindowDeadline() - block.number);
 
     // if the agent owes more than their total expected rewards in the window period, they're overleveraged

@@ -22,7 +22,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IStats} from "src/Types/Interfaces/IStats.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IMockMiner} from "src/Types/Interfaces/IMockMiner.sol"; // TODO: remove this for Filecoin.sol
-import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {SignedCredential, VerifiableCredential, Credentials} from "src/Types/Structs/Credentials.sol";
 import {
   ChangeWorkerAddressParams,
   ChangeMultiaddrsParams,
@@ -35,7 +35,8 @@ import {
   ROUTE_POOL_FACTORY,
   ROUTE_MINER_REGISTRY,
   ROUTE_WFIL_TOKEN,
-  ROUTE_AGENT_POLICE
+  ROUTE_AGENT_POLICE,
+  ROUTE_CRED_PARSER
 } from "src/Constants/Routes.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {
@@ -48,6 +49,7 @@ import {
 } from "src/Errors.sol";
 
 contract Agent is IAgent, RouterAware {
+  using Credentials for VerifiableCredential;
   uint256 public id;
 
   /*//////////////////////////////////////
@@ -144,7 +146,8 @@ contract Agent is IAgent, RouterAware {
    * @return maxWithdrawAmount Returns the maximum amount that can be withdrawn
    */
   function maxWithdraw(SignedCredential memory signedCredential) external view returns (uint256) {
-    return _maxWithdraw(signedCredential.vc);
+    address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
+    return _maxWithdraw(signedCredential.vc, credParser);
   }
 
   /**
@@ -334,7 +337,7 @@ contract Agent is IAgent, RouterAware {
     IPowerToken powerToken = GetRoute.powerToken(router);
     // check
     require(
-      signedCredential.vc.miner.qaPower >= powerToken.powerTokensMinted(id) + amount,
+      signedCredential.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) >= powerToken.powerTokensMinted(id) + amount,
       "Cannot mint more power than the miner has"
     );
     // interact
@@ -389,7 +392,8 @@ contract Agent is IAgent, RouterAware {
     uint256 amount,
     SignedCredential memory signedCredential
   ) external requiresAuth isValidCredential(signedCredential) {
-    uint256 maxWithdrawAmt = _maxWithdraw(signedCredential.vc);
+    address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
+    uint256 maxWithdrawAmt = _maxWithdraw(signedCredential.vc, credParser);
 
     if (maxWithdrawAmt < amount) {
       revert InsufficientCollateral(
@@ -627,19 +631,19 @@ contract Agent is IAgent, RouterAware {
     VerifiableCredential memory agentCred,
     VerifiableCredential memory minerCred
   ) internal view returns (bool) {
+    address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
     // if nothing is borrowed, can remove
     if (totalPowerTokensStaked() == 0) {
       return true;
     }
 
-    uint256 maxWithdrawAmt = _maxWithdraw(agentCred);
+    uint256 maxWithdrawAmt = _maxWithdraw(agentCred, credParser);
     uint256 minerLiquidationValue = _liquidationValue(
-      minerCred.miner.assets,
-      minerCred.miner.liabilities,
+      minerCred.getAssets(credParser),
+      minerCred.getLiabilities(credParser),
       0
     );
-
-    _canRemovePower(agentCred.miner.qaPower, minerCred.miner.qaPower);
+    _canRemovePower(agentCred.getQAPower(credParser), minerCred.getQAPower(credParser));
 
     if (maxWithdrawAmt <= minerLiquidationValue) {
       revert InsufficientCollateral(
@@ -776,7 +780,7 @@ contract Agent is IAgent, RouterAware {
 
   // TODO: should we add any EDR for some number of days to this?
   // thinking no... because assets can include this amount server side to give us more flexibility and cheaper gas
-  function _maxWithdraw(VerifiableCredential memory vc) internal view returns (uint256) {
+  function _maxWithdraw(VerifiableCredential memory vc, address credParser) internal view returns (uint256) {
     uint256 liquid = liquidAssets();
 
     // if nothing is borrowed, you can withdraw everything
@@ -784,7 +788,7 @@ contract Agent is IAgent, RouterAware {
       return liquid;
     }
 
-    uint256 liquidationValue = _liquidationValue(vc.miner.assets, vc.miner.liabilities, liquid);
+    uint256 liquidationValue = _liquidationValue(vc.getAssets(credParser), vc.getLiabilities(credParser), liquid);
     uint256 minCollateral = _minCollateral(vc);
 
     if (liquidationValue > minCollateral) {

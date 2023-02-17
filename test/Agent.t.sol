@@ -23,7 +23,7 @@ import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Window} from "src/Types/Structs/Window.sol";
-
+import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {ROUTE_AGENT_FACTORY_ADMIN, ROUTE_MINER_REGISTRY} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 import {Roles} from "src/Constants/Roles.sol";
@@ -34,6 +34,7 @@ import "./BaseTest.sol";
 
 contract AgentBasicTest is BaseTest {
     using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner1 = makeAddr("MINER_OWNER_1");
@@ -350,6 +351,7 @@ contract AgentBasicTest is BaseTest {
 
 contract AgentTest is BaseTest {
     using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner = makeAddr("MINER_OWNER");
@@ -390,8 +392,8 @@ contract AgentTest is BaseTest {
         // mint some power for the agent
         signedCred = issueGenericSC(address(agent));
         vm.startPrank(address(agent));
-        agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
-        IERC20(powerToken).approve(address(pool), signedCred.vc.miner.qaPower);
+        agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
+        IERC20(powerToken).approve(address(pool), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
         vm.stopPrank();
     }
 
@@ -399,8 +401,9 @@ contract AgentTest is BaseTest {
         uint256 borrowAmount = 0.5e18;
 
         uint256 borrowBlock = block.number;
-        vm.prank(address(agent));
-        agent.borrow(borrowAmount, 0, signedCred, signedCred.vc.miner.qaPower);
+        vm.startPrank(address(agent));
+        agent.borrow(borrowAmount, 0, signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
+        vm.stopPrank();
         uint256 currBalance = wFIL.balanceOf(address(agent));
         assertEq(currBalance, borrowAmount);
 
@@ -410,13 +413,13 @@ contract AgentTest is BaseTest {
 
         uint256 rate = pool.implementation().getRate(
             borrowAmount,
-            signedCred.vc.miner.qaPower,
+            signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)),
             GetRoute.agentPolice(router).windowLength(),
             account,
             signedCred.vc
         );
         assertEq(account.perEpochRate, rate);
-        assertEq(account.powerTokensStaked, signedCred.vc.miner.qaPower);
+        assertEq(account.powerTokensStaked, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
         assertEq(account.totalBorrowed, borrowAmount);
 
         // the agent staked all its power tokens in this example
@@ -427,7 +430,7 @@ contract AgentTest is BaseTest {
 
         assertEq(
             IERC20(powerToken).balanceOf(address(pool)),
-            signedCred.vc.miner.qaPower
+            signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER))
         );
     }
 
@@ -435,7 +438,7 @@ contract AgentTest is BaseTest {
         uint256 borrowAmount = 0.5e18;
 
         vm.startPrank(address(agent));
-        agent.borrow(borrowAmount, 0, signedCred, signedCred.vc.miner.qaPower);
+        agent.borrow(borrowAmount, 0, signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
         wFIL.approve(address(pool), borrowAmount);
         agent.exit(0, borrowAmount, signedCred);
         vm.stopPrank();
@@ -472,7 +475,7 @@ contract AgentTest is BaseTest {
         uint256 borrowAmount = 0.5e18;
 
         vm.startPrank(address(agent));
-        agent.borrow(borrowAmount, 0, signedCred, signedCred.vc.miner.qaPower);
+        agent.borrow(borrowAmount, 0, signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
         wFIL.approve(address(pool), borrowAmount);
         IERC20(powerToken).approve(address(pool2),  10000000000000000000);
         oldAccount = AccountHelpers.getAccount(router, address(agent), oldPoolID);
@@ -493,6 +496,7 @@ contract AgentTest is BaseTest {
 
 contract AgentPoliceTest is BaseTest {
     using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
 
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
@@ -535,8 +539,8 @@ contract AgentPoliceTest is BaseTest {
         // mint some power for the agent
         signedCred = issueGenericSC(address(agent));
         vm.startPrank(address(agent));
-        agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
-        IERC20(powerToken).approve(address(pool), signedCred.vc.miner.qaPower);
+        agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
+        IERC20(powerToken).approve(address(pool), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
         vm.stopPrank();
     }
 
@@ -567,7 +571,7 @@ contract AgentPoliceTest is BaseTest {
         assertTrue(police.isOverPowered(agent.id()));
         assertEq(
             IERC20(powerToken).balanceOf(address(agent)),
-            signedCred.vc.miner.qaPower - powerTokenStake
+            signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - powerTokenStake
         );
     }
 
@@ -613,7 +617,7 @@ contract AgentPoliceTest is BaseTest {
         police.checkPower(address(agent), sc);
 
         // no power was burned
-        assertEq(IERC20(address(powerToken)).totalSupply(), signedCred.vc.miner.qaPower);
+        assertEq(IERC20(address(powerToken)).totalSupply(), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
         assertEq(police.isOverPowered(address(agent)), false);    }
 
     function testRemoveMinerWhenOverPowered() public {
@@ -647,7 +651,7 @@ contract AgentPoliceTest is BaseTest {
     function testForceBurnPowerWithAdequateBal() public {
         uint256 newQAPower = 5e18;
 
-        MinerData memory minerData = MinerData(
+        AgentData memory AgentData = AgentData(
             1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, newQAPower, 5e18, 0, 0
         );
 
@@ -657,7 +661,7 @@ contract AgentPoliceTest is BaseTest {
             block.number,
             block.number + 100,
             1000,
-            minerData
+            abi.encode(AgentData)
         );
 
         SignedCredential memory sc = issueSC(_vc);
@@ -665,7 +669,7 @@ contract AgentPoliceTest is BaseTest {
         assertTrue(police.isOverPowered(address(agent)), "Agent should be overed powered");
         police.forceBurnPower(address(agent), sc);
 
-        assertEq(IPowerToken(powerToken).powerTokensMinted(agent.id()), sc.vc.miner.qaPower, "Agent should have 5e18 power tokens minted");
+        assertEq(IPowerToken(powerToken).powerTokensMinted(agent.id()), sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), "Agent should have 5e18 power tokens minted");
         assertEq(IERC20(address(powerToken)).totalSupply(), 5e18);
         assertEq(police.isOverPowered(address(agent)), false);
     }
@@ -824,14 +828,14 @@ contract AgentPoliceTest is BaseTest {
         assertEq(wFIL.balanceOf(address(agent)), borrowAmount);
         assertEq(IERC20(powerToken).balanceOf(address(pool)), powerTokenStake);
         uint256 agentPowTokenBal = IERC20(powerToken).balanceOf(address(agent));
-        assertEq(agentPowTokenBal, signedCred.vc.miner.qaPower - powerTokenStake);
+        assertEq(agentPowTokenBal, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - powerTokenStake);
 
         sc = issueSC(createCustomCredential(address(agent), newQAPower, 10e18, 5e18, 1e18));
 
         // no funds get burned here
         police.checkPower(address(agent), sc);
 
-        assertEq(IERC20(address(powerToken)).totalSupply(), signedCred.vc.miner.qaPower);
+        assertEq(IERC20(address(powerToken)).totalSupply(), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
         assertTrue(police.isOverPowered(address(agent)));
         assertTrue(police.isOverPowered(agent.id()));
     }
@@ -858,6 +862,7 @@ contract AgentPoliceTest is BaseTest {
 
 contract AgentDefaultTest is BaseTest {
     using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
 
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
@@ -913,12 +918,12 @@ contract AgentDefaultTest is BaseTest {
         // mint some power for the agent
         signedCred = issueGenericSC(address(agent));
         vm.startPrank(address(agent));
-        agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
-        IERC20(powerToken).approve(address(pool1), signedCred.vc.miner.qaPower);
-        IERC20(powerToken).approve(address(pool2), signedCred.vc.miner.qaPower);
+        agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
+        IERC20(powerToken).approve(address(pool1), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
+        IERC20(powerToken).approve(address(pool2), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
 
-        agent.borrow(stakeAmount / 2, pool1.id(), signedCred, signedCred.vc.miner.qaPower / 2);
-        agent.borrow(stakeAmount / 2, pool2.id(), signedCred, signedCred.vc.miner.qaPower / 2);
+        agent.borrow(stakeAmount / 2, pool1.id(), signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) / 2);
+        agent.borrow(stakeAmount / 2, pool2.id(), signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) / 2);
         vm.stopPrank();
     }
 
@@ -952,7 +957,8 @@ contract AgentDefaultTest is BaseTest {
 }
 
 contract AgentCollateralsTest is BaseTest {
-     using AccountHelpers for Account;
+    using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
 
     address investor1 = makeAddr("INVESTOR_1");
     address investor2 = makeAddr("INVESTOR_2");
@@ -1010,12 +1016,12 @@ contract AgentCollateralsTest is BaseTest {
         // mint some power for the agent
         signedCred = issueGenericSC(address(agent));
         vm.startPrank(address(agent));
-        agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
-        IERC20(powerToken).approve(address(pool1), signedCred.vc.miner.qaPower);
-        IERC20(powerToken).approve(address(pool2), signedCred.vc.miner.qaPower);
+        agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
+        IERC20(powerToken).approve(address(pool1), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
+        IERC20(powerToken).approve(address(pool2), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
 
-        agent.borrow(borrowAmount, pool1.id(), signedCred, signedCred.vc.miner.qaPower / 2);
-        agent.borrow(borrowAmount, pool2.id(), signedCred, signedCred.vc.miner.qaPower / 2);
+        agent.borrow(borrowAmount, pool1.id(), signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) / 2);
+        agent.borrow(borrowAmount, pool2.id(), signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) / 2);
         vm.stopPrank();
     }
 
@@ -1039,14 +1045,14 @@ contract AgentCollateralsTest is BaseTest {
 
         SignedCredential memory sc = issueSC(createCustomCredential(
             address(agent),
-            signedCred.vc.miner.qaPower,
-            signedCred.vc.miner.expectedDailyRewards,
-            signedCred.vc.miner.assets,
+            signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)),
+            signedCred.vc.getExpectedDailyRewards(IRouter(router).getRoute(ROUTE_CRED_PARSER)),
+            signedCred.vc.getAssets(IRouter(router).getRoute(ROUTE_CRED_PARSER)),
             8e18
         ));
 
         // expected withdraw amount is the agents liquidation value minus the min collateral of both pools
-        uint256 liquidationValue = agent.liquidAssets() + sc.vc.miner.assets - sc.vc.miner.liabilities;
+        uint256 liquidationValue = agent.liquidAssets() + sc.vc.getAssets(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - sc.vc.getLiabilities(IRouter(router).getRoute(ROUTE_CRED_PARSER));
         // the mock pool implementation returns 10% of totalBorrowed for minCollateral
         Account memory account1 = AccountHelpers.getAccount(router, address(agent), pool1.id());
         Account memory account2 = AccountHelpers.getAccount(router, address(agent), pool2.id());
@@ -1134,7 +1140,7 @@ contract AgentCollateralsTest is BaseTest {
     }
 
     function testRemoveMinerWithTooMuchPower(uint256 powerAmount) public {
-        vm.assume(powerAmount <= signedCred.vc.miner.qaPower);
+        vm.assume(powerAmount <= signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
         address newMiner = _newMiner(minerOwner);
         // add another miner to the agent
         _agentClaimOwnership(address(agent), newMiner, minerOwner);
@@ -1142,7 +1148,7 @@ contract AgentCollateralsTest is BaseTest {
         // in this example, remove a miner that contributes all the borrowing power
         SignedCredential memory minerCred = issueSC(createCustomCredential(
             newMiner,
-            signedCred.vc.miner.qaPower,
+            signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)),
             0,
             0,
             0
@@ -1178,7 +1184,7 @@ contract AgentCollateralsTest is BaseTest {
             newMiner,
             0,
             0,
-            signedCred.vc.miner.assets,
+            signedCred.vc.getAssets(IRouter(router).getRoute(ROUTE_CRED_PARSER)),
             0
         ));
 
@@ -1198,7 +1204,8 @@ contract AgentCollateralsTest is BaseTest {
 }
 
 contract AgentTooManyPoolsTest is BaseTest {
-     using AccountHelpers for Account;
+    using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
 
     address investor1 = makeAddr("INVESTOR_1");
     address minerOwner = makeAddr("MINER_OWNER");
@@ -1228,10 +1235,11 @@ contract AgentTooManyPoolsTest is BaseTest {
         (agent, miner) = configureAgent(minerOwner);
         // mint some power for the agent
         signedCred = issueGenericSC(address(agent));
-        vm.prank(address(agent));
-        agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+        vm.startPrank(address(agent));
+        agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
+        vm.stopPrank();
         maxPools = GetRoute.agentPolice(router).maxPoolsPerAgent();
-        powerTokenStakePerPool = signedCred.vc.miner.qaPower / (maxPools * 2);
+        powerTokenStakePerPool = signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) / (maxPools * 2);
 
         for (uint256 i = 0; i <= maxPools; i++) {
             string memory poolName = Strings.toString(i);
@@ -1245,7 +1253,7 @@ contract AgentTooManyPoolsTest is BaseTest {
             _deposit(_pool);
 
             vm.startPrank(address(agent));
-            IERC20(powerToken).approve(address(_pool), signedCred.vc.miner.qaPower);
+            IERC20(powerToken).approve(address(_pool), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
             agent.borrow(
                 borrowAmountPerPool,
                 _pool.id(),
