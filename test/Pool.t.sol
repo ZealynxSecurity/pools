@@ -189,6 +189,53 @@ contract PoolTemplateStakingTest is BaseTest {
         pool.deposit(1e18, address(this));
     }
 
+  function testMintForReceiver() public {
+    uint256 investor1ShareAmount = 1e18;
+
+    vm.startPrank(investor1);
+    wFIL.approve(address(pool), investor1ShareAmount);
+    assertEq(wFIL.allowance(investor1, address(pool)), investor1ShareAmount);
+
+    uint256 investor1PreDepositBal = wFIL.balanceOf(investor1);
+
+    uint256 investor1UnderlyingAmount = pool.mint(investor1ShareAmount, investor2);
+    vm.stopPrank();
+    // Expect exchange rate to be 1:1 on initial mint.
+    assertEq(investor1ShareAmount, investor1UnderlyingAmount);
+    assertEq(pool.previewWithdraw(investor1ShareAmount), investor1UnderlyingAmount);
+    assertEq(pool.previewDeposit(investor1UnderlyingAmount), investor1ShareAmount);
+    assertEq(pool.convertToAssets(pool20.balanceOf(investor2)), investor1UnderlyingAmount);
+    assertEq(pool.totalAssets(), investor1UnderlyingAmount);
+
+    assertEq(pool20.totalSupply(), investor1ShareAmount);
+    assertEq(pool20.balanceOf(investor2), investor1UnderlyingAmount);
+    assertEq(wFIL.balanceOf(investor1), investor1PreDepositBal - investor1UnderlyingAmount);
+  }
+
+  function testDepositForReceiver() public {
+    uint256 investor1UnderlyingAmount = 1e18;
+    uint256 investor1ShareAmount = pool.previewDeposit(investor1UnderlyingAmount);
+
+    vm.startPrank(investor1);
+    wFIL.approve(address(pool), investor1ShareAmount);
+    assertEq(wFIL.allowance(investor1, address(pool)), investor1ShareAmount);
+
+    uint256 investor1PreDepositBal = wFIL.balanceOf(investor1);
+
+    pool.deposit(investor1UnderlyingAmount, investor2);
+    vm.stopPrank();
+    // Expect exchange rate to be 1:1 on initial mint.
+    assertEq(investor1ShareAmount, investor1UnderlyingAmount);
+    assertEq(pool.previewWithdraw(investor1ShareAmount), investor1UnderlyingAmount);
+    assertEq(pool.previewDeposit(investor1UnderlyingAmount), investor1ShareAmount);
+    assertEq(pool.convertToAssets(pool20.balanceOf(investor2)), investor1UnderlyingAmount);
+    assertEq(pool.totalAssets(), investor1UnderlyingAmount);
+
+    assertEq(pool20.totalSupply(), investor1ShareAmount);
+    assertEq(pool20.balanceOf(investor2), investor1UnderlyingAmount);
+    assertEq(wFIL.balanceOf(investor1), investor1PreDepositBal - investor1UnderlyingAmount);
+  }
+
     function testFailWithdrawWithNotEnoughUnderlyingAmount() public {
         wFIL.deposit{value: 0.5e18}();
         wFIL.approve(address(pool), 0.5e18);

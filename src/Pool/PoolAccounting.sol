@@ -418,7 +418,7 @@ contract PoolAccounting is IPool, RouterAware {
         require(shares > 0, "Pool: cannot mint 0 shares");
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
-        SafeTransferLib.safeTransferFrom(ERC20(asset), receiver, address(this), assets);
+        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
         template.mint(shares, receiver);
         emit Deposit(msg.sender, receiver, assets, shares);
     }
@@ -715,7 +715,7 @@ contract PoolAccounting is IPool, RouterAware {
     function _deposit(uint256 assets, address receiver) internal returns (uint256 shares) {
         require(assets > 0, "Pool: cannot deposit 0 assets");
         shares = previewDeposit(assets);
-        SafeTransferLib.safeTransferFrom(ERC20(asset), receiver, address(this), assets);
+        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
         template.mint(shares, receiver);
         emit Deposit(msg.sender, receiver, assets, shares);
     }
