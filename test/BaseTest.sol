@@ -54,19 +54,20 @@ contract BaseTest is Test {
   IMultiRolesAuthority coreAuthority;
 
   constructor() {
+    vm.startPrank(systemAdmin);
     // deploys the coreAuthority and the router
-    (router, coreAuthority) = Deployer.init();
+    (router, coreAuthority) = Deployer.init(systemAdmin);
     // these two route setting calls are separate because they blow out the call stack if they're one func
     Deployer.setupAdminRoutes(
-      address(router),
-      makeAddr('ROUTER_ADMIN'),
-      makeAddr('AGENT_FACTORY_ADMIN'),
-      makeAddr('POWER_TOKEN_ADMIN'),
-      makeAddr('MINER_REGISTRY_ADMIN'),
-      makeAddr('POOL_FACTORY_ADMIN'),
-      msg.sender,
-      makeAddr('TREASURY_ADMIN'),
-      makeAddr('AGENT_POLICE_ADMIN')
+      router,
+      systemAdmin,
+      systemAdmin,
+      systemAdmin,
+      systemAdmin,
+      systemAdmin,
+      systemAdmin,
+      systemAdmin,
+      systemAdmin
     );
     vcIssuer = vm.addr(vcIssuerPk);
     Deployer.setupContractRoutes(
@@ -84,9 +85,10 @@ contract BaseTest is Test {
     // any contract that extends RouterAware gets its router set here
     Deployer.setRouterOnContracts(address(router));
     // initialize the system's authentication system
-    Deployer.initRoles(address(router), address(0));
+    Deployer.initRoles(address(router), systemAdmin);
     // roll forward at least 1 window length so our computations dont overflow/underflow
     vm.roll(block.number + WINDOW_LENGTH);
+    vm.stopPrank();
   }
 
   function configureAgent(address minerOwner) public returns (Agent, MockMiner) {

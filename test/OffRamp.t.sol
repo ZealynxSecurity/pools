@@ -30,6 +30,7 @@ contract OffRampTest is BaseTest {
   function setUp() public {
     // mock the pool factory for offramp permissioning
     PoolFactory factory = new PoolFactory(router);
+    vm.prank(systemAdmin);
     IRouter(router).pushRoute(ROUTE_POOL_FACTORY, address(factory));
 
     // Our "asset" in most cases is wrapped fil

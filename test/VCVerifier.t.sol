@@ -25,7 +25,9 @@ contract VCVerifierTest is BaseTest {
   function setUp() public {
     vcv = new VCVerifierMock(address(router), "glif.io", "1");
     sauth = AuthController.newMultiRolesAuthority(address(this), Authority(address(0)));
+    vm.startPrank(systemAdmin);
     AuthController.setSubAuthority(address(router), address(vcv), sauth);
+    vm.stopPrank();
   }
 
   function testVerifyCredential() public {

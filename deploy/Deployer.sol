@@ -12,12 +12,11 @@ import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.so
 import "src/Constants/Routes.sol";
 
 library Deployer {
-  function init() internal returns (
+  function init(address owner) internal returns (
     address router, IMultiRolesAuthority coreAuthority
   ) {
-    coreAuthority = IMultiRolesAuthority(address(
-      AuthController.newMultiRolesAuthority(address(this),
-      Authority(address(0)))
+    coreAuthority = IMultiRolesAuthority(
+      address(AuthController.newMultiRolesAuthority(owner, Authority(address(0)))
     ));
     router = address(new Router(address(coreAuthority)));
   }
@@ -29,13 +28,15 @@ library Deployer {
       IRouter(router).getRoute(ROUTE_AGENT_FACTORY_ADMIN),
       IRouter(router).getRoute(ROUTE_POOL_FACTORY),
       IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN),
-      IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN)
+      IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN),
+      systemAdmin
     );
 
     AuthController.initPowerTokenRoles(
       address(router),
       IRouter(router).getRoute(ROUTE_POWER_TOKEN),
-      IRouter(router).getRoute(ROUTE_POWER_TOKEN_ADMIN)
+      IRouter(router).getRoute(ROUTE_POWER_TOKEN_ADMIN),
+      systemAdmin
     );
 
     AuthController.initAgentPoliceRoles(
@@ -49,8 +50,6 @@ library Deployer {
       IRouter(router).getRoute(ROUTE_MINER_REGISTRY),
       IRouter(router).getRoute(ROUTE_MINER_REGISTRY_ADMIN)
     );
-
-    AuthController.transferCoreAuthorityOwnership(address(router), systemAdmin);
   }
 
   function setupAdminRoutes(

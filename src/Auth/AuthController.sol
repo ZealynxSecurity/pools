@@ -112,7 +112,8 @@ library AuthController {
     address agentFactoryAdmin,
     address poolFactory,
     address poolFactoryAdmin,
-    address poolDeployer
+    address poolDeployer,
+    address deployer
   ) internal {
     IMultiRolesAuthority authority = getCoreAuthority(router);
     // factories needs to be able to assign custom Authorities on a per agent/pool basis
@@ -126,10 +127,10 @@ library AuthController {
     );
 
     // create factory specific sub authorities
-    MultiRolesAuthority agentFactoryAuthority = newMultiRolesAuthority(address(this), Authority(address(0)));
+    MultiRolesAuthority agentFactoryAuthority = newMultiRolesAuthority(deployer, Authority(address(0)));
     setSubAuthority(router, agentFactory, agentFactoryAuthority);
 
-    MultiRolesAuthority poolFactoryAuthority = newMultiRolesAuthority(address(this), Authority(address(0)));
+    MultiRolesAuthority poolFactoryAuthority = newMultiRolesAuthority(deployer, Authority(address(0)));
     setSubAuthority(router, poolFactory, poolFactoryAuthority);
 
     // Setup custom roles and capabilities for the pool factory
@@ -164,10 +165,11 @@ library AuthController {
   function initPowerTokenRoles(
     address router,
     address powerToken,
-    address powerTokenAdmin
+    address powerTokenAdmin,
+    address deployer
   ) internal {
     // calling contract starts as the owner of the sub authority so we can add roles and capabilities
-    MultiRolesAuthority subAuthority = newMultiRolesAuthority(address(this), Authority(address(0)));
+    MultiRolesAuthority subAuthority = newMultiRolesAuthority(deployer, Authority(address(0)));
     setSubAuthority(router, powerToken, subAuthority);
 
     // change the owner of the sub authority to the power token admin
@@ -243,12 +245,10 @@ library AuthController {
   function initAgentPoliceRoles(
     address router,
     address agentPolice,
-    address admin
+    address systemAdmin
   ) internal {
-    MultiRolesAuthority subAuthority = newMultiRolesAuthority(address(this), Authority(address(0)));
+    MultiRolesAuthority subAuthority = newMultiRolesAuthority(systemAdmin, Authority(address(0)));
     setSubAuthority(router, agentPolice, subAuthority);
-
-    subAuthority.transferOwnership(admin);
   }
 
   function initAgentRoles(
@@ -311,10 +311,8 @@ library AuthController {
     address minerRegistry,
     address minerRegistryAdmin
   ) internal {
-    MultiRolesAuthority subAuthority = newMultiRolesAuthority(address(this), Authority(address(0)));
+    MultiRolesAuthority subAuthority = newMultiRolesAuthority(minerRegistryAdmin, Authority(address(0)));
     setSubAuthority(router, minerRegistry, subAuthority);
-
-    subAuthority.transferOwnership(minerRegistryAdmin);
   }
 
   function transferCoreAuthorityOwnership(address router, address systemAdmin) internal {
