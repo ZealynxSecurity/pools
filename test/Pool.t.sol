@@ -386,6 +386,36 @@ contract PoolBorrowingTest is BaseTest {
 
   // tests a deficit > borrow amt
   function testBorrowDeficitNoProceeds() public {}
+
+
+  function testTotalBorrowable() public {
+
+    vm.startPrank(investor1);
+
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
+    pool.deposit(investor1UnderlyingAmount, investor1);
+    vm.stopPrank();
+    uint256 prevMinerBal = wFIL.balanceOf(address(agent));
+
+    uint256 powerAmtStake = 1e18;
+    vm.startPrank(address(agent));
+    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    // approve the pool to pull the agent's power tokens on call to deposit
+    // note that borrow
+    powerToken.approve(address(pool), powerAmtStake);
+
+    uint256 startEpoch = block.number;
+    pool.borrow(borrowAmount, signedCred, powerAmtStake);
+    uint256 postMinerBal = wFIL.balanceOf(address(agent));
+
+    vm.stopPrank();
+
+
+    uint256 totalBorrowable = pool.totalBorrowableAssets();
+    uint256 totalBorrowed = pool.totalBorrowed();
+    assertEq(totalBorrowed, borrowAmount);
+    assertEq(totalBorrowable, investor1UnderlyingAmount - borrowAmount);
+  }
 }
 
 contract PoolExitingTest is BaseTest {

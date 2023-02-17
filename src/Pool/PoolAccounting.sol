@@ -185,11 +185,11 @@ contract PoolAccounting is IPool, RouterAware {
      * @return totalBorrowed The total borrowed from the agent
      */
     function totalBorrowableAssets() public view returns (uint256) {
-        uint256 _totalAssets = totalAssets();
+        uint256 _assets = asset.balanceOf(address(this)) - feesCollected;
         uint256 _absMinLiquidity = getAbsMinLiquidity();
 
-        if (_totalAssets < _absMinLiquidity) return 0;
-        return totalAssets() - getAbsMinLiquidity();
+        if (_assets < _absMinLiquidity) return 0;
+        return _assets - _absMinLiquidity;
     }
 
     /**

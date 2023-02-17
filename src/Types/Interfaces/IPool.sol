@@ -64,6 +64,8 @@ interface IPool {
 
     function totalBorrowed() external view returns (uint256);
 
+    function totalBorrowableAssets() external view returns (uint256);
+
     function getAgentBorrowed(uint256 agentID) external view returns (uint256);
 
     function getLiquidAssets() external view returns (uint256);
