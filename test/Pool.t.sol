@@ -399,7 +399,7 @@ contract PoolBorrowingTest is BaseTest {
 
     uint256 powerAmtStake = 1e18;
     vm.startPrank(address(agent));
-    agent.mintPower(signedCred.vc.miner.qaPower, signedCred);
+    agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
     // approve the pool to pull the agent's power tokens on call to deposit
     // note that borrow
     powerToken.approve(address(pool), powerAmtStake);
