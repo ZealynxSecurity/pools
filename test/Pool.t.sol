@@ -84,6 +84,20 @@ contract PoolTemplateStakingTest is BaseTest {
     assertEq(poolToken.decimals(), 18);
   }
 
+  function testFailUnauthorizedPoolTokenMint() public {
+    address tester = makeAddr("TESTER");
+    // first check to make sure a template can mint
+    vm.startPrank(address(pool.template()));
+    pool.share().mint(tester, 1e18);
+    vm.stopPrank();
+    assertEq(pool.share().balanceOf(tester), 1e18);
+
+    tester = makeAddr("TESTER2");
+    vm.startPrank(tester);
+    pool.share().mint(tester, 1e18);
+    vm.stopPrank();
+  }
+
   function testSingleDepositWithdraw() public {
     uint256 investor1UnderlyingAmount = 1e18;
 

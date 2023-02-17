@@ -16,8 +16,8 @@ contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
                                 MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
-    modifier requiresAuth() {
-        AuthController.onlyPoolAccounting(router, address(GetRoute.pool(router, poolID)));
+    modifier onlyPoolTemplate() {
+        AuthController.onlyPoolTemplate(router, msg.sender);
         _;
     }
 
@@ -38,7 +38,7 @@ contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
     function mint(
         address account,
         uint256 _amount
-    ) public requiresAuth returns (bool) {
+    ) public onlyPoolTemplate returns (bool) {
       _mint(account, _amount);
       return true;
     }
