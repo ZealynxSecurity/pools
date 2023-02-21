@@ -23,7 +23,7 @@ contract AgentFactory is IAgentFactory, RouterAware {
     Agent agent = AgentDeployer.deploy(router, agentCount);
     agents[address(agent)] = agentCount;
 
-    if (operator != address(0)) {
+    if (operator == address(0)) {
       operator = msg.sender;
     }
 

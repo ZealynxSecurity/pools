@@ -65,8 +65,11 @@ contract AgentBasicTest is BaseTest {
         assertTrue(agent.hasMiner(address(miner)), "The miner should be registered as a miner on the agent");
         assertTrue(registry.minerRegistered(agent.id(), address(miner)), "After adding the miner the registry should have the miner's address as a registered miner");
 
-        Authority customAuthority = coreAuthority.getTargetCustomAuthority(address(agent));
-
+        Authority customAuthorityAuth = coreAuthority.getTargetCustomAuthority(address(agent));
+        // hax hax hax - dirty but works
+        MultiRolesAuthority customAuthority = MultiRolesAuthority(address(customAuthorityAuth));
+        assertTrue(customAuthority.doesUserHaveRole(address(investor1), uint8(Roles.ROLE_AGENT_OPERATOR)), "The message sender should have the operator role");
+        assertTrue(customAuthority.doesUserHaveRole(address(investor1), uint8(Roles.ROLE_AGENT_OWNER)), "The message sender should have the owner role");
         assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_ADD_MINERS_SELECTOR));
         assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_REMOVE_MINER_SELECTOR));
         assertTrue(customAuthority.canCall(address(investor1), address(agent), AGENT_WITHDRAW_SELECTOR));
