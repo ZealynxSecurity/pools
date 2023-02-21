@@ -10,7 +10,7 @@ import {AccountHelpers} from "src/Pool/Account.sol";
 
 contract Router is IRouter {
   mapping(bytes4 => address) public route;
-  mapping(bytes4 => Account) private _accounts;
+  mapping(bytes32 => Account) private _accounts;
 
   constructor(
     address coreAuthority
@@ -84,7 +84,7 @@ contract Router is IRouter {
   function createAccountKey(
     uint256 agentID,
     uint256 poolID
-  ) public pure returns (bytes4) {
-    return bytes4(keccak256(abi.encodePacked(agentID, poolID)));
+  ) public pure returns (bytes32) {
+    return bytes32(keccak256(abi.encodePacked(agentID, poolID)));
   }
 }
