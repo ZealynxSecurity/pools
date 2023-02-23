@@ -87,7 +87,7 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
     ) public onlyAccounting accountNotInPenalty(vc.subject, account) returns (uint256) {
         IPool pool = IPool(msg.sender);
         // check
-        _checkLiquidity(ask, pool.totalAssets());
+        _checkLiquidity(ask, pool.totalBorrowableAssets());
 
         if (ask > vc.cap) {
             revert Unauthorized(
@@ -128,6 +128,7 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         Account memory account
     ) external onlyAccounting accountExists(vc.subject, account) {
         IPool pool = IPool(msg.sender);
+        _checkLiquidity(borrowAmount, pool.totalBorrowableAssets());
 
         Window memory window = GetRoute.agentPolice(router).windowInfo();
 
@@ -352,4 +353,5 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
     function _id(address pool) internal view returns (uint256) {
         return IPool(pool).id();
     }
+
 }

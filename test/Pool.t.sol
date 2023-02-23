@@ -15,10 +15,10 @@ import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {Decode} from "src/Errors.sol";
-import {PoolAccounting} from "src/Pool/PoolAccounting.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {ROUTE_POOL_FACTORY_ADMIN} from "src/Constants/Routes.sol";
+import {InsufficientLiquidity} from "src/Errors.sol";
 import "./BaseTest.sol";
 
 // a value we use to test approximation of the cursor according to a window start/close
@@ -393,6 +393,28 @@ contract PoolBorrowingTest is BaseTest {
 
   function testMultiBorrowNoDeficit() public {
 
+  }
+
+  function testBorrowInsufficientLiquidity() public {
+    vm.startPrank(investor1);
+
+    wFIL.approve(address(pool), investor1UnderlyingAmount);
+    pool.deposit(investor1UnderlyingAmount, investor1);
+    vm.stopPrank();
+    uint256 prevMinerBal = wFIL.balanceOf(address(agent));
+
+    uint256 powerAmtStake = 2e18;
+    vm.startPrank(address(agent));
+    agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
+    // approve the pool to pull the agent's power tokens on call to deposit
+    // note that borrow
+    powerToken.approve(address(pool), powerAmtStake);
+
+    uint256 startEpoch = block.number;
+    pool.borrow(borrowAmount, signedCred, powerAmtStake/2);
+    vm.expectRevert(abi.encodeWithSelector(InsufficientLiquidity.selector, address(pool.template()), address(pool), investor1UnderlyingAmount, investor1UnderlyingAmount-borrowAmount, bytes4(0x5e10ffa7), "PoolTemplate: Insufficient liquidity"));
+    pool.borrow(investor1UnderlyingAmount, signedCred, powerAmtStake/2);
+    vm.stopPrank();
   }
 
   // tests a deficit < borrow amt
