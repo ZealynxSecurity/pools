@@ -610,6 +610,8 @@ contract PoolAccounting is IPool, RouterAware {
         require(isShuttingDown, "POOL: Must be shutting down");
         require(newPool.id() == id, "POOL: New pool must have same ID");
         harvestFees(feesCollected);
+        IPowerToken powerToken = GetRoute.powerToken(router);
+        powerToken.transfer(address(newPool), powerToken.balanceOf(address(this)));
         asset.transfer(address(newPool), asset.balanceOf(address(this)));
         share.transfer(address(newPool), share.balanceOf(address(this)));
         iou.transfer(address(newPool), iou.balanceOf(address(this)));

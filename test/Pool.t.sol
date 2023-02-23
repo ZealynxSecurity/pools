@@ -1412,6 +1412,7 @@ contract PoolUpgradeTest is BaseTest {
     uint256 investorPoolShares = pool.share().balanceOf(investor1);
     uint256 totalBorrowed = pool.totalBorrowed();
     uint256 agentBorrowed = pool.getAgentBorrowed(agent.id());
+    uint256 powerTokenBalance = powerToken.balanceOf(address(pool));
 
     // first shut down the pool
     vm.startPrank(poolOperator);
@@ -1427,6 +1428,7 @@ contract PoolUpgradeTest is BaseTest {
     assertEq(investorPoolSharesNew, investorPoolShares);
     assertEq(totalBorrowedNew, totalBorrowed);
     assertEq(agentBorrowedNew, agentBorrowed);
+    assertEq(powerToken.balanceOf(address(pool)), powerTokenBalance);
 
     // now attempt to deposit and borrow again
     vm.startPrank(investor1);
@@ -1442,7 +1444,7 @@ contract PoolUpgradeTest is BaseTest {
     investorPoolSharesNew = pool.share().balanceOf(investor1);
     totalBorrowedNew = pool.totalBorrowed();
     agentBorrowedNew = pool.getAgentBorrowed(agent.id());
-
+    
     assertGt(investorPoolSharesNew, investorPoolShares);
     assertGt(totalBorrowedNew, totalBorrowed);
     assertGt(agentBorrowedNew, agentBorrowed);

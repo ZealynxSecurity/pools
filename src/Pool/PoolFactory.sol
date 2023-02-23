@@ -152,12 +152,13 @@ contract PoolFactory is IPoolFactory, RouterAware {
       address(oldPool.iou()),
       oldPool.minimumLiquidity()
     );
+    // Update the pool to exist before we decomission the old pool so transfer checks will succeed
+    allPools[poolId] = address(newPool);
+    exists[createKey(ACCOUNTING, address(newPool))] = true;
     uint256 borrowedAmount = oldPool.decommissionPool(newPool);
     // change update the pointer in factory storage
-    allPools[poolId] = address(newPool);
     // reset pool mappings
     exists[createKey(ACCOUNTING, address(oldPool))] = false;
-    exists[createKey(ACCOUNTING, address(newPool))] = true;
     // update the accounting in the new pool
     newPool.jumpStartTotalBorrowed(borrowedAmount);
     // update the roles of the new pool
