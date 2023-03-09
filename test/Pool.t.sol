@@ -1398,6 +1398,23 @@ contract PoolUpgradeTest is BaseTest {
     assertEq(address(pool.template()), newTemplate, "Template should be set");
   }
 
+  function testSetImplementation() public {
+    address newImplementation = makeAddr("NEW_IMPLEMENTATION");
+    // expect this call to revert because the template is not approved
+    vm.expectRevert("Pool: Invalid implementation");
+    vm.prank(poolOperator);
+    pool.setImplementation(IPoolImplementation(newImplementation));
+
+    // approve the template
+    vm.prank(IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN));
+    poolFactory.approveImplementation(newImplementation);
+
+    // now this should work
+    vm.prank(poolOperator);
+    pool.setImplementation(IPoolImplementation(newImplementation));
+    assertEq(address(pool.implementation()), newImplementation, "Template should be set");
+  }
+
   function testSetMinimumLiquidity() public {
     uint256 newMinLiq = 1.3e18;
     vm.prank(poolOperator);

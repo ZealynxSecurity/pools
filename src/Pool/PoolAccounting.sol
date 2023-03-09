@@ -639,6 +639,14 @@ contract PoolAccounting is IPool, RouterAware {
         template = poolTemplate;
     }
 
+    function setImplementation(IPoolImplementation poolImplementation) public requiresAuth {
+        require(
+            GetRoute.poolFactory(router).isPoolImplementation(address(poolImplementation)),
+            "Pool: Invalid implementation"
+        );
+        implementation = poolImplementation;
+    }
+
     /**
      * @dev Enables or disables the operator role for a specific address
      * @param operator The address of the operator whose role will be changed

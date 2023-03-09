@@ -199,12 +199,13 @@ library AuthController {
 
     subAuthority.setUserRole(operator, uint8(Roles.ROLE_POOL_OPERATOR), true);
 
-    bytes4[6] memory capabilities = [
+    bytes4[7] memory capabilities = [
       OFFRAMP_SET_CONVERSION_WINDOW_SELECTOR,
       POOL_SET_MIN_LIQUIDITY_SELECTOR,
       POOL_SHUT_DOWN_SELECTOR,
       POOL_SET_RAMP_SELECTOR,
       POOL_SET_TEMPLATE_SELECTOR,
+      POOL_SET_IMPLEMENTATION_SELECTOR,
       SET_OPERATOR_ROLE_SELECTOR
     ];
 

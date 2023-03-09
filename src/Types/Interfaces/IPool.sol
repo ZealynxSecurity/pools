@@ -150,6 +150,8 @@ interface IPool {
 
     function setTemplate(IPoolTemplate newTemplate) external;
 
+    function setImplementation(IPoolImplementation poolImplementation) external;
+
     function setMinimumLiquidity(uint256 minLiquidity) external;
 
     function setOperatorRole(address operator, bool enabled) external;
