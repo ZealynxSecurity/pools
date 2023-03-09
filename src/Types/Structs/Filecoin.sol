@@ -1,15 +1,26 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-struct ChangeWorkerAddressParams {
-  bytes new_worker;
-  bytes[] new_control_addresses;
+struct GetBeneficiaryReturn {
+  ActiveBeneficiary active;
+  PendingBeneficiaryChange proposed;
 }
 
-struct ChangeMultiaddrsParams {
-  bytes[] new_multi_addrs;
+struct BeneficiaryTerm {
+  uint256 quota;
+  uint256 used_quota;
+  uint64 expiration;
 }
 
-struct ChangePeerIDParams {
-  bytes new_id;
+struct ActiveBeneficiary {
+  uint64 beneficiary;
+  BeneficiaryTerm term;
+}
+
+struct PendingBeneficiaryChange {
+  uint64 new_beneficiary;
+  uint256 new_quota;
+  uint64 new_expiration;
+  bool approved_by_beneficiary;
+  bool approved_by_nominee;
 }

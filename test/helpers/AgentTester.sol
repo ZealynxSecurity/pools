@@ -6,14 +6,14 @@ import "src/Types/Structs/Filecoin.sol";
 
 contract AgentSigTester {
   // AGENT_ADD_MINERS_SELECTOR
-  function addMiners(address[] calldata) external pure returns (bytes4) {
+  function addMiners(uint64[] calldata) external pure returns (bytes4) {
     return msg.sig;
   }
 
   // AGENT_REMOVE_MINER_SELECTOR
   function removeMiner(
     address,
-    address,
+    uint64,
     SignedCredential memory
   ) external pure returns (bytes4) {
     return msg.sig;
@@ -21,24 +21,9 @@ contract AgentSigTester {
 
   // AGENT_CHANGE_MINER_WORKER_SELECTOR
   function changeMinerWorker(
-    address,
-    ChangeWorkerAddressParams calldata
-  ) external pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  // AGENT_CHANGE_MINER_MULTIADDRS_SELECTOR
-  function changeMultiaddrs(
-    address,
-    ChangeMultiaddrsParams calldata
-  ) external pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  // AGENT_CHANGE_MINER_PEER_ID_SELECTOR
-  function changePeerID(
-    address,
-    ChangePeerIDParams calldata
+    uint64,
+    uint64,
+    uint64[] memory
   ) external pure returns (bytes4) {
     return msg.sig;
   }
@@ -88,7 +73,7 @@ contract AgentSigTester {
 
   // AGENT_PULL_FUNDS_SELECTOR
   function pullFundsFromMiners(
-    address[] calldata,
+    uint64[] calldata,
     uint256[] calldata
   ) external pure returns (bytes4) {
     return msg.sig;
@@ -96,7 +81,7 @@ contract AgentSigTester {
 
   // AGENT_PUSH_FUNDS_SELECTOR
   function pushFundsToMiners(
-    address[] calldata,
+    uint64[] calldata,
     uint256[] calldata
   ) external pure returns (bytes4) {
     return msg.sig;

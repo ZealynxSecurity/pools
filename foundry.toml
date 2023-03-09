@@ -1,7 +1,7 @@
 [profile.default]
 src = 'src'
 out = 'out'
-libs = ['lib']
+libs = ['lib', 'helpers/MockMiner']
 solce_version = "0.8.15"
 remappings = [
   "ds-test/=lib/forge-std/lib/ds-test/src/",
@@ -9,11 +9,34 @@ remappings = [
   "@openzeppelin/=lib/openzeppelin-contracts/",
   "solmate/=lib/solmate/src/",
   "bytes-utils/=lib/solidity-bytes-utils/contracts/",
+  "filecoin-solidity/=lib/filecoin-solidity/contracts/v0.8/",
+  "solidity-cborutils/=lib/solidity-cborutils/",
+  "helpers/=helpers/MockMiner/",
+  "@ensdomains/buffer/=lib/buffer/",
   "src/=src/",
   "deploy/=deploy/"
 ]
+
+[profile.filecoin-sol]
+src = 'src'
+out = 'out-filecoin-sol'
+libs = ['lib', 'helpers/FilecoinSol']
+solce_version = "0.8.15"
+remappings = [
+  "ds-test/=lib/forge-std/lib/ds-test/src/",
+  "forge-std/=lib/forge-std/src/",
+  "@openzeppelin/=lib/openzeppelin-contracts/",
+  "solmate/=lib/solmate/src/",
+  "bytes-utils/=lib/solidity-bytes-utils/contracts/",
+  "filecoin-solidity/=lib/filecoin-solidity/contracts/v0.8/",
+  "solidity-bignumber/=lib/solidity-BigNumber/src/",
+  "solidity-cborutils/=lib/solidity-cborutils/",
+  "@ensdomains/buffer/=lib/buffer/",
+  "src/=src/",
+  "deploy/=deploy/"
+]
+
 [fuzz]
 runs = 1024
-
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

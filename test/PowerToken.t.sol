@@ -12,6 +12,8 @@ import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Decode} from "src/Errors.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
+import {errorSelector} from "test/helpers/Utils.sol";
+import {InvalidPower} from "src/Agent/Errors.sol";
 
 contract PowerTokenTest is BaseTest {
   using Credentials for VerifiableCredential;
@@ -76,8 +78,11 @@ contract PowerTokenTest is BaseTest {
   function testMintTooMuchPower() public {
     vm.startPrank(agentOwner);
     uint256 qa = vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER));
-    vm.expectRevert("Cannot mint more power than the miner has");
-    agent.mintPower(qa + 1, sc);
+    try agent.mintPower(qa + 1, sc) {
+      assertTrue(false, "Call to mint should fail with not enough power");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), InvalidPower.selector);
+    }
     vm.stopPrank();
   }
 

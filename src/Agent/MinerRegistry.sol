@@ -19,7 +19,7 @@ contract MinerRegistry is IMinerRegistry, RouterAware {
                             GETTERS
   //////////////////////////////////////////////////////////////*/
 
-  function minerRegistered(uint256 agentID, address miner) public view returns (bool) {
+  function minerRegistered(uint256 agentID, uint64 miner) public view returns (bool) {
     return _minerRegistered[_createMapKey(agentID, miner)];
   }
 
@@ -41,23 +41,23 @@ contract MinerRegistry is IMinerRegistry, RouterAware {
                     REGISTRY STATE MUTATING FUNCS
   //////////////////////////////////////////////////////////////*/
 
-  function addMiners(address[] calldata miners) external onlyAgent {
+  function addMiners(uint64[] calldata miners) external onlyAgent {
     for (uint256 i = 0; i < miners.length; ++i) {
       _addMiner(miners[i]);
     }
   }
 
-  function removeMiners(address[] calldata miners) external onlyAgent {
+  function removeMiners(uint64[] calldata miners) external onlyAgent {
     for (uint256 i = 0; i < miners.length; ++i) {
       _removeMiner(miners[i]);
     }
   }
 
-  function addMiner(address miner) external onlyAgent {
+  function addMiner(uint64 miner) external onlyAgent {
     _addMiner(miner);
   }
 
-  function removeMiner(address miner) external onlyAgent {
+  function removeMiner(uint64 miner) external onlyAgent {
     _removeMiner(miner);
   }
 
@@ -69,7 +69,7 @@ contract MinerRegistry is IMinerRegistry, RouterAware {
     return IAgent(agent).id();
   }
 
-  function _addMiner(address miner) internal {
+  function _addMiner(uint64 miner) internal {
     uint256 id = _getIDFromAgent(msg.sender);
     require(minerRegistered(id, miner) == false, "Miner already registered");
     _minerRegistered[_createMapKey(id, miner)] = true;
@@ -77,7 +77,7 @@ contract MinerRegistry is IMinerRegistry, RouterAware {
     emit AddMiner(msg.sender, miner);
   }
 
-  function _removeMiner(address miner) internal {
+  function _removeMiner(uint64 miner) internal {
     uint256 id = _getIDFromAgent(msg.sender);
     require(minerRegistered(id, miner), "Miner not registered");
     _minerRegistered[_createMapKey(id, miner)] = false;
@@ -85,7 +85,7 @@ contract MinerRegistry is IMinerRegistry, RouterAware {
     emit RemoveMiner(msg.sender, miner);
   }
 
-  function _createMapKey(uint256 agent, address miner) internal pure returns (bytes32) {
+  function _createMapKey(uint256 agent, uint64 miner) internal pure returns (bytes32) {
     return keccak256(abi.encodePacked(agent, miner));
   }
 }

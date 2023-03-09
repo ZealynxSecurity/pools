@@ -53,7 +53,7 @@ interface IAgentPolice {
 
   event ForcePullFundsFromMiners(
     address agent,
-    address[] miners,
+    uint64[] miners,
     uint256[] amounts
   );
 
@@ -117,11 +117,11 @@ interface IAgentPolice {
 
   function forcePullFundsFromMiners(
     address agent,
-    address[] calldata miners,
+    uint64[] calldata miners,
     uint256[] calldata amounts
   ) external;
 
-  function lockout(address agent, address miner) external;
+  function lockout(address agent, uint64 miner) external;
 
   /*//////////////////////////////////////////////
                   ADMIN CONTROLS

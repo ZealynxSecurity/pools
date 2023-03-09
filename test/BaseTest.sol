@@ -2,7 +2,7 @@
 pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
-import "src/MockMiner.sol";
+import "test/helpers/MockMiner.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
@@ -35,9 +35,27 @@ import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {MockPoolImplementation} from "test/helpers/MockPoolImplementation.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
+import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
+import {MinerHelper} from "helpers/MinerHelper.sol";
+import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
+import {Credentials} from "src/Types/Structs/Credentials.sol";
+
 import "src/Constants/Routes.sol";
 
+struct StateSnapshot {
+    uint256 balanceWFIL;
+    uint256 poolBalanceWFIL;
+    uint256 powerStake;
+    uint256 borrowed;
+    uint256 powerBalance;
+    uint256 powerBalancePool;
+}
+
 contract BaseTest is Test {
+  using MinerHelper for uint64;
+  using AccountHelpers for Account;
+  using Credentials for VerifiableCredential;
+
   uint256 public constant WINDOW_LENGTH = 1000;
   address public constant ZERO_ADDRESS = address(0);
   address public treasury = makeAddr('TREASURY');
@@ -53,6 +71,7 @@ contract BaseTest is Test {
 
   WFIL wFIL = new WFIL();
   IMultiRolesAuthority coreAuthority;
+  MockIDAddrStore idStore;
 
   constructor() {
     vm.startPrank(systemAdmin);
@@ -90,46 +109,77 @@ contract BaseTest is Test {
     Deployer.initRoles(address(router), systemAdmin);
     // roll forward at least 1 window length so our computations dont overflow/underflow
     vm.roll(block.number + WINDOW_LENGTH);
+
+    // deploy an ID address store for mocking built-in miner actors
+    idStore = new MockIDAddrStore();
+    require(address(idStore) == MinerHelper.ID_STORE_ADDR, "ID_STORE_ADDR must be set to the address of the IDAddrStore");
     vm.stopPrank();
   }
 
-  function configureAgent(address minerOwner) public returns (Agent, MockMiner) {
-    MockMiner miner = MockMiner(payable(_newMiner(minerOwner)));
-
+  function configureAgent(address minerOwner) public returns (Agent, uint64 minerID) {
+    uint64 miner = _newMiner(minerOwner);
     // create an agent for miner
     Agent agent = _configureAgent(minerOwner, miner);
     return (agent, miner);
   }
 
-  function _configureAgent(address minerOwner, MockMiner miner) public returns (Agent) {
+  function _configureAgent(address minerOwner, uint64 miner) public returns (Agent agent) {
     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
-    // create a agent for miner
-    vm.prank(minerOwner);
-    Agent agent = Agent(
-      payable(
-        agentFactory.create(address(0))
-      ));
+    vm.startPrank(minerOwner);
+    agent = Agent(payable(agentFactory.create(address(0))));
+    assertTrue(
+      miner.isOwner(minerOwner),
+      "The mock miner's current owner should be set to the original owner"
+    );
+    vm.stopPrank();
 
-    _agentClaimOwnership(address(agent), address(miner), minerOwner);
+    _agentClaimOwnership(address(agent), miner, minerOwner);
     return agent;
   }
 
-  function _newMiner(address minerOwner) internal returns (address) {
-    vm.prank(minerOwner);
-    return address(new MockMiner());
+  function configureMiner(address _agent, address minerOwner) public returns (uint64 miner) {
+    miner = _newMiner(minerOwner);
+    _agentClaimOwnership(address(_agent), miner, minerOwner);
   }
 
-  function _agentClaimOwnership(address _agent, address _miner, address _minerOwner) internal {
+  function _newMiner(address minerOwner) internal returns (uint64 id) {
+    vm.prank(minerOwner);
+    MockMiner miner = new MockMiner(minerOwner);
+
+    id = MockIDAddrStore(MinerHelper.ID_STORE_ADDR).addAddr(address(miner));
+    miner.setID(id);
+  }
+
+  function pushWFILFunds(address target, uint256 amount, address sender) public {
+    vm.deal(sender, amount);
+    vm.startPrank(sender);
+    uint256 startingBalance = wFIL.balanceOf(address(target));
+    // give the agent some funds to push
+    wFIL.deposit{value: amount}();
+    wFIL.transfer(address(target), amount);
+
+
+    assertEq(wFIL.balanceOf(address(target)), startingBalance + amount);
+    vm.stopPrank();
+  }
+
+  function _agentClaimOwnership(address _agent, uint64 _miner, address _minerOwner) internal {
+    IMinerRegistry registry = IMinerRegistry(IRouter(router).getRoute(ROUTE_MINER_REGISTRY));
     IAgent agent = IAgent(_agent);
-    IMockMiner miner = IMockMiner(_miner);
-    address[] memory miners = new address[](1);
+
+    uint64[] memory miners = new uint64[](1);
     miners[0] = _miner;
     vm.startPrank(_minerOwner);
-    miner.change_owner_address(_miner, _agent);
-    // confirm change owner address (agent1 now owns miner)
+    _miner.changeOwnerAddress(address(_agent));
+    vm.stopPrank();
+
+    // confirm change owner address (agent now owns miner)
+    vm.startPrank(address(agent));
     agent.addMiners(miners);
-    require(miner.get_owner(_miner) == _agent, "Miner owner not set");
     require(agent.hasMiner(_miner), "Miner not registered");
+    assertTrue(_miner.isOwner(_agent), "The mock miner's owner should change to the agent");
+    assertTrue(agent.hasMiner(_miner), "The miner should be registered as a miner on the agent");
+    assertTrue(registry.minerRegistered(agent.id(), _miner), "After adding the miner the registry should have the miner's address as a registered miner");
     vm.stopPrank();
   }
 
@@ -222,6 +272,89 @@ contract BaseTest is Test {
 
     return pool;
   }
+
+  function mintAndApprovePower(IAgent _agent, address _pool, address _powerToken, uint256 amount, SignedCredential memory signedCred) internal {
+    vm.startPrank(address(_agent));
+    _agent.mintPower(amount, signedCred);
+    IERC20(_powerToken).approve(_pool, amount);
+    vm.stopPrank();
+  }
+
+  function createAndPrimePool(
+    string memory poolName,
+    string memory poolSymbol,
+    address poolOperator,
+    uint256 fee,
+    uint256 _amount,
+    address investor
+    ) internal returns(IPool)
+  {
+    IPool pool = createPool(poolName, poolSymbol, poolOperator, fee);
+    primePool(pool, _amount, investor);
+    return pool;
+  }
+
+  function primePool(IPool pool, uint256 _amount, address investor) internal {
+    IERC4626 pool4626 = IERC4626(address(pool));
+    // investor1 stakes 10 FIL
+    vm.deal(investor, _amount);
+    vm.startPrank(investor);
+    wFIL.deposit{value: _amount}();
+    wFIL.approve(address(pool), _amount);
+    pool4626.deposit(_amount, investor);
+    vm.stopPrank();
+  }
+
+    function agentMintAndApprovePower(address pool, address _powerToken, IAgent _agent, SignedCredential memory _signedCred, uint256 _amount) internal {
+        vm.startPrank(address(_agent));
+        _agent.mintPower(_amount, _signedCred);
+        IERC20(_powerToken).approve(pool, _amount);
+        vm.stopPrank();
+    }
+
+    function agentBorrow(IAgent _agent, uint256 _borrowAmount, SignedCredential memory _signedCred, IPool _pool, address _powerToken, uint256 powerStake) internal {
+        vm.startPrank(address(_agent));
+        // Establsh the state before the borrow
+        StateSnapshot memory preBorrowState;
+        preBorrowState.balanceWFIL = wFIL.balanceOf(address(_agent));
+        Account memory account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
+        preBorrowState.powerStake = account.powerTokensStaked;
+        preBorrowState.borrowed = account.totalBorrowed;
+        preBorrowState.powerBalance = IERC20(_powerToken).balanceOf(address(_agent));
+        preBorrowState.powerBalancePool = IERC20(_powerToken).balanceOf(address(_pool));
+
+        _agent.borrow(_borrowAmount, 0, _signedCred, powerStake);
+        vm.stopPrank();
+
+        // Check the state after the borrow
+        uint256 currBalance = wFIL.balanceOf(address(_agent));
+        assertEq(currBalance, preBorrowState.balanceWFIL + _borrowAmount);
+
+        account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
+        assertEq(account.startEpoch, block.number);
+        assertGt(account.pmtPerEpoch(), 0);
+
+        uint256 rate = _pool.implementation().getRate(
+            _borrowAmount,
+            powerStake,
+            GetRoute.agentPolice(router).windowLength(),
+            account,
+            _signedCred.vc
+        );
+        assertEq(account.perEpochRate, rate);
+        assertEq(account.powerTokensStaked, preBorrowState.powerStake + powerStake);
+        assertEq(account.totalBorrowed, preBorrowState.borrowed + _borrowAmount);
+
+        assertEq(
+            IERC20(_powerToken).balanceOf(address(_agent)),
+            preBorrowState.powerBalance - powerStake
+        );
+
+        assertEq(
+            IERC20(_powerToken).balanceOf(address(_pool)),
+            preBorrowState.powerBalancePool + powerStake
+        );
+    }
 
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
     ramp = IOffRamp(new OffRamp(

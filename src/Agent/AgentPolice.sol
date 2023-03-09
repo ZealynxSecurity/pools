@@ -330,7 +330,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
    */
   function forcePullFundsFromMiners(
     address agent,
-    address[] calldata miners,
+    uint64[] calldata miners,
     uint256[] calldata amounts
   ) external requiresAuth onlyIfAgentOverLeveraged(agent) {
 
@@ -351,7 +351,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
    */
   function lockout(
     address agent,
-    address miner
+    uint64 miner
   ) external requiresAuth onlyIfAgentInDefault(agent) {
     emit Lockout(agent, msg.sender);
   }

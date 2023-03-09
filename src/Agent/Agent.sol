@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {Authority} from "src/Auth/Auth.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
-import {AccountHelpers} from "src/Pool/Account.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -21,13 +19,7 @@ import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IStats} from "src/Types/Interfaces/IStats.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
-import {IMockMiner} from "src/Types/Interfaces/IMockMiner.sol"; // TODO: remove this for Filecoin.sol
 import {SignedCredential, VerifiableCredential, Credentials} from "src/Types/Structs/Credentials.sol";
-import {
-  ChangeWorkerAddressParams,
-  ChangeMultiaddrsParams,
-  ChangePeerIDParams
-} from "src/Types/Structs/Filecoin.sol";
 
 import {
   ROUTE_AGENT_FACTORY,
@@ -40,17 +32,25 @@ import {
 } from "src/Constants/Routes.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {
-  OverPowered,
-  OverLeveraged,
-  InvalidParams,
-  InDefault,
+  Unauthorized,
+  InvalidPower,
+  InsufficientFunds,
   InsufficientCollateral,
-  TooManyPools
-} from "src/Errors.sol";
+  InvalidParams,
+  Internal,
+  BadAgentState
+} from "src/Agent/Errors.sol";
+import {MinerHelper} from "helpers/MinerHelper.sol";
 
 contract Agent is IAgent, RouterAware {
   using Credentials for VerifiableCredential;
+  using MinerHelper for uint64;
+
   uint256 public id;
+  /**
+   * @notice Returns the minerID at a specific index
+   */
+  uint64[] public miners;
 
   /*//////////////////////////////////////
                 MODIFIERS
@@ -86,6 +86,16 @@ contract Agent is IAgent, RouterAware {
     _;
   }
 
+  modifier equalLengthArrays(uint256[] memory a, uint256[] memory b) {
+    _equalLengthArrays(a, b);
+    _;
+  }
+
+  modifier minersMatchAmounts(uint64[] memory miners, uint256[] memory amounts) {
+    _minersMatchAmounts(miners, amounts);
+    _;
+  }
+
   constructor(
     address _router,
     uint256 _agentID
@@ -104,7 +114,7 @@ contract Agent is IAgent, RouterAware {
    * @return tokensStaked Returns the amount of power tokens staked by the pool
    */
   function powerTokensStaked(uint256 poolID) public view returns (uint256) {
-    return AccountHelpers.getAccount(router, id, poolID).powerTokensStaked;
+    return _getAccount(poolID).powerTokensStaked;
   }
 
   /**
@@ -112,7 +122,7 @@ contract Agent is IAgent, RouterAware {
    * @param miner The address of the miner to check for registration
    * @return hasMiner Returns true if the miner is registered, false otherwise
    */
-  function hasMiner(address miner) public view returns (bool) {
+  function hasMiner(uint64 miner) public view returns (bool) {
     return GetRoute.minerRegistry(router).minerRegistered(id, miner);
   }
 
@@ -131,6 +141,13 @@ contract Agent is IAgent, RouterAware {
   }
 
   /**
+   * @notice Returns the total number of miners pledged to this Agent
+   */
+  function minersCount() external view returns (uint256) {
+    return miners.length;
+  }
+
+  /**
    * @notice Get the number of pools that an Agent has staked power tokens in
    * @return count Returns the number of pools that an Agent has staked power tokens in
    *
@@ -146,8 +163,10 @@ contract Agent is IAgent, RouterAware {
    * @return maxWithdrawAmount Returns the maximum amount that can be withdrawn
    */
   function maxWithdraw(SignedCredential memory signedCredential) external view returns (uint256) {
-    address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-    return _maxWithdraw(signedCredential.vc, credParser);
+    return _maxWithdraw(
+      signedCredential.vc,
+      IRouter(router).getRoute(ROUTE_CRED_PARSER)
+    );
   }
 
   /**
@@ -185,7 +204,7 @@ contract Agent is IAgent, RouterAware {
    *
    * This function can only be called by the Agent's owner or operator
    */
-  function addMiners(address[] calldata miners) external requiresAuth {
+  function addMiners(uint64[] calldata miners) external requiresAuth {
     for (uint256 i = 0; i < miners.length; i++) {
       _addMiner(miners[i]);
     }
@@ -193,7 +212,7 @@ contract Agent is IAgent, RouterAware {
   /**
    * @notice Removes a miner from the miner registry
    * @param newMinerOwner The address that will become the new owner of the miner
-   * @param miner The address of the miner to remove
+   * @param miner The address of the miner to remove. NOTE: this is a uint64 masked in an address type
    * @param agentCred The signed credential of the agent attempting to remove the miner
    * @param minerCred A credential uniquely about the miner to be removed
    *
@@ -210,7 +229,7 @@ contract Agent is IAgent, RouterAware {
    */
   function removeMiner(
     address newMinerOwner,
-    address miner,
+    uint64 miner,
     SignedCredential memory agentCred,
     // a credential uniquely about the miner we wish to remove
     SignedCredential memory minerCred
@@ -222,11 +241,20 @@ contract Agent is IAgent, RouterAware {
     isValidCredential(agentCred)
   {
     // also validate the minerCred against the miner to remove
-    _isValidCredential(miner, minerCred);
+    // the miner needs to be encoded as an address type for compatibility with the vc
+    _isValidCredential(address(uint160(miner)), minerCred);
     _checkRemoveMiner(agentCred.vc, minerCred.vc);
 
-    // set the miners owner to the new owner
-    _changeMinerOwner(miner, newMinerOwner);
+    miner.changeOwnerAddress(newMinerOwner);
+
+    // remove this miner from the Agent's list of miners
+    for (uint256 i = 0; i < miners.length; i++) {
+      if (miners[i] == miner) {
+        miners[i] = miners[miners.length - 1];
+        miners.pop();
+        break;
+      }
+    }
 
     // Remove the miner from the central registry
     GetRoute.minerRegistry(router).removeMiner(miner);
@@ -237,16 +265,19 @@ contract Agent is IAgent, RouterAware {
    * @param newAgent The address of the new agent to which the miner will be migrated
    * @param miner The address of the miner to be migrated
    */
-  function migrateMiner(address newAgent, address miner) external requiresAuth {
+  function migrateMiner(address newAgent, uint64 miner) external requiresAuth {
     uint256 newId = IAgent(newAgent).id();
-    // first check to make sure the agentFactory knows about this "agent"
-    require(GetRoute.agentFactory(router).agents(newAgent) == newId);
-    // then make sure this is the same agent, just upgraded
-    require(newId == id, "Cannot migrate miner to a different agent");
-    // check to ensure this miner was registered to the original agent
-    require(GetRoute.minerRegistry(router).minerRegistered(id, miner), "Miner not registered");
+    if (
+      // first check to make sure the agentFactory knows about this "agent"
+      GetRoute.agentFactory(router).agents(newAgent) != newId ||
+      // then make sure this is the same agent, just upgraded
+      newId != id ||
+      // check to ensure this miner was registered to the original agent
+      !GetRoute.minerRegistry(router).minerRegistered(id, miner)
+    ) revert Unauthorized();
+
     // propose an ownership change (must be accepted in v2 agent)
-    _changeMinerOwner(miner, newAgent);
+    miner.changeOwnerAddress(newAgent);
 
     emit MigrateMiner(msg.sender, newAgent, miner);
   }
@@ -254,41 +285,17 @@ contract Agent is IAgent, RouterAware {
   /**
    * @notice Changes the worker address associated with a miner
    * @param miner The address of the miner whose worker address will be changed
-   * @param params The parameters for changing the worker address, including the new worker address and the new control addresses
+   * @param worker the worker address
+   * @param controlAddresses the control addresses to set
    * @dev miner must be owned by this Agent in order for this call to execute
    */
   function changeMinerWorker(
-    address miner,
-    ChangeWorkerAddressParams calldata params
+    uint64 miner,
+    uint64 worker,
+    uint64[] calldata controlAddresses
   ) external requiresAuth {
-    IMockMiner(miner).change_worker_address(miner, params);
-    emit ChangeMinerWorker(miner, params.new_worker, params.new_control_addresses);
-  }
-  /**
-   * @notice Changes the miner's multiaddress
-   * @param miner The address of the miner whose multiaddress will be changed
-   * @param params The parameters for changing the multiaddress
-   * @dev miner must be owned by this Agent in order for this call to execute
-   */
-  function changeMultiaddrs(
-    address miner,
-    ChangeMultiaddrsParams calldata params
-  ) external requiresAuth {
-    IMockMiner(miner).change_multiaddresses(miner, params);
-    emit ChangeMultiaddrs(miner, params.new_multi_addrs);
-  }
-  /**
-   * @notice Changes the miner's peerID
-   * @param miner The address of the miner whose peerID will be changed
-   * @param params The parameters for changing the peerID
-   * @dev miner must be owned by this Agent in order for this call to execute
-   */
-  function changePeerID(
-    address miner,
-    ChangePeerIDParams calldata params
-  ) external requiresAuth {
-    IMockMiner(miner).change_peer_id(miner, params);
-    emit ChangePeerID(miner, params.new_id);
+    miner.changeWorkerAddress(worker, controlAddresses);
+    emit ChangeMinerWorker(miner, worker, controlAddresses);
   }
 
   /*//////////////////////////////////////////////////
@@ -308,6 +315,7 @@ contract Agent is IAgent, RouterAware {
 
     emit SetOperatorRole(operator, enabled);
   }
+
   /**
    * @notice Enables or disables the owner role for a specific address
    * @param owner The address of the operator whose role will be changed
@@ -325,6 +333,7 @@ contract Agent is IAgent, RouterAware {
   /*//////////////////////////////////////////////////
                 POWER TOKEN FUNCTIONS
   //////////////////////////////////////////////////*/
+
   /**
    * @notice Allows an agent to mint power tokens
    * @param amount The amount of power tokens to mint
@@ -336,10 +345,10 @@ contract Agent is IAgent, RouterAware {
   ) external notOverPowered requiresAuth isValidCredential(signedCredential) {
     IPowerToken powerToken = GetRoute.powerToken(router);
     // check
-    require(
-      signedCredential.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) >= powerToken.powerTokensMinted(id) + amount,
-      "Cannot mint more power than the miner has"
-    );
+    if (
+      signedCredential.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) < powerToken.powerTokensMinted(id) + amount
+    ) revert InvalidPower();
+
     // interact
     powerToken.mint(amount);
   }
@@ -354,11 +363,12 @@ contract Agent is IAgent, RouterAware {
     uint256 amount,
     SignedCredential memory signedCredential
   ) external requiresAuthOrPolice isValidCredential(signedCredential) returns (uint256) {
-    IERC20 powerToken = GetRoute.powerToken20(router);
+    IPowerToken powerToken = GetRoute.powerToken(router);
     // check
-    require(amount <= powerToken.balanceOf(address(this)), "Agent: Cannot burn more power than the agent holds");
+    if (amount > powerToken.balanceOf(address(this)))
+      revert InvalidPower();
     // interact
-    IPowerToken(address(powerToken)).burn(amount);
+    powerToken.burn(amount);
 
     return amount;
   }
@@ -366,19 +376,6 @@ contract Agent is IAgent, RouterAware {
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS
   //////////////////////////////////////////////*/
-
-  /**
-   * @notice Allows an agent to withdraw balance to a recipient. Only callable by the Agent's Owner(s)
-   * @param receiver The address to which the funds will be withdrawn
-   * @param amount The amount of balance to withdraw
-   * @dev This function will fail if there are any power tokens staked in any Pools.
-   * It's a permissionless withdrawal as long as nothing is borrowed
-   */
-  function withdrawBalance(address receiver, uint256 amount) external requiresAuth {
-    require(totalPowerTokensStaked() == 0, "Cannot withdraw funds while power tokens are staked");
-
-    _withdrawBalance(receiver, amount);
-  }
 
   /**
    * @notice Allows an agent to withdraw balance to a recipient. Only callable by the Agent's Owner(s).
@@ -396,14 +393,7 @@ contract Agent is IAgent, RouterAware {
     uint256 maxWithdrawAmt = _maxWithdraw(signedCredential.vc, credParser);
 
     if (maxWithdrawAmt < amount) {
-      revert InsufficientCollateral(
-        address(this),
-        msg.sender,
-        amount,
-        maxWithdrawAmt,
-        msg.sig,
-        "Attempted to draw down too much collateral"
-      );
+      revert InsufficientCollateral();
     }
 
     _withdrawBalance(receiver, amount);
@@ -419,10 +409,9 @@ contract Agent is IAgent, RouterAware {
    * This function adds a native FIL balance to the Agent
    */
   function pullFundsFromMiners(
-    address[] calldata miners,
+    uint64[] calldata miners,
     uint256[] calldata amounts
-  ) external requiresAuthOrPolice {
-    require(miners.length == amounts.length, "Miners and amounts must be same length");
+  ) external requiresAuthOrPolice minersMatchAmounts(miners, amounts) {
     for (uint256 i = 0; i < miners.length; i++) {
       _pullFundsFromMiner(miners[i], amounts[i]);
     }
@@ -439,11 +428,14 @@ contract Agent is IAgent, RouterAware {
    * This function cannot be called if the Agent is overLeveraged
    */
   function pushFundsToMiners(
-    address[] calldata miners,
+    uint64[] calldata miners,
     uint256[] calldata amounts
-  ) external notOverLeveraged requiresAuth {
-    require(miners.length == amounts.length, "Miners and amounts must be same length");
-
+  )
+    external
+    notOverLeveraged
+    requiresAuth
+    minersMatchAmounts(miners, amounts)
+  {
     uint256 total = 0;
     for (uint256 i = 0; i < miners.length; i++) {
       total += amounts[i];
@@ -452,7 +444,9 @@ contract Agent is IAgent, RouterAware {
     _poolFundsInFIL(total);
 
     for (uint256 i = 0; i < miners.length; i++) {
-      _pushFundsToMiner(miners[i], amounts[i]);
+      uint64 miner = miners[i];
+      if (!hasMiner(miner)) revert Unauthorized();
+      miner.transfer(amounts[i]);
     }
 
     emit PushFundsToMiners(miners, amounts);
@@ -487,7 +481,7 @@ contract Agent is IAgent, RouterAware {
     // first time staking, add the poolID to the list of pools this agent is staking in
     if (pool.getAgentBorrowed(id) == 0) {
       if (stakedPoolsCount() > GetRoute.agentPolice(router).maxPoolsPerAgent()) {
-        revert TooManyPools(id, "Agent: Too many pools");
+        revert BadAgentState();
       }
       GetRoute.agentPolice(router).addPoolToList(poolID);
     }
@@ -511,9 +505,7 @@ contract Agent is IAgent, RouterAware {
     uint256 additionalPowerTokens,
     SignedCredential memory signedCredential
   ) external requiresAuth isValidCredential(signedCredential) {
-    Account memory account = AccountHelpers.getAccount(
-      router,
-      address(this),
+    Account memory account = _getAccount(
       oldPoolID
     );
     IPowerToken powerToken = GetRoute.powerToken(router);
@@ -523,8 +515,20 @@ contract Agent is IAgent, RouterAware {
     uint256 currentDebt = account.totalBorrowed;
     // NOTE: Once we have permissionless Pools, we need to protect against re-entrancy in the pool borrow.
     powerToken.mint(powStaked);
-    newPool.borrow(currentDebt, signedCredential, powStaked + additionalPowerTokens);
-    require(oldPool.exitPool(address(this), signedCredential, currentDebt) == powStaked, "Refinance failed");
+    newPool.borrow(
+      currentDebt,
+      signedCredential,
+      powStaked + additionalPowerTokens
+    );
+
+    if (
+      oldPool.exitPool(
+        address(this),
+        signedCredential,
+        currentDebt
+      ) != powStaked
+    ) revert Internal();
+
     powerToken.burn(powStaked);
   }
 
@@ -544,7 +548,7 @@ contract Agent is IAgent, RouterAware {
     IPool pool = GetRoute.pool(router, poolID);
     uint256 borrowedAmount = pool.getAgentBorrowed(id);
 
-    require(borrowedAmount >= assetAmount, "Cannot exit more than borrowed");
+    if (borrowedAmount < assetAmount) revert InvalidParams();
 
     pool.asset().approve(address(pool), assetAmount);
     pool.exitPool(address(this), signedCredential, assetAmount);
@@ -565,19 +569,13 @@ contract Agent is IAgent, RouterAware {
     uint256[] calldata _poolIDs,
     uint256[] calldata _amounts,
     SignedCredential memory _signedCredential
-  ) external requiresAuthOrPolice isValidCredential(_signedCredential) {
-    if (_poolIDs.length != _amounts.length) {
-      revert InvalidParams(
-        msg.sender,
-        address(this),
-        msg.sig,
-        "Pool IDs and amounts must be same length"
-      );
-    }
-    require(_poolIDs.length == _amounts.length, "Pool IDs and amounts must be same length");
-
+  )
+    external
+    requiresAuthOrPolice
+    isValidCredential(_signedCredential)
+    equalLengthArrays(_poolIDs, _amounts)
+  {
     uint256 total = 0;
-
     for (uint256 i = 0; i < _poolIDs.length; i++) {
       total += _amounts[i];
     }
@@ -585,9 +583,10 @@ contract Agent is IAgent, RouterAware {
     _poolFundsInWFIL(total);
 
     for (uint256 i = 0; i < _poolIDs.length; i++) {
+      uint256 amount = _amounts[i];
       IPool pool = GetRoute.pool(router, _poolIDs[i]);
-      pool.asset().approve(address(pool), _amounts[i]);
-      pool.makePayment(address(this), _amounts[i]);
+      pool.asset().approve(address(pool), amount);
+      pool.makePayment(address(this), amount);
     }
   }
 
@@ -606,16 +605,13 @@ contract Agent is IAgent, RouterAware {
     uint256[] calldata _amounts,
     uint256[] calldata _powerTokenTokenAmounts,
     SignedCredential memory _signedCredential
-  ) external requiresAuth isValidCredential(_signedCredential) {
-    if (_poolIDs.length != _amounts.length || _poolIDs.length != _powerTokenTokenAmounts.length) {
-      revert InvalidParams(
-        msg.sender,
-        address(this),
-        msg.sig,
-        "Pool IDs, amounts, and power token amounts must be same length"
-      );
-    }
-
+  )
+    external
+    requiresAuth
+    isValidCredential(_signedCredential)
+    equalLengthArrays(_poolIDs, _amounts)
+    equalLengthArrays(_poolIDs, _powerTokenTokenAmounts)
+  {
     for (uint256 i = 0; i < _poolIDs.length; i++) {
       GetRoute.pool(router, _poolIDs[i]).stakeToPay(
         _amounts[i], _signedCredential, _powerTokenTokenAmounts[i]
@@ -637,7 +633,6 @@ contract Agent is IAgent, RouterAware {
       return true;
     }
 
-    uint256 maxWithdrawAmt = _maxWithdraw(agentCred, credParser);
     uint256 minerLiquidationValue = _liquidationValue(
       minerCred.getAssets(credParser),
       minerCred.getLiabilities(credParser),
@@ -645,98 +640,74 @@ contract Agent is IAgent, RouterAware {
     );
     _canRemovePower(agentCred.getQAPower(credParser), minerCred.getQAPower(credParser));
 
-    if (maxWithdrawAmt <= minerLiquidationValue) {
-      revert InsufficientCollateral(
-        address(this),
-        msg.sender,
-        minerLiquidationValue,
-        maxWithdrawAmt,
-        msg.sig,
-        "Agent does not have enough collateral to remove Miner"
-      );
+    if (_maxWithdraw(agentCred, credParser) <= minerLiquidationValue) {
+      revert InsufficientCollateral();
     }
 
     return true;
   }
 
-  function _canAddMiner(address miner) internal view returns (bool) {
-    // check to make sure pending owner is address(this);
-    require(IMockMiner(miner).next_owner(miner) == address(this), "Agent must be set as the nextOwner on the miner");
-    // check to make sure no beneficiary address (or that we were set as the beneficiary address)
-    require(IMockMiner(miner).get_beneficiary(miner) == address(0) || IMockMiner(miner).get_beneficiary(miner) == address(this));
-
-    return true;
-  }
-
-  function _changeMinerOwner(address miner, address owner) internal {
-    IMockMiner(miner).change_owner_address(miner, owner);
-  }
-
-  function _addMiner(address miner) internal {
+  function _addMiner(uint64 miner) internal {
     // Confirm the miner is valid and can be added
-    require(_canAddMiner(miner), "Cannot add miner unless it is set as the nextOwner on the miner and no beneficiary address is set");
+    if (!miner.configuredForTakeover()) revert Unauthorized();
 
-    _changeMinerOwner(miner, address(this));
+    // change the owner address
+    miner.changeOwnerAddress(address(this));
+
+    // add the miner to the agent's list of miners
+    miners.push(miner);
 
     GetRoute.minerRegistry(router).addMiner(miner);
   }
 
-  function _pullFundsFromMiner(address miner, uint256 amount) internal {
-    require(
-      IMinerRegistry(GetRoute.minerRegistry(router)).minerRegistered(id, miner),
-      "Agent does not own miner"
+  function _pullFundsFromMiner(uint64 miner, uint256 amount) internal {
+    if (
+      !IMinerRegistry(
+        GetRoute.minerRegistry(router)
+      ).minerRegistered(id, miner)
+    ) revert Unauthorized();
+
+    miner.withdrawBalance(
+      amount > 0 ? amount : miner.balance()
     );
-
-    uint256 withdrawAmount = amount;
-    if (withdrawAmount == 0) {
-      // withdraw all if amount is 0
-      withdrawAmount = miner.balance;
-    }
-
-    IMockMiner(miner).withdrawBalance(withdrawAmount);
-  }
-
-  function _pushFundsToMiner(address miner, uint256 amount) internal {
-    (bool success, ) = miner.call{value: amount}("");
-    require(success, "Failed to send funds to miner");
   }
 
   // ensures theres enough native FIL bal in the agent to push funds to miners
   function _poolFundsInFIL(uint256 amount) internal {
     uint256 filBal = address(this).balance;
-    IERC20 wFIL20 = GetRoute.wFIL20(router);
-    uint256 wFILBal = wFIL20.balanceOf(address(this));
+    IWFIL wFIL = GetRoute.wFIL(router);
 
     if (filBal >= amount) {
       return;
     }
 
-    require(filBal + wFILBal >= amount, "Not enough FIL or wFIL to push to miner");
+    if (filBal + wFIL.balanceOf(address(this)) < amount) revert InsufficientFunds();
 
-    IWFIL(address(wFIL20)).withdraw(amount - filBal);
+    wFIL.withdraw(amount - filBal);
   }
 
   // ensures theres enough wFIL bal in the agent to make payments to pools
   function _poolFundsInWFIL(uint256 amount) internal {
-    uint256 filBal = address(this).balance;
-    IERC20 wFIL20 = GetRoute.wFIL20(router);
-    uint256 wFILBal = wFIL20.balanceOf(address(this));
+    IWFIL wFIL = GetRoute.wFIL(router);
+    uint256 wFILBal = wFIL.balanceOf(address(this));
 
     if (wFILBal >= amount) {
       return;
     }
 
-    require(filBal + wFILBal >= amount, "Not enough FIL or wFIL to push to miner");
+    if (address(this).balance + wFILBal < amount) revert InsufficientFunds();
 
-    IWFIL(address(wFIL20)).deposit{value: amount - wFILBal}();
+    wFIL.deposit{value: amount - wFILBal}();
   }
 
   function _burnPower(uint256 amount) internal returns (uint256) {
-    IERC20 powerToken = GetRoute.powerToken20(router);
+    IPowerToken powerToken = GetRoute.powerToken(router);
     // check
-    require(amount <= powerToken.balanceOf(address(this)), "Agent: Cannot burn more power than the agent holds");
+    if (amount > powerToken.balanceOf(address(this)))
+      revert InvalidPower();
+
     // interact
-    IPowerToken(address(powerToken)).burn(amount);
+    powerToken.burn(amount);
 
     return amount;
   }
@@ -746,29 +717,29 @@ contract Agent is IAgent, RouterAware {
   }
 
   function _requiresAuth() internal view {
-    require(_canCall(), "Agent: Not authorized");
+    if (!_canCall()) revert Unauthorized();
   }
 
   function _requiresAuthOrPolice() internal view {
-    require(_canCall() || IRouter(router).getRoute(ROUTE_AGENT_POLICE) == (msg.sender), "Agent: Not authorized");
+    if (!(
+      _canCall() ||
+      IRouter(router).getRoute(ROUTE_AGENT_POLICE) == msg.sender
+    )) revert Unauthorized();
   }
 
   function _notOverPowered() internal view {
-    if (GetRoute.agentPolice(router).isOverPowered(id)) {
-      revert OverPowered(id, "Agent: Cannot perform action while overpowered");
-    }
+    if (GetRoute.agentPolice(router).isOverPowered(id))
+      revert BadAgentState();
   }
 
   function _notOverLeveraged() internal view {
-    if (GetRoute.agentPolice(router).isOverLeveraged(id)) {
-      revert OverLeveraged(id, "Agent: Cannot perform action while overleveraged");
-    }
+    if (GetRoute.agentPolice(router).isOverLeveraged(id))
+      revert BadAgentState();
   }
 
   function _notInDefault() internal view {
-    if (GetRoute.agentPolice(router).isInDefault(id)) {
-      revert InDefault(id, "Agent: Cannot perform action while in default");
-    }
+    if (GetRoute.agentPolice(router).isInDefault(id))
+      revert BadAgentState();
   }
 
   function _isValidCredential(
@@ -810,26 +781,17 @@ contract Agent is IAgent, RouterAware {
         .pool(router, poolID)
         .implementation()
         .minCollateral(
-          IRouter(router).getAccount(id, poolID),
+          _getAccount(poolID),
           vc
         );
     }
   }
 
-  /// @notice ensure we don't remove too much power
+  /// @notice ensure that the power we're removing by removing a miner does not put us into an "overPowered" state
   function _canRemovePower(uint256 totalPower, uint256 powerToRemove) internal view {
-      // ensure that the power we're removing by removing a miner does not put us into an "overPowered" state
-      if (totalPower < powerToRemove + GetRoute.powerToken(router).powerTokensMinted(id)) {
-        revert InsufficientCollateral(
-          address(this),
-          msg.sender,
-          powerToRemove,
-          // TODO: here we should do totalPower - powMinted, but that could underflow..
-          0,
-          msg.sig,
-          "Attempted to remove a miner with too much power"
-        );
-      }
+    if (totalPower < powerToRemove + GetRoute.powerToken(router).powerTokensMinted(id)) {
+      revert InsufficientCollateral();
+    }
   }
 
   function _getStakedPoolIDs() internal view returns (uint256[] memory) {
@@ -852,9 +814,24 @@ contract Agent is IAgent, RouterAware {
     _poolFundsInFIL(amount);
 
     (bool success,) = receiver.call{value: amount}("");
-    require(success, "Withdrawal failed.");
+    if (!success) revert Internal();
 
     emit WithdrawBalance(receiver, amount);
+  }
+
+  function _getAccount(uint256 poolID) internal view returns (Account memory) {
+    return IRouter(router).getAccount(id, poolID);
+  }
+
+  function _equalLengthArrays(uint256[] memory a, uint256[] memory b) internal pure {
+    if (a.length != b.length) revert InvalidParams();
+  }
+
+  function _minersMatchAmounts(
+    uint64[] memory miners,
+    uint256[] memory amounts
+  ) internal pure {
+    if (miners.length != amounts.length) revert InvalidParams();
   }
 }
 

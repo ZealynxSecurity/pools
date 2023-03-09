@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import {BytesLib} from "bytes-utils/BytesLib.sol";
+
 function iToHex(bytes memory buffer) pure returns (string memory) {
     // Fixed buffer size for hexadecimal convertion
     bytes memory converted = new bytes(buffer.length * 2);
@@ -15,3 +17,6 @@ function iToHex(bytes memory buffer) pure returns (string memory) {
     return string(abi.encodePacked("0x", converted));
 }
 
+function errorSelector(bytes memory b) pure returns (bytes4 selector) {
+    return bytes4(BytesLib.slice(b, 0, 4));
+}

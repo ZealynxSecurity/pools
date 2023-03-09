@@ -2,12 +2,12 @@
 pragma solidity ^0.8.15;
 
 interface IMinerRegistry {
-  event AddMiner(address indexed agent, address indexed miner);
-  event RemoveMiner(address indexed agent, address indexed miner);
+  event AddMiner(address indexed agent, uint64 indexed miner);
+  event RemoveMiner(address indexed agent, uint64 indexed miner);
 
-  function addMiners (address[] calldata miners) external;
-  function removeMiners (address[] calldata miners) external;
-  function addMiner(address miner) external;
-  function removeMiner(address miner) external;
-  function minerRegistered(uint256 agentID, address miner) external view returns (bool);
+  function addMiners (uint64[] calldata miners) external;
+  function removeMiners (uint64[] calldata miners) external;
+  function addMiner(uint64 miner) external;
+  function removeMiner(uint64 miner) external;
+  function minerRegistered(uint256 agentID, uint64 miner) external view returns (bool);
 }

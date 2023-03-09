@@ -264,13 +264,11 @@ library AuthController {
       subAuthority.setUserRole(msg.sender, uint8(Roles.ROLE_AGENT_OWNER), true);
       subAuthority.setUserRole(operator, uint8(Roles.ROLE_AGENT_OPERATOR), true);
 
-      bytes4[12] memory commonSelectors = [
+      bytes4[10] memory commonSelectors = [
         // miner funcs
         AGENT_ADD_MINERS_SELECTOR,
         AGENT_REMOVE_MINER_SELECTOR,
         AGENT_CHANGE_MINER_WORKER_SELECTOR,
-        AGENT_CHANGE_MINER_MULTIADDRS_SELECTOR,
-        AGENT_CHANGE_MINER_PEERID_SELECTOR,
         // finance funcs
         AGENT_BORROW_SELECTOR,
         AGENT_EXIT_SELECTOR,
@@ -288,9 +286,10 @@ library AuthController {
         subAuthority.setRoleCapability(uint8(Roles.ROLE_AGENT_OWNER), commonSelectors[i], true);
       }
 
-      bytes4[4] memory ownerOnlySelectors = [
+      bytes4[5] memory ownerOnlySelectors = [
         SET_OPERATOR_ROLE_SELECTOR,
         SET_OWNER_ROLE_SELECTOR,
+        AGENT_CHANGE_MINER_WORKER_SELECTOR,
         AGENT_WITHDRAW_SELECTOR,
         AGENT_WITHDRAW_WITH_CRED_SELECTOR
       ];

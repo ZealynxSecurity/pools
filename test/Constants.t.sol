@@ -32,48 +32,30 @@ contract AgentConstantsTest is Test {
   }
 
   function testAddMiners() public {
-    bytes4 funcSig = tester.addMiners(new address[](0));
+    uint64[] memory miners = new uint64[](4);
+    miners[0] = 1000;
+    bytes4 funcSig = tester.addMiners(miners);
     assertEq(funcSig, AGENT_ADD_MINERS_SELECTOR);
   }
 
   function testRemoveMiner() public {
     bytes4 funcSig = tester.removeMiner(
       makeAddr("MINER"),
-      makeAddr("OWNER"),
+      1,
       sc
     );
     assertEq(funcSig, AGENT_REMOVE_MINER_SELECTOR);
   }
 
   function testChangeMinerWorker() public {
+    uint64[] memory controlAddrs = new uint64[](1);
+    controlAddrs[0] = 1000;
     bytes4 funcSig = tester.changeMinerWorker(
-      makeAddr("MINER"),
-      ChangeWorkerAddressParams(
-        bytes(""),
-        new bytes[](0)
-      )
+      1000,
+      1000,
+      controlAddrs
     );
     assertEq(funcSig, AGENT_CHANGE_MINER_WORKER_SELECTOR);
-  }
-
-  function testChangeMultiaddrs() public {
-    bytes4 funcSig = tester.changeMultiaddrs(
-      makeAddr("MINER"),
-      ChangeMultiaddrsParams(
-        new bytes[](0)
-      )
-    );
-    assertEq(funcSig, AGENT_CHANGE_MINER_MULTIADDRS_SELECTOR);
-  }
-
-  function testChangePeerID() public {
-    bytes4 funcSig = tester.changePeerID(
-      makeAddr("MINER"),
-      ChangePeerIDParams(
-        bytes("")
-      )
-    );
-    assertEq(funcSig, AGENT_CHANGE_MINER_PEERID_SELECTOR);
   }
 
   function testSetOperator() public {
@@ -126,16 +108,20 @@ contract AgentConstantsTest is Test {
   }
 
   function testPullFundsFromMiners() public {
+    uint64[] memory miners = new uint64[](4);
+    miners[0] = 1000;
     bytes4 funcSig = tester.pullFundsFromMiners(
-      new address[](0),
+      miners,
       new uint256[](0)
     );
     assertEq(funcSig, AGENT_PULL_FUNDS_SELECTOR);
   }
 
   function testPushFundsToMiners() public {
+    uint64[] memory miners = new uint64[](4);
+    miners[0] = 1000;
     bytes4 funcSig = tester.pushFundsToMiners(
-      new address[](0),
+      miners,
       new uint256[](0)
     );
     assertEq(funcSig, AGENT_PUSH_FUNDS_SELECTOR);
