@@ -105,12 +105,13 @@ library Deployer {
     address poolFactory,
     address powerToken,
     address vcIssuer,
-    address credParser
+    address credParser,
+    address accountingDeployer
   ) internal returns (
     bytes4[] memory routeIDs, address[] memory routeAddrs
   ) {
-    routeIDs = new bytes4[](9);
-    routeAddrs = new address[](9);
+    routeIDs = new bytes4[](10);
+    routeAddrs = new address[](10);
     // Add treasury route
     routeIDs[0] = ROUTE_TREASURY;
     routeAddrs[0] = treasury;
@@ -138,6 +139,9 @@ library Deployer {
     // Add cred parser
     routeIDs[8] = ROUTE_CRED_PARSER;
     routeAddrs[8] = credParser;
+    // Add cred parser
+    routeIDs[9] = ROUTE_ACCOUNTING_DEPLOYER;
+    routeAddrs[9] = accountingDeployer;
 
     IRouter(router).pushRoutes(routeIDs, routeAddrs);
   }

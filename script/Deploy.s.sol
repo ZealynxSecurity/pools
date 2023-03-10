@@ -14,6 +14,7 @@ import {PowerToken} from "src/PowerToken/PowerToken.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
+import {PoolAccountingDeployer} from "deploy/PoolAccounting.sol";
 import "src/Constants/Routes.sol";
 
 contract Deploy is Script {
@@ -63,6 +64,7 @@ contract Deploy is Script {
         );
         address powerToken = address(new PowerToken());
         address credParser = address(new CredParser());
+        address accountingDeployer = address(new PoolAccountingDeployer());
 
         vcIssuer = vm.addr(vcIssuerPk);
 
@@ -76,7 +78,8 @@ contract Deploy is Script {
             poolFactory,
             powerToken,
             vcIssuer,
-            credParser
+            credParser,
+            accountingDeployer
         );
 
         // any contract that extends RouterAware gets its router set here

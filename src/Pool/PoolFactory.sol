@@ -5,15 +5,15 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
-import {PoolAccountingDeployer} from "deploy/PoolAccounting.sol";
 import {PoolTokensDeployer} from "deploy/PoolTokens.sol";
+import {IPoolDeployer} from "src/Types/Interfaces/IPoolDeployer.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
-import {ROUTE_TREASURY} from "src/Constants/Routes.sol";
+import {ROUTE_ACCOUNTING_DEPLOYER} from "src/Constants/Routes.sol";
 
 string constant IMPLEMENTATION = "IMPLEMENTATION";
 string constant TEMPLATE = "TEMPLATE";
@@ -83,6 +83,8 @@ contract PoolFactory is IPoolFactory, RouterAware {
     require(isPoolImplementation(implementation), "Pool: Implementation not approved");
     require(isPoolTemplate(template), "Pool: Template not approved");
     require(operator != address(0), "Pool: Operator cannot be 0 address");
+    IPoolDeployer deployer = IPoolDeployer(IRouter(router).getRoute(ROUTE_ACCOUNTING_DEPLOYER));
+
 
     uint256 poolID = allPools.length;
     address stakingAsset = address(asset);
@@ -100,7 +102,7 @@ contract PoolFactory is IPoolFactory, RouterAware {
     );
 
     // deploy a new Pool Accounting instance
-    pool = PoolAccountingDeployer.deploy(
+    pool = deployer.deploy(
       poolID,
       router,
       implementation,
@@ -128,6 +130,7 @@ contract PoolFactory is IPoolFactory, RouterAware {
     uint256 poolId
   ) external returns (IPool newPool) {
     IPool oldPool = IPool(allPools[poolId]);
+    IPoolDeployer deployer = IPoolDeployer(IRouter(router).getRoute(ROUTE_ACCOUNTING_DEPLOYER));
 
     IMultiRolesAuthority authority = IMultiRolesAuthority(
      address(AuthController.getSubAuthority(router, address(oldPool)))
@@ -141,7 +144,7 @@ contract PoolFactory is IPoolFactory, RouterAware {
     // the pool must be shutting down (deposits disabled) to upgrade
     require(oldPool.isShuttingDown(), "Pool: Not shutting down");
     // deploy a new instance of PoolAccounting
-    newPool = PoolAccountingDeployer.deploy(
+    newPool = deployer.deploy(
       poolId,
       router,
       address(oldPool.implementation()),

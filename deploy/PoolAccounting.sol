@@ -2,9 +2,9 @@
 pragma solidity ^0.8.15;
 
 import {PoolAccounting} from "src/Pool/PoolAccounting.sol";
-
+import {IPool} from "src/Types/Interfaces/IPool.sol";
 // This contract is just used to deploy the PoolAccounting contract
-library PoolAccountingDeployer {
+contract PoolAccountingDeployer {
 
   /**
    * @dev deploys a new PoolAccounting contract
@@ -28,7 +28,7 @@ library PoolAccountingDeployer {
     address _ramp,
     address _iou,
     uint256 _minimumLiquidity
-  ) public returns (PoolAccounting) {
+  ) public returns (IPool) {
     return new PoolAccounting(
       _id,
       _router,

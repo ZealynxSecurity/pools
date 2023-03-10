@@ -30,6 +30,7 @@ struct ContractRoutes {
   address vcIssuer;
   address coreAuthority;
   address credParser;
+  address accountingDeployer;
 }
 
 contract RouterTest is Test {
@@ -66,7 +67,8 @@ contract RouterTest is Test {
       makeAddr("POOL_FACTORY"),
       makeAddr("POWER_TOKEN"),
       makeAddr("VC_ISSUER"),
-      makeAddr("CRED_PARSER")
+      makeAddr("CRED_PARSER"),
+      makeAddr("ACCOUNT_DEPLOYER")
     );
 
     // for ease of testing routes
@@ -88,7 +90,8 @@ contract RouterTest is Test {
       contractRouteAddrs[5],
       contractRouteAddrs[6],
       address(authority),
-      contractRouteAddrs[8]
+      contractRouteAddrs[8],
+      contractRouteAddrs[9]
     );
 
     AuthController.transferCoreAuthorityOwnership(address(router), routerAdmin);
@@ -142,9 +145,15 @@ contract RouterTest is Test {
     assertEq(router.getRoute(ROUTE_TREASURY), contractRoutes.treasury);
   }
 
+  function testGetAccountingDeployer() public {
+    assertEq(router.getRoute(ROUTE_ACCOUNTING_DEPLOYER), contractRoutes.accountingDeployer);
+  }
+
+
   function testGetTreasuryAdmin() public {
     assertEq(router.getRoute(ROUTE_TREASURY_ADMIN), adminRoutes.treasuryAdmin);
   }
+
 
   function testPushRoute() public {
     address newRoute = makeAddr("NEW_ROUTE");

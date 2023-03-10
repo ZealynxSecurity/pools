@@ -35,6 +35,7 @@ import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {MockPoolImplementation} from "test/helpers/MockPoolImplementation.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
+import {PoolAccountingDeployer} from "deploy/PoolAccounting.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
 import {MinerHelper} from "helpers/MinerHelper.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
@@ -101,7 +102,8 @@ contract BaseTest is Test {
       address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0)),
       address(new PowerToken()),
       vcIssuer,
-      address(new CredParser())
+      address(new CredParser()),
+      address(new PoolAccountingDeployer())
     );
     // any contract that extends RouterAware gets its router set here
     Deployer.setRouterOnContracts(address(router));
