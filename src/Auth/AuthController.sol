@@ -88,12 +88,7 @@ library AuthController {
     );
   }
 
-  function onlyPoolTemplate(address router, address poolTemplate) internal view {
-    require(
-      GetRoute.poolFactory(router).isPoolTemplate(poolTemplate),
-      "onlyPoolTemplate: Not authorized"
-    );
-  }
+
 
   function onlyPoolFactory(address router, address poolFactory) internal view {
     if (address(GetRoute.poolFactory(router)) != poolFactory) {

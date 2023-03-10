@@ -5,38 +5,46 @@ import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
 import {console} from "forge-std/console.sol";
 import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 import {ROUTE_POOL_FACTORY} from "src/Constants/Routes.sol";
-import {PoolFactory} from "./helpers/MockPoolFactory.sol";
 
 import {BaseTest} from "./BaseTest.sol";
 
 contract OffRampTest is BaseTest {
   OffRamp ramp;
   PoolToken iou;
+  IPool pool;
   address poolTemplate;
   address poolFactory = makeAddr("POOLFACTORY");
 
   address investor1 = makeAddr("INVESTOR1");
   address investor2 = makeAddr("INVESTOR2");
   address investor3 = makeAddr("INVESTOR3");
+  address poolOperator = makeAddr("POOL_OPERATOR");
   uint256 conversionWindow;
   uint256 dust = 1000;
   uint256 maxSupply = 2000000000e18;
   uint256 EPOCHS_IN_20_YEARS = 20 * EPOCHS_IN_YEAR;
   function setUp() public {
     // mock the pool factory for offramp permissioning
-    PoolFactory factory = new PoolFactory(router);
     vm.prank(systemAdmin);
-    IRouter(router).pushRoute(ROUTE_POOL_FACTORY, address(factory));
 
     // Our "asset" in most cases is wrapped fil
     iou = new PoolToken(router, 0, "iou", "iou");
     ramp = new OffRamp(router, address(iou), address(wFIL), 0);
+
     conversionWindow = ramp.conversionWindow();
+    vm.stopPrank();
+    pool = createPool(
+      "TEST",
+      "TEST",
+      poolOperator,
+      2e18
+    );
   }
   function testDistributeSimple(uint256 initialBalance, uint256 timeChunk) public {
     (initialBalance, timeChunk) = _loadAssumptions(initialBalance, timeChunk);
@@ -148,6 +156,7 @@ contract OffRampTest is BaseTest {
   }
 
   function testClaimSimple(uint256 initialBalance, uint256 timeChunk) public {
+
     (initialBalance, timeChunk) = _loadAssumptions(initialBalance, timeChunk);
     _initialInvestorStakeSetup(initialBalance);
     vm.startPrank(investor1);
@@ -188,7 +197,7 @@ contract OffRampTest is BaseTest {
 
   function _initialInvestorStakeSetup(uint256 amount) internal {
     _mintWFILToOfframp(amount);
-    vm.prank(address(ramp));
+    vm.prank(address(pool.template()));
     iou.mint(investor1, amount);
     vm.prank(investor1);
     iou.approve(address(ramp), amount);

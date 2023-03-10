@@ -102,7 +102,7 @@ contract PoolAccounting is IPool, RouterAware {
     }
 
     modifier onlyTemplate() {
-        AuthController.onlyPoolTemplate(router, msg.sender);
+        require(msg.sender == address(template), "onlyPoolTemplate: Not authorized");
         _;
     }
 

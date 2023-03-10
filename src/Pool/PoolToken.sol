@@ -8,6 +8,7 @@ import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.so
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {IPoolTokenPlus} from "src/Types/Interfaces/IPoolTokenPlus.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {Unauthorized} from "src/Errors.sol";
 
 contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
     uint256 public poolID;
@@ -17,7 +18,9 @@ contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
     //////////////////////////////////////////////////////////////*/
 
     modifier onlyPoolTemplate() {
-        AuthController.onlyPoolTemplate(router, msg.sender);
+        if (address(GetRoute.pool(router, poolID).template()) != msg.sender) {
+            revert Unauthorized(address(this), msg.sender, msg.sig, "Only pool template can mint/burn");
+        }
         _;
     }
 

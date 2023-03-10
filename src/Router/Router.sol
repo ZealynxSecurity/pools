@@ -7,6 +7,8 @@ import {AuthController} from "src/Auth/AuthController.sol";
 import {Auth} from "src/Auth/Auth.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
+import {GetRoute} from "src/Router/GetRoute.sol";
+import {Unauthorized} from "src/Errors.sol";
 
 contract Router is IRouter {
   mapping(bytes4 => address) public route;
@@ -26,11 +28,6 @@ contract Router is IRouter {
  */
   modifier requiresAuth {
     AuthController.requiresCoreAuth(address(this), address(this));
-    _;
-  }
-
-  modifier onlyPoolTemplate() {
-    AuthController.onlyPoolTemplate(address(this), msg.sender);
     _;
   }
 
@@ -77,7 +74,10 @@ contract Router is IRouter {
     uint256 agentID,
     uint256 poolID,
     Account memory account
-  ) public onlyPoolTemplate {
+  ) public {
+    if (!GetRoute.poolFactory(address(this)).isPoolTemplate(msg.sender)) {
+      revert Unauthorized(address(this), msg.sender, msg.sig, "Only pool template can set account");
+    }
     _accounts[createAccountKey(agentID, poolID)] = account;
   }
 

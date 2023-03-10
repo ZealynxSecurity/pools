@@ -81,7 +81,7 @@ contract PoolFactory is IPoolFactory, RouterAware {
     address template
   ) external requiresAuth returns (IPool pool) {
     require(isPoolImplementation(implementation), "Pool: Implementation not approved");
-    require(isPoolTemplate(template), "Pool: Template not approved");
+    require(exists[createKey(TEMPLATE, template)], "Pool: Template not approved");
     require(operator != address(0), "Pool: Operator cannot be 0 address");
     IPoolDeployer deployer = IPoolDeployer(IRouter(router).getRoute(ROUTE_ACCOUNTING_DEPLOYER));
 
@@ -180,7 +180,7 @@ contract PoolFactory is IPoolFactory, RouterAware {
    * @dev Returns if a Pool Template instance exists
    * @param template The address of the template
    */
-  function isPoolTemplate(address template) public view returns (bool) {
+  function isPoolTemplate(address template) external view returns (bool) {
     return exists[createKey(TEMPLATE, template)];
   }
 
