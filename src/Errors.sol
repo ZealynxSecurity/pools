@@ -60,10 +60,7 @@ error InvalidParams(
   string reason
 );
 
-error InvalidCredential(
-  SignedCredential credential,
-  string reason
-);
+error InvalidCredential();
 
 error NotOverPowered(
   uint256 agent,

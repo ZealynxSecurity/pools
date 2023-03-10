@@ -98,7 +98,9 @@ interface IAgentPolice {
 
   function checkDefault(address agent, SignedCredential memory signedCredential) external;
 
-  function isValidCredential(address agent, SignedCredential memory signedCredential) external view returns (bool);
+  function isValidCredential(address agent, SignedCredential memory signedCredential) external;
+
+  function registerCredentialUseBlock(SignedCredential memory signedCredential) external;
 
   /*//////////////////////////////////////////////
                       POLICING
@@ -118,7 +120,8 @@ interface IAgentPolice {
   function forcePullFundsFromMiners(
     address agent,
     uint64[] calldata miners,
-    uint256[] calldata amounts
+    uint256[] calldata amounts,
+    SignedCredential memory signedCredential
   ) external;
 
   function lockout(address agent, uint64 miner) external;

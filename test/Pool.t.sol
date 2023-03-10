@@ -518,10 +518,10 @@ contract PoolExitingTest is BaseTest {
   }
 
   function testFullExit() public {
-    vm.prank(address(agent));
-    wFIL.approve(address(pool), borrowAmount);
-    // NOTE: anyone can exit anyone else - the returned tokens still go to the agent's account
-    pool.exitPool(address(agent), signedCred, borrowAmount);
+    vm.startPrank(minerOwner);
+    agent.exit(pool.id(), borrowAmount, issueGenericSC(address(agent)));
+    vm.stopPrank();
+
     Account memory account = AccountHelpers.getAccount(router, address(agent), pool.id());
 
     assertEq(account.totalBorrowed, 0);
@@ -533,11 +533,10 @@ contract PoolExitingTest is BaseTest {
   }
 
   function testPartialExitWithinCurrentWindow() public {
-    vm.prank(address(agent));
-    wFIL.approve(address(pool), borrowAmount);
-
     uint256 poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));
-    pool.exitPool(address(agent), signedCred, borrowAmount / 2);
+    vm.startPrank(minerOwner);
+    agent.exit(pool.id(), borrowAmount / 2, issueGenericSC(address(agent)));
+    vm.stopPrank();
 
     uint256 poolPowTokenBalAfter = IERC20(address(powerToken)).balanceOf(address(pool));
 
@@ -1461,7 +1460,7 @@ contract PoolUpgradeTest is BaseTest {
     investorPoolSharesNew = pool.share().balanceOf(investor1);
     totalBorrowedNew = pool.totalBorrowed();
     agentBorrowedNew = pool.getAgentBorrowed(agent.id());
-    
+
     assertGt(investorPoolSharesNew, investorPoolShares);
     assertGt(totalBorrowedNew, totalBorrowed);
     assertGt(agentBorrowedNew, agentBorrowed);

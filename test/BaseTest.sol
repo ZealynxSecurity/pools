@@ -176,7 +176,7 @@ contract BaseTest is Test {
     vm.stopPrank();
 
     // confirm change owner address (agent now owns miner)
-    vm.startPrank(address(agent));
+    vm.startPrank(_minerOwner);
     agent.addMiners(miners);
     require(agent.hasMiner(_miner), "Miner not registered");
     assertTrue(_miner.isOwner(_agent), "The mock miner's owner should change to the agent");
@@ -211,6 +211,8 @@ contract BaseTest is Test {
   ) public returns (
     SignedCredential memory
   ) {
+    // roll forward a block so our credentials do not result in the same signature
+    vm.roll(block.number + 1);
     uint256 qaPower = 10e18;
     uint256 expectedDailyRewards = 20e18;
     uint256 assets = 10e18;

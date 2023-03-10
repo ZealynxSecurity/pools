@@ -68,7 +68,7 @@ function testSingleDepositBorrowRepayWithdraw() public {
     uint256 agentPowerAmount = 1e18;
     vm.startPrank(minerOwner);
     agent.mintPower(agentPowerAmount, signedCred);
-    agent.borrow(borrowAmount, pool.id(), signedCred, agentPowerAmount);
+    agent.borrow(borrowAmount, pool.id(), issueGenericSC(address(agent)), agentPowerAmount);
     vm.stopPrank();
 
     uint256 poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));
@@ -84,8 +84,7 @@ function testSingleDepositBorrowRepayWithdraw() public {
 
     // agent repays the borrow amount
     vm.startPrank(minerOwner);
-    wFIL.approve(address(pool), borrowAmount);
-    agent.exit(pool.id(), borrowAmount, signedCred);
+    agent.exit(pool.id(), borrowAmount, issueGenericSC(address(agent)));
     vm.stopPrank();
 
     poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));

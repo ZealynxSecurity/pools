@@ -128,11 +128,13 @@ interface IAgent {
 
   function pullFundsFromMiners(
     uint64[] calldata miners,
-    uint256[] calldata amounts
+    uint256[] calldata amounts,
+    SignedCredential memory signedCredential
   ) external;
 
   function pushFundsToMiners(
     uint64[] calldata miners,
-    uint256[] calldata amounts
+    uint256[] calldata amounts,
+    SignedCredential memory signedCredential
   ) external;
 }

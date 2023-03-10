@@ -14,7 +14,6 @@ import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
-
 import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -103,11 +102,6 @@ contract PoolAccounting is IPool, RouterAware {
 
     modifier onlyTemplate() {
         require(msg.sender == address(template), "onlyPoolTemplate: Not authorized");
-        _;
-    }
-
-    modifier isValidCredential(address agent, SignedCredential memory signedCredential) {
-        _isValidCredential(agent, signedCredential);
         _;
     }
 
@@ -242,7 +236,6 @@ contract PoolAccounting is IPool, RouterAware {
         public
         onlyAgent
         isOpen
-        isValidCredential(msg.sender, sc)
     {
         // pull the powerTokens into the pool
         GetRoute.powerToken(router).transferFrom(msg.sender, address(this), powerTokenAmount);
@@ -281,7 +274,6 @@ contract PoolAccounting is IPool, RouterAware {
         public
         onlyAgent
         isOpen
-        isValidCredential(msg.sender, sc)
     {
         // pull the powerTokens into the pool
         GetRoute.powerToken(router).transferFrom(msg.sender, address(this), powerTokenAmount);
@@ -349,7 +341,7 @@ contract PoolAccounting is IPool, RouterAware {
         address agent,
         SignedCredential memory sc,
         uint256 amount
-    ) public isValidCredential(agent, sc) returns (
+    ) public onlyAgent returns (
         uint256 powerTokensToReturn
     ) {
         // Pull back the borrowed asset
@@ -664,13 +656,6 @@ contract PoolAccounting is IPool, RouterAware {
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-
-    function _isValidCredential(
-        address agent,
-        SignedCredential memory signedCredential
-    ) internal view returns (bool) {
-        return GetRoute.agentPolice(router).isValidCredential(agent, signedCredential);
-    }
 
     function _addressToID(address agent) internal view returns (uint256) {
         return IAgent(agent).id();

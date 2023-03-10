@@ -47,7 +47,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   mapping(bytes32 => bool) private _agentState;
   /// @notice `_poolIDs` maps agentID to the pools they have actively borrowed from
   mapping(uint256 => uint256[]) private _poolIDs;
-
+  mapping(bytes32 => uint256) private _credentialUseBlock;
   constructor(
     string memory _name,
     string memory _version,
@@ -220,14 +220,12 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   function isValidCredential(
     address agent,
     SignedCredential memory signedCredential
-  ) external view returns (bool) {
-    return isValid(
-      agent,
-      signedCredential.vc,
-      signedCredential.v,
-      signedCredential.r,
-      signedCredential.s
-    );
+  ) external {
+      _checkCredential(agent, signedCredential);
+  }
+
+  function registerCredentialUseBlock(SignedCredential memory signedCredential) external  {
+    _credentialUseBlock[keccak256(abi.encode(signedCredential.v, signedCredential.r, signedCredential.s))] = block.number;
   }
 
   /*//////////////////////////////////////////////
@@ -331,11 +329,12 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   function forcePullFundsFromMiners(
     address agent,
     uint64[] calldata miners,
-    uint256[] calldata amounts
+    uint256[] calldata amounts,
+    SignedCredential memory sc
   ) external requiresAuth onlyIfAgentOverLeveraged(agent) {
 
     // draw up funds from all the agent's miners (non destructive)
-    IAgent(agent).pullFundsFromMiners(miners, amounts);
+    IAgent(agent).pullFundsFromMiners(miners, amounts, sc);
 
     emit ForcePullFundsFromMiners(agent, miners, amounts);
   }
@@ -497,11 +496,12 @@ contract AgentPolice is IAgentPolice, VCVerifier {
         signedCredential.r,
         signedCredential.s
       )) {
-        revert InvalidCredential(
-          signedCredential,
-          "AgentPolice: Invalid credential"
-        );
+        revert InvalidCredential();
       }
+    if (_credentialUseBlock[keccak256(abi.encode(signedCredential.v, signedCredential.r, signedCredential.s))] > 0)  {
+        revert InvalidCredential();
+      }
+
   }
 
   function _revertIfNotOverPowered(uint256 agent) internal view {

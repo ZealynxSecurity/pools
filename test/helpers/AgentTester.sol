@@ -14,6 +14,7 @@ contract AgentSigTester {
   function removeMiner(
     address,
     uint64,
+    SignedCredential memory,
     SignedCredential memory
   ) external pure returns (bytes4) {
     return msg.sig;
@@ -61,12 +62,6 @@ contract AgentSigTester {
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS
   //////////////////////////////////////////////*/
-
-  // AGENT_WITHDRAW_BALANCE_SELECTOR
-  function withdrawBalance(address,uint256) external pure returns (bytes4) {
-    return msg.sig;
-  }
-
   function withdrawBalance(address,uint256,SignedCredential memory) external pure returns (bytes4) {
     return msg.sig;
   }
@@ -74,7 +69,8 @@ contract AgentSigTester {
   // AGENT_PULL_FUNDS_SELECTOR
   function pullFundsFromMiners(
     uint64[] calldata,
-    uint256[] calldata
+    uint256[] calldata,
+    SignedCredential memory
   ) external pure returns (bytes4) {
     return msg.sig;
   }
@@ -82,7 +78,8 @@ contract AgentSigTester {
   // AGENT_PUSH_FUNDS_SELECTOR
   function pushFundsToMiners(
     uint64[] calldata,
-    uint256[] calldata
+    uint256[] calldata,
+    SignedCredential memory
   ) external pure returns (bytes4) {
     return msg.sig;
   }

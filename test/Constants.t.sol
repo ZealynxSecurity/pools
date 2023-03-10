@@ -17,7 +17,7 @@ contract AgentConstantsTest is Test {
 
     AgentData memory agent = AgentData(1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, 10e18, 5e18, 0, 0);
 
-   VerifiableCredential memory vc = VerifiableCredential(
+    VerifiableCredential memory vc = VerifiableCredential(
       issuer,
       makeAddr("SUBJECT"),
       block.number,
@@ -42,6 +42,7 @@ contract AgentConstantsTest is Test {
     bytes4 funcSig = tester.removeMiner(
       makeAddr("MINER"),
       1,
+      sc,
       sc
     );
     assertEq(funcSig, AGENT_REMOVE_MINER_SELECTOR);
@@ -90,14 +91,6 @@ contract AgentConstantsTest is Test {
     assertEq(funcSig, AGENT_BURN_POWER_SELECTOR);
   }
 
-  function testWithdrawBalance() public {
-    bytes4 funcSig = tester.withdrawBalance(
-      address(0),
-      0
-    );
-    assertEq(funcSig, AGENT_WITHDRAW_SELECTOR);
-  }
-
   function testWithdrawBalanceWithCred() public {
     bytes4 funcSig = tester.withdrawBalance(
       address(0),
@@ -112,7 +105,8 @@ contract AgentConstantsTest is Test {
     miners[0] = 1000;
     bytes4 funcSig = tester.pullFundsFromMiners(
       miners,
-      new uint256[](0)
+      new uint256[](0),
+      sc
     );
     assertEq(funcSig, AGENT_PULL_FUNDS_SELECTOR);
   }
@@ -122,7 +116,8 @@ contract AgentConstantsTest is Test {
     miners[0] = 1000;
     bytes4 funcSig = tester.pushFundsToMiners(
       miners,
-      new uint256[](0)
+      new uint256[](0),
+      sc
     );
     assertEq(funcSig, AGENT_PUSH_FUNDS_SELECTOR);
   }

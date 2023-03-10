@@ -410,8 +410,14 @@ contract Agent is IAgent, RouterAware {
    */
   function pullFundsFromMiners(
     uint64[] calldata miners,
-    uint256[] calldata amounts
-  ) external requiresAuthOrPolice minersMatchAmounts(miners, amounts) {
+    uint256[] calldata amounts,
+    SignedCredential memory signedCredential
+  )
+    external
+    requiresAuthOrPolice
+    isValidCredential(signedCredential)
+    minersMatchAmounts(miners, amounts)
+  {
     for (uint256 i = 0; i < miners.length; i++) {
       _pullFundsFromMiner(miners[i], amounts[i]);
     }
@@ -429,9 +435,11 @@ contract Agent is IAgent, RouterAware {
    */
   function pushFundsToMiners(
     uint64[] calldata miners,
-    uint256[] calldata amounts
+    uint256[] calldata amounts,
+    SignedCredential memory signedCredential
   )
     external
+    isValidCredential(signedCredential)
     notOverLeveraged
     requiresAuth
     minersMatchAmounts(miners, amounts)
@@ -477,13 +485,13 @@ contract Agent is IAgent, RouterAware {
     isValidCredential(signedCredential)
   {
     IPool pool = GetRoute.pool(router, poolID);
-
+    IAgentPolice police = GetRoute.agentPolice(router);
     // first time staking, add the poolID to the list of pools this agent is staking in
     if (pool.getAgentBorrowed(id) == 0) {
-      if (stakedPoolsCount() > GetRoute.agentPolice(router).maxPoolsPerAgent()) {
+      if (stakedPoolsCount() > police.maxPoolsPerAgent()) {
         revert BadAgentState();
       }
-      GetRoute.agentPolice(router).addPoolToList(poolID);
+      police.addPoolToList(poolID);
     }
 
     GetRoute.powerToken(router).approve(address(pool), powerTokenAmount);
@@ -516,12 +524,14 @@ contract Agent is IAgent, RouterAware {
     uint256 currentDebt = account.totalBorrowed;
     // NOTE: Once we have permissionless Pools, we need to protect against re-entrancy in the pool borrow.
     powerToken.mint(powStaked);
+    powerToken.approve(address(newPool), powStaked + additionalPowerTokens);
     newPool.borrow(
       currentDebt,
       signedCredential,
       powStaked + additionalPowerTokens
     );
 
+    oldPool.asset().approve(address(oldPool), currentDebt);
     if (
       oldPool.exitPool(
         address(this),
@@ -746,8 +756,10 @@ contract Agent is IAgent, RouterAware {
   function _isValidCredential(
     address agent,
     SignedCredential memory signedCredential
-  ) internal view returns (bool) {
-    return GetRoute.agentPolice(router).isValidCredential(agent, signedCredential);
+  ) internal  {
+    IAgentPolice agentPolice = GetRoute.agentPolice(router);
+    agentPolice.isValidCredential(agent, signedCredential);
+    agentPolice.registerCredentialUseBlock(signedCredential);
   }
 
   // TODO: should we add any EDR for some number of days to this?
