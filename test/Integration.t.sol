@@ -11,6 +11,7 @@ import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import "./BaseTest.sol";
 
 contract IntegrationTest is BaseTest {
+  using Credentials for VerifiableCredential;
   IAgent agent;
 
   IPoolFactory poolFactory;
@@ -65,12 +66,9 @@ function testSingleDepositBorrowRepayWithdraw() public {
 
     // agent mints some power to borrow against
     uint256 agentPowerAmount = 1e18;
-    vm.startPrank(address(agent));
+    vm.startPrank(minerOwner);
     agent.mintPower(agentPowerAmount, signedCred);
-    // approve the pool to pull the agent's power tokens on call to deposit
-    powerToken.approve(address(pool), agentPowerAmount);
-
-    pool.borrow(borrowAmount, signedCred, agentPowerAmount);
+    agent.borrow(borrowAmount, pool.id(), signedCred, agentPowerAmount);
     vm.stopPrank();
 
     uint256 poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));
@@ -85,9 +83,9 @@ function testSingleDepositBorrowRepayWithdraw() public {
     assertEq(agentAssetBal, borrowAmount, "agent has incorrect asset bal");
 
     // agent repays the borrow amount
-    vm.startPrank(address(agent));
+    vm.startPrank(minerOwner);
     wFIL.approve(address(pool), borrowAmount);
-    pool.exitPool(address(agent), signedCred, borrowAmount);
+    agent.exit(pool.id(), borrowAmount, signedCred);
     vm.stopPrank();
 
     poolPowTokenBal = IERC20(address(powerToken)).balanceOf(address(pool));

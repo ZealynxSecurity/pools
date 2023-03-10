@@ -486,6 +486,7 @@ contract Agent is IAgent, RouterAware {
       GetRoute.agentPolice(router).addPoolToList(poolID);
     }
 
+    GetRoute.powerToken(router).approve(address(pool), powerTokenAmount);
     pool.borrow(amount, signedCredential, powerTokenAmount);
   }
 
