@@ -115,57 +115,6 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         return account.perEpochRate;
     }
 
-    // allows an agent to make a payment by staking more power
-    /// NOTE: an agent can only stakeToPay if the staking brings the account current
-    /// A pool implementation does not have to let this happen,
-    /// a new call to getRate gets made, which can revert and end the entire operation
-    function stakeToPay(
-        uint256 borrowAmount,
-        uint256 pmtLessFee,
-        VerifiableCredential memory vc,
-        uint256 powerTokenAmount,
-        IPoolImplementation poolImpl,
-        Account memory account
-    ) external onlyAccounting accountExists(vc.subject, account) {
-        IPool pool = IPool(msg.sender);
-        _checkLiquidity(borrowAmount, pool.totalBorrowableAssets());
-
-        Window memory window = GetRoute.agentPolice(router).windowInfo();
-
-        // uses the old rate to compute how much is owed up to the current window
-        uint256 deficit = account.getDeficit(window, pool.implementation());
-
-        // ensure this payment can bring the account current
-        AccountHelpers._amountGt(pmtLessFee, deficit);
-        // bring account current
-        account.epochsPaid = account.epochsPaid < window.start ? window.start : account.epochsPaid;
-
-        // NOTE: If we borrow _after_ the credit the math works out but they're getting the "old rate" for the amount they're paying off for this payment
-
-
-        // credit the account with any remaining payment leftover after getting out of deficit
-        account.credit(pmtLessFee - deficit);
-        /// @dev we get a new rate
-        /// @notice the pool implementation may choose to not allow this in which case, stakeToPay will revert
-        account.borrow(
-            router,
-            borrowAmount,
-            powerTokenAmount,
-            vc,
-            poolImpl
-        );
-        account.save(router, vc.subject, _id(msg.sender));
-
-        pool.increaseTotalBorrowed(borrowAmount);
-
-        emit StakeToPay(
-            vc.subject,
-            borrowAmount,
-            powerTokenAmount,
-            account.perEpochRate
-        );
-    }
-
     function makePayment(
         address agent,
         Account memory account,

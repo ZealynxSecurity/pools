@@ -45,10 +45,4 @@ interface IPoolImplementation {
         uint256 paymentAmount,
         Account memory account
     ) external view;
-
-    function beforeStakeToPay(
-        uint256 paymentAmount,
-        uint256 powerTokenAmount,
-        Account memory account
-    ) external view;
 }

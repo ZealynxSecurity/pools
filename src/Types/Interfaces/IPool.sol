@@ -80,8 +80,6 @@ interface IPool {
 
     function makePayment(address agent,uint256 pmt) external;
 
-    function stakeToPay(uint256 pmt, SignedCredential memory sc, uint256 powerTokenAmount) external;
-
     function rebalanceTotalBorrowed(uint256 agentID, uint256 realAccountValue) external;
 
     /*//////////////////////////////////////////////////////////////

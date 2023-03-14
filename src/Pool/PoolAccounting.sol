@@ -261,45 +261,6 @@ contract PoolAccounting is IPool, RouterAware {
     }
 
     /**
-     * @dev Stakes `powerTokenAmount` into the Pool to pay `pmt` amount of asset (essentially borrowing more to make a payment)
-     * @param pmt The desired amount to borrow to make a payment
-     * @param sc The Agent's signed credential from the VC issuer
-     * @param powerTokenAmount The amount of power tokens to pledge to the Pool
-     */
-    function stakeToPay(
-        uint256 pmt,
-        SignedCredential memory sc,
-        uint256 powerTokenAmount
-    )
-        public
-        onlyAgent
-        isOpen
-    {
-        // pull the powerTokens into the pool
-        GetRoute.powerToken(router).transferFrom(msg.sender, address(this), powerTokenAmount);
-
-        Account memory account = _getAccount(msg.sender);
-
-        (,uint256 remainingPmt) = _accrueFees(pmt, account);
-
-        implementation.beforeStakeToPay(
-            remainingPmt,
-            powerTokenAmount,
-            account
-        );
-
-        template.stakeToPay(
-            pmt,
-            remainingPmt,
-            sc.vc,
-            powerTokenAmount,
-            implementation,
-            account
-        );
-        // no funds get transferred to the agent in this case, since they use the borrowed proceeds to make a payment
-    }
-
-    /**
      * @dev Makes a payment of `pmt` to the Pool
      * @param agent The address of the agent to credit the payment for
      * @param pmt The amount to pay

@@ -23,7 +23,7 @@ contract MockPoolImplementation is IPoolImplementation, RouterAware {
     uint256 ,
     uint256 ,
     Account memory,
-    VerifiableCredential memory 
+    VerifiableCredential memory
   ) external pure returns (uint256) {
     // hardcode 20% rate (per annum)
     uint256 apy = 0.2e18;
@@ -33,7 +33,7 @@ contract MockPoolImplementation is IPoolImplementation, RouterAware {
   function rateSpike(
     uint256 ,
     uint256 ,
-    Account memory 
+    Account memory
   ) external pure returns (uint256) {
     uint256 penalty = 5e16;
     return penalty / EPOCHS_IN_YEAR;
@@ -41,7 +41,7 @@ contract MockPoolImplementation is IPoolImplementation, RouterAware {
 
   function minCollateral(
     Account memory account,
-    VerifiableCredential memory 
+    VerifiableCredential memory
   ) external pure returns (uint256) {
     // 10% of the borrow amount
     return account.totalBorrowed.mulWadUp(1e17);
@@ -51,23 +51,17 @@ contract MockPoolImplementation is IPoolImplementation, RouterAware {
     uint256 ,
     uint256 ,
     Account memory ,
-    VerifiableCredential memory 
+    VerifiableCredential memory
   ) external pure {}
 
   function beforeExit(
       uint256 ,
       Account memory ,
-      VerifiableCredential memory 
+      VerifiableCredential memory
   ) external pure {}
 
   function beforeMakePayment(
       uint256 ,
-      Account memory 
-  ) external pure {}
-
-  function beforeStakeToPay(
-      uint256 ,
-      uint256 ,
-      Account memory 
+      Account memory
   ) external pure {}
 }

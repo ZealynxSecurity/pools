@@ -112,13 +112,5 @@ contract AgentSigTester {
     return msg.sig;
   }
 
-  // AGENT_STAKE_TO_MAKE_PAYMENTS_SELECTOR
-  function stakeToMakePayments(
-    uint256[] calldata,
-    uint256[] calldata,
-    uint256[] calldata,
-    SignedCredential memory
-  ) external pure returns (bytes4) {
-    return msg.sig;
-  }
+
 }

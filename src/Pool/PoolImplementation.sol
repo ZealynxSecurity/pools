@@ -97,16 +97,4 @@ function beforeBorrow(
       uint256 paymentAmount,
       Account memory account
   ) external pure {}
-
-  /**
-   * @dev A hook that gets called before making a payment
-   * @param paymentAmount The desired amount to borrow to make a payment
-   * @param powerTokenAmount The amount of power tokens that would be pledged to this Pool for a payment
-   * @param account The Agent's current account with this specific Pool
-   */
-  function beforeStakeToPay(
-      uint256 paymentAmount,
-      uint256 powerTokenAmount,
-      Account memory account
-  ) external pure {}
 }

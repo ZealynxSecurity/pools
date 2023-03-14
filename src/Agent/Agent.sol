@@ -601,35 +601,6 @@ contract Agent is IAgent, RouterAware {
     }
   }
 
-  /**
-   * @notice Allows an agent to stake power tokens in lieu of making payments (to multiple pools)
-   * @param _poolIDs The IDs of the pools to which payments will be made
-   * @param _amounts The amounts of the payments to be made to each pool
-   * @param _powerTokenTokenAmounts The amounts of power tokens to stake for each pool
-   * @param _signedCredential The signed credential of the agent making the payments
-   * @dev This function essentially borrows more funds in order to make a payment
-   * Pools do not have to support this, but they can if they'd like to
-   * Every time an Agent stakes power tokens to make a payment, they get a new payment rate
-   */
-  function stakeToMakePayments(
-    uint256[] calldata _poolIDs,
-    uint256[] calldata _amounts,
-    uint256[] calldata _powerTokenTokenAmounts,
-    SignedCredential memory _signedCredential
-  )
-    external
-    requiresAuth
-    isValidCredential(_signedCredential)
-    equalLengthArrays(_poolIDs, _amounts)
-    equalLengthArrays(_poolIDs, _powerTokenTokenAmounts)
-  {
-    for (uint256 i = 0; i < _poolIDs.length; i++) {
-      GetRoute.pool(router, _poolIDs[i]).stakeToPay(
-        _amounts[i], _signedCredential, _powerTokenTokenAmounts[i]
-      );
-    }
-  }
-
   /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/

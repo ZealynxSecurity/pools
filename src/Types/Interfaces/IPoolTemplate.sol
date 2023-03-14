@@ -37,14 +37,6 @@ interface IPoolTemplate  {
         uint256 pmt
     );
 
-    event StakeToPay(
-        address indexed agent,
-        uint256 pmt,
-        uint256 powerTokenAmount,
-        uint256 newRate
-    );
-
-
     // Finance functions
     function borrow(
         uint256 ask,
@@ -64,15 +56,6 @@ interface IPoolTemplate  {
         address agent,
         Account memory account,
         uint256 pmtLessFees
-    ) external;
-
-    function stakeToPay(
-        uint256 borrowAmount,
-        uint256 pmtLessFees,
-        VerifiableCredential memory vc,
-        uint256 powerTokenAmount,
-        IPoolImplementation broker,
-        Account memory account
     ) external;
 
     function deposit(

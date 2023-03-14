@@ -424,9 +424,6 @@ library AccountHelpers {
   /**
    * @dev given an `epochValue`, compute the min payment (less fees) to get `account.epochsPaid === epochValue`
    * pass this amount as the `pmt` param in `makePayment`
-   * @notice you can use this function to compute the `stakeToPay` pmt amount,
-   * but it's not quite as accurate for epochValues past window.start of the current period
-   * (since stakeToPay will give you a new rate)
    * @param account the account to compute the minimum payment target for
    * @param epochValue the epochValue represented the window that this payment will bring the account up to
    * @param router the router address to access global elements
