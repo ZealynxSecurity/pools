@@ -16,8 +16,8 @@ contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
                                 MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
-    modifier onlyPoolTemplate() {
-        if (address(GetRoute.pool(router, poolID).template()) != msg.sender) {
+    modifier onlyPool() {
+        if (address(GetRoute.pool(router, poolID)) != msg.sender) {
             revert Unauthorized();
         }
         _;
@@ -40,7 +40,7 @@ contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
     function mint(
         address account,
         uint256 _amount
-    ) public onlyPoolTemplate returns (bool) {
+    ) public onlyPool returns (bool) {
       _mint(account, _amount);
       return true;
     }

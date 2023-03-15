@@ -3,7 +3,6 @@ pragma solidity ^0.8.15;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {PoolTokensDeployer} from "deploy/PoolTokens.sol";
 import {IPoolDeployer} from "src/Types/Interfaces/IPoolDeployer.sol";
@@ -18,7 +17,6 @@ import {ROUTE_ACCOUNTING_DEPLOYER} from "src/Constants/Routes.sol";
 import {InvalidParams, InvalidState, Unauthorized} from "src/Errors.sol";
 
 string constant IMPLEMENTATION = "IMPLEMENTATION";
-string constant TEMPLATE = "TEMPLATE";
 string constant ACCOUNTING = "ACCOUNTING";
 
 contract PoolFactory is IPoolFactory, RouterAware, Operatable {
@@ -61,7 +59,6 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
    * @param owner The owner of the pool
    * @param operator The operator of the pool
    * @param implementation The implementation of the pool
-   * @param template The template of the pool
    * @return pool The address of the new pool
    */
   function createPool(
@@ -69,11 +66,9 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
     string memory symbol,
     address owner,
     address operator,
-    address implementation,
-    address template
+    address implementation
   ) external onlyOwnerOperator returns (IPool pool) {
     if (!isPoolImplementation(implementation)) revert InvalidParams();
-    if (!exists[createKey(TEMPLATE, template)]) revert InvalidParams();
     if (operator == address(0)) revert InvalidParams();
 
     IPoolDeployer deployer = IPoolDeployer(IRouter(router).getRoute(ROUTE_ACCOUNTING_DEPLOYER));
@@ -101,7 +96,6 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
       implementation,
       stakingAsset,
       shareToken,
-      template,
       // start with no offramp
       address(0),
       iouToken,
@@ -136,7 +130,6 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
       address(oldPool.implementation()),
       address(oldPool.asset()),
       address(oldPool.share()),
-      address(oldPool.template()),
       address(oldPool.ramp()),
       address(oldPool.iou()),
       oldPool.minimumLiquidity()
@@ -161,14 +154,6 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
   }
 
   /**
-   * @dev Returns if a Pool Template instance exists
-   * @param template The address of the template
-   */
-  function isPoolTemplate(address template) external view returns (bool) {
-    return exists[createKey(TEMPLATE, template)];
-  }
-
-  /**
    * @dev Returns if a Pool Implementation instance exists
    * @param implementation The address of the implementation
    */
@@ -185,14 +170,6 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
   }
 
   /**
-   * @dev Approves a new Pool Template
-   * @notice only the factory admin can approve new templates
-   */
-  function approveTemplate(address template) external onlyOwnerOperator {
-    exists[createKey(TEMPLATE, address(template))] = true;
-  }
-
-  /**
    * @dev Revokes an Implementation
    * @notice only the factory admin can revoke an implementation
    *
@@ -203,16 +180,7 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
   }
 
   /**
-   * @dev Revokes a Template
-   * @notice only the factory admin can revoke a template
-   */
-  function revokeTemplate(address template) external onlyOwnerOperator {
-    exists[createKey(TEMPLATE, address(template))] = false;
-  }
-
-  /**
    * @dev Sets the treasury fee rate
-   * @notice only the factory admin can revoke a template
    */
   function setTreasuryFeeRate(uint256 newFeeRate) external onlyOwnerOperator {
     require(newFeeRate <= MAX_TREASURY_FEE, "Pool: Fee too high");
@@ -221,7 +189,6 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
 
   /**
    * @dev Sets the treasury fee threshold
-   * @notice only the factory admin can revoke a template
    * The fee threshold is the amount of assets to accure in a Pool until transferring the fee to the treasury
    */
   function setFeeThreshold(uint256 newThreshold) external onlyOwnerOperator {

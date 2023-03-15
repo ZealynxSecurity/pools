@@ -3,14 +3,12 @@ pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
-import {IPoolTemplate} from "src/Types/Interfaces/IPoolTemplate.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
-import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {Decode} from "src/Errors.sol";
@@ -25,7 +23,7 @@ import "./BaseTest.sol";
 // TODO: investigate how to get this to 0 or 1
 uint256 constant EPOCH_CURSOR_ACCEPTANCE_DELTA = 1;
 
-contract PoolTemplateStakingTest is BaseTest {
+contract PoolStakingTest is BaseTest {
   using Credentials for VerifiableCredential;
   IAgent agent;
 
@@ -86,8 +84,8 @@ contract PoolTemplateStakingTest is BaseTest {
 
   function testFailUnauthorizedPoolTokenMint() public {
     address tester = makeAddr("TESTER");
-    // first check to make sure a template can mint
-    vm.startPrank(address(pool.template()));
+    // first check to make sure a pool can mint
+    vm.startPrank(address(pool));
     pool.share().mint(tester, 1e18);
     vm.stopPrank();
     assertEq(pool.share().balanceOf(tester), 1e18);
@@ -1147,38 +1145,21 @@ contract PoolUpgradeTest is BaseTest {
     assertTrue(pool.isShuttingDown(), "Pool should be shut down");
   }
 
-  function testSetTemplate() public {
-    address newTemplate = makeAddr("NEW_TEMPLATE");
-    // expect this call to revert because the template is not approved
-    vm.expectRevert("Pool: Invalid template");
-    vm.prank(poolOperator);
-    pool.setTemplate(IPoolTemplate(newTemplate));
-
-    // approve the template
-    vm.prank(IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN));
-    poolFactory.approveTemplate(newTemplate);
-
-    // now this should work
-    vm.prank(poolOperator);
-    pool.setTemplate(IPoolTemplate(newTemplate));
-    assertEq(address(pool.template()), newTemplate, "Template should be set");
-  }
-
   function testSetImplementation() public {
     address newImplementation = makeAddr("NEW_IMPLEMENTATION");
-    // expect this call to revert because the template is not approved
+    // expect this call to revert because the implementation is not approved
     vm.expectRevert("Pool: Invalid implementation");
     vm.prank(poolOperator);
     pool.setImplementation(IPoolImplementation(newImplementation));
 
-    // approve the template
+    // approve the Implementation
     vm.prank(IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN));
     poolFactory.approveImplementation(newImplementation);
 
     // now this should work
     vm.prank(poolOperator);
     pool.setImplementation(IPoolImplementation(newImplementation));
-    assertEq(address(pool.implementation()), newImplementation, "Template should be set");
+    assertEq(address(pool.implementation()), newImplementation, "Implementaton should be set");
   }
 
   function testSetMinimumLiquidity() public {

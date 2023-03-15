@@ -169,16 +169,6 @@ contract PoolFactoryConstantsTest is Test {
     assertEq(funcSig, POOL_FACTORY_REVOKE_IMPLEMENTATION_SELECTOR);
   }
 
-  function testApproveTemplate() public {
-    bytes4 funcSig = tester.approveTemplate(address(0));
-    assertEq(funcSig, POOL_FACTORY_APPROVE_TEMPLATE_SELECTOR);
-  }
-
-  function testRevokeTemplate() public {
-    bytes4 funcSig = tester.revokeTemplate(address(0));
-    assertEq(funcSig, POOL_FACTORY_REVOKE_TEMPLATE_SELECTOR);
-  }
-
   function testSetTreasuryFeeRate() public {
     bytes4 funcSig = tester.setTreasuryFeeRate(0);
     assertEq(funcSig, POOL_FACTORY_SET_TREASURY_FEE_SELECTOR);
@@ -259,7 +249,6 @@ contract ConstantsTest is Test {
     assertEq(POOL_SHUT_DOWN_SELECTOR, bytes4(keccak256(bytes("shutDown()"))));
     assertEq(POOL_SET_MIN_LIQUIDITY_SELECTOR, bytes4(keccak256(bytes("setMinimumLiquidity(uint256)"))));
     assertEq(POOL_SET_RAMP_SELECTOR, bytes4(keccak256(bytes("setRamp(address)"))));
-    assertEq(POOL_SET_TEMPLATE_SELECTOR, bytes4(keccak256(bytes("setTemplate(address)"))));
     assertEq(POOL_SET_IMPLEMENTATION_SELECTOR, bytes4(keccak256(bytes("setImplementation(address)"))));
 
     assertEq(PAUSE_SELECTOR, bytes4(keccak256(bytes("pause()"))));

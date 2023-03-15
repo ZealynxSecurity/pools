@@ -15,7 +15,6 @@ contract PoolAccountingDeployer {
    * @param _poolImplementation pool implementation address
    * @param _asset staking asset address
    * @param _share pool share token address
-   * @param _template pool template address
    * @param _ramp pool off ramp address
    * @param _iou pool IOU token address
    * @param _minimumLiquidity pool minimum liquidity amount
@@ -28,7 +27,6 @@ contract PoolAccountingDeployer {
     address _poolImplementation,
     address _asset,
     address _share,
-    address _template,
     address _ramp,
     address _iou,
     uint256 _minimumLiquidity
@@ -41,7 +39,6 @@ contract PoolAccountingDeployer {
       _poolImplementation,
       _asset,
       _share,
-      _template,
       _ramp,
       _iou,
       _minimumLiquidity

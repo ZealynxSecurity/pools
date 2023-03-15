@@ -515,7 +515,7 @@ library AccountHelpers {
         amount,
         minSize,
         msg.sig,
-        "PoolTemplate: Payment size too small"
+        "Pool: Payment size too small"
       );
     }
   }

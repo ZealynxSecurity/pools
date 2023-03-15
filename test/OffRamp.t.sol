@@ -18,7 +18,6 @@ contract OffRampTest is BaseTest {
   OffRamp ramp;
   PoolToken iou;
   IPool pool;
-  address poolTemplate;
   address poolFactory = makeAddr("POOLFACTORY");
 
   address investor1 = makeAddr("INVESTOR1");
@@ -197,7 +196,7 @@ contract OffRampTest is BaseTest {
 
   function _initialInvestorStakeSetup(uint256 amount) internal {
     _mintWFILToOfframp(amount);
-    vm.prank(address(pool.template()));
+    vm.prank(address(pool));
     iou.mint(investor1, amount);
     vm.prank(investor1);
     iou.approve(address(ramp), amount);

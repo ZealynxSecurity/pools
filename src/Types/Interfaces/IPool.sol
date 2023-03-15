@@ -6,7 +6,6 @@ import {SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
-import {IPoolTemplate} from "src/Types/Interfaces/IPoolTemplate.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 
 interface IPool {
@@ -14,6 +13,24 @@ interface IPool {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
+
+    event Borrow(
+        address indexed agent,
+        uint256 amount,
+        uint256 powerTokenAmount,
+        uint256 rate
+    );
+
+    event ExitPool(
+        address indexed agent,
+        uint256 amount,
+        uint256 powerTokensReturned
+    );
+
+    event MakePayment(
+        address indexed agent,
+        uint256 pmt
+    );
 
     event Deposit(
         address indexed caller,
@@ -45,8 +62,6 @@ interface IPool {
     function asset() external view returns (ERC20);
 
     function share() external view returns (PoolToken);
-
-    function template() external view returns (IPoolTemplate);
 
     function implementation() external view returns (IPoolImplementation);
 
@@ -146,19 +161,8 @@ interface IPool {
 
     function setRamp(IOffRamp newRamp) external;
 
-    function setTemplate(IPoolTemplate newTemplate) external;
-
     function setImplementation(IPoolImplementation poolImplementation) external;
 
     function setMinimumLiquidity(uint256 minLiquidity) external;
-
-
-    /*////////////////////////////////////////////////////////
-                    ONLY CALLABLE BY TEMPLATE
-    ////////////////////////////////////////////////////////*/
-
-    function reduceTotalBorrowed(uint256 amount) external;
-
-    function increaseTotalBorrowed(uint256 amount) external;
 }
 

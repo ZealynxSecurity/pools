@@ -13,14 +13,6 @@ contract PoolFactorySigTester {
     return msg.sig;
   }
 
-  function approveTemplate(address) external pure returns (bytes4) {
-    return msg.sig;
-  }
-
-  function revokeTemplate(address) external pure returns (bytes4) {
-    return msg.sig;
-  }
-
   function setTreasuryFeeRate(uint256) external pure returns (bytes4) {
     return msg.sig;
   }

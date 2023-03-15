@@ -10,7 +10,6 @@ interface IPoolDeployer {
         address _poolImplementation,
         address _asset,
         address _share,
-        address _template,
         address _ramp,
         address _iou,
         uint256 _minimumLiquidity

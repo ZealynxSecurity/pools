@@ -31,7 +31,6 @@ import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol"
 import {Account} from "src/Types/Structs/Account.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
-import {PoolTemplate} from "src/Pool/PoolTemplate.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {MockPoolImplementation} from "test/helpers/MockPoolImplementation.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
@@ -248,13 +247,8 @@ contract BaseTest is Test {
     ) internal returns(IPool)
   {
     IPoolFactory poolFactory = GetRoute.poolFactory(router);
-    address poolFactoryOwner = IAuth(address(poolFactory)).owner();
-    vm.startPrank(poolFactoryOwner);
-    PoolTemplate template = new PoolTemplate();
     MockPoolImplementation broker = new MockPoolImplementation(fee, router);
-
-    template.setRouter(router);
-    poolFactory.approveTemplate(address(template));
+    vm.startPrank(IAuth(address(poolFactory)).owner());
     poolFactory.approveImplementation(address(broker));
 
     IPool pool = poolFactory.createPool(
@@ -263,8 +257,7 @@ contract BaseTest is Test {
         // the operator is the owner in this test case
         poolOperator,
         poolOperator,
-        address(broker),
-        address(template)
+        address(broker)
     );
     vm.stopPrank();
 

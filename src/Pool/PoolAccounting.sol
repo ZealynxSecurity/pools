@@ -21,14 +21,15 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
-import {IPoolTemplate} from "src/Types/Interfaces/IPoolTemplate.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
+import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {Account} from "src/Types/Structs/Account.sol";
+import {Window} from "src/Types/Structs/Window.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
-import {InsufficientLiquidity} from "src/Errors.sol";
+import {InsufficientLiquidity, AccountDNE, Unauthorized} from "src/Errors.sol";
 
 contract PoolAccounting is IPool, RouterAware, Operatable {
     using FixedPointMathLib for uint256;
@@ -40,9 +41,6 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
 
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
-
-    /// @dev `template`
-    IPoolTemplate public template;
 
     /// @dev `implementation handles logic for approving borrow requests and setting rates/account health
     IPoolImplementation public implementation;
@@ -95,11 +93,6 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         _;
     }
 
-    modifier onlyTemplate() {
-        require(msg.sender == address(template), "onlyPoolTemplate: Not authorized");
-        _;
-    }
-
     modifier isOpen() {
         require(!isShuttingDown, "Pool is shutting down");
         _;
@@ -128,7 +121,6 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         address _poolImplementation,
         address _asset,
         address _share,
-        address _template,
         address _ramp,
         address _iou,
         uint256 _minimumLiquidity
@@ -136,12 +128,10 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         id = _id;
         router = _router;
         implementation = IPoolImplementation(_poolImplementation);
-        template = IPoolTemplate(_template);
         share = PoolToken(_share);
         asset = ERC20(_asset);
         iou = PoolToken(_iou);
         ramp = IOffRamp(_ramp);
-        asset.approve(_template, type(uint256).max);
         minimumLiquidity = _minimumLiquidity;
     }
 
@@ -202,20 +192,6 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     }
 
     /*//////////////////////////////////////////////////////////////
-                      ONLY CALLABLE BY TEMPLATE
-    //////////////////////////////////////////////////////////////*/
-
-
-    // NOTE: Making these seperate saves us a step but maybe there's a smarter way to do this; feels wrong idk
-    function reduceTotalBorrowed(uint256 amount) external onlyTemplate {
-        totalBorrowed -= amount;
-    }
-
-    function increaseTotalBorrowed(uint256 amount) external onlyTemplate {
-        totalBorrowed += amount;
-    }
-
-    /*//////////////////////////////////////////////////////////////
                         POOL BORROWING FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
@@ -234,11 +210,14 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         onlyAgent
         isOpen
     {
+        // NOTE: this could be a modifier but it's only used here
+        _checkLiquidity(amount);
+        address agent = msg.sender;
         // pull the powerTokens into the pool
-        GetRoute.powerToken(router).transferFrom(msg.sender, address(this), powerTokenAmount);
+        GetRoute.powerToken(router).transferFrom(agent, address(this), powerTokenAmount);
 
-        Account memory account = _getAccount(msg.sender);
-
+        Account memory account = _getAccount(agent);
+        _accountNotInPenalty(agent, account);
         implementation.beforeBorrow(
             amount,
             powerTokenAmount,
@@ -246,15 +225,26 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
             sc.vc
         );
 
-        template.borrow(
+        if (amount > sc.vc.cap) {
+            revert Unauthorized();
+        }
+
+        account.borrow(
+            router,
             amount,
-            sc.vc,
             powerTokenAmount,
-            implementation,
-            account
+            sc.vc,
+            implementation
         );
+
+        account.save(router, sc.vc.subject, id);
+
+        totalBorrowed += amount;
+
+        emit Borrow(sc.vc.subject, amount, account.perEpochRate, account.totalBorrowed);
+
         // interact
-        SafeTransferLib.safeTransfer(asset, msg.sender, amount);
+        SafeTransferLib.safeTransfer(asset, agent, amount);
     }
 
     /**
@@ -265,8 +255,10 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     function makePayment(
         address agent,
         uint256 pmt
-    ) public {
+    )  public {
         Account memory account = _getAccount(agent);
+        // NOTE: we could compound this into the account getter
+        _accountExists(agent, account, msg.sig);
 
         (,uint256 remainingPmt) = _accrueFees(pmt, account);
 
@@ -275,11 +267,26 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
             account
         );
 
-        template.makePayment(
-            agent,
-            account,
-            remainingPmt
-        );
+        Window memory window = GetRoute.agentPolice(router).windowInfo();
+        uint256 penaltyEpochs = account.getPenaltyEpochs(window);
+
+        if (penaltyEpochs > 0) {
+            account.creditInPenalty(
+                remainingPmt,
+                penaltyEpochs,
+                implementation.rateSpike(
+                    penaltyEpochs,
+                    window.length,
+                    account
+                )
+            );
+        } else {
+            account.credit(remainingPmt);
+        }
+
+        account.save(router, agent, id);
+
+        emit MakePayment(agent, remainingPmt);
 
         SafeTransferLib.safeTransferFrom(
             asset,
@@ -302,6 +309,7 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     ) public onlyAgent returns (
         uint256 powerTokensToReturn
     ) {
+        address subject = sc.vc.subject;
         // Pull back the borrowed asset
         SafeTransferLib.safeTransferFrom(
             asset,
@@ -312,20 +320,22 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
 
         Account memory account = _getAccount(agent);
 
+        _accountCurrent(subject, account);
+
         implementation.beforeExit(
             amount,
             account,
             sc.vc
         );
 
-        powerTokensToReturn = template.exitPool(
-            amount,
-            sc.vc,
-            AccountHelpers.getAccount(router, agent, id)
-        );
+        AccountHelpers._amountGt(account.totalBorrowed, amount);
+        totalBorrowed -= amount;
+        powerTokensToReturn = account.exit(amount);
+        account.save(router, subject, id);
+        emit ExitPool(subject, amount, powerTokensToReturn);
 
         // Return the power tokens to the agent
-        GetRoute.powerToken(router).transfer(sc.vc.subject, powerTokensToReturn);
+        GetRoute.powerToken(router).transfer(subject, powerTokensToReturn);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -362,7 +372,8 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
         SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
-        template.mint(shares, receiver);
+        share.mint(receiver, shares);
+        assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 
@@ -378,7 +389,14 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         address receiver,
         address owner
     ) public requiresRamp returns (uint256 shares) {
-        shares = template.withdraw(assets, receiver, owner, share, iou);
+        shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
+
+        share.burn(owner, shares);
+
+        // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
+        iou.mint(address(this), assets);
+        iou.approve(address(ramp), assets);
+        ramp.stakeOnBehalf(assets, receiver);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
@@ -394,7 +412,16 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         address receiver,
         address owner
     ) public requiresRamp returns (uint256 assets) {
-        assets = template.redeem(shares, receiver, owner, share, iou);
+
+        // Check for rounding error since we round down in previewRedeem.
+        require((assets = previewRedeem(shares)) != 0, "ZERO_ASSETS");
+
+        share.burn(owner, shares);
+
+        // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
+        iou.mint(address(this), assets);
+        iou.approve(address(ramp), assets);
+        ramp.stakeOnBehalf(assets, receiver);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
@@ -581,14 +608,6 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         isShuttingDown = true;
     }
 
-    function setTemplate(IPoolTemplate poolTemplate) public onlyOwnerOperator {
-        require(
-            GetRoute.poolFactory(router).isPoolTemplate(address(poolTemplate)),
-            "Pool: Invalid template"
-        );
-        template = poolTemplate;
-    }
-
     function setImplementation(IPoolImplementation poolImplementation) public onlyOwnerOperator {
         require(
             GetRoute.poolFactory(router).isPoolImplementation(address(poolImplementation)),
@@ -607,6 +626,55 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
 
     function _getAccount(address agent) internal view returns (Account memory) {
         return AccountHelpers.getAccount(router, agent, id);
+    }
+
+    function _accountExists(
+        address agent,
+        Account memory account,
+        bytes4 sig
+    ) internal pure returns (bool) {
+        if (!account.exists()) {
+            revert AccountDNE(
+                agent,
+                sig,
+                "Pool: Account does not exist"
+            );
+        }
+
+        return true;
+    }
+
+    function _accountNotInPenalty(
+        address agent,
+        Account memory account
+    ) internal view returns (bool) {
+        if (account.getPenaltyEpochs(GetRoute.agentPolice(router).windowInfo()) > 0) {
+            revert Unauthorized();
+        }
+
+        return true;
+    }
+
+    function _accountCurrent(address agent, Account memory account) internal view returns (bool) {
+        if (GetRoute.agentPolice(router).windowInfo().start > account.epochsPaid) {
+            revert Unauthorized();
+        }
+
+        return true;
+    }
+
+    function _checkLiquidity(uint256 amount) internal view {
+        uint256 available = totalBorrowableAssets();
+        if (available < amount) {
+            revert InsufficientLiquidity(
+                address(this),
+                msg.sender,
+                amount,
+                available,
+                msg.sig,
+                "Pool: Insufficient liquidity"
+            );
+        }
     }
 
     function _accrueFees(
@@ -634,16 +702,28 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         require(assets > 0, "Pool: cannot deposit 0 assets");
         shares = previewDeposit(assets);
         SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
-        template.mint(shares, receiver);
+        share.mint(receiver, shares);
+        assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 
     function _depositFIL(address receiver) internal returns (uint256 shares) {
-        uint256 assets = template.filToAsset{value: msg.value}(asset, address(this));
+        IWFIL wFIL = GetRoute.wFIL(router);
+
+        // in this Pool, the asset must be wFIL
+        require(
+            address(asset) == address(wFIL),
+            "Asset must be wFIL to deposit FIL"
+        );
+        // handle FIL deposit
+        uint256 assets = msg.value;
+        wFIL.deposit{value: assets}();
+        wFIL.transfer(address(this), assets);
         require(assets > 0, "Pool: cannot deposit 0 assets");
 
         shares = previewDeposit(assets);
-        template.mint(shares, receiver);
+        share.mint(receiver, shares);
+        assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 }

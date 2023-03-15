@@ -32,8 +32,7 @@ contract PoolFactory is IPoolFactory, RouterAware {
     string memory symbol,
     address owner,
     address operator,
-    address implementation,
-    address template
+    address implementation
   ) external returns (IPool) {}
 
   function upgradePool(
@@ -44,21 +43,13 @@ contract PoolFactory is IPoolFactory, RouterAware {
     return true;
   }
 
-  function isPoolTemplate(address template) public view returns (bool) {
-    return true;
-  }
-
   function isPoolImplementation(address implementation) public view returns (bool) {
     return true;
   }
 
   function approveImplementation(address implementation) external {}
 
-  function approveTemplate(address template) external {}
-
   function revokeImplementation(address implementation) external {}
-
-  function revokeTemplate(address template) external {}
 
   function setTreasuryFeeRate(uint256 newFeeRate) external {}
 
