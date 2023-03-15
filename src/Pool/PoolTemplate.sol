@@ -11,8 +11,6 @@ import {AuthController} from "src/Auth/AuthController.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
-
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
@@ -24,7 +22,6 @@ import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";
-import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN, ROUTE_POOL_FACTORY} from "src/Constants/Routes.sol";
 import {
     AccountDNE,
@@ -46,11 +43,6 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
 
     modifier onlyAccounting() {
         AuthController.onlyPoolAccounting(router, msg.sender);
-        _;
-    }
-
-    modifier requiresAuth() {
-        AuthController.requiresSubAuth(router, address(this));
         _;
     }
 
@@ -90,12 +82,7 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         _checkLiquidity(ask, pool.totalBorrowableAssets());
 
         if (ask > vc.cap) {
-            revert Unauthorized(
-                vc.subject,
-                address(this),
-                msg.sig,
-                "Borrowed ask exceeds vc cap"
-            );
+            revert Unauthorized();
         }
 
         account.borrow(
@@ -272,12 +259,7 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
 
     function _accountCurrent(address agent, Account memory account) internal view returns (bool) {
         if (GetRoute.agentPolice(router).windowInfo().start > account.epochsPaid) {
-            revert Unauthorized(
-                agent,
-                address(this),
-                msg.sig,
-                "Account is not current"
-            );
+            revert Unauthorized();
         }
 
         return true;
@@ -288,12 +270,7 @@ contract PoolTemplate is IPoolTemplate, RouterAware {
         Account memory account
     ) internal view returns (bool) {
         if (account.getPenaltyEpochs(GetRoute.agentPolice(router).windowInfo()) > 0) {
-            revert Unauthorized(
-                agent,
-                address(this),
-                msg.sig,
-                "PoolTemplate: Cannot perform action while in penalty"
-            );
+            revert Unauthorized();
         }
 
         return true;

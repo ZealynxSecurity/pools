@@ -12,9 +12,9 @@ import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
+import {Operatable} from "src/Auth/Operatable.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
@@ -30,7 +30,7 @@ import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
 import {InsufficientLiquidity} from "src/Errors.sol";
 
-contract PoolAccounting is IPool, RouterAware {
+contract PoolAccounting is IPool, RouterAware, Operatable {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
 
@@ -74,11 +74,6 @@ contract PoolAccounting is IPool, RouterAware {
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
     //////////////////////////////////////////////////////////////*/
-
-    modifier requiresAuth() {
-        AuthController.requiresSubAuth(router, address(this));
-        _;
-    }
 
     modifier requiresRamp() {
         require(address(ramp) != address(0), "No ramp set");
@@ -126,6 +121,8 @@ contract PoolAccounting is IPool, RouterAware {
     // This is just the approval module, and the treasury address
     // Everything else is accesible through the router (power token for example)
     constructor(
+        address _owner,
+        address _operator,
         uint256 _id,
         address _router,
         address _poolImplementation,
@@ -135,7 +132,7 @@ contract PoolAccounting is IPool, RouterAware {
         address _ramp,
         address _iou,
         uint256 _minimumLiquidity
-    ) {
+    ) Operatable(_owner, _operator) {
         id = _id;
         router = _router;
         implementation = IPoolImplementation(_poolImplementation);
@@ -553,7 +550,7 @@ contract PoolAccounting is IPool, RouterAware {
                             ADMIN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function setRamp(IOffRamp _ramp) external requiresAuth {
+    function setRamp(IOffRamp _ramp) external onlyOwnerOperator {
         ramp = _ramp;
     }
 
@@ -576,15 +573,15 @@ contract PoolAccounting is IPool, RouterAware {
         totalBorrowed = amount;
     }
 
-    function setMinimumLiquidity(uint256 _minimumLiquidity) public requiresAuth {
+    function setMinimumLiquidity(uint256 _minimumLiquidity) public onlyOwnerOperator {
         minimumLiquidity = _minimumLiquidity;
     }
 
-    function shutDown() public requiresAuth {
+    function shutDown() public onlyOwnerOperator {
         isShuttingDown = true;
     }
 
-    function setTemplate(IPoolTemplate poolTemplate) public requiresAuth {
+    function setTemplate(IPoolTemplate poolTemplate) public onlyOwnerOperator {
         require(
             GetRoute.poolFactory(router).isPoolTemplate(address(poolTemplate)),
             "Pool: Invalid template"
@@ -592,26 +589,12 @@ contract PoolAccounting is IPool, RouterAware {
         template = poolTemplate;
     }
 
-    function setImplementation(IPoolImplementation poolImplementation) public requiresAuth {
+    function setImplementation(IPoolImplementation poolImplementation) public onlyOwnerOperator {
         require(
             GetRoute.poolFactory(router).isPoolImplementation(address(poolImplementation)),
             "Pool: Invalid implementation"
         );
         implementation = poolImplementation;
-    }
-
-    /**
-     * @dev Enables or disables the operator role for a specific address
-     * @param operator The address of the operator whose role will be changed
-     * @param enabled A boolean value that indicates whether the operator role should be enabled or disabled for this addr
-     * @notice only the owner of the agent can call this function
-     */
-    function setOperatorRole(address operator, bool enabled) external requiresAuth {
-        IMultiRolesAuthority(
-        address(AuthController.getSubAuthority(router, address(this)))
-        ).setUserRole(operator, uint8(Roles.ROLE_POOL_OPERATOR), enabled);
-
-        emit SetOperatorRole(operator, enabled);
     }
 
     /*//////////////////////////////////////////////////////////////

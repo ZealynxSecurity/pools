@@ -30,6 +30,7 @@ contract PoolFactory is IPoolFactory, RouterAware {
   function createPool(
     string memory name,
     string memory symbol,
+    address owner,
     address operator,
     address implementation,
     address template

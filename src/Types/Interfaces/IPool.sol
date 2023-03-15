@@ -152,7 +152,6 @@ interface IPool {
 
     function setMinimumLiquidity(uint256 minLiquidity) external;
 
-    function setOperatorRole(address operator, bool enabled) external;
 
     /*////////////////////////////////////////////////////////
                     ONLY CALLABLE BY TEMPLATE

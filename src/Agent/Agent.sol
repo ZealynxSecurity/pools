@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {AuthController} from "src/Auth/AuthController.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
+import {Operatable} from "src/Auth/Operatable.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
@@ -20,7 +18,6 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IStats} from "src/Types/Interfaces/IStats.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {SignedCredential, VerifiableCredential, Credentials} from "src/Types/Structs/Credentials.sol";
-
 import {
   ROUTE_AGENT_FACTORY,
   ROUTE_POWER_TOKEN,
@@ -42,10 +39,9 @@ import {
 } from "src/Agent/Errors.sol";
 import {MinerHelper} from "helpers/MinerHelper.sol";
 
-contract Agent is IAgent, RouterAware {
+contract Agent is IAgent, RouterAware, Operatable {
   using Credentials for VerifiableCredential;
   using MinerHelper for uint64;
-
   uint256 public id;
   /**
    * @notice Returns the minerID at a specific index
@@ -55,11 +51,6 @@ contract Agent is IAgent, RouterAware {
   /*//////////////////////////////////////
                 MODIFIERS
   //////////////////////////////////////*/
-
-  modifier requiresAuth {
-    _requiresAuth();
-    _;
-  }
 
   modifier requiresAuthOrPolice {
     _requiresAuthOrPolice();
@@ -98,8 +89,10 @@ contract Agent is IAgent, RouterAware {
 
   constructor(
     address _router,
-    uint256 _agentID
-  ) {
+    uint256 _agentID,
+    address _owner,
+    address _operator
+  ) Operatable(_owner, _operator) {
     router = _router;
     id = _agentID;
   }
@@ -204,7 +197,7 @@ contract Agent is IAgent, RouterAware {
    *
    * This function can only be called by the Agent's owner or operator
    */
-  function addMiners(uint64[] calldata miners) external requiresAuth {
+  function addMiners(uint64[] calldata miners) external onlyOwnerOperator {
     for (uint256 i = 0; i < miners.length; i++) {
       _addMiner(miners[i]);
     }
@@ -235,9 +228,9 @@ contract Agent is IAgent, RouterAware {
     SignedCredential memory minerCred
   )
     external
+    onlyOwner
     notOverPowered
     notOverLeveraged
-    requiresAuth
     isValidCredential(agentCred)
   {
     // also validate the minerCred against the miner to remove
@@ -265,7 +258,7 @@ contract Agent is IAgent, RouterAware {
    * @param newAgent The address of the new agent to which the miner will be migrated
    * @param miner The address of the miner to be migrated
    */
-  function migrateMiner(address newAgent, uint64 miner) external requiresAuth {
+  function migrateMiner(address newAgent, uint64 miner) external onlyOwnerOperator {
     uint256 newId = IAgent(newAgent).id();
     if (
       // first check to make sure the agentFactory knows about this "agent"
@@ -293,41 +286,9 @@ contract Agent is IAgent, RouterAware {
     uint64 miner,
     uint64 worker,
     uint64[] calldata controlAddresses
-  ) external requiresAuth {
+  ) external onlyOwner {
     miner.changeWorkerAddress(worker, controlAddresses);
     emit ChangeMinerWorker(miner, worker, controlAddresses);
-  }
-
-  /*//////////////////////////////////////////////////
-          AGENT OWNERSHIP / OPERATOR CHANGES
-  //////////////////////////////////////////////////*/
-
-  /**
-   * @notice Enables or disables the operator role for a specific address
-   * @param operator The address of the operator whose role will be changed
-   * @param enabled A boolean value that indicates whether the operator role should be enabled or disabled for this addr
-   * @dev only the owner of the agent can call this function
-   */
-  function setOperatorRole(address operator, bool enabled) external requiresAuth {
-    IMultiRolesAuthority(
-      address(AuthController.getSubAuthority(router, address(this)))
-    ).setUserRole(operator, uint8(Roles.ROLE_AGENT_OPERATOR), enabled);
-
-    emit SetOperatorRole(operator, enabled);
-  }
-
-  /**
-   * @notice Enables or disables the owner role for a specific address
-   * @param owner The address of the operator whose role will be changed
-   * @param enabled A boolean value that indicates whether the owner role should be enabled or disabled for this addr
-   * @dev only the owner of the agent can call this function
-   */
-  function setOwnerRole(address owner, bool enabled) external requiresAuth {
-    IMultiRolesAuthority(
-      address(AuthController.getSubAuthority(router, address(this)))
-    ).setUserRole(owner, uint8(Roles.ROLE_AGENT_OWNER), enabled);
-
-    emit SetOwnerRole(owner, enabled);
   }
 
   /*//////////////////////////////////////////////////
@@ -342,7 +303,7 @@ contract Agent is IAgent, RouterAware {
   function mintPower(
     uint256 amount,
     SignedCredential memory signedCredential
-  ) external notOverPowered requiresAuth isValidCredential(signedCredential) {
+  ) external notOverPowered onlyOwnerOperator isValidCredential(signedCredential) {
     IPowerToken powerToken = GetRoute.powerToken(router);
     // check
     if (
@@ -388,7 +349,7 @@ contract Agent is IAgent, RouterAware {
     address receiver,
     uint256 amount,
     SignedCredential memory signedCredential
-  ) external requiresAuth isValidCredential(signedCredential) {
+  ) external onlyOwner isValidCredential(signedCredential) {
     address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
     uint256 maxWithdrawAmt = _maxWithdraw(signedCredential.vc, credParser);
 
@@ -439,9 +400,9 @@ contract Agent is IAgent, RouterAware {
     SignedCredential memory signedCredential
   )
     external
+    onlyOwnerOperator
     isValidCredential(signedCredential)
     notOverLeveraged
-    requiresAuth
     minersMatchAmounts(miners, amounts)
   {
     uint256 total = 0;
@@ -478,10 +439,10 @@ contract Agent is IAgent, RouterAware {
     SignedCredential memory signedCredential,
     uint256 powerTokenAmount
   ) external
+    onlyOwnerOperator
     notOverPowered
     notOverLeveraged
     notInDefault
-    requiresAuth
     isValidCredential(signedCredential)
   {
     IPool pool = GetRoute.pool(router, poolID);
@@ -513,7 +474,7 @@ contract Agent is IAgent, RouterAware {
     uint256 newPoolID,
     uint256 additionalPowerTokens,
     SignedCredential memory signedCredential
-  ) external requiresAuth isValidCredential(signedCredential) {
+  ) external onlyOwnerOperator isValidCredential(signedCredential) {
     Account memory account = _getAccount(
       oldPoolID
     );
@@ -554,7 +515,7 @@ contract Agent is IAgent, RouterAware {
     uint256 poolID,
     uint256 assetAmount,
     SignedCredential memory signedCredential
-  ) external requiresAuth isValidCredential(signedCredential) {
+  ) external onlyOwnerOperator isValidCredential(signedCredential) {
     // TODO: optimize with https://github.com/glif-confidential/pools/issues/148
     IPool pool = GetRoute.pool(router, poolID);
     uint256 borrowedAmount = pool.getAgentBorrowed(id);
@@ -694,19 +655,12 @@ contract Agent is IAgent, RouterAware {
     return amount;
   }
 
-  function _canCall() internal view returns (bool) {
-    return AuthController.canCallSubAuthority(router, address(this));
-  }
-
-  function _requiresAuth() internal view {
-    if (!_canCall()) revert Unauthorized();
-  }
-
   function _requiresAuthOrPolice() internal view {
-    if (!(
-      _canCall() ||
-      IRouter(router).getRoute(ROUTE_AGENT_POLICE) == msg.sender
-    )) revert Unauthorized();
+    if (
+      owner() != _msgSender() &&
+      operator() != _msgSender() &&
+      IRouter(router).getRoute(ROUTE_AGENT_POLICE) != msg.sender
+    ) revert Unauthorized();
   }
 
   function _notOverPowered() internal view {

@@ -14,10 +14,6 @@ interface IAgent {
 
   event ChangeMinerWorker(uint64 indexed miner, uint64 newWorker, uint64[] newControlAddresses);
 
-  event SetOperatorRole(address indexed operator, bool enabled);
-
-  event SetOwnerRole(address indexed owner, bool enabled);
-
   event WithdrawBalance(address indexed receiver, uint256 amount);
 
   event PullFundsFromMiners(uint64[] miners, uint256[] amounts);
@@ -68,13 +64,6 @@ interface IAgent {
     uint64 worker,
     uint64[] calldata controlAddresses
   ) external;
-  /*//////////////////////////////////////////////////
-          AGENT OWNERSHIP / OPERATOR CHANGES
-  //////////////////////////////////////////////////*/
-
-  function setOperatorRole(address operator, bool enabled) external;
-
-  function setOwnerRole(address owner, bool enabled) external;
 
   /*//////////////////////////////////////////////////
                 POWER TOKEN FUNCTIONS

@@ -18,20 +18,16 @@ contract AgentFactory is IAgentFactory, RouterAware {
   // we start at ID 1 because ID 0 is reserved for empty agent ID
   uint256 public agentCount = 0;
 
-  function create(address operator) external returns (address) {
+  function create(address owner, address operator) external returns (address) {
     agentCount++;
-    Agent agent = AgentDeployer.deploy(router, agentCount);
-    agents[address(agent)] = agentCount;
-
-    if (operator == address(0)) {
-      operator = msg.sender;
-    }
-
-    AuthController.initAgentRoles(
+    Agent agent = AgentDeployer.deploy(
       router,
-      address(agent),
+      agentCount,
+      owner,
       operator
     );
+    agents[address(agent)] = agentCount;
+
 
     emit CreateAgent(agent.id(), address(agent), operator);
 

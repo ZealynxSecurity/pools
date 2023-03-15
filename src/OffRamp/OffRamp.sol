@@ -8,10 +8,9 @@ import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
-import {AuthController} from "src/Auth/AuthController.sol";
-import {Unauthorized} from "src/Errors.sol";
+import {Ownable} from "src/Auth/Ownable.sol";
 
-contract OffRamp is IOffRamp, RouterAware {
+contract OffRamp is IOffRamp, RouterAware, Ownable {
     using SafeTransferLib for ERC20;
 
     // the conversionWindow protects against flash loan attacks
@@ -55,8 +54,9 @@ contract OffRamp is IOffRamp, RouterAware {
         address _router,
         address _iouToken,
         address _exitToken,
+        address _owner,
         uint256 _poolID
-    ) {
+    ) Ownable(_owner){
         router = _router;
         iouToken = _iouToken;
         exitToken = _exitToken;
@@ -112,15 +112,10 @@ contract OffRamp is IOffRamp, RouterAware {
         _;
     }
 
-    modifier requiresAuth() {
-        _requiresAuth();
-        _;
-    }
-
     ///@dev set the TRANSMUTATION_PERIOD variable
     ///
     /// sets the length (in blocks) of one full distribution phase
-    function setConversionWindow(uint256 newTransmutationPeriod) public requiresAuth() {
+    function setConversionWindow(uint256 newTransmutationPeriod) public onlyOwner {
         conversionWindow = newTransmutationPeriod;
         emit TransmuterPeriodUpdated(conversionWindow);
     }
@@ -412,18 +407,4 @@ contract OffRamp is IOffRamp, RouterAware {
         return 0;
     }
 
-    function _requiresAuth() internal view {
-        // the Offramp's authority is its Parent Pool
-        if (!AuthController.canCallSubAuthority(
-            router,
-            address(GetRoute.pool(router, poolID))
-        )) {
-            revert Unauthorized(
-                address(this),
-                msg.sender,
-                msg.sig,
-                "OffRamp: Unauthorized"
-            );
-        }
-    }
 }

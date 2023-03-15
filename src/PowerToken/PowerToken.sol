@@ -5,7 +5,6 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IPowerTokenPlus} from "src/Types/Interfaces/IPowerTokenPlus.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
@@ -29,10 +28,7 @@ contract PowerToken is
                               MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
-    modifier requiresAuth() {
-      AuthController.requiresSubAuth(router, address(this));
-      _;
-    }
+
 
     modifier onlyAgent() {
       AuthController.onlyAgent(router, msg.sender);
@@ -109,12 +105,12 @@ contract PowerToken is
                             ADMIN CONTROLS
     //////////////////////////////////////////////////////////////*/
 
-    function pause() external requiresAuth {
+    function pause() external {
       paused = true;
       emit PauseContract();
     }
 
-    function resume() external requiresAuth {
+    function resume() external {
       paused = false;
       emit ResumeContract();
     }
@@ -142,12 +138,7 @@ contract PowerToken is
         agentFactory.isAgent(to) ||
         to == treasury
       )) {
-        revert Unauthorized(
-          address(this),
-          msg.sender,
-          msg.sig,
-          "PowerToken: Invalid to address"
-        );
+        revert Unauthorized();
       }
     }
 

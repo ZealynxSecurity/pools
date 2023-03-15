@@ -17,8 +17,8 @@ import {PowerToken} from "src/PowerToken/PowerToken.sol";
 import {PoolFactory} from "src/Pool/PoolFactory.sol";
 import {Router} from "src/Router/Router.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -71,17 +71,15 @@ contract BaseTest is Test {
   string constant public VERIFIED_VERSION = "1";
 
   WFIL wFIL = new WFIL();
-  IMultiRolesAuthority coreAuthority;
   MockIDAddrStore idStore;
 
   constructor() {
     vm.startPrank(systemAdmin);
-    // deploys the coreAuthority and the router
-    (router, coreAuthority) = Deployer.init(systemAdmin);
+    // deploys the router
+    router = address(new Router(systemAdmin));
     // these two route setting calls are separate because they blow out the call stack if they're one func
     Deployer.setupAdminRoutes(
       router,
-      systemAdmin,
       systemAdmin,
       systemAdmin,
       systemAdmin,
@@ -97,9 +95,9 @@ contract BaseTest is Test {
       address(wFIL),
       address(new MinerRegistry()),
       address(new AgentFactory()),
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH)),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, systemAdmin, systemAdmin)),
       // 1e17 = 10% treasury fee on yield
-      address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0)),
+      address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0, systemAdmin, systemAdmin)),
       address(new PowerToken()),
       vcIssuer,
       address(new CredParser()),
@@ -107,8 +105,6 @@ contract BaseTest is Test {
     );
     // any contract that extends RouterAware gets its router set here
     Deployer.setRouterOnContracts(address(router));
-    // initialize the system's authentication system
-    Deployer.initRoles(address(router), systemAdmin);
     // roll forward at least 1 window length so our computations dont overflow/underflow
     vm.roll(block.number + WINDOW_LENGTH);
 
@@ -128,7 +124,7 @@ contract BaseTest is Test {
   function _configureAgent(address minerOwner, uint64 miner) public returns (Agent agent) {
     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
     vm.startPrank(minerOwner);
-    agent = Agent(payable(agentFactory.create(address(0))));
+    agent = Agent(payable(agentFactory.create(minerOwner, minerOwner)));
     assertTrue(
       miner.isOwner(minerOwner),
       "The mock miner's current owner should be set to the original owner"
@@ -251,11 +247,9 @@ contract BaseTest is Test {
     uint256 fee
     ) internal returns(IPool)
   {
-    address poolFactoryAdmin = IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN);
-    vm.startPrank(poolFactoryAdmin);
-
     IPoolFactory poolFactory = GetRoute.poolFactory(router);
-
+    address poolFactoryOwner = IAuth(address(poolFactory)).owner();
+    vm.startPrank(poolFactoryOwner);
     PoolTemplate template = new PoolTemplate();
     MockPoolImplementation broker = new MockPoolImplementation(fee, router);
 
@@ -266,6 +260,8 @@ contract BaseTest is Test {
     IPool pool = poolFactory.createPool(
         poolName,
         poolSymbol,
+        // the operator is the owner in this test case
+        poolOperator,
         poolOperator,
         address(broker),
         address(template)
@@ -275,13 +271,6 @@ contract BaseTest is Test {
     _configureOffRamp(pool);
 
     return pool;
-  }
-
-  function mintAndApprovePower(IAgent _agent, address _pool, address _powerToken, uint256 amount, SignedCredential memory signedCred) internal {
-    vm.startPrank(address(_agent));
-    _agent.mintPower(amount, signedCred);
-    IERC20(_powerToken).approve(_pool, amount);
-    vm.stopPrank();
   }
 
   function createAndPrimePool(
@@ -309,55 +298,58 @@ contract BaseTest is Test {
     vm.stopPrank();
   }
 
-    function agentMintAndApprovePower(address pool, address _powerToken, IAgent _agent, SignedCredential memory _signedCred, uint256 _amount) internal {
-        vm.startPrank(address(_agent));
-        _agent.mintPower(_amount, _signedCred);
-        IERC20(_powerToken).approve(pool, _amount);
-        vm.stopPrank();
-    }
+  function agentBorrow(
+    IAgent _agent,
+    uint256 _borrowAmount,
+    SignedCredential memory _signedCred,
+    IPool _pool,
+    address _powerToken,
+    uint256 powerStake
+  ) internal {
+      vm.startPrank(_agentOperator(_agent));
+      // Establsh the state before the borrow
+      StateSnapshot memory preBorrowState;
+      preBorrowState.balanceWFIL = wFIL.balanceOf(address(_agent));
+      Account memory account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
+      preBorrowState.powerStake = account.powerTokensStaked;
+      preBorrowState.borrowed = account.totalBorrowed;
+      preBorrowState.powerBalance = IERC20(_powerToken).balanceOf(address(_agent));
+      preBorrowState.powerBalancePool = IERC20(_powerToken).balanceOf(address(_pool));
 
-    function agentBorrow(IAgent _agent, uint256 _borrowAmount, SignedCredential memory _signedCred, IPool _pool, address _powerToken, uint256 powerStake) internal {
-        vm.startPrank(address(_agent));
-        // Establsh the state before the borrow
-        StateSnapshot memory preBorrowState;
-        preBorrowState.balanceWFIL = wFIL.balanceOf(address(_agent));
-        Account memory account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
-        preBorrowState.powerStake = account.powerTokensStaked;
-        preBorrowState.borrowed = account.totalBorrowed;
-        preBorrowState.powerBalance = IERC20(_powerToken).balanceOf(address(_agent));
-        preBorrowState.powerBalancePool = IERC20(_powerToken).balanceOf(address(_pool));
+      _agent.borrow(_borrowAmount, 0, _signedCred, powerStake);
+      vm.stopPrank();
+      // Check the state after the borrow
+      uint256 currBalance = wFIL.balanceOf(address(_agent));
+      assertEq(currBalance, preBorrowState.balanceWFIL + _borrowAmount);
 
-        _agent.borrow(_borrowAmount, 0, _signedCred, powerStake);
-        vm.stopPrank();
+      account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
 
-        // Check the state after the borrow
-        uint256 currBalance = wFIL.balanceOf(address(_agent));
-        assertEq(currBalance, preBorrowState.balanceWFIL + _borrowAmount);
-
-        account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
+      // first time borrowing, check the startEpoch
+      if (preBorrowState.borrowed == 0) {
         assertEq(account.startEpoch, block.number);
-        assertGt(account.pmtPerEpoch(), 0);
+      }
+      assertGt(account.pmtPerEpoch(), 0);
 
-        uint256 rate = _pool.implementation().getRate(
-            _borrowAmount,
-            powerStake,
-            GetRoute.agentPolice(router).windowLength(),
-            account,
-            _signedCred.vc
-        );
-        assertEq(account.perEpochRate, rate);
-        assertEq(account.powerTokensStaked, preBorrowState.powerStake + powerStake);
-        assertEq(account.totalBorrowed, preBorrowState.borrowed + _borrowAmount);
+      uint256 rate = _pool.implementation().getRate(
+          _borrowAmount,
+          powerStake,
+          GetRoute.agentPolice(router).windowLength(),
+          account,
+          _signedCred.vc
+      );
+      assertEq(account.perEpochRate, rate);
+      assertEq(account.powerTokensStaked, preBorrowState.powerStake + powerStake);
+      assertEq(account.totalBorrowed, preBorrowState.borrowed + _borrowAmount);
 
-        assertEq(
-            IERC20(_powerToken).balanceOf(address(_agent)),
-            preBorrowState.powerBalance - powerStake
-        );
+      assertEq(
+          IERC20(_powerToken).balanceOf(address(_agent)),
+          preBorrowState.powerBalance - powerStake
+      );
 
-        assertEq(
-            IERC20(_powerToken).balanceOf(address(_pool)),
-            preBorrowState.powerBalancePool + powerStake
-        );
+      assertEq(
+          IERC20(_powerToken).balanceOf(address(_pool)),
+          preBorrowState.powerBalancePool + powerStake
+      );
     }
 
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
@@ -365,10 +357,19 @@ contract BaseTest is Test {
       router,
       address(pool.iou()),
       address(pool.asset()),
+      systemAdmin,
       pool.id()
     ));
 
-    vm.prank(address(GetRoute.poolFactory(router)));
+    vm.prank(IAuth(address(pool)).owner());
     pool.setRamp(ramp);
+  }
+
+  function _agentOwner(IAgent agent) internal view returns (address) {
+    return IAuth(address(agent)).owner();
+  }
+
+  function _agentOperator(IAgent agent) internal view returns (address) {
+    return IAuth(address(agent)).operator();
   }
 }

@@ -37,9 +37,7 @@ contract IntegrationTest is BaseTest {
     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
-    vm.prank(poolAdmin);
     pool = createPool(poolName, poolSymbol, poolOperator, 20e18);
-    vm.stopPrank();
     pool20 = IERC20(address(pool.share()));
     iou = IERC20(address(pool.iou()));
     ramp = IOffRamp(address(pool.ramp()));

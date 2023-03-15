@@ -3,7 +3,6 @@ pragma solidity ^0.8.15;
 
 import {Router} from "src/Router/Router.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
-import {Authority} from "src/Auth/Auth.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
 

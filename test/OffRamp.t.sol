@@ -35,7 +35,7 @@ contract OffRampTest is BaseTest {
 
     // Our "asset" in most cases is wrapped fil
     iou = new PoolToken(router, 0, "iou", "iou");
-    ramp = new OffRamp(router, address(iou), address(wFIL), 0);
+    ramp = new OffRamp(router, address(iou), address(wFIL), systemAdmin, 0);
 
     conversionWindow = ramp.conversionWindow();
     vm.stopPrank();

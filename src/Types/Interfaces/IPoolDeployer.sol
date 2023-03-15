@@ -3,6 +3,8 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 
 interface IPoolDeployer {
     function deploy(
+        address _owner,
+        address _operator,
         uint256 _id,
         address _router,
         address _poolImplementation,

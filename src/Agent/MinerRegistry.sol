@@ -3,12 +3,10 @@ pragma solidity ^0.8.15;
 
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {Auth} from "src/Auth/Auth.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {ROUTE_AGENT_FACTORY} from "src/Constants/Routes.sol";
 
 contract MinerRegistry is IMinerRegistry, RouterAware {
@@ -26,11 +24,6 @@ contract MinerRegistry is IMinerRegistry, RouterAware {
   /*///////////////////////////////////////////////////////////////
                             MODIFIERS
   //////////////////////////////////////////////////////////////*/
-
-  modifier requiresAuth {
-    AuthController.requiresSubAuth(router, address(this));
-    _;
-  }
 
   modifier onlyAgent {
     AuthController.onlyAgent(router, msg.sender);

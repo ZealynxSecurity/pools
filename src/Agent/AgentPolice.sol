@@ -3,6 +3,7 @@ pragma solidity ^0.8.15;
 
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
+import {Operatable} from "src/Auth/Operatable.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
@@ -14,7 +15,6 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";
@@ -33,7 +33,7 @@ import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 string constant POWER = "POWER";
 string constant LEVERAGE = "LEVERAGE";
 
-contract AgentPolice is IAgentPolice, VCVerifier {
+contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using AccountHelpers for Account;
   using FixedPointMathLib for uint256;
   using Credentials for VerifiableCredential;
@@ -51,19 +51,16 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   constructor(
     string memory _name,
     string memory _version,
-    uint256 _windowLength
-  ) VCVerifier(_name, _version) {
+    uint256 _windowLength,
+    address _owner,
+    address _operator
+  ) VCVerifier(_name, _version) Operatable(_owner, _operator) {
     windowLength = _windowLength;
     maxPoolsPerAgent = 10;
   }
 
   modifier _isValidCredential(address agent, SignedCredential memory signedCredential) {
     _checkCredential(agent, signedCredential);
-    _;
-  }
-
-  modifier requiresAuth() {
-    _requiresAuth();
     _;
   }
 
@@ -301,8 +298,8 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     address agent,
     SignedCredential memory signedCredential
   ) external
+    onlyOwnerOperator
     _isValidCredential(agent, signedCredential)
-    requiresAuth
     onlyIfAgentOverLeveraged(agent)
   {
     IAgent _agent = IAgent(agent);
@@ -331,7 +328,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
     uint64[] calldata miners,
     uint256[] calldata amounts,
     SignedCredential memory sc
-  ) external requiresAuth onlyIfAgentOverLeveraged(agent) {
+  ) external onlyOwnerOperator onlyIfAgentOverLeveraged(agent) {
 
     // draw up funds from all the agent's miners (non destructive)
     IAgent(agent).pullFundsFromMiners(miners, amounts, sc);
@@ -351,7 +348,7 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   function lockout(
     address agent,
     uint64 miner
-  ) external requiresAuth onlyIfAgentInDefault(agent) {
+  ) external onlyOwnerOperator onlyIfAgentInDefault(agent) {
     emit Lockout(agent, msg.sender);
   }
 
@@ -362,14 +359,14 @@ contract AgentPolice is IAgentPolice, VCVerifier {
   /**
    * @notice `setWindowLength` changes the window length
    */
-  function setWindowLength(uint256 _windowLength) external requiresAuth {
+  function setWindowLength(uint256 _windowLength) external onlyOwnerOperator {
     windowLength = _windowLength;
   }
 
   /**
    * @notice `setMaxPoolsPerAgent` changes the maximum number of pools an agent can borrow from
    */
-  function setMaxPoolsPerAgent(uint256 _maxPoolsPerAgent) external requiresAuth {
+  function setMaxPoolsPerAgent(uint256 _maxPoolsPerAgent) external onlyOwnerOperator {
     maxPoolsPerAgent = _maxPoolsPerAgent;
   }
 
@@ -434,17 +431,6 @@ contract AgentPolice is IAgentPolice, VCVerifier {
 
   function _addressToID(address agent) internal view returns (uint256) {
     return IAgent(agent).id();
-  }
-
-  function _requiresAuth() internal view {
-    if (!AuthController.canCallSubAuthority(router, address(this))) {
-      revert Unauthorized(
-        address(this),
-        msg.sender,
-        msg.sig,
-        "AgentPolice: Unauthorized"
-      );
-    }
   }
 
   function _powerTokensMinted(uint256 agent) internal view returns (uint256) {

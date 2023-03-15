@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {AuthController} from "src/Auth/AuthController.sol";
-import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
-import {Authority} from "src/Auth/Auth.sol";
 import "src/VCVerifier/VCVerifier.sol";
 import "./BaseTest.sol";
 
@@ -19,14 +16,10 @@ contract VCVerifierMock is VCVerifier {
 
 contract VCVerifierTest is BaseTest {
   VCVerifierMock public vcv;
-  MultiRolesAuthority public sauth;
   address public agent = makeAddr("AGENT");
 
   function setUp() public {
     vcv = new VCVerifierMock(address(router), "glif.io", "1");
-    sauth = AuthController.newMultiRolesAuthority(address(this), Authority(address(0)));
-    vm.startPrank(systemAdmin);
-    AuthController.setSubAuthority(address(router), address(vcv), sauth);
     vm.stopPrank();
   }
 

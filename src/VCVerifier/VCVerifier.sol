@@ -5,7 +5,6 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {ROUTE_VC_ISSUER} from "src/Constants/Routes.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";

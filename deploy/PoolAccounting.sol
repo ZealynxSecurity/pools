@@ -8,6 +8,8 @@ contract PoolAccountingDeployer {
 
   /**
    * @dev deploys a new PoolAccounting contract
+   * @param _owner pool owner address
+   * @param _operator pool operator address
    * @param _id pool id
    * @param _router router address
    * @param _poolImplementation pool implementation address
@@ -19,6 +21,8 @@ contract PoolAccountingDeployer {
    * @param _minimumLiquidity pool minimum liquidity amount
   */
   function deploy(
+    address _owner,
+    address _operator,
     uint256 _id,
     address _router,
     address _poolImplementation,
@@ -30,6 +34,8 @@ contract PoolAccountingDeployer {
     uint256 _minimumLiquidity
   ) public returns (IPool) {
     return new PoolAccounting(
+      _owner,
+      _operator,
       _id,
       _router,
       _poolImplementation,

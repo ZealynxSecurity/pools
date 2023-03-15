@@ -3,21 +3,16 @@ pragma solidity ^0.8.15;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import "test/helpers/MockMiner.sol";
-import {Authority} from "src/Auth/Auth.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
-import {Auth} from "src/Auth/Auth.sol";
-import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {WFIL} from "src/WFIL.sol";
-
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouterAware} from "src/Types/Interfaces/IRouter.sol";
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
@@ -40,7 +35,6 @@ import {
 } from "src/Agent/Errors.sol";
 import "src/Constants/FuncSigs.sol";
 
-
 import "./BaseTest.sol";
 
 contract AgentBasicTest is BaseTest {
@@ -61,30 +55,8 @@ contract AgentBasicTest is BaseTest {
     }
 
     function assertAgentPermissions(address operator, address owner, address agent) public {
-        Authority customAuthorityAuth = coreAuthority.getTargetCustomAuthority(agent);
-        // hax hax hax - dirty but works
-        MultiRolesAuthority customAuthority = MultiRolesAuthority(address(customAuthorityAuth));
-        assertTrue(customAuthority.doesUserHaveRole(operator, uint8(Roles.ROLE_AGENT_OPERATOR)), "The message sender should have the operator role");
-        assertTrue(customAuthority.doesUserHaveRole(owner, uint8(Roles.ROLE_AGENT_OWNER)), "The message sender should have the owner role");
-        assertTrue(customAuthority.canCall(operator, agent, AGENT_ADD_MINERS_SELECTOR));
-        assertTrue(customAuthority.canCall(operator, agent, AGENT_REMOVE_MINER_SELECTOR));
-        assertTrue(customAuthority.canCall(operator, agent, AGENT_WITHDRAW_SELECTOR));
-        assertTrue(customAuthority.canCall(operator, agent, AGENT_BORROW_SELECTOR));
-        assertTrue(customAuthority.canCall(operator, agent, AGENT_MINT_POWER_SELECTOR));
-        assertTrue(customAuthority.canCall(operator, agent, AGENT_BURN_POWER_SELECTOR));
-        assertTrue(customAuthority.canCall(operator, agent, SET_OPERATOR_ROLE_SELECTOR));
-        assertTrue(customAuthority.canCall(operator, agent, SET_OWNER_ROLE_SELECTOR));
-        // Agent should be able to set roles on its own authorities
-        assertTrue(customAuthority.canCall(agent, address(customAuthority), AUTH_SET_USER_ROLE_SELECTOR));
-        address nonOperatorOwner = makeAddr("NON_OPERATOR_OWNER");
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, agent, AGENT_ADD_MINERS_SELECTOR));
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, agent, AGENT_REMOVE_MINER_SELECTOR));
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, agent, AGENT_WITHDRAW_SELECTOR));
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, agent, AGENT_BORROW_SELECTOR));
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, agent, AGENT_MINT_POWER_SELECTOR));
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, agent, AGENT_BURN_POWER_SELECTOR));
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, agent, SET_OPERATOR_ROLE_SELECTOR));
-        assertTrue(!customAuthority.canCall(nonOperatorOwner, agent, SET_OWNER_ROLE_SELECTOR));
+        assertEq(Agent(payable(agent)).owner(), owner, "wrong owner");
+        assertEq(Agent(payable(agent)).operator(), operator, "wrong operator");
     }
 
     function setupMiner(address owner) public returns (MockMiner _miner) {
@@ -103,22 +75,6 @@ contract AgentBasicTest is BaseTest {
 
     function testInitialState() public {
         assertAgentPermissions(minerOwner1, minerOwner1, address(agent));
-    }
-
-    function testClashingAgentRoles() public {
-        (Agent agent1,) = configureAgent(investor1);
-        (Agent agent2,) = configureAgent(investor2);
-        assertAgentPermissions(investor1, investor1, address(agent1));
-        assertAgentPermissions(investor2, investor2, address(agent2));
-
-        Authority agent1Authority = coreAuthority.getTargetCustomAuthority(address(agent1));
-        Authority agent2Authority = coreAuthority.getTargetCustomAuthority(address(agent2));
-
-        assertTrue(!(agent1Authority.canCall(investor2, address(agent1), AGENT_BORROW_SELECTOR)));
-        assertTrue(!(agent2Authority.canCall(investor1, address(agent2), AGENT_BORROW_SELECTOR)));
-        // the global authority should receive the same result
-        assertTrue(!(coreAuthority.canCall(investor2, address(agent1), AGENT_BORROW_SELECTOR)));
-        assertTrue(!(coreAuthority.canCall(investor1, address(agent2), AGENT_BORROW_SELECTOR)));
     }
 
     function testFailClaimOwnership() public {
@@ -145,52 +101,24 @@ contract AgentBasicTest is BaseTest {
         withdrawBalance(minerOwner1, agent, miner, 0, sc);
     }
 
-    function testEnableOwner() public {
-        vm.startPrank(minerOwner1);
+    function testTransferOwner() public {
         address owner = makeAddr("OWNER");
-        agent.setOwnerRole(owner, true);
-        MultiRolesAuthority customAuthority = MultiRolesAuthority(
-            address(coreAuthority.getTargetCustomAuthority(address(agent)))
-        );
-        assertTrue(customAuthority.doesUserHaveRole(owner, uint8(Roles.ROLE_AGENT_OWNER)));
+        vm.prank(minerOwner1);
+        agent.transferOwnership(owner);
+        assertEq(agent.pendingOwner(), owner);
+        vm.prank(owner);
+        agent.acceptOwnership();
+        assertEq(agent.owner(), owner);
     }
 
-    function testDisableOwner() public {
-        vm.startPrank(minerOwner1);
-        address owner = makeAddr("OWNER");
-        agent.setOwnerRole(owner, true);
-
-        MultiRolesAuthority customAuthority = MultiRolesAuthority(
-            address(coreAuthority.getTargetCustomAuthority(address(agent)))
-        );
-        assertTrue(customAuthority.doesUserHaveRole(owner, uint8(Roles.ROLE_AGENT_OWNER)));
-        agent.setOwnerRole(owner, false);
-        assertTrue(!customAuthority.doesUserHaveRole(owner, uint8(Roles.ROLE_AGENT_OWNER)));
-    }
-
-    function testEnableOperator() public {
-        vm.startPrank(minerOwner1);
+    function testTransferOperator() public {
         address operator = makeAddr("OPERATOR");
-        agent.setOperatorRole(operator, true);
-        MultiRolesAuthority customAuthority = MultiRolesAuthority(address(coreAuthority.getTargetCustomAuthority(address(agent))));
-        assertTrue(customAuthority.doesUserHaveRole(operator, uint8(Roles.ROLE_AGENT_OPERATOR)));
-        assertTrue(!(customAuthority.doesUserHaveRole(operator, uint8(Roles.ROLE_AGENT_OWNER))));
-    }
-
-    function testDisableOperator() public {
-        vm.startPrank(minerOwner1);
-        address operator = makeAddr("OPERATOR");
-        agent.setOperatorRole(operator, true);
-
-        MultiRolesAuthority customAuthority = MultiRolesAuthority(
-            address(coreAuthority.getTargetCustomAuthority(address(agent)))
-        );
-
-        assertTrue(customAuthority.doesUserHaveRole(operator, uint8(Roles.ROLE_AGENT_OPERATOR)));
-        assertTrue(!(customAuthority.doesUserHaveRole(operator, uint8(Roles.ROLE_AGENT_OWNER))));
-
-        agent.setOperatorRole(operator, false);
-        assertTrue(!customAuthority.doesUserHaveRole(operator, uint8(Roles.ROLE_AGENT_OPERATOR)));
+        vm.prank(minerOwner1);
+        agent.transferOperator(operator);
+        assertEq(agent.pendingOperator(), operator);
+        vm.prank(operator);
+        agent.acceptOperator();
+        assertEq(agent.operator(), operator);
     }
 
     function testRouterConfigured() public {
@@ -365,11 +293,13 @@ contract AgentTest is BaseTest {
         (agent, miner) = configureAgent(minerOwner);
         // mint some power for the agent
         signedCred = issueGenericSC(address(agent));
-        agentMintAndApprovePower(address(pool), powerToken, agent, signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
+        vm.startPrank(_agentOperator(agent));
+        agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
+        vm.stopPrank();
     }
 
     function agentExit(IAgent _agent, uint256 _exitAmount, SignedCredential memory _signedCred, IPool _pool) internal {
-        vm.startPrank(address(_agent));
+        vm.startPrank(_agentOperator(_agent));
         // Establsh the state before the borrow
         StateSnapshot memory preBorrowState;
         preBorrowState.balanceWFIL = wFIL.balanceOf(address(_agent));
@@ -439,8 +369,7 @@ contract AgentTest is BaseTest {
         agentBorrow(agent, borrowAmount, sc, pool, powerToken, sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
         oldAccount = AccountHelpers.getAccount(router, address(agent), oldPoolID);
         assertEq(oldAccount.totalBorrowed, borrowAmount);
-        // TODO: switch to minerOwner when MRA is gone
-        vm.startPrank(address(agent));
+        vm.startPrank(minerOwner);
         agent.refinance(oldPoolID, newPoolID, 0, issueGenericSC(address(agent)));
         oldAccount = AccountHelpers.getAccount(router, address(agent), oldPoolID);
         newAccount = AccountHelpers.getAccount(router, address(agent), newPoolID);
@@ -501,7 +430,9 @@ contract AgentPoliceTest is BaseTest {
         (agent, miner) = configureAgent(minerOwner);
         // mint some power for the agent
         signedCred = issueGenericSC(address(agent));
-        mintAndApprovePower(agent, address(pool), powerToken, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
+        vm.startPrank(_agentOperator(agent));
+        agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
+        vm.stopPrank();
     }
 
     function testNextPmtWindowDeadline() public {
@@ -736,8 +667,7 @@ contract AgentPoliceTest is BaseTest {
         try police.setWindowLength(newWindowPeriod) {
             assertTrue(false, "Should have reverted with Unauthorized error");
         } catch (bytes memory err) {
-            (,,, string memory reason) = Decode.unauthorizedError(err);
-            assertEq(reason, "AgentPolice: Unauthorized");
+            assertEq(errorSelector(err), Unauthorized.selector);
         }
     }
 
@@ -749,30 +679,42 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testTransferOwnershipNonAdmin() public {
-        Auth auth = Auth(address(AuthController.getSubAuthority(router, address(police))));
-        vm.expectRevert("UNAUTHORIZED");
-        auth.transferOwnership(address(this));
-        assertEq(auth.owner(), IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN));
+        try IAuth(address(police)).transferOwnership(address(this)) {
+            assertTrue(false, "Should not be able to transfer ownership");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), Unauthorized.selector);
+        }
     }
 
     function testTransferOwnership() public {
         address owner = IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN);
         address newOwner = makeAddr("NEW OWNER");
-        Auth auth = Auth(address(AuthController.getSubAuthority(router, address(police))));
 
         vm.prank(owner);
-        auth.transferOwnership(newOwner);
+        IAuth(address(police)).transferOwnership(newOwner);
+        vm.prank(newOwner);
+        IAuth(address(police)).acceptOwnership();
 
-        assertEq(auth.owner(), newOwner);
+        assertEq(IAuth(address(police)).owner(), newOwner);
+    }
+
+    function testTransferOperator() public {
+        address owner = IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN);
+        address newOperator = makeAddr("NEW OPERATOR");
+
+        vm.prank(owner);
+        IAuth(address(police)).transferOperator(newOperator);
+        vm.prank(newOperator);
+        IAuth(address(police)).acceptOperator();
+
+        assertEq(IAuth(address(police)).operator(), newOperator);
     }
 
     function testLockoutNonAdmin() public {
-        // TODO: replace with proper expect revert
         try police.lockout(address(0), 0) {
             assertTrue(false, "Should have reverted with Unauthorized error");
         } catch (bytes memory err) {
-            (,,, string memory reason) = Decode.unauthorizedError(err);
-            assertEq(reason, "AgentPolice: Unauthorized");
+            assertEq(errorSelector(err), Unauthorized.selector);
         }
     }
 

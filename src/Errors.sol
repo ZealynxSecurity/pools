@@ -4,12 +4,8 @@ pragma solidity ^0.8.15;
 import {BytesLib} from "bytes-utils/BytesLib.sol";
 import {SignedCredential} from "src/Types/Structs/Credentials.sol";
 
-error Unauthorized(
-  address target,
-  address caller,
-  bytes4 funcSig,
-  string reason
-);
+error Unauthorized();
+error InvalidState();
 
 error InsufficientLiquidity(
   address target,
@@ -53,12 +49,7 @@ error AccountDNE(
   string reason
 );
 
-error InvalidParams(
-  address target,
-  address caller,
-  bytes4 funcSig,
-  string reason
-);
+error InvalidParams();
 
 error InvalidCredential();
 

@@ -4,7 +4,6 @@ pragma solidity ^0.8.15;
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {IMultiRolesAuthority} from "src/Types/Interfaces/IMultiRolesAuthority.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {IPoolTokenPlus} from "src/Types/Interfaces/IPoolTokenPlus.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -19,7 +18,7 @@ contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
 
     modifier onlyPoolTemplate() {
         if (address(GetRoute.pool(router, poolID).template()) != msg.sender) {
-            revert Unauthorized(address(this), msg.sender, msg.sig, "Only pool template can mint/burn");
+            revert Unauthorized();
         }
         _;
     }

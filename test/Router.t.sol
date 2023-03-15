@@ -5,8 +5,6 @@ import "forge-std/Test.sol";
 import "src/Router/Router.sol";
 import "src/Constants/Routes.sol";
 import "src/Types/Interfaces/IRouter.sol";
-import {MultiRolesAuthority} from "src/Auth/MultiRolesAuthority.sol";
-import {Authority} from "src/Auth/Auth.sol";
 import {Deployer} from "deploy/Deployer.sol";
 
 // for ease of testing routes
@@ -16,7 +14,6 @@ struct AdminRoutes {
   address powerTokenAdmin;
   address minerRegistryAdmin;
   address poolFactoryAdmin;
-  address coreAuthorityAdmin;
   address treasuryAdmin;
 }
 
@@ -28,7 +25,6 @@ struct ContractRoutes {
   address poolFactory;
   address powerToken;
   address vcIssuer;
-  address coreAuthority;
   address credParser;
   address accountingDeployer;
 }
@@ -39,24 +35,12 @@ contract RouterTest is Test {
   ContractRoutes public contractRoutes;
   AdminRoutes public adminRoutes;
 
-  MultiRolesAuthority authority;
   function setUp() public {
     routerAdmin = makeAddr("ROUTER_ADMIN");
-    authority = AuthController.newMultiRolesAuthority(address(this), Authority(address(0)));
 
-    router = new Router(address(authority));
+    router = new Router(routerAdmin);
 
-    (, address[] memory adminRouteAddrs) = Deployer.setupAdminRoutes(
-      address(router),
-      routerAdmin,
-      makeAddr("AGENT_FACTORY_ADMIN"),
-      makeAddr("POWER_TOKEN_ADMIN"),
-      makeAddr("MINER_REGISTRY_ADMIN"),
-      makeAddr("POOL_FACTORY_ADMIN"),
-      makeAddr("CORE_AUTHORITY_ADMIN"),
-      makeAddr("TREASURY_ADMIN"),
-      makeAddr("AGENT_POLICE_ADMIN")
-    );
+    vm.startPrank(routerAdmin);
     (, address[] memory contractRouteAddrs) = Deployer.setupContractRoutes(
       address(router),
       makeAddr("TREASURY"),
@@ -70,17 +54,9 @@ contract RouterTest is Test {
       makeAddr("CRED_PARSER"),
       makeAddr("ACCOUNT_DEPLOYER")
     );
+    vm.stopPrank();
 
     // for ease of testing routes
-    adminRoutes = AdminRoutes(
-      adminRouteAddrs[0],
-      adminRouteAddrs[1],
-      adminRouteAddrs[2],
-      adminRouteAddrs[3],
-      adminRouteAddrs[4],
-      adminRouteAddrs[5],
-      adminRouteAddrs[6]
-    );
     contractRoutes = ContractRoutes(
       contractRouteAddrs[0],
       contractRouteAddrs[1],
@@ -89,12 +65,9 @@ contract RouterTest is Test {
       contractRouteAddrs[4],
       contractRouteAddrs[5],
       contractRouteAddrs[6],
-      address(authority),
       contractRouteAddrs[8],
       contractRouteAddrs[9]
     );
-
-    AuthController.transferCoreAuthorityOwnership(address(router), routerAdmin);
   }
 
   function testGetAgentFactory() public {
@@ -109,16 +82,12 @@ contract RouterTest is Test {
     assertEq(router.getRoute(ROUTE_MINER_REGISTRY), contractRoutes.minerRegistry);
   }
 
-  function testGetAuthority() public {
-    assertEq(router.getRoute(ROUTE_CORE_AUTHORITY), address(authority));
-  }
-
   function testGetPowerToken() public {
     assertEq(router.getRoute(ROUTE_POWER_TOKEN), contractRoutes.powerToken);
   }
 
-  function testGetRouterAdmin() public {
-    assertEq(router.getRoute(ROUTE_SYSTEM_ADMIN), address(routerAdmin));
+  function testGetRouterOwner() public {
+    assertEq(router.owner(), address(routerAdmin));
   }
 
   function testGetPowerTokenAdmin() public {
@@ -131,10 +100,6 @@ contract RouterTest is Test {
 
     function testGetPoolFactoryAdmin() public {
     assertEq(router.getRoute(ROUTE_POOL_FACTORY_ADMIN), adminRoutes.poolFactoryAdmin);
-  }
-
-    function testGetSystemAdmin() public {
-    assertEq(router.getRoute(ROUTE_CORE_AUTH_ADMIN), adminRoutes.coreAuthorityAdmin);
   }
 
   function testGetVCIssuer() public {
