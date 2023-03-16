@@ -46,3 +46,15 @@ interface IPoolImplementation {
         Account memory account
     ) external view;
 }
+
+interface IPoolImplementationV2 {
+    function getRate(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) external view returns (uint256);
+
+    function isOverLeveraged(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) external view returns (bool);
+}

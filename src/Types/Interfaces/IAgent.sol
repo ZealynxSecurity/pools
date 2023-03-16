@@ -96,6 +96,18 @@ interface IAgent {
     uint256 powerTokenAmount
   ) external;
 
+  function borrowV2(
+    uint256 amount,
+    uint256 poolID,
+    SignedCredential memory signedCred
+  ) external;
+
+  function pay(
+    uint256 amount,
+    uint256 poolID,
+    SignedCredential memory signedCred
+  ) external returns (uint256 epochsPaid);
+
   function exit(
     uint256 poolID,
     uint256 assetAmount,

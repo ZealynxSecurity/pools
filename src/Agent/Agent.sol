@@ -422,6 +422,53 @@ contract Agent is IAgent, RouterAware, Operatable {
   }
 
   /**
+  * conditions in which you cannot borrow:
+  - in default
+  - if your position in any pool is overleveraged
+
+  TODO: reentrency?
+   */
+  function borrowV2(
+    uint256 amount,
+    uint256 poolID,
+    SignedCredential memory sc
+  ) external
+    onlyOwnerOperator
+    /// notInDefault (check with police)
+    isValidCredential(sc)
+  {
+    IPool pool = GetRoute.pool(router, poolID);
+
+    IAgentPolice police = GetRoute.agentPolice(router);
+    // first time staking, add the poolID to the list of pools this agent is staking in
+    if (pool.getAgentBorrowed(id) == 0) {
+      if (stakedPoolsCount() > police.maxPoolsPerAgent()) {
+        revert BadAgentState();
+      }
+      police.addPoolToList(poolID);
+    }
+
+    pool.borrowV2(amount, sc.vc);
+    // transaction will revert if any of the pool's accounts reject the new agent's state
+    police.isAgentOverLeveraged(id, sc.vc);
+  }
+
+  function pay(
+    uint256 amount,
+    uint256 poolID,
+    SignedCredential memory sc
+  ) external
+    onlyOwnerOperator
+    isValidCredential(sc)
+    returns (uint256 epochsPaid)
+  {
+    GetRoute.pool(router, poolID).pay(amount, sc.vc);
+
+    // fullyPaidOff = pool.pay()
+    // if fullyPaidOff; police.removePoolFromList(poolID)
+  }
+
+  /**
    * @notice Allows an agent to borrow funds from a pool
    * @param amount The amount of funds to borrow. Must be less than the `ask` in the `signedCredential`
    * @param poolID The ID of the pool from which to borrow

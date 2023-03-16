@@ -8,6 +8,9 @@ import {GetRoute} from "src/Router/GetRoute.sol";
 import {Unauthorized} from "src/Errors.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 
+address constant ADDRESS_ZERO = address(0);
+error RouteDNE();
+
 contract Router is IRouter, Ownable {
   mapping(bytes4 => address) public route;
   mapping(bytes32 => Account) private _accounts;
@@ -15,6 +18,8 @@ contract Router is IRouter, Ownable {
   constructor(address owner) Ownable(owner) {}
 
   function getRoute(bytes4 id) public view returns (address) {
+    address route = route[id];
+    if (route == ADDRESS_ZERO) revert RouteDNE();
     return route[id];
   }
 

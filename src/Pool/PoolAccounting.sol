@@ -24,16 +24,20 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
-import {Account} from "src/Types/Structs/Account.sol";
+import {Account, AccountV2} from "src/Types/Structs/Account.sol";
+import {AccountHelpersV2} from "src/Pool/AccountV2.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
 import {InsufficientLiquidity, AccountDNE, Unauthorized} from "src/Errors.sol";
 
+error AccountDNE();
+
 contract PoolAccounting is IPool, RouterAware, Operatable {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
+    using AccountHelpersV2 for AccountV2;
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -80,6 +84,17 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
 
     modifier onlyAgent() {
         AuthController.onlyAgent(router, msg.sender);
+        _;
+    }
+
+    /// @dev a modifier that ensures the caller matches the `vc.subject` and that the caller is an agent
+    modifier subjectIsAgentCaller(VerifiableCredential memory vc) {
+        if (
+            vc.subject != msg.sender ||
+            !GetRoute.agentFactory(router).isAgent(agent)
+        ) {
+            revert Unauthorized();
+        }
         _;
     }
 
@@ -194,6 +209,87 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     /*//////////////////////////////////////////////////////////////
                         POOL BORROWING FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+
+    // TODO: check for default before entering
+    function borrowV2(
+        uint256 amount,
+        VerifiableCredential memory vc
+    ) external subjectIsAgentCaller(vc) returns (uint256 rate) {
+        _checkLiquidity(amount);
+        if (amount != vc.cap) revert Unauthorized();
+
+        address agent = msg.sender;
+        AccountV2 memory account = _getAccountV2(agent);
+
+        // fresh account, set start epoch and epochsPaid to beginning of current window
+        if (account.principal == 0) {
+            uint256 currentEpoch = block.number;
+            account.startEpoch = currentEpoch;
+            account.epochsPaid = currentEpoch;
+            borrowedAmount = borrowAmount;
+        }
+
+        account.principal += borrowedAmount;
+        account.save(router, agent, id);
+
+        totalBorrowed += borrowedAmount;
+
+        emit Borrow(sc.vc.subject, amount, account.perEpochRate, account.totalBorrowed);
+
+        // interact
+        SafeTransferLib.safeTransfer(asset, agent, amount);
+    }
+
+    function pay(uint256 amount, VerifiableCredential memory vc) external returns (uint256 epochsPaid) {
+        AccountV2 memory account = _getAccountV2(vc.subject);
+        if (!account.exists()) revert AccountDNE();
+        uint256 perEpochRate = implementation.getRate(account, vc);
+        uint256 blockNumber = block.number;
+        uint256 interestOwed;
+        uint256 feeBasis;
+
+        if (account.epochsPaid < blockNumber) {
+            uint256 epochsToPay = blockNumber - account.epochsPaid;
+            interestOwed = perEpochRate * epochsToPay;
+        }
+
+        if (amount <= interestOwed) {
+            // pay interest only
+            uint256 epochsForward = amount / perEpochRate;
+            account.epochsPaid += epochsForward;
+            feeBasis = amount;
+        } else {
+            // pay interest and principal
+            uint256 principalPaid = amount - interestOwed;
+            // protect against underflow
+            totalBorrowed -= (principalPaid > totalBorrowed) ? 0 : principalPaid;
+            if (principalPaid >= account.principal) {
+                // fully paid off
+                GetRoute.agentPolice(router).removePoolFromList(agent, id);
+                account.reset();
+            } else {
+                // interest and partial principal payment
+                account.principal -= principalPaid;
+                account.epochsPaid = blockNumber;
+            }
+
+        }
+        // update the account in storage
+        account.save(router, agent, id);
+        // take fee
+        feesCollected += GetRoute
+            .poolFactory(router)
+            .treasuryFeeRate()
+            .mulWadUp(feeBasis);
+
+        // transfer the assets into the pool
+        SafeTransferLib.safeTransferFrom(
+            asset,
+            msg.sender,
+            address(this),
+            amount
+        );
+    }
 
     /**
      * @dev Allows user to borrow asset
@@ -624,6 +720,10 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         return IAgent(agent).id();
     }
 
+    function _getAccountV2(address agent) internal view returns (AccountV2 memory) {
+        return AccountHelpersV2.getAccount(router, agent, id);
+    }
+
     function _getAccount(address agent) internal view returns (Account memory) {
         return AccountHelpers.getAccount(router, agent, id);
     }
@@ -634,11 +734,7 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         bytes4 sig
     ) internal pure returns (bool) {
         if (!account.exists()) {
-            revert AccountDNE(
-                agent,
-                sig,
-                "Pool: Account does not exist"
-            );
+            revert AccountDNE();
         }
 
         return true;
@@ -725,6 +821,14 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         share.mint(receiver, shares);
         assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
+    }
+
+    function _computeFeePerPmt(uint256 pmt) internal view returns (uint256 fee) {
+        // protocol fee % * pmt
+        fee = GetRoute
+            .poolFactory(router)
+            .treasuryFeeRate()
+            .mulWadUp(pmt);
     }
 }
 

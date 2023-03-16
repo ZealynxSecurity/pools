@@ -70,6 +70,8 @@ interface IAgentPolice {
 
   function windowLength() external view returns (uint256);
 
+  function defaultWindow() external view returns (uint256);
+
   function nextPmtWindowDeadline() external view returns (uint256);
 
   function windowInfo() external view returns (Window memory);
@@ -101,6 +103,8 @@ interface IAgentPolice {
   function isValidCredential(address agent, SignedCredential memory signedCredential) external;
 
   function registerCredentialUseBlock(SignedCredential memory signedCredential) external;
+
+  function isAgentOverLeveraged(uint256 agentID, VerifiableCredential memory vc) external;
 
   /*//////////////////////////////////////////////
                       POLICING

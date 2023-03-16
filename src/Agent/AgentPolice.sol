@@ -7,6 +7,7 @@ import {Operatable} from "src/Auth/Operatable.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
+import {AccountHelpersV2} from "src/Pool/AccountV2.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -40,6 +41,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   /// @notice `windowLength` is the number of epochs between window.start and window.deadline
   uint256 public windowLength;
+
+  /// @notice `defaultLookback` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
+  uint256 public defaultWindow;
   /// @notice `maxPoolsPoerAgent`
   uint256 public maxPoolsPerAgent;
 
@@ -52,10 +56,12 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     string memory _name,
     string memory _version,
     uint256 _windowLength,
+    uint256 _defaultWindow,
     address _owner,
     address _operator
   ) VCVerifier(_name, _version) Operatable(_owner, _operator) {
     windowLength = _windowLength;
+    defaultWindow = _defaultWindow;
     maxPoolsPerAgent = 10;
   }
 
@@ -190,6 +196,28 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     return overLeveraged;
   }
 
+  function isAgentOverLeveraged(
+    uint256 agentID,
+    VerifiableCredential memory vc
+  ) external view {
+    uint256[] memory poolIDs = _poolIDs(agentID);
+
+    for (uint256 i = 0; i < poolIDs.length; ++i) {
+      uint256 poolID = poolIDs[i];
+      IPool pool = GetRoute.pool(router, poolID);
+      if (pool.implementation().isOverLeveraged(
+        AccountHelpersV2.getAccount(router, agentID, poolID),
+        vc
+      )) {
+        revert OverLeveraged();
+      }
+    }
+  }
+
+  // function checkDefaultV2(address agent) external view returns (bool) {
+  //   return _checkDefaultV2(_addressToID(agent));
+  // }
+
   /**
    * @notice `checkDefault` updates the overPowered and overLeveraged state of the agent and returns true if they are both true (in default)
    * @param agent the address of the agent
@@ -244,8 +272,12 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param pool the id of the pool to add
    * @dev only an agent can add a pool to its list
    */
-  function removePoolFromList(uint256 pool) public onlyAgent {
-    uint256[] storage pools = _poolIDs[_addressToID(msg.sender)];
+  function removePoolFromList(uint256 agentID, uint256 pool) external {
+    if (GetRoute.pool(router, pool) != msg.sender) {
+      revert NotAuthorized();
+    }
+
+    uint256[] storage pools = _poolIDs[agentID];
     for (uint256 i = 0; i < pools.length; i++) {
       if (pools[i] == pool) {
         pools[i] = pools[pools.length - 1];
@@ -361,6 +393,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function setWindowLength(uint256 _windowLength) external onlyOwnerOperator {
     windowLength = _windowLength;
+  }
+
+  /**
+   * @notice `setDefaultWindow` changes the default window epochs
+   */
+  function setDefaultWindow(uint256 _defaultWindow) external onlyOwnerOperator {
+    defaultWindow = _defaultWindow;
   }
 
   /**
