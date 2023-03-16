@@ -5,7 +5,11 @@ import "forge-std/Test.sol";
 import "src/Router/Router.sol";
 import "src/Constants/Routes.sol";
 import "src/Types/Interfaces/IRouter.sol";
+import {Account} from "src/Types/Structs/Account.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {Deployer} from "deploy/Deployer.sol";
+import {BaseTest} from "./BaseTest.sol";
+import {Unauthorized} from "src/Errors.sol";
 
 // for ease of testing routes
 struct AdminRoutes {
@@ -29,8 +33,8 @@ struct ContractRoutes {
   address accountingDeployer;
 }
 
-contract RouterTest is Test {
-  Router router;
+contract RouterTest is BaseTest {
+  Router routerInstance;
   address routerAdmin;
   ContractRoutes public contractRoutes;
   AdminRoutes public adminRoutes;
@@ -38,11 +42,11 @@ contract RouterTest is Test {
   function setUp() public {
     routerAdmin = makeAddr("ROUTER_ADMIN");
 
-    router = new Router(routerAdmin);
+    routerInstance = new Router(routerAdmin);
 
     vm.startPrank(routerAdmin);
     (, address[] memory contractRouteAddrs) = Deployer.setupContractRoutes(
-      address(router),
+      address(routerInstance),
       makeAddr("TREASURY"),
       makeAddr("WFIL"),
       makeAddr("MINER_REGISTRY"),
@@ -71,67 +75,67 @@ contract RouterTest is Test {
   }
 
   function testGetAgentFactory() public {
-    assertEq(router.getRoute(ROUTE_AGENT_FACTORY), contractRoutes.agentFactory);
+    assertEq(routerInstance.getRoute(ROUTE_AGENT_FACTORY), contractRoutes.agentFactory);
   }
 
   function testGetPoolFactory() public {
-    assertEq(router.getRoute(ROUTE_POOL_FACTORY), contractRoutes.poolFactory);
+    assertEq(routerInstance.getRoute(ROUTE_POOL_FACTORY), contractRoutes.poolFactory);
   }
 
   function testGetMinerRegistry() public {
-    assertEq(router.getRoute(ROUTE_MINER_REGISTRY), contractRoutes.minerRegistry);
+    assertEq(routerInstance.getRoute(ROUTE_MINER_REGISTRY), contractRoutes.minerRegistry);
   }
 
   function testGetPowerToken() public {
-    assertEq(router.getRoute(ROUTE_POWER_TOKEN), contractRoutes.powerToken);
+    assertEq(routerInstance.getRoute(ROUTE_POWER_TOKEN), contractRoutes.powerToken);
   }
 
   function testGetRouterOwner() public {
-    assertEq(router.owner(), address(routerAdmin));
+    assertEq(routerInstance.owner(), address(routerAdmin));
   }
 
   function testGetPowerTokenAdmin() public {
-    assertEq(router.getRoute(ROUTE_POWER_TOKEN_ADMIN), adminRoutes.powerTokenAdmin);
+    assertEq(routerInstance.getRoute(ROUTE_POWER_TOKEN_ADMIN), adminRoutes.powerTokenAdmin);
   }
 
     function testGetMinerRegistryAdmin() public {
-    assertEq(router.getRoute(ROUTE_MINER_REGISTRY_ADMIN), adminRoutes.minerRegistryAdmin);
+    assertEq(routerInstance.getRoute(ROUTE_MINER_REGISTRY_ADMIN), adminRoutes.minerRegistryAdmin);
   }
 
     function testGetPoolFactoryAdmin() public {
-    assertEq(router.getRoute(ROUTE_POOL_FACTORY_ADMIN), adminRoutes.poolFactoryAdmin);
+    assertEq(routerInstance.getRoute(ROUTE_POOL_FACTORY_ADMIN), adminRoutes.poolFactoryAdmin);
   }
 
   function testGetVCIssuer() public {
-    assertEq(router.getRoute(ROUTE_VC_ISSUER), contractRoutes.vcIssuer);
+    assertEq(routerInstance.getRoute(ROUTE_VC_ISSUER), contractRoutes.vcIssuer);
   }
 
   function testGetTreasury() public {
-    assertEq(router.getRoute(ROUTE_TREASURY), contractRoutes.treasury);
+    assertEq(routerInstance.getRoute(ROUTE_TREASURY), contractRoutes.treasury);
   }
 
   function testGetAccountingDeployer() public {
-    assertEq(router.getRoute(ROUTE_ACCOUNTING_DEPLOYER), contractRoutes.accountingDeployer);
+    assertEq(routerInstance.getRoute(ROUTE_ACCOUNTING_DEPLOYER), contractRoutes.accountingDeployer);
   }
 
 
   function testGetTreasuryAdmin() public {
-    assertEq(router.getRoute(ROUTE_TREASURY_ADMIN), adminRoutes.treasuryAdmin);
+    assertEq(routerInstance.getRoute(ROUTE_TREASURY_ADMIN), adminRoutes.treasuryAdmin);
   }
 
 
   function testPushRoute() public {
     address newRoute = makeAddr("NEW_ROUTE");
     vm.prank(routerAdmin);
-    router.pushRoute(ROUTE_AGENT_FACTORY, newRoute);
-    assertEq(router.getRoute(ROUTE_AGENT_FACTORY), newRoute);
+    routerInstance.pushRoute(ROUTE_AGENT_FACTORY, newRoute);
+    assertEq(routerInstance.getRoute(ROUTE_AGENT_FACTORY), newRoute);
   }
 
   function testPushRouteString() public {
     address newRoute = makeAddr("TEST_ROUTE");
     vm.prank(routerAdmin);
-    router.pushRoute("TEST_ROUTE", newRoute);
-    assertEq(router.getRoute("TEST_ROUTE"), newRoute);
+    routerInstance.pushRoute("TEST_ROUTE", newRoute);
+    assertEq(routerInstance.getRoute("TEST_ROUTE"), newRoute);
   }
 
   function testPushRoutes() public {
@@ -147,8 +151,32 @@ contract RouterTest is Test {
     routeIDs[1] = ROUTE_POOL_FACTORY;
 
     vm.prank(routerAdmin);
-    router.pushRoutes(routeIDs, routes);
-    assertEq(router.getRoute(ROUTE_AGENT_FACTORY), newRoute);
-    assertEq(router.getRoute(ROUTE_POOL_FACTORY), newRoute2);
+    routerInstance.pushRoutes(routeIDs, routes);
+    assertEq(routerInstance.getRoute(ROUTE_AGENT_FACTORY), newRoute);
+    assertEq(routerInstance.getRoute(ROUTE_POOL_FACTORY), newRoute2);
+  }
+
+  function testSetAccountNoAuth() public {
+    address poolOperator = makeAddr("POOL_OPERATOR");
+    string memory poolName = "Test Pool";
+    string memory poolSymbol = "TEST";
+    IPool pool = createPool(
+      poolName,
+      poolSymbol,
+      poolOperator,
+      20e18
+    );
+    uint256 poolId = pool.id();
+    vm.prank(address(pool));
+    Router(router).setAccount(0, poolId, Account(10, 20, 30, 10, 20, 30));
+    IPool badPool = createPool(
+      poolName,
+      poolSymbol,
+      poolOperator,
+      20e18
+    );
+    vm.prank(address(badPool));
+    vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
+    Router(router).setAccount(0, poolId, Account(10, 20, 30, 10, 20, 30));
   }
 }
