@@ -40,17 +40,6 @@ contract Deploy is Script {
         // deploys the router
         router = address(new Router(deployerAddr));
 
-        Deployer.setupAdminRoutes(
-            address(router),
-            deployerAddr,
-            deployerAddr,
-            deployerAddr,
-            deployerAddr,
-            deployerAddr,
-            deployerAddr,
-            deployerAddr
-        );
-
         address minerRegistry = address(new MinerRegistry());
         address agentFactory = address(new AgentFactory());
         address agentPolice = address(

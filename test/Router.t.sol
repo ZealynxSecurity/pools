@@ -11,16 +11,6 @@ import {Deployer} from "deploy/Deployer.sol";
 import {BaseTest} from "./BaseTest.sol";
 import {Unauthorized} from "src/Errors.sol";
 
-// for ease of testing routes
-struct AdminRoutes {
-  address routerAdmin;
-  address agentFactoryAdmin;
-  address powerTokenAdmin;
-  address minerRegistryAdmin;
-  address poolFactoryAdmin;
-  address treasuryAdmin;
-}
-
 struct ContractRoutes {
   address treasury;
   address wFIL;
@@ -37,7 +27,6 @@ contract RouterTest is BaseTest {
   Router routerInstance;
   address routerAdmin;
   ContractRoutes public contractRoutes;
-  AdminRoutes public adminRoutes;
 
   function setUp() public {
     routerAdmin = makeAddr("ROUTER_ADMIN");
@@ -94,18 +83,6 @@ contract RouterTest is BaseTest {
     assertEq(routerInstance.owner(), address(routerAdmin));
   }
 
-  function testGetPowerTokenAdmin() public {
-    assertEq(routerInstance.getRoute(ROUTE_POWER_TOKEN_ADMIN), adminRoutes.powerTokenAdmin);
-  }
-
-    function testGetMinerRegistryAdmin() public {
-    assertEq(routerInstance.getRoute(ROUTE_MINER_REGISTRY_ADMIN), adminRoutes.minerRegistryAdmin);
-  }
-
-    function testGetPoolFactoryAdmin() public {
-    assertEq(routerInstance.getRoute(ROUTE_POOL_FACTORY_ADMIN), adminRoutes.poolFactoryAdmin);
-  }
-
   function testGetVCIssuer() public {
     assertEq(routerInstance.getRoute(ROUTE_VC_ISSUER), contractRoutes.vcIssuer);
   }
@@ -117,12 +94,6 @@ contract RouterTest is BaseTest {
   function testGetAccountingDeployer() public {
     assertEq(routerInstance.getRoute(ROUTE_ACCOUNTING_DEPLOYER), contractRoutes.accountingDeployer);
   }
-
-
-  function testGetTreasuryAdmin() public {
-    assertEq(routerInstance.getRoute(ROUTE_TREASURY_ADMIN), adminRoutes.treasuryAdmin);
-  }
-
 
   function testPushRoute() public {
     address newRoute = makeAddr("NEW_ROUTE");

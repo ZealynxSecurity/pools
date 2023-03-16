@@ -598,7 +598,7 @@ contract AgentPoliceTest is BaseTest {
         _miners[0] = miner;
         _miners[1] = secondMiner;
 
-        vm.startPrank(IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN));
+        vm.startPrank(IAuth(address(police)).owner());
         // TODO: replace with proper expect revert
 
         try police.forcePullFundsFromMiners(address(agent), _miners, new uint256[](2), issueGenericSC(address(agent))) {
@@ -641,7 +641,7 @@ contract AgentPoliceTest is BaseTest {
 
         assertEq(address(agent).balance, 0, "agent should have no FIL");
 
-        vm.startPrank(IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN));
+        vm.startPrank(IAuth(address(police)).owner());
         police.forcePullFundsFromMiners(address(agent), _miners, _amounts, issueGenericSC(address(agent)));
 
         assertEq(address(agent).balance, FORCE_PULL_AMNT * 2, "Agent should have 2 times the force pull amount of FIL");
@@ -654,7 +654,7 @@ contract AgentPoliceTest is BaseTest {
 
 
         SignedCredential memory signedCredential = makeAgentOverLeveraged(1e18, 1e18);
-        vm.startPrank(IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN));
+        vm.startPrank(IAuth(address(police)).owner());
         police.forceMakePayments(address(agent), signedCredential);
         vm.stopPrank();
         Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
@@ -673,7 +673,7 @@ contract AgentPoliceTest is BaseTest {
 
     function testSetWindowLength() public {
         uint256 newWindowPeriod = 100;
-        vm.prank(IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN));
+        vm.prank(IAuth(address(police)).owner());
         police.setWindowLength(newWindowPeriod);
         assertEq(police.windowLength(), newWindowPeriod);
     }
@@ -687,7 +687,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testTransferOwnership() public {
-        address owner = IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN);
+        address owner = IAuth(address(police)).owner();
         address newOwner = makeAddr("NEW OWNER");
 
         vm.prank(owner);
@@ -699,7 +699,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testTransferOperator() public {
-        address owner = IRouter(router).getRoute(ROUTE_AGENT_POLICE_ADMIN);
+        address owner = IAuth(address(police)).owner();
         address newOperator = makeAddr("NEW OPERATOR");
 
         vm.prank(owner);

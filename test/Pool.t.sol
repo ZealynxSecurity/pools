@@ -1153,7 +1153,7 @@ contract PoolUpgradeTest is BaseTest {
     pool.setImplementation(IPoolImplementation(newImplementation));
 
     // approve the Implementation
-    vm.prank(IRouter(router).getRoute(ROUTE_POOL_FACTORY_ADMIN));
+    vm.prank(IAuth(address(poolFactory)).owner());
     poolFactory.approveImplementation(newImplementation);
 
     // now this should work
