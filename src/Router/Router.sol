@@ -63,7 +63,7 @@ contract Router is IRouter, Ownable {
     uint256 poolID,
     Account memory account
   ) public {
-    if (!GetRoute.poolFactory(address(this)).isPool(msg.sender)) {
+    if (address(GetRoute.pool(address(this), poolID)) != msg.sender) {
       revert Unauthorized();
     }
     _accounts[createAccountKey(agentID, poolID)] = account;

@@ -9,44 +9,6 @@ import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import "src/Constants/Routes.sol";
 
 library Deployer {
-  function setupAdminRoutes(
-    address router,
-    address systemAdmin,
-    address agentFactoryAdmin,
-    address powerTokenAdmin,
-    address minerRegistryAdmin,
-    address poolFactoryAdmin,
-    address treasuryAdmin,
-    address agentPoliceAdmin
-  ) internal returns (
-    bytes4[] memory routeIDs, address[] memory routeAddrs
-  ) {
-    routeIDs = new bytes4[](8);
-    routeAddrs = new address[](8);
-    // Add router admin route
-    routeIDs[0] = ROUTE_SYSTEM_ADMIN;
-    routeAddrs[0] = systemAdmin;
-    // Add agent factory admin route
-    routeIDs[1] = ROUTE_AGENT_FACTORY_ADMIN;
-    routeAddrs[1] = agentFactoryAdmin;
-    // Add power token admin route
-    routeIDs[2] = ROUTE_POWER_TOKEN_ADMIN;
-    routeAddrs[2] = powerTokenAdmin;
-    // Add miner registry admin route
-    routeIDs[3] = ROUTE_MINER_REGISTRY_ADMIN;
-    routeAddrs[3] = minerRegistryAdmin;
-    // Add pool factory admin route
-    routeIDs[4] = ROUTE_POOL_FACTORY_ADMIN;
-    routeAddrs[4] = poolFactoryAdmin;
-    // Add treasury admin route
-    routeIDs[5] = ROUTE_TREASURY_ADMIN;
-    routeAddrs[5] = treasuryAdmin;
-    // Add agent police admin route
-    routeIDs[6] = ROUTE_AGENT_POLICE_ADMIN;
-    routeAddrs[6] = agentPoliceAdmin;
-
-    IRouter(router).pushRoutes(routeIDs, routeAddrs);
-  }
 
   function setupContractRoutes(
     address router,

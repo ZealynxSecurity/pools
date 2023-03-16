@@ -76,17 +76,7 @@ contract BaseTest is Test {
     vm.startPrank(systemAdmin);
     // deploys the router
     router = address(new Router(systemAdmin));
-    // these two route setting calls are separate because they blow out the call stack if they're one func
-    Deployer.setupAdminRoutes(
-      router,
-      systemAdmin,
-      systemAdmin,
-      systemAdmin,
-      systemAdmin,
-      systemAdmin,
-      systemAdmin,
-      systemAdmin
-    );
+
     vcIssuer = vm.addr(vcIssuerPk);
     Deployer.setupContractRoutes(
       address(router),
