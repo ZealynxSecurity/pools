@@ -89,15 +89,9 @@ interface IPool {
                             BORROWER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function borrow(uint256 amount, SignedCredential memory sc, uint256 powerTokenAmount) external;
-
-    function borrowV2(uint256 amount, VerifiableCredential memory vc) external;
+    function borrowV2(VerifiableCredential memory vc) external;
 
     function pay(uint256 amount, VerifiableCredential memory vc) external returns (bool paidOff);
-
-    function exitPool( address agent, SignedCredential memory sc, uint256 amount) external returns (uint256);
-
-    function makePayment(address agent,uint256 pmt) external;
 
     function rebalanceTotalBorrowed(uint256 agentID, uint256 realAccountValue) external;
 

@@ -32,29 +32,21 @@ interface IAgent {
 
   function hasMiner(uint64 miner) external view returns (bool);
 
-  // powerTokensMinted - powerTokensBurned
-  function totalPowerTokensStaked() external view returns (uint256);
-
-  function powerTokensStaked(uint256 poolID) external view returns (uint256 powerTokensStaked);
-
-  function stakedPoolsCount() external view returns (uint256);
-
-  function maxWithdraw(SignedCredential memory sc) external view returns (uint256);
+  function borrowedPoolsCount() external view returns (uint256);
 
   function liquidAssets() external view returns (uint256);
-
 
   /*//////////////////////////////////////////////////
         MINER OWNERSHIP/WORKER/OPERATOR CHANGES
   //////////////////////////////////////////////////*/
 
-  function addMiners(uint64[] calldata miners) external;
+  function addMiners(
+    SignedCredential memory sc
+  ) external;
 
   function removeMiner(
     address newMinerOwner,
-    uint64 miner,
-    SignedCredential memory agentCred,
-    SignedCredential memory minerCred
+    SignedCredential memory sc
   ) external;
 
   function migrateMiner(address newAgent, uint64 miner) external;
@@ -65,41 +57,18 @@ interface IAgent {
     uint64[] calldata controlAddresses
   ) external;
 
-  /*//////////////////////////////////////////////////
-                POWER TOKEN FUNCTIONS
-  //////////////////////////////////////////////////*/
-
-  function mintPower(
-    uint256 amount,
-    SignedCredential memory sc
-  ) external;
-
-  function burnPower(
-    uint256 amount,
-    SignedCredential memory sc
-  ) external returns (uint256 burnedAmt);
-
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS
   //////////////////////////////////////////////*/
 
   function withdrawBalance(
     address receiver,
-    uint256 amount,
-    SignedCredential memory signedCredential
-  ) external;
-
-  function borrow(
-    uint256 amount,
-    uint256 poolID,
-    SignedCredential memory vc,
-    uint256 powerTokenAmount
+    SignedCredential memory sc
   ) external;
 
   function borrowV2(
-    uint256 amount,
     uint256 poolID,
-    SignedCredential memory signedCred
+    SignedCredential memory sc
   ) external;
 
   function pay(
@@ -108,22 +77,9 @@ interface IAgent {
     SignedCredential memory signedCred
   ) external returns (uint256 epochsPaid);
 
-  function exit(
-    uint256 poolID,
-    uint256 assetAmount,
-    SignedCredential memory vc
-  ) external;
-
-  function makePayments(
-    uint256[] calldata poolIDs,
-    uint256[] calldata amounts,
-    SignedCredential memory vc
-  ) external;
-
   function refinance(
     uint256 oldPoolID,
     uint256 newPoolID,
-    uint256 additionalPowerTokens,
     SignedCredential memory signedCredential
   ) external;
 
