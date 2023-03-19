@@ -29,7 +29,7 @@ import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credenti
 import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
 
-contract PoolAccounting is IPool, RouterAware, Operatable {
+contract GenesisPool is IPool, RouterAware, Operatable {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
     using AccountHelpers for Account;

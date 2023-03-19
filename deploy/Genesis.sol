@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {PoolAccounting} from "src/Pool/PoolAccounting.sol";
+import {GenesisPool} from "src/Pool/Genesis.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
-// This contract is just used to deploy the PoolAccounting contract
-contract PoolAccountingDeployer {
+// This contract is just used to deploy the GenesisPool contract
+contract GenesisPoolDeployer {
 
   /**
-   * @dev deploys a new PoolAccounting contract
+   * @dev deploys a new GenesisPool contract
    * @param _owner pool owner address
    * @param _operator pool operator address
    * @param _id pool id
@@ -32,7 +32,7 @@ contract PoolAccountingDeployer {
     uint256 _minimumLiquidity,
     uint256 _bias
   ) public returns (IPool) {
-    return new PoolAccounting(
+    return new GenesisPool(
       _owner,
       _operator,
       _id,

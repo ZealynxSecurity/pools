@@ -13,7 +13,6 @@ import {PoolFactory} from "src/Pool/PoolFactory.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
-import {PoolAccountingDeployer} from "deploy/PoolAccounting.sol";
 import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import "src/Constants/Routes.sol";
 
@@ -49,7 +48,6 @@ contract Deploy is Script {
             new PoolFactory(IERC20(address(wFIL)), 1e17, 0, deployerAddr, deployerAddr)
         );
         address credParser = address(new CredParser());
-        address accountingDeployer = address(new PoolAccountingDeployer());
         address agentDeployer = address(new AgentDeployer());
 
         vcIssuer = vm.addr(vcIssuerPk);
@@ -64,7 +62,6 @@ contract Deploy is Script {
             poolFactory,
             vcIssuer,
             credParser,
-            accountingDeployer,
             agentDeployer
         );
 
