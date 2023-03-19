@@ -25,10 +25,6 @@ library GetRoute {
     return IWFIL(IRouter(router).getRoute(ROUTE_WFIL_TOKEN));
   }
 
-  function wFIL20(address router) internal view returns (IERC20) {
-    return IERC20(IRouter(router).getRoute(ROUTE_WFIL_TOKEN));
-  }
-
   function minerRegistry(address router) internal view returns (IMinerRegistry) {
     return IMinerRegistry(IRouter(router).getRoute(ROUTE_MINER_REGISTRY));
   }

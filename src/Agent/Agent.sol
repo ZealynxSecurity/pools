@@ -6,7 +6,6 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
-import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
@@ -14,19 +13,11 @@ import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
-import {IStats} from "src/Types/Interfaces/IStats.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {SignedCredential, VerifiableCredential, Credentials} from "src/Types/Structs/Credentials.sol";
 import {
-  ROUTE_AGENT_FACTORY,
-  ROUTE_POWER_TOKEN,
-  ROUTE_POOL_FACTORY,
-  ROUTE_MINER_REGISTRY,
-  ROUTE_WFIL_TOKEN,
-  ROUTE_AGENT_POLICE,
-  ROUTE_CRED_PARSER
+  ROUTE_AGENT_POLICE
 } from "src/Constants/Routes.sol";
-import {Roles} from "src/Constants/Roles.sol";
 import {MinerHelper} from "helpers/MinerHelper.sol";
 
 contract Agent is IAgent, RouterAware, Operatable {
@@ -99,8 +90,8 @@ contract Agent is IAgent, RouterAware, Operatable {
    * the liquidAssets will decrease,
    * but the total liquidationValue of the Agent should not change
    */
-  function liquidAssets() public view returns (uint256) {
-    return address(this).balance + GetRoute.wFIL20(router).balanceOf(address(this));
+  function liquidAssets() external view returns (uint256) {
+    return address(this).balance + GetRoute.wFIL(router).balanceOf(address(this));
   }
 
   /*//////////////////////////////////////////////
@@ -132,8 +123,10 @@ contract Agent is IAgent, RouterAware, Operatable {
     if (!sc.vc.target.configuredForTakeover()) revert Unauthorized();
     // change the owner address
     sc.vc.target.changeOwnerAddress(address(this));
-    // add the miner to the central registry
+    // add the miner to the central registry, this call will fail if the miner is already registered
     GetRoute.minerRegistry(router).addMiner(sc.vc.target);
+    // push the miner to the Agent's list of miners
+    miners.push(sc.vc.target);
   }
 
   /**
@@ -154,6 +147,8 @@ contract Agent is IAgent, RouterAware, Operatable {
     isValidCredential(sc)
   {
     sc.vc.target.changeOwnerAddress(newMinerOwner);
+    // Remove the miner from the central registry
+    GetRoute.minerRegistry(router).removeMiner(sc.vc.target);
 
     // remove this miner from the Agent's list of miners
     for (uint256 i = 0; i < miners.length; i++) {
@@ -164,8 +159,6 @@ contract Agent is IAgent, RouterAware, Operatable {
       }
     }
 
-    // Remove the miner from the central registry
-    GetRoute.minerRegistry(router).removeMiner(sc.vc.target);
     // revert the transaction if any of the pools reject the removal
     GetRoute.agentPolice(router).isAgentOverLeveraged(sc.vc);
   }
@@ -272,11 +265,11 @@ contract Agent is IAgent, RouterAware, Operatable {
   }
 
   /**
-  * conditions in which you cannot borrow:
-  - in default
-  - if your position in any pool is overleveraged
-
-  TODO: reentrency? default
+   * @notice Allows an agent to borrow funds from a Pool
+   * @param poolID The ID of the pool to borrow from
+   * @param sc The signed credential of the user attempting to borrow funds from a pool. The credential must contain a `borrow` action type with the `value` field set to the amount to borrow. In case of a `borrow` action, the `target` field goes unused
+   *
+   * @dev The transaction will revert if the agent becomes overleveraged after borrowing
    */
   function borrow(
     uint256 poolID,
@@ -302,6 +295,14 @@ contract Agent is IAgent, RouterAware, Operatable {
     police.isAgentOverLeveraged(sc.vc);
   }
 
+  /**
+   * @notice Allows an agent to repay funds to a Pool
+   * @param poolID The ID of the pool to repay to
+   * @param sc The signed credential of the user attempting to repay funds to a pool. The credential must contain a `repay` action type with the `value` field set to the amount to repay. In case of a `repay` action, the `target` field goes unused
+   * @dev If the payment covers all the interest owed, then the remaining payments will go towards down principal
+   *
+   * The Agent's account must exist in order to pay back to a pool
+   */
   function pay(
     uint256 poolID,
     SignedCredential memory sc
