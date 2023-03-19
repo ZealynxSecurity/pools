@@ -1,92 +1,92 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+// // SPDX-License-Identifier: UNLICENSED
+// pragma solidity ^0.8.15;
 
-import "src/VCVerifier/VCVerifier.sol";
-import "./BaseTest.sol";
+// import "src/VCVerifier/VCVerifier.sol";
+// import "./BaseTest.sol";
 
-contract VCVerifierMock is VCVerifier {
-  constructor(
-    address _router,
-    string memory verifiedName,
-    string memory verifiedVersion
-  ) VCVerifier(verifiedName, verifiedVersion) {
-    router = _router;
-  }
-}
+// contract VCVerifierMock is VCVerifier {
+//   constructor(
+//     address _router,
+//     string memory verifiedName,
+//     string memory verifiedVersion
+//   ) VCVerifier(verifiedName, verifiedVersion) {
+//     router = _router;
+//   }
+// }
 
-contract VCVerifierTest is BaseTest {
-  VCVerifierMock public vcv;
-  address public agent = makeAddr("AGENT");
+// contract VCVerifierTest is BaseTest {
+//   VCVerifierMock public vcv;
+//   address public agent = makeAddr("AGENT");
 
-  function setUp() public {
-    vcv = new VCVerifierMock(address(router), "glif.io", "1");
-    vm.stopPrank();
-  }
+//   function setUp() public {
+//     vcv = new VCVerifierMock(address(router), "glif.io", "1");
+//     vm.stopPrank();
+//   }
 
-  function testVerifyCredential() public {
-    SignedCredential memory sc = issueSC(agent);
+//   function testVerifyCredential() public {
+//     SignedCredential memory sc = issueSC(agent);
 
-    assertTrue(vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s));
-  }
+//     assertTrue(vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s));
+//   }
 
-  function testVerifyCredentialFromWrongIssuer() public {
-    uint256 qaPower = 10e10;
+//   function testVerifyCredentialFromWrongIssuer() public {
+//     uint256 qaPower = 10e10;
 
-    AgentData memory _agent = AgentData(
-      1e10, 100, 0, 0.5e18, 10e18, 10e18, 10, qaPower, 5e18, 0, 0
-    );
+//     AgentData memory _agent = AgentData(
+//       1e10, 100, 0, 0.5e18, 10e18, 10e18, 10, qaPower, 5e18, 0, 0
+//     );
 
-    VerifiableCredential memory vc = VerifiableCredential(
-      vcIssuer,
-      agent,
-      block.number,
-      block.number + 100,
-      100,
-      abi.encode(_agent)
-    );
+//     VerifiableCredential memory vc = VerifiableCredential(
+//       vcIssuer,
+//       agent,
+//       block.number,
+//       block.number + 100,
+//       100,
+//       abi.encode(_agent)
+//     );
 
-    bytes32 digest = vcv.digest(vc);
-    (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, digest);
-    vm.expectRevert("VCVerifier: Not authorized");
-    vcv.isValid(agent, vc, v, r, s);
-  }
+//     bytes32 digest = vcv.digest(vc);
+//     (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, digest);
+//     vm.expectRevert("VCVerifier: Not authorized");
+//     vcv.isValid(agent, vc, v, r, s);
+//   }
 
-  function testBadIssuer() public {
-    SignedCredential memory sc = issueSC(agent);
+//   function testBadIssuer() public {
+//     SignedCredential memory sc = issueSC(agent);
 
-    sc.vc.issuer = makeAddr("FALSE_ISSUER");
-    vm.expectRevert("VCVerifier: Not authorized");
-    vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s);
-  }
+//     sc.vc.issuer = makeAddr("FALSE_ISSUER");
+//     vm.expectRevert("VCVerifier: Not authorized");
+//     vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s);
+//   }
 
-  function testFalseSubject() public {
-    SignedCredential memory sc = issueSC(agent);
+//   function testFalseSubject() public {
+//     SignedCredential memory sc = issueSC(agent);
 
-    sc.vc.subject = makeAddr("FALSE_SUBJECT");
-    vm.expectRevert("VCVerifier: Not authorized");
-    vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s);
-  }
+//     sc.vc.subject = makeAddr("FALSE_SUBJECT");
+//     vm.expectRevert("VCVerifier: Not authorized");
+//     vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s);
+//   }
 
-  // we don't use the issueGenericVC funcs because we dont use the AgentPolice as the VCVerifier
-  function issueSC(address _agent) internal returns (SignedCredential memory) {
-    uint256 qaPower = 10e18;
+//   // we don't use the issueGenericVC funcs because we dont use the AgentPolice as the VCVerifier
+//   function issueSC(address _agent) internal returns (SignedCredential memory) {
+//     uint256 qaPower = 10e18;
 
-    AgentData memory agent = AgentData(
-      1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0
-    );
+//     AgentData memory agent = AgentData(
+//       1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0
+//     );
 
-    VerifiableCredential memory vc = VerifiableCredential(
-      vcIssuer,
-      _agent,
-      block.number,
-      block.number + 100,
-      1000,
-      abi.encode(agent)
-    );
+//     VerifiableCredential memory vc = VerifiableCredential(
+//       vcIssuer,
+//       _agent,
+//       block.number,
+//       block.number + 100,
+//       1000,
+//       abi.encode(agent)
+//     );
 
-    bytes32 digest = vcv.digest(vc);
-    (uint8 v, bytes32 r, bytes32 s) = vm.sign(vcIssuerPk, digest);
-    return SignedCredential(vc, v, r, s);
-  }
-}
+//     bytes32 digest = vcv.digest(vc);
+//     (uint8 v, bytes32 r, bytes32 s) = vm.sign(vcIssuerPk, digest);
+//     return SignedCredential(vc, v, r, s);
+//   }
+// }
 

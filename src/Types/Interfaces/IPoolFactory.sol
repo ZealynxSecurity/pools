@@ -14,8 +14,7 @@ interface IPoolFactory {
     string calldata name,
     string calldata symbol,
     address owner,
-    address operator,
-    address implementation
+    address operator
   ) external returns (IPool pool);
   function upgradePool(uint256 poolId) external returns (IPool newPool);
   function approveImplementation(address implementation) external;

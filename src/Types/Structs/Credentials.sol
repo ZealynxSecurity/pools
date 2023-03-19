@@ -34,9 +34,9 @@ struct VerifiableCredential {
    */
   address issuer;
   /**
-   * @dev The address of the agent to which the credential is issued
+   * @dev The id of the agent to which the credential is issued
    */
-  address subject;
+  uint256 subject;
   /**
    * @dev The epoch in which the credential was signed and issued
    */

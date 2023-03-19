@@ -30,8 +30,6 @@ interface IAgent {
 
   function minersCount() external view returns (uint256);
 
-  function hasMiner(uint64 miner) external view returns (bool);
-
   function borrowedPoolsCount() external view returns (uint256);
 
   function liquidAssets() external view returns (uint256);
@@ -40,7 +38,7 @@ interface IAgent {
         MINER OWNERSHIP/WORKER/OPERATOR CHANGES
   //////////////////////////////////////////////////*/
 
-  function addMiners(
+  function addMiner(
     SignedCredential memory sc
   ) external;
 
@@ -63,16 +61,15 @@ interface IAgent {
 
   function withdrawBalance(
     address receiver,
-    SignedCredential memory sc
+    SignedCredential memory signedCred
   ) external;
 
-  function borrowV2(
+  function borrow(
     uint256 poolID,
-    SignedCredential memory sc
+    SignedCredential memory signedCred
   ) external;
 
   function pay(
-    uint256 amount,
     uint256 poolID,
     SignedCredential memory signedCred
   ) external returns (uint256 epochsPaid);
@@ -80,18 +77,14 @@ interface IAgent {
   function refinance(
     uint256 oldPoolID,
     uint256 newPoolID,
-    SignedCredential memory signedCredential
+    SignedCredential memory signedCred
   ) external;
 
-  function pullFundsFromMiners(
-    uint64[] calldata miners,
-    uint256[] calldata amounts,
-    SignedCredential memory signedCredential
+  function pullFundsFromMiner(
+    SignedCredential memory signedCred
   ) external;
 
-  function pushFundsToMiners(
-    uint64[] calldata miners,
-    uint256[] calldata amounts,
-    SignedCredential memory signedCredential
+  function pushFundsToMiner(
+    SignedCredential memory signedCred
   ) external;
 }

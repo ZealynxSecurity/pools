@@ -20,7 +20,7 @@ contract Router is IRouter, Ownable {
   function getRoute(bytes4 id) public view returns (address) {
     address route = route[id];
     if (route == ADDRESS_ZERO) revert RouteDNE();
-    return route[id];
+    return route;
   }
 
   function getRoute(string memory id) public view returns (address) {

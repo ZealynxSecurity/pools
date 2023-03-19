@@ -58,17 +58,14 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
    * @param symbol The symbol of the pool
    * @param owner The owner of the pool
    * @param operator The operator of the pool
-   * @param implementation The implementation of the pool
    * @return pool The address of the new pool
    */
   function createPool(
     string memory name,
     string memory symbol,
     address owner,
-    address operator,
-    address implementation
+    address operator
   ) external onlyOwnerOperator returns (IPool pool) {
-    if (!isPoolImplementation(implementation)) revert InvalidParams();
     if (operator == address(0)) revert InvalidParams();
 
     IPoolDeployer deployer = IPoolDeployer(IRouter(router).getRoute(ROUTE_ACCOUNTING_DEPLOYER));
@@ -93,13 +90,13 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
       operator,
       poolID,
       router,
-      implementation,
       stakingAsset,
       shareToken,
       // start with no offramp
       address(0),
       iouToken,
-      0
+      0,
+      15
     );
     // add the pool to the list of all pools
     allPools.push(address(pool));
@@ -127,12 +124,12 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
       IAuth(address(oldPool)).operator(),
       poolId,
       router,
-      address(oldPool.implementation()),
       address(oldPool.asset()),
       address(oldPool.share()),
       address(oldPool.ramp()),
       address(oldPool.iou()),
-      oldPool.minimumLiquidity()
+      oldPool.minimumLiquidity(),
+      15
     );
     // Update the pool to exist before we decomission the old pool so transfer checks will succeed
     allPools[poolId] = address(newPool);

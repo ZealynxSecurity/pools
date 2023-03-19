@@ -2,10 +2,8 @@
 pragma solidity ^0.8.15;
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
-import {SignedCredential} from "src/Types/Structs/Credentials.sol";
+import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
-import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 
 interface IPool {
@@ -16,20 +14,12 @@ interface IPool {
 
     event Borrow(
         address indexed agent,
-        uint256 amount,
-        uint256 powerTokenAmount,
-        uint256 rate
-    );
-
-    event ExitPool(
-        address indexed agent,
-        uint256 amount,
-        uint256 powerTokensReturned
+        uint256 amount
     );
 
     event MakePayment(
         address indexed agent,
-        uint256 pmt
+        uint256 rate
     );
 
     event Deposit(
@@ -47,14 +37,6 @@ interface IPool {
         uint256 shares
     );
 
-    event RebalanceTotalBorrowed(
-        uint256 indexed agentID,
-        uint256 realAccountValue,
-        uint256 totalBorrowed
-    );
-
-    event SetOperatorRole(address indexed operator, bool enabled);
-
     /*////////////////////////////////////////////////////////
                             GETTERS
     ////////////////////////////////////////////////////////*/
@@ -62,8 +44,6 @@ interface IPool {
     function asset() external view returns (ERC20);
 
     function share() external view returns (PoolToken);
-
-    function implementation() external view returns (IPoolImplementation);
 
     function iou() external view returns (PoolToken);
 
@@ -85,15 +65,23 @@ interface IPool {
 
     function getLiquidAssets() external view returns (uint256);
 
+    function getRate(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) external view returns (uint256);
+
+    function isOverLeveraged(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) external view returns (bool);
+
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function borrowV2(VerifiableCredential memory vc) external;
+    function borrow(VerifiableCredential memory vc) external;
 
-    function pay(uint256 amount, VerifiableCredential memory vc) external returns (bool paidOff);
-
-    function rebalanceTotalBorrowed(uint256 agentID, uint256 realAccountValue) external;
+    function pay(VerifiableCredential memory vc) external returns (uint256 rate, uint256 epochsPaid);
 
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC
@@ -159,8 +147,8 @@ interface IPool {
 
     function setRamp(IOffRamp newRamp) external;
 
-    function setImplementation(IPoolImplementation poolImplementation) external;
-
     function setMinimumLiquidity(uint256 minLiquidity) external;
+
+    function setBias(uint256 bias) external;
 }
 

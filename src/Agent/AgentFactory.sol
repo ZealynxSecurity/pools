@@ -28,7 +28,6 @@ contract AgentFactory is IAgentFactory, RouterAware {
     );
     agents[address(agent)] = agentCount;
 
-
     emit CreateAgent(agent.id(), address(agent), operator);
 
     return address(agent);

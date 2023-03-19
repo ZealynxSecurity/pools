@@ -28,21 +28,20 @@ import {
   ROUTE_CRED_PARSER
 } from "src/Constants/Routes.sol";
 import {Roles} from "src/Constants/Roles.sol";
-import {
-  Unauthorized,
-  InvalidPower,
-  InsufficientFunds,
-  InsufficientCollateral,
-  InvalidParams,
-  Internal,
-  BadAgentState
-} from "src/Agent/Errors.sol";
 import {MinerHelper} from "helpers/MinerHelper.sol";
 
 contract Agent is IAgent, RouterAware, Operatable {
 
   using Credentials for VerifiableCredential;
   using MinerHelper for uint64;
+
+  error Unauthorized();
+  error InvalidPower();
+  error InsufficientFunds();
+  error InsufficientCollateral();
+  error InvalidParams();
+  error Internal();
+  error BadAgentState();
 
   uint256 public id;
   /**
@@ -79,15 +78,6 @@ contract Agent is IAgent, RouterAware, Operatable {
   //////////////////////////////////////////////////*/
 
   /**
-   * @notice Check if a miner is registered in the miner registry under this Agent
-   * @param miner The address of the miner to check for registration
-   * @return hasMiner Returns true if the miner is registered, false otherwise
-   */
-  function hasMiner(uint64 miner) public view returns (bool) {
-    return GetRoute.minerRegistry(router).minerRegistered(id, miner);
-  }
-
-  /**
    * @notice Returns the total number of miners pledged to this Agent
    */
   function minersCount() external view returns (uint256) {
@@ -113,9 +103,7 @@ contract Agent is IAgent, RouterAware, Operatable {
    * but the total liquidationValue of the Agent should not change
    */
   function liquidAssets() public view returns (uint256) {
-    uint256 filBal = address(this).balance;
-    uint256 wfilBal = GetRoute.wFIL20(router).balanceOf(address(this));
-    return filBal + wfilBal;
+    return address(this).balance + GetRoute.wFIL20(router).balanceOf(address(this));
   }
 
   /*//////////////////////////////////////////////
@@ -132,7 +120,8 @@ contract Agent is IAgent, RouterAware, Operatable {
 
   /**
    * @notice Adds miner addresses to the miner registry
-   * @param miners The addresses of the miners to add
+   * @param sc The a signed credential with an `addMiner` action type
+   * The `target` in the `sc` is the uint64 ID of the miner
    *
    * @dev under the hood this function calls `changeOwnerAddress` on the underlying Miner Actor to claim its ownership.
    * The underlying Miner Actor's nextPendingOwner _must_ be the address of this Agent or else this call will fail.
@@ -146,56 +135,43 @@ contract Agent is IAgent, RouterAware, Operatable {
     // change the owner address
     sc.vc.target.changeOwnerAddress(address(this));
 
-    GetRoute.minerRegistry(router).addMiner(miner);
+    GetRoute.minerRegistry(router).addMiner(sc.vc.target);
   }
 
   /**
    * @notice Removes a miner from the miner registry
    * @param newMinerOwner The address that will become the new owner of the miner
-   * @param miner The address of the miner to remove. NOTE: this is a uint64 masked in an address type
-   * @param agentCred The signed credential of the agent attempting to remove the miner
-   * @param minerCred A credential uniquely about the miner to be removed
+   * @param sc The signed credential of the agent attempting to remove the miner. The `target` will be the uint64 miner ID to remove and the `value` will be the value of assets that would be removed along with this particular miner.
    *
-   * @dev under the hood this function:
-   * - makes sure the Agent is not already overPowered or overLeveraged
-   * - checks to make sure that removing the miner will not:
-   *    - put the Agent into an overLeveraged state
-   *    - put the Agent into an overPowered State
-   *    - remove too many assets from the Agent,
-   *        effectively putting it under the min collateral amount as determined by the Pools
-   * - changes the owner of the miner to the new owner - the new owner will have to claim directly with the Miner Actor
    *
    * If an Agent is not actively borrowing from any Pools, it can always remove its Miners
    */
   function removeMiner(
     address newMinerOwner,
-    uint64 miner,
-    SignedCredential memory agentCred,
-    // a credential uniquely about the miner we wish to remove
-    SignedCredential memory minerCred
+    SignedCredential memory sc
   )
     external
     onlyOwner
-    isValidCredential(agentCred)
+    isValidCredential(sc)
   {
-    // also validate the minerCred against the miner to remove
-    // the miner needs to be encoded as an address type for compatibility with the vc
-    _isValidCredential(address(uint160(miner)), minerCred);
-    _checkRemoveMiner(agentCred.vc, minerCred.vc);
+    // // also validate the minerCred against the miner to remove
+    // // the miner needs to be encoded as an address type for compatibility with the vc
+    // _isValidCredential(address(uint160(miner)), minerCred);
+    // _checkRemoveMiner(agentCred.vc, minerCred.vc);
 
-    miner.changeOwnerAddress(newMinerOwner);
+    // miner.changeOwnerAddress(newMinerOwner);
 
-    // remove this miner from the Agent's list of miners
-    for (uint256 i = 0; i < miners.length; i++) {
-      if (miners[i] == miner) {
-        miners[i] = miners[miners.length - 1];
-        miners.pop();
-        break;
-      }
-    }
+    // // remove this miner from the Agent's list of miners
+    // for (uint256 i = 0; i < miners.length; i++) {
+    //   if (miners[i] == miner) {
+    //     miners[i] = miners[miners.length - 1];
+    //     miners.pop();
+    //     break;
+    //   }
+    // }
 
-    // Remove the miner from the central registry
-    GetRoute.minerRegistry(router).removeMiner(miner);
+    // // Remove the miner from the central registry
+    // GetRoute.minerRegistry(router).removeMiner(miner);
   }
   /**
    * @notice Migrates a miner from the current agent to a new agent
@@ -243,8 +219,7 @@ contract Agent is IAgent, RouterAware, Operatable {
   /**
    * @notice Allows an agent to withdraw balance to a recipient. Only callable by the Agent's Owner(s).
    * @param receiver The address to which the funds will be withdrawn
-   * @param amount The amount of balance to withdraw
-   * @param signedCredential The signed credential of the user attempting to withdraw balance
+   * @param sc The signed credential of the user attempting to withdraw balance with a `withdraw` action type
    * @dev A credential must be passed when existing $FIL is borrowed in order to compute the max withdraw amount
    */
   function withdrawBalance(
@@ -254,65 +229,48 @@ contract Agent is IAgent, RouterAware, Operatable {
     address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
     uint256 liquid = liquidAssets();
 
-    uint256 withdrawAmt;
-
     // if nothing is borrowed, you can withdraw everything
-    if (borrowedPoolsCount().length == 0) {
-      return liquid;
-    }
+    if (sc.vc.value > liquid) revert InsufficientFunds();
 
-    _poolFundsInFIL(amount);
+    _poolFundsInFIL(sc.vc.value);
 
-    (bool success,) = receiver.call{value: amount}("");
+    (bool success,) = receiver.call{value: sc.vc.value}("");
     if (!success) revert Internal();
 
-    emit WithdrawBalance(receiver, amount);
+    emit WithdrawBalance(receiver, sc.vc.value);
   }
 
   /**
-   * @notice Allows an agent to pull up funds from multiple staked Miner Actors into the Agent
-   * @param minerID An array of miner addresses to pull funds from
-   * @param amount An array of amounts to pull from each miner
-   * @dev the amounts correspond to the miners array.
-   * The Agent must own the miners its withdrawing funds from
+   * @notice Allows an agent to pull up funds from a staked Miner Actor into the Agent
+   * @param sc The signed credential of the user attempting to pull funds from a miner. The credential must contain a `pullFundsFromMiner` action type with the `value` field set to the amount to pull, and the `target` as the ID of the miner to pull funds from
+   * @dev The Agent must own the miner its withdrawing funds from
    *
    * This function adds a native FIL balance to the Agent
    */
-  function pullFundsFromMiner(
-    uint64 minerID,
-    uint256 amount,
-    SignedCredential memory sc
-  )
+  function pullFundsFromMiner(SignedCredential memory sc)
     external
     requiresAuthOrPolice
     isValidCredential(sc)
   {
-    _pullFundsFromMiner(miner, amount);
-    emit PullFundsFromMiners(miners, amounts);
+    _pullFundsFromMiner(sc.vc.target, sc.vc.value);
+    // emit PullFundsFromMiners(miners, amounts);
   }
 
   /**
    * @notice Allows an agent to push funds to a miner
-   * @param minerID The ID of the miner to push funds to
-   * @param amount The amount of funds to push to the miner
-
-
-   * @dev the amounts correspond to the miners array
+   * @param sc The signed credential of the user attempting to push funds to a miner. The credential must contain a `pushFundsFromMiner` action type with the `value` field set to the amount to push, and the `target` as the ID of the miner to push funds to
+   * @dev The Agent must own the miner its withdrawing funds from
    * If the agents FIL balance is less than the total amount to push, the function will attempt to convert any wFIL before reverting
-   * This function cannot be called if the Agent is overLeveraged
+   * TODO: this function cannot be called if the Agent is in default
    */
-  function pushFundsToMiner(
-    uint64 minerID,
-    uint256 amount,
-    SignedCredential memory sc
-  )
+  function pushFundsToMiner(SignedCredential memory sc)
     external
     onlyOwnerOperator
     isValidCredential(sc)
   {
-    _poolFundsInFIL(amount);
-    if (!hasMiner(miner)) revert Unauthorized();
-    miner.transfer(amount);
+    _poolFundsInFIL(sc.vc.value);
+    if (!GetRoute.minerRegistry(router).minerRegistered(id, sc.vc.target)) revert Unauthorized();
+    sc.vc.target.transfer(sc.vc.value);
 
     // emit PushFundsToMiners(miners, amounts);
   }
@@ -322,9 +280,9 @@ contract Agent is IAgent, RouterAware, Operatable {
   - in default
   - if your position in any pool is overleveraged
 
-  TODO: reentrency?
+  TODO: reentrency? default
    */
-  function borrowV2(
+  function borrow(
     uint256 poolID,
     SignedCredential memory sc
   ) external
@@ -343,13 +301,12 @@ contract Agent is IAgent, RouterAware, Operatable {
       police.addPoolToList(poolID);
     }
 
-    pool.borrowV2(sc.vc);
+    pool.borrow(sc.vc);
     // transaction will revert if any of the pool's accounts reject the new agent's state
     police.isAgentOverLeveraged(id, sc.vc);
   }
 
   function pay(
-    uint256 amount,
     uint256 poolID,
     SignedCredential memory sc
   ) external
@@ -357,10 +314,7 @@ contract Agent is IAgent, RouterAware, Operatable {
     isValidCredential(sc)
     returns (uint256 epochsPaid)
   {
-    GetRoute.pool(router, poolID).pay(amount, sc.vc);
-
-    // fullyPaidOff = pool.pay()
-    // if fullyPaidOff; police.removePoolFromList(poolID)
+    (,epochsPaid) = GetRoute.pool(router, poolID).pay(sc.vc);
   }
 
   /**
@@ -369,7 +323,6 @@ contract Agent is IAgent, RouterAware, Operatable {
    * and can secure a better rate from a different pool
    * @param oldPoolID The ID of the pool to exit from
    * @param newPoolID The ID of the pool to borrow from
-   * @param additionalPowerTokens The additional power tokens to stake as collateral in the new Pool
    * @param signedCredential The signed credential of the agent refinance the pool
    * @dev This function acts like one Pool "buying out" the position of an Agent on another Pool
    */
@@ -407,29 +360,6 @@ contract Agent is IAgent, RouterAware, Operatable {
   /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/
-
-  function _checkRemoveMiner(
-    VerifiableCredential memory agentCred
-  ) internal view returns (bool) {
-    address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-    // if nothing is borrowed, can remove
-    if (totalPowerTokensStaked() == 0) {
-      return true;
-    }
-
-    uint256 minerLiquidationValue = _liquidationValue(
-      minerCred.getAssets(credParser),
-      minerCred.getLiabilities(credParser),
-      0
-    );
-    _canRemovePower(agentCred.getQAPower(credParser), minerCred.getQAPower(credParser));
-
-    if (_maxWithdraw(agentCred, credParser) <= minerLiquidationValue) {
-      revert InsufficientCollateral();
-    }
-
-    return true;
-  }
 
   function _pullFundsFromMiner(uint64 miner, uint256 amount) internal {
     if (
@@ -487,23 +417,6 @@ contract Agent is IAgent, RouterAware, Operatable {
     agentPolice.isValidCredential(agent, signedCredential);
     agentPolice.registerCredentialUseBlock(signedCredential);
     if (signedCredential.vc.action != msg.sig) revert Unauthorized();
-  }
-
-  function _minCollateral(
-    VerifiableCredential memory vc
-  ) internal view returns (uint256 minCollateral) {
-    uint256[] memory poolIDs = _getStakedPoolIDs();
-
-    for (uint256 i = 0; i < poolIDs.length; ++i) {
-      uint256 poolID = poolIDs[i];
-      minCollateral += GetRoute
-        .pool(router, poolID)
-        .implementation()
-        .minCollateral(
-          _getAccount(poolID),
-          vc
-        );
-    }
   }
 
   function _getStakedPoolIDs() internal view returns (uint256[] memory) {

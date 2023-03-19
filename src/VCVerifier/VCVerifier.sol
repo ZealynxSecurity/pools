@@ -10,6 +10,8 @@ import {ROUTE_VC_ISSUER} from "src/Constants/Routes.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 
 abstract contract VCVerifier is RouterAware, EIP712 {
+  error InvalidCredential();
+
   constructor(string memory _name, string memory _version)
     EIP712(_name, _version) {}
 
@@ -31,7 +33,7 @@ abstract contract VCVerifier is RouterAware, EIP712 {
       vc.subject,
       vc.epochIssued,
       vc.epochValidUntil,
-      vc.cap,
+      vc.value,
       vc.claim
     ));
   }
@@ -48,33 +50,23 @@ abstract contract VCVerifier is RouterAware, EIP712 {
       return ECDSA.recover(digest(vc), v, r, s);
   }
 
-  // TODO: Use error library
-  function isValid(
-    address agent,
+  function validateCred(
+    uint256 agent,
     VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s
-  ) public view returns (bool) {
+  ) public view {
     address issuer = recover(vc, v, r, s);
-    require(issuer == vc.issuer, "VCVerifier: Not authorized");
-    require(isValidIssuer(issuer), "VCVerifier: Not authorized");
-    require(vc.subject == agent, "VCVerifier: Not authorized");
-    require(block.number >= vc.epochIssued && block.number <= vc.epochValidUntil, "Verifiable Credential not in valid epoch range");
-
-    return true;
+    if (
+      issuer != vc.issuer ||
+      !isValidIssuer(issuer) ||
+      vc.subject != agent ||
+      !(
+        block.number >= vc.epochIssued &&
+        block.number <= vc.epochValidUntil
+      )
+    ) revert InvalidCredential();
   }
 
   function isValidIssuer(address issuer) internal view returns (bool) {
     return IRouter(router).getRoute(ROUTE_VC_ISSUER) == issuer;
-  }
-
-  function _isValidVC(address agent, SignedCredential memory signedCredential) internal view returns (bool) {
-    require(isValid(
-      agent,
-      signedCredential.vc,
-      signedCredential.v,
-      signedCredential.r,
-      signedCredential.s
-    ), "Invalid VC");
-
-    return true;
   }
 }

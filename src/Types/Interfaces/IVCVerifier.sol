@@ -9,9 +9,9 @@ interface IVCVerifier {
   ) external view returns(bytes32);
 
   // validates a signed credential
-  function isValidCredential(
+  function validateCred(
     SignedCredential memory
-  ) external view returns (bool);
+  ) external;
 
   function recover(
     SignedCredential memory

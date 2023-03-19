@@ -12,36 +12,37 @@ contract PoolAccountingDeployer {
    * @param _operator pool operator address
    * @param _id pool id
    * @param _router router address
-   * @param _poolImplementation pool implementation address
    * @param _asset staking asset address
    * @param _share pool share token address
    * @param _ramp pool off ramp address
    * @param _iou pool IOU token address
    * @param _minimumLiquidity pool minimum liquidity amount
+   * @param _bias the curve constant of the dynamic rate
+
   */
   function deploy(
     address _owner,
     address _operator,
     uint256 _id,
     address _router,
-    address _poolImplementation,
     address _asset,
     address _share,
     address _ramp,
     address _iou,
-    uint256 _minimumLiquidity
+    uint256 _minimumLiquidity,
+    uint256 _bias
   ) public returns (IPool) {
     return new PoolAccounting(
       _owner,
       _operator,
       _id,
       _router,
-      _poolImplementation,
       _asset,
       _share,
       _ramp,
       _iou,
-      _minimumLiquidity
+      _minimumLiquidity,
+      _bias
     );
   }
 }
