@@ -47,11 +47,11 @@ interface IAgentPolice {
                       CHECKERS
   //////////////////////////////////////////////*/
 
-  function isValidCredential(address agent, SignedCredential memory signedCredential) external;
+  function isValidCredential(uint256 agent, SignedCredential memory signedCredential) external;
 
   function registerCredentialUseBlock(SignedCredential memory signedCredential) external;
 
-  function isAgentOverLeveraged(uint256 agentID, VerifiableCredential memory vc) external;
+  function isAgentOverLeveraged(VerifiableCredential memory vc) external;
 
   function checkDefault(SignedCredential memory signedCredential) external returns (bool);
 

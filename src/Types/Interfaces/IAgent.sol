@@ -16,10 +16,6 @@ interface IAgent {
 
   event WithdrawBalance(address indexed receiver, uint256 amount);
 
-  event PullFundsFromMiners(uint64[] miners, uint256[] amounts);
-
-  event PushFundsToMiners(uint64[] miners, uint256[] amounts);
-
   /*//////////////////////////////////////////////////
                         GETTERS
   //////////////////////////////////////////////////*/
@@ -72,7 +68,7 @@ interface IAgent {
   function pay(
     uint256 poolID,
     SignedCredential memory signedCred
-  ) external returns (uint256 epochsPaid);
+  ) external returns (uint256 rate, uint256 epochsPaid);
 
   function refinance(
     uint256 oldPoolID,

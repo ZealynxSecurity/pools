@@ -93,16 +93,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   //////////////////////////////////////////////*/
 
   function isAgentOverLeveraged(
-    uint256 agentID,
     VerifiableCredential memory vc
   ) external view {
-    uint256[] memory poolIDs = _poolIDs[agentID];
+    uint256[] memory poolIDs = _poolIDs[vc.subject];
 
     for (uint256 i = 0; i < poolIDs.length; ++i) {
       uint256 poolID = poolIDs[i];
       IPool pool = GetRoute.pool(router, poolID);
       if (pool.isOverLeveraged(
-        AccountHelpers.getAccount(router, agentID, poolID),
+        AccountHelpers.getAccount(router, vc.subject, poolID),
         vc
       )) {
         revert OverLeveraged();
@@ -130,15 +129,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   /**
    * @notice `isValidCredential` returns true if the credential is valid
-   * @param agent the address of the agent
+   * @param agent the ID of the agent
    * @param signedCredential the signed credential of the agent
    * @dev a credential is valid if it's subject is `agent` and is signed by an authorized issuer
    */
   function isValidCredential(
-    address agent,
+    uint256 agent,
     SignedCredential memory signedCredential
   ) external {
-      _checkCredential(_addressToID(agent), signedCredential);
+    _checkCredential(agent, signedCredential);
   }
 
   function registerCredentialUseBlock(SignedCredential memory signedCredential) external  {
