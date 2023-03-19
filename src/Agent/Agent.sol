@@ -2,6 +2,7 @@
 pragma solidity ^0.8.15;
 
 import {GetRoute} from "src/Router/GetRoute.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -32,22 +33,29 @@ contract Agent is IAgent, RouterAware, Operatable {
   error BadAgentState();
 
   uint256 public id;
-  /**
-   * @notice Returns the minerID at a specific index
-   */
+  /// @notice `miners` Returns the minerID at a specific index
   uint64[] public miners;
-
+  /// @notice `newAgent` returns an address of an upgraded agent during the upgrade process
+  address public newAgent;
   /*//////////////////////////////////////
                 MODIFIERS
   //////////////////////////////////////*/
 
+  /// @dev a modifier that protects function calls
+  /// only owner, operator, or agent police can call
   modifier onlyAuthOrPolice {
     _onlyAuthOrPolice();
     _;
   }
 
-  modifier isValidCredential(SignedCredential memory signedCredential) {
-    _isValidCredential(id, signedCredential);
+  /// @dev a modifier that checks and immediately burns a signed credential
+  modifier validateAndBurnCred(SignedCredential memory signedCredential) {
+    _validateAndBurnCred(id, signedCredential);
+    _;
+  }
+
+  modifier onlyAgentFactory() {
+    AuthController.onlyAgentFactory(router, msg.sender);
     _;
   }
 
@@ -73,13 +81,13 @@ contract Agent is IAgent, RouterAware, Operatable {
   }
 
   /**
-   * @notice Get the number of pools that an Agent has staked power tokens in
+   * @notice Get the number of pools that an Agent is actively borrowing from
    * @return count Returns the number of pools that an Agent has staked power tokens in
    *
    * @dev this corresponds to the number of Pools that an Agent is actively borrowing from
    */
-  function borrowedPoolsCount() public view returns (uint256) {
-    return _getStakedPoolIDs().length;
+  function borrowedPoolsCount() public view returns (uint256 count) {
+    count = _getStakedPoolIDs().length;
   }
 
   /**
@@ -90,7 +98,7 @@ contract Agent is IAgent, RouterAware, Operatable {
    * the liquidAssets will decrease,
    * but the total liquidationValue of the Agent should not change
    */
-  function liquidAssets() external view returns (uint256) {
+  function liquidAssets() public view returns (uint256) {
     return address(this).balance + GetRoute.wFIL(router).balanceOf(address(this));
   }
 
@@ -118,7 +126,7 @@ contract Agent is IAgent, RouterAware, Operatable {
    */
   function addMiner(
     SignedCredential memory sc
-  ) external onlyOwnerOperator isValidCredential(sc) {
+  ) external onlyOwnerOperator validateAndBurnCred(sc) {
     // Confirm the miner is valid and can be added
     if (!sc.vc.target.configuredForTakeover()) revert Unauthorized();
     // change the owner address
@@ -144,31 +152,42 @@ contract Agent is IAgent, RouterAware, Operatable {
   )
     external
     onlyOwner
-    isValidCredential(sc)
+    validateAndBurnCred(sc)
   {
-    sc.vc.target.changeOwnerAddress(newMinerOwner);
     // Remove the miner from the central registry
     GetRoute.minerRegistry(router).removeMiner(sc.vc.target);
-
     // remove this miner from the Agent's list of miners
-    for (uint256 i = 0; i < miners.length; i++) {
-      if (miners[i] == sc.vc.target) {
-        miners[i] = miners[miners.length - 1];
-        miners.pop();
-        break;
-      }
-    }
-
+    _popMinerFromList(sc.vc.target);
     // revert the transaction if any of the pools reject the removal
     GetRoute.agentPolice(router).isAgentOverLeveraged(sc.vc);
+    // change the owner address of the miner to the new miner owner
+    sc.vc.target.changeOwnerAddress(newMinerOwner);
   }
+
+  /**
+   * @notice Gets called by the agent factory to begin the upgrade process to a new Agent
+   * @param _newAgent The address of the new agent to which the miner will be migrated
+   */
+  function decommissionAgent(address _newAgent) public onlyAgentFactory {
+    // if the newAgent is already set, we've already started teh migration
+    if (newAgent != address(0)) revert BadAgentState();
+    // if the newAgent has a mismatching ID, revert
+    if(IAgent(_newAgent).id() != id) revert Unauthorized();
+    // set the newAgent in storage, which marks the upgrade process as starting
+    newAgent = _newAgent;
+    // Withdraw all liquid funds from the Agent to the newAgent
+    (bool success,) = _newAgent.call{value: liquidAssets()}("");
+    if (!success) revert Internal();
+  }
+
   /**
    * @notice Migrates a miner from the current agent to a new agent
    * This function is useful for upgrading an agent to a new version
    * @param newAgent The address of the new agent to which the miner will be migrated
    * @param miner The address of the miner to be migrated
    */
-  function migrateMiner(address newAgent, uint64 miner) external onlyOwnerOperator {
+  function migrateMiner(address newAgent, uint64 miner) external onlyOwner {
+    if (address(newAgent) != msg.sender) revert Unauthorized();
     uint256 newId = IAgent(newAgent).id();
     if (
       // first check to make sure the agentFactory knows about this "agent"
@@ -214,7 +233,7 @@ contract Agent is IAgent, RouterAware, Operatable {
   function withdrawBalance(
     address receiver,
     SignedCredential memory sc
-  ) external onlyOwner isValidCredential(sc) {
+  ) external onlyOwner validateAndBurnCred(sc) {
     _poolFundsInFIL(sc.vc.value);
 
     (bool success,) = receiver.call{value: sc.vc.value}("");
@@ -236,7 +255,7 @@ contract Agent is IAgent, RouterAware, Operatable {
   function pullFundsFromMiner(SignedCredential memory sc)
     external
     onlyAuthOrPolice
-    isValidCredential(sc)
+    validateAndBurnCred(sc)
   {
     // revert if this agent does not own the underlying miner
     _checkMinerRegistered(sc.vc.target);
@@ -254,7 +273,7 @@ contract Agent is IAgent, RouterAware, Operatable {
   function pushFundsToMiner(SignedCredential memory sc)
     external
     onlyOwnerOperator
-    isValidCredential(sc)
+    validateAndBurnCred(sc)
   {
     // revert if this agent does not own the underlying miner
     _checkMinerRegistered(sc.vc.target);
@@ -277,7 +296,7 @@ contract Agent is IAgent, RouterAware, Operatable {
   ) external
     onlyOwnerOperator
     /// notInDefault (check with police)
-    isValidCredential(sc)
+    validateAndBurnCred(sc)
   {
     IPool pool = GetRoute.pool(router, poolID);
 
@@ -308,7 +327,7 @@ contract Agent is IAgent, RouterAware, Operatable {
     SignedCredential memory sc
   ) external
     onlyOwnerOperator
-    isValidCredential(sc)
+    validateAndBurnCred(sc)
     returns (uint256 rate, uint256 epochsPaid)
   {
     (rate, epochsPaid) = GetRoute.pool(router, poolID).pay(sc.vc);
@@ -327,7 +346,7 @@ contract Agent is IAgent, RouterAware, Operatable {
     uint256 oldPoolID,
     uint256 newPoolID,
     SignedCredential memory sc
-  ) external onlyOwnerOperator isValidCredential(sc) {}
+  ) external onlyOwnerOperator validateAndBurnCred(sc) {}
 
   /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
@@ -355,7 +374,7 @@ contract Agent is IAgent, RouterAware, Operatable {
     ) revert Unauthorized();
   }
 
-  function _isValidCredential(
+  function _validateAndBurnCred(
     uint256 agent,
     SignedCredential memory signedCredential
   ) internal {
@@ -375,5 +394,15 @@ contract Agent is IAgent, RouterAware, Operatable {
 
   function _checkMinerRegistered(uint64 miner) internal view {
     if (!GetRoute.minerRegistry(router).minerRegistered(id, miner)) revert Unauthorized();
+  }
+
+  function _popMinerFromList(uint64 miner) internal {
+    for (uint256 i = 0; i < miners.length; i++) {
+      if (miners[i] == miner) {
+        miners[i] = miners[miners.length - 1];
+        miners.pop();
+        break;
+      }
+    }
   }
 }

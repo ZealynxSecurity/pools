@@ -22,6 +22,8 @@ interface IAgent {
 
   function id() external view returns (uint256);
 
+  function newAgent() external view returns (address);
+
   function miners(uint256) external view returns (uint64);
 
   function minersCount() external view returns (uint256);
@@ -50,6 +52,8 @@ interface IAgent {
     uint64 worker,
     uint64[] calldata controlAddresses
   ) external;
+
+  function decommissionAgent(address newAgent) external;
 
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS

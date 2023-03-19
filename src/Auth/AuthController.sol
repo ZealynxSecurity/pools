@@ -35,4 +35,10 @@ library AuthController {
       revert Unauthorized();
     }
   }
+
+  function onlyAgentFactory(address router, address agentFactory) internal view {
+    if (address(GetRoute.agentFactory(router)) != agentFactory) {
+      revert Unauthorized();
+    }
+  }
 }

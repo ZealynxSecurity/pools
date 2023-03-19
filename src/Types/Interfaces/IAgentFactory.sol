@@ -8,4 +8,5 @@ interface IAgentFactory {
   function agentCount() external view returns (uint256);
   function isAgent(address agent) external view returns (bool);
   function create(address owner, address operator) external returns (address);
+  function upgradeAgent(address agent) external returns (address newAgent);
 }

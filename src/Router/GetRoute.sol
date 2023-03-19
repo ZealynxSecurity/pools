@@ -3,6 +3,7 @@ pragma solidity ^0.8.15;
 
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IAgentDeployer} from "src/Types/Interfaces/IAgentDeployer.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
@@ -15,6 +16,10 @@ import "src/Constants/Routes.sol";
 library GetRoute {
   function agentFactory(address router) internal view returns (IAgentFactory) {
     return IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
+  }
+
+  function agentDeployer(address router) internal view returns (IAgentDeployer) {
+    return IAgentDeployer(IRouter(router).getRoute(ROUTE_AGENT_DEPLOYER));
   }
 
   function poolFactory(address router) internal view returns (IPoolFactory) {
