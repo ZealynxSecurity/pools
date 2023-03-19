@@ -3,7 +3,6 @@ pragma solidity ^0.8.15;
 
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";

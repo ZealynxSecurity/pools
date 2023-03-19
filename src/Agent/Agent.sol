@@ -13,7 +13,6 @@ import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IStats} from "src/Types/Interfaces/IStats.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";

@@ -10,7 +10,6 @@ import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {PoolFactory} from "src/Pool/PoolFactory.sol";
-import {PowerToken} from "src/PowerToken/PowerToken.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
@@ -48,7 +47,6 @@ contract Deploy is Script {
         address poolFactory = address(
             new PoolFactory(IERC20(address(wFIL)), 1e17, 0, deployerAddr, deployerAddr)
         );
-        address powerToken = address(new PowerToken());
         address credParser = address(new CredParser());
         address accountingDeployer = address(new PoolAccountingDeployer());
 
@@ -62,7 +60,6 @@ contract Deploy is Script {
             agentFactory,
             agentPolice,
             poolFactory,
-            powerToken,
             vcIssuer,
             credParser,
             accountingDeployer

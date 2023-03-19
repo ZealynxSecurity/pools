@@ -12,7 +12,6 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";

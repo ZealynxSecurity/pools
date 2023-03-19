@@ -21,7 +21,6 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
@@ -538,8 +537,6 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         require(isShuttingDown, "POOL: Must be shutting down");
         require(newPool.id() == id, "POOL: New pool must have same ID");
         harvestFees(feesCollected);
-        IPowerToken powerToken = GetRoute.powerToken(router);
-        powerToken.transfer(address(newPool), powerToken.balanceOf(address(this)));
         asset.transfer(address(newPool), asset.balanceOf(address(this)));
         share.transfer(address(newPool), share.balanceOf(address(this)));
         iou.transfer(address(newPool), iou.balanceOf(address(this)));
