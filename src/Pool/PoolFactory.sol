@@ -16,9 +16,6 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {ROUTE_ACCOUNTING_DEPLOYER} from "src/Constants/Routes.sol";
 import {InvalidParams, InvalidState, Unauthorized} from "src/Errors.sol";
 
-string constant IMPLEMENTATION = "IMPLEMENTATION";
-string constant ACCOUNTING = "ACCOUNTING";
-
 contract PoolFactory is IPoolFactory, RouterAware, Operatable {
   /**
    * @notice The PoolFactoryAdmin can change the treasury fee up to the MAX_TREASURY_FEE
@@ -30,7 +27,7 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
   IERC20 public asset;
   address[] public allPools;
   // poolExists
-  mapping(bytes32 => bool) public exists;
+  mapping(address => bool) internal exists;
 
   /*//////////////////////////////////////
                 MODIFIERS
@@ -101,43 +98,31 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
     // add the pool to the list of all pools
     allPools.push(address(pool));
     // cache the new pool in storage
-    exists[createKey(ACCOUNTING, address(pool))] = true;
+    exists[address(pool)] = true;
   }
 
   /**
-   * @dev upgrades a Pool Accounting instance
-   * @param poolId The id of the pool to upgrade
+   * @notice upgrades a Pool Accounting instance
+   * @param newPool The address of the pool to upgrade
+   *
+   * @dev only the Pool Factory owner or operator can upgrade pools
    */
   function upgradePool(
-    uint256 poolId
-  ) external returns (IPool newPool) {
-    IPool oldPool = IPool(allPools[poolId]);
-    // only the Pool's owner or operator can upgrade
-    if (IAuth(address(oldPool)).owner() != msg.sender && IAuth(address(oldPool)).operator() != msg.sender) revert Unauthorized();
+    IPool newPool
+  ) external onlyOwnerOperator {
+    uint256 poolID = newPool.id();
+    IPool oldPool = IPool(allPools[poolID]);
+
     // the pool must be shutting down (deposits disabled) to upgrade
     if (!oldPool.isShuttingDown()) revert InvalidState();
 
-    IPoolDeployer deployer = IPoolDeployer(IRouter(router).getRoute(ROUTE_ACCOUNTING_DEPLOYER));
-    // deploy a new instance of PoolAccounting
-    newPool = deployer.deploy(
-      IAuth(address(oldPool)).owner(),
-      IAuth(address(oldPool)).operator(),
-      poolId,
-      router,
-      address(oldPool.asset()),
-      address(oldPool.share()),
-      address(oldPool.ramp()),
-      address(oldPool.iou()),
-      oldPool.minimumLiquidity(),
-      15
-    );
     // Update the pool to exist before we decomission the old pool so transfer checks will succeed
-    allPools[poolId] = address(newPool);
-    exists[createKey(ACCOUNTING, address(newPool))] = true;
+    allPools[poolID] = address(newPool);
+    exists[address(newPool)] = true;
     uint256 borrowedAmount = oldPool.decommissionPool(newPool);
     // change update the pointer in factory storage
     // reset pool mappings
-    exists[createKey(ACCOUNTING, address(oldPool))] = false;
+    exists[address(oldPool)] = false;
     // update the accounting in the new pool
     newPool.jumpStartTotalBorrowed(borrowedAmount);
   }
@@ -147,33 +132,7 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
    * @param pool The address of the pool
    */
   function isPool(address pool) external view returns (bool) {
-    return exists[createKey(ACCOUNTING, pool)];
-  }
-
-  /**
-   * @dev Returns if a Pool Implementation instance exists
-   * @param implementation The address of the implementation
-   */
-  function isPoolImplementation(address implementation) public view returns (bool) {
-    return exists[createKey(IMPLEMENTATION, implementation)];
-  }
-
-  /**
-   * @dev Approves a new Pool Implementation
-   * @notice only the factory admin can approve new implementations
-   */
-  function approveImplementation(address implementation) external onlyOwnerOperator {
-    exists[createKey(IMPLEMENTATION, address(implementation))] = true;
-  }
-
-  /**
-   * @dev Revokes an Implementation
-   * @notice only the factory admin can revoke an implementation
-   *
-   * TODO: Not sure about side effects of removing live versions? Should be safe - deprecation
-   */
-  function revokeImplementation(address implementation) external onlyOwnerOperator {
-    exists[createKey(IMPLEMENTATION, address(implementation))] = false;
+    return exists[pool];
   }
 
   /**
