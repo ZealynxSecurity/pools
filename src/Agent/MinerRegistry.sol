@@ -11,8 +11,7 @@ import {ROUTE_AGENT_FACTORY} from "src/Constants/Routes.sol";
 
 contract MinerRegistry is IMinerRegistry, RouterAware {
 
-  error DuplicateEntry();
-  error MinerNotRegistered();
+  error InvalidParams();
 
   // maps keccak256(agentID, minerAddr) => registered status
   mapping(bytes32 => bool) private _minerRegistered;
@@ -41,7 +40,7 @@ contract MinerRegistry is IMinerRegistry, RouterAware {
   function addMiner(uint64 miner) external onlyAgent {
     bytes32 key = _createMapKey(_getIDFromAgent(msg.sender), miner);
 
-    if (_minerRegistered[key]) revert DuplicateEntry();
+    if (_minerRegistered[key]) revert InvalidParams();
 
     _minerRegistered[key] = true;
 
@@ -50,7 +49,9 @@ contract MinerRegistry is IMinerRegistry, RouterAware {
 
   function removeMiner(uint64 miner) external onlyAgent {
     bytes32 key = _createMapKey(_getIDFromAgent(msg.sender), miner);
-    if (_minerRegistered[key]) revert MinerNotRegistered();
+
+    if (!_minerRegistered[key]) revert InvalidParams();
+
     _minerRegistered[key] = false;
 
     emit RemoveMiner(msg.sender, miner);

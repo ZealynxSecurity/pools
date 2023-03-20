@@ -83,7 +83,7 @@ contract AgentBasicTest is BaseTest {
         try agent.addMiner(addMinerCred) {
           assertTrue(false, "should have failed - duplicate miner");
         } catch (bytes memory e) {
-          assertEq(errorSelector(e), MinerRegistry.DuplicateEntry.selector);
+          assertEq(errorSelector(e), MinerRegistry.InvalidParams.selector);
         }
 
         vm.stopPrank();
@@ -140,18 +140,23 @@ contract AgentBasicTest is BaseTest {
       assertEq(address(agent).balance, agentFILBal + transferAmt);
     }
 
-    //     function testSingleUseCredentials() public {
-//         uint256 borrowAmount = 0.5e18;
-//         vm.roll(block.number + 1);
-//         uint256 borrowBlock = block.number;
-//         vm.startPrank(minerOwner);
-//         SignedCredential memory sc = issueGenericSC(address(agent));
-//         uint256 qaPower = sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER));
-//         agent.borrow(borrowAmount / 3, 0, sc, qaPower / 3);
-//         vm.expectRevert(abi.encodeWithSelector(InvalidCredential.selector));
-//         agent.borrow(borrowAmount / 3, 0, sc, qaPower / 3);
-//         vm.stopPrank();
-//     }
+    function testSingleUseCredentials() public {
+      // testing that single use credentials are consumed through pushFundsToMiner call
+      uint256 pushAmount = 1e18;
+      vm.deal(address(agent), pushAmount);
+      SignedCredential memory pushFundsCred = issuePushFundsToMinerCred(agent.id(), miner, pushAmount);
+
+      vm.startPrank(minerOwner1);
+      agent.pushFundsToMiner(pushFundsCred);
+
+      try agent.pushFundsToMiner(pushFundsCred) {
+        assertTrue(false, "should have failed - single use credential");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
+      }
+
+      vm.stopPrank();
+    }
 }
 
 contract AgentWithdrawTest is BaseTest {
@@ -189,7 +194,7 @@ contract AgentPushPullFundsTest is BaseTest {
       assertEq(miner1.balance, 0);
     }
 
-    function testPushFundsToMiners(uint256 pushAmount) public {
+    function testPushFundsToMiner(uint256 pushAmount) public {
       vm.assume(pushAmount > 0.001e18);
       require(address(agent).balance == 0);
 

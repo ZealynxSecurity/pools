@@ -233,6 +233,25 @@ contract BaseTest is Test {
     return signCred(vc);
   }
 
+  function issueRemoveMinerCred(uint256 agent, uint64 miner) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      1000,
+      Agent.removeMiner.selector,
+      miner,
+      // agent data irrelevant for an remove miner cred
+      bytes("")
+    );
+
+    return signCred(vc);
+  }
+
   function issuePullFundsFromMinerCred(uint256 agent, uint64 miner, uint256 amount) internal returns (SignedCredential memory) {
     // roll forward so we don't get an identical credential that's already been used
     vm.roll(block.number + 1);
