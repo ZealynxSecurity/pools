@@ -266,6 +266,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         SafeTransferLib.safeTransfer(asset, msg.sender, vc.value);
     }
 
+
     function pay(VerifiableCredential memory vc) external returns (uint256 rate, uint256 epochsPaid) {
         // grab this Agent's account from storage
         Account memory account = _getAccount(vc.subject);

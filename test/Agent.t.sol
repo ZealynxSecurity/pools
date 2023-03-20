@@ -267,15 +267,7 @@ contract AgentBorrowingTest is BaseTest {
       borrowAmount = bound(borrowAmount, 1, stakeAmount);
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      vm.startPrank(minerOwner);
-      uint256 borrowBlock = block.number;
-      agent.borrow(pool.id(), borrowCred);
-      vm.stopPrank();
-
-      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-      assertEq(account.principal, borrowAmount);
-      assertEq(account.startEpoch, borrowBlock);
-      assertEq(account.epochsPaid, borrowBlock);
+      agentBorrow(agent, pool.id(), borrowCred);
     }
 
     function testBorrowTwice(uint256 borrowAmount) public {
@@ -283,18 +275,14 @@ contract AgentBorrowingTest is BaseTest {
 
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      vm.startPrank(minerOwner);
-      agent.borrow(pool.id(), borrowCred);
       uint256 borrowBlock = block.number;
-      vm.stopPrank();
+      agentBorrow(agent, pool.id(), borrowCred);
       // roll forward to test the startEpoch and epochsPaid
       vm.roll(block.number + 1000);
 
       borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      vm.startPrank(minerOwner);
-      agent.borrow(pool.id(), borrowCred);
-      vm.stopPrank();
+      agentBorrow(agent, pool.id(), borrowCred);
 
       Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
       assertEq(account.principal, borrowAmount * 2);

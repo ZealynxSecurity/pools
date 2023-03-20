@@ -41,9 +41,9 @@ import {EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 import "src/Constants/Routes.sol";
 
 struct StateSnapshot {
-    uint256 balanceWFIL;
+    uint256 agentBalanceWFIL;
     uint256 poolBalanceWFIL;
-    uint256 borrowed;
+    uint256 agentBorrowed;
 }
 
 contract BaseTest is Test {
@@ -151,68 +151,6 @@ contract BaseTest is Test {
     assertTrue(_miner.isOwner(_agent), "The mock miner's owner should change to the agent");
     assertTrue(registry.minerRegistered(agent.id(), _miner), "After adding the miner the registry should have the miner's address as a registered miner");
   }
-
-  // function pushWFILFunds(address target, uint256 amount, address sender) public {
-  //   vm.deal(sender, amount);
-  //   vm.startPrank(sender);
-  //   uint256 startingBalance = wFIL.balanceOf(address(target));
-  //   // give the agent some funds to push
-  //   wFIL.deposit{value: amount}();
-  //   wFIL.transfer(address(target), amount);
-
-
-  //   assertEq(wFIL.balanceOf(address(target)), startingBalance + amount);
-  //   vm.stopPrank();
-  // }
-
-  // function createCustomCredential(
-  //     address agent,
-  //     uint256 qaPower,
-  //     uint256 expectedDailyRewards,
-  //     uint256 assets,
-  //     uint256 liabilities
-  //   ) internal view returns (VerifiableCredential memory vc) {
-  //     AgentData memory _miner = AgentData(
-  //         assets, expectedDailyRewards, 0, 0.5e18, liabilities, 10e18, 10, qaPower, 5e18, 0, 0
-  //     );
-
-  //     vc = VerifiableCredential(
-  //         vcIssuer,
-  //         address(agent),
-  //         block.number,
-  //         block.number + 100,
-  //         1000,
-  //         abi.encode(_miner)
-  //     );
-  // }
-
-  // function issueGenericSC(
-  //   address agent
-  // ) public returns (
-  //   SignedCredential memory
-  // ) {
-  //   // roll forward a block so our credentials do not result in the same signature
-  //   vm.roll(block.number + 1);
-  //   uint256 qaPower = 10e18;
-  //   uint256 expectedDailyRewards = 20e18;
-  //   uint256 assets = 10e18;
-  //   uint256 liabilities = 2e18;
-
-  //   AgentData memory miner = AgentData(
-  //     assets, expectedDailyRewards, 0, 0.5e18, liabilities, 10e18, 10, qaPower, 5e18, 0, 0
-  //   );
-
-  //   VerifiableCredential memory vc = VerifiableCredential(
-  //     vcIssuer,
-  //     agent,
-  //     block.number,
-  //     block.number + 100,
-  //     expectedDailyRewards * 5,
-  //     abi.encode(miner)
-  //   );
-
-  //   return issueSC(vc);
-  // }
 
   function issueAddMinerCred(uint256 agent, uint64 miner) internal returns (SignedCredential memory) {
     // roll forward so we don't get an identical credential that's already been used
@@ -393,58 +331,42 @@ contract BaseTest is Test {
     vm.stopPrank();
   }
 
-  // function agentBorrow(
-  //   IAgent _agent,
-  //   uint256 _borrowAmount,
-  //   SignedCredential memory _signedCred,
-  //   IPool _pool,
-  //   address _powerToken,
-  //   uint256 powerStake
-  // ) internal {
-  //     vm.startPrank(_agentOperator(_agent));
-  //     // Establsh the state before the borrow
-  //     StateSnapshot memory preBorrowState;
-  //     preBorrowState.balanceWFIL = wFIL.balanceOf(address(_agent));
-  //     Account memory account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
-  //     preBorrowState.borrowed = account.totalBorrowed;
+  function agentBorrow(
+    IAgent agent,
+    uint256 poolID,
+    SignedCredential memory sc
+  ) internal {
+      vm.startPrank(_agentOperator(agent));
+      // Establsh the state before the borrow
+      StateSnapshot memory preBorrowState;
 
-  //     _agent.borrow(_borrowAmount, 0, _signedCred, powerStake);
-  //     vm.stopPrank();
-  //     // Check the state after the borrow
-  //     uint256 currBalance = wFIL.balanceOf(address(_agent));
-  //     assertEq(currBalance, preBorrowState.balanceWFIL + _borrowAmount);
+      preBorrowState.agentBalanceWFIL = wFIL.balanceOf(address(agent));
+      Account memory account = AccountHelpers.getAccount(
+        router,
+        address(agent),
+        poolID
+      );
 
-  //     account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
+      preBorrowState.agentBorrowed = account.principal;
 
-  //     // first time borrowing, check the startEpoch
-  //     if (preBorrowState.borrowed == 0) {
-  //       assertEq(account.startEpoch, block.number);
-  //     }
-  //     assertGt(account.pmtPerEpoch(), 0);
+      uint256 borrowBlock = block.number;
+      agent.borrow(poolID, sc);
 
-  //     uint256 rate = _pool.implementation().getRate(
-  //         _borrowAmount,
-  //         powerStake,
-  //         GetRoute.agentPolice(router).windowLength(),
-  //         account,
-  //         _signedCred.vc
-  //     );
-  //     assertEq(account.perEpochRate, rate);
-  //     assertEq(account.powerTokensStaked, preBorrowState.powerStake + powerStake);
-  //     assertEq(account.totalBorrowed, preBorrowState.borrowed + _borrowAmount);
+      vm.stopPrank();
+      // Check the state after the borrow
+      uint256 currBalance = wFIL.balanceOf(address(agent));
+      assertEq(currBalance, preBorrowState.agentBalanceWFIL + sc.vc.value);
 
-  //     assertEq(
-  //         IERC20(_powerToken).balanceOf(address(_agent)),
-  //         preBorrowState.powerBalance - powerStake
-  //     );
+      account = AccountHelpers.getAccount(router, address(agent), poolID);
 
-  //     assertEq(
-  //         IERC20(_powerToken).balanceOf(address(_pool)),
-  //         preBorrowState.powerBalancePool + powerStake
-  //     );
-  //   }
+      // first time borrowing, check the startEpoch
+      if (preBorrowState.agentBorrowed == 0) {
+        assertEq(account.startEpoch, borrowBlock);
+        assertEq(account.epochsPaid, borrowBlock);
+      }
 
-
+      assertEq(account.principal, preBorrowState.agentBorrowed + sc.vc.value);
+    }
 
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
     ramp = IOffRamp(new OffRamp(
