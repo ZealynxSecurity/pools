@@ -20,7 +20,8 @@ interface IPool {
     event Pay(
         uint256 indexed agent,
         uint256 rate,
-        uint256 epochsPaid
+        uint256 epochsPaid,
+        uint256 refund
     );
 
     event Deposit(
@@ -82,7 +83,13 @@ interface IPool {
 
     function borrow(VerifiableCredential memory vc) external;
 
-    function pay(VerifiableCredential memory vc) external returns (uint256 rate, uint256 epochsPaid);
+    function pay(
+        VerifiableCredential memory vc
+    ) external returns (
+        uint256 rate,
+        uint256 epochsPaid,
+        uint256 refund
+    );
 
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC

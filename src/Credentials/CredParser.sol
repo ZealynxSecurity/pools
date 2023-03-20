@@ -6,13 +6,19 @@ contract CredParser {
   function getAgentValue(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(_agentData, (AgentData)).agentValue;
   }
-  function getQAPower(bytes memory _agentData) external pure returns (uint256) {
-    return abi.decode(_agentData, (AgentData)).qaPower;
+  function getBaseRate(bytes memory _agentData) external pure returns (uint256) {
+    return abi.decode(_agentData, (AgentData)).baseRate;
   }
   function getExpectedDailyRewards(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(_agentData, (AgentData)).expectedDailyRewards;
   }
+  function getGCRED(bytes memory _agentData) external pure returns (uint256) {
+    return abi.decode(_agentData, (AgentData)).gcred;
+  }
   function getPrincipal(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(_agentData, (AgentData)).principal;
+  }
+  function getQAPower(bytes memory _agentData) external pure returns (uint256) {
+    return abi.decode(_agentData, (AgentData)).qaPower;
   }
 }

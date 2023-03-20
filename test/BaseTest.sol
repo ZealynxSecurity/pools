@@ -305,7 +305,8 @@ contract BaseTest is Test {
       address(0),
       // no min liquidity for test pool
       0,
-      15e16
+      15e16,
+      1
     ));
     vm.startPrank(systemAdmin);
     poolFactory.attachPool(pool);

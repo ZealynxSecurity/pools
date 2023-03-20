@@ -82,28 +82,45 @@ library Credentials {
     agentData = abi.decode(vc.claim, (AgentData));
   }
 
-  function getAssets(
+  function getBaseRate(
     VerifiableCredential memory vc,
     address credParser
   ) internal pure returns (uint256) {
-    return ICredentials(credParser).getAssets(vc.claim);
+    return ICredentials(credParser).getBaseRate(vc.claim);
   }
+
+  function getAgentValue(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return ICredentials(credParser).getAgentValue(vc.claim);
+  }
+
+  function getGCRED(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return ICredentials(credParser).getGCRED(vc.claim);
+  }
+
   function getQAPower(
     VerifiableCredential memory vc,
     address credParser
   ) internal pure returns (uint256) {
     return ICredentials(credParser).getQAPower(vc.claim);
   }
+
   function getExpectedDailyRewards(
     VerifiableCredential memory vc,
     address credParser
   ) internal pure returns (uint256) {
     return ICredentials(credParser).getExpectedDailyRewards(vc.claim);
   }
-  function getLiabilities(
+
+  function getPrincipal(
     VerifiableCredential memory vc,
     address credParser
   ) internal pure returns (uint256) {
-    return ICredentials(credParser).getLiabilities(vc.claim);
+    return ICredentials(credParser).getPrincipal(vc.claim);
   }
 }

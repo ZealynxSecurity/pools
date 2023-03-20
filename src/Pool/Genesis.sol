@@ -2,13 +2,14 @@
 pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {ERC4626} from "solmate/mixins/ERC4626.sol";
+
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
-import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
@@ -24,20 +25,23 @@ import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
+import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Roles} from "src/Constants/Roles.sol";
-import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
+import {ROUTE_AGENT_FACTORY, ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
+import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
 contract GenesisPool is IPool, RouterAware, Operatable {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
-    using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
 
     error InsufficientLiquidity();
     error AccountDNE();
     error Unauthorized();
     error InvalidParams();
+    error PoolShuttingDown();
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -48,6 +52,9 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
     /// @dev `bias` sets the curve of the dynamic rate
     uint256 private bias;
+
+    /// @dev `maxDTI` is the
+    uint256 private maxDTI;
 
     /// @dev `asset` is the token that is being borrowed in the pool
     ERC20 public asset;
@@ -91,9 +98,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     modifier subjectIsAgentCaller(VerifiableCredential memory vc) {
         if (
             GetRoute.agentFactory(router).agents(msg.sender) != vc.subject
-        ) {
-            revert Unauthorized();
-        }
+        ) revert Unauthorized();
         _;
     }
 
@@ -108,7 +113,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     }
 
     modifier isOpen() {
-        require(!isShuttingDown, "Pool is shutting down");
+        if (isShuttingDown) revert PoolShuttingDown();
         _;
     }
 
@@ -134,13 +139,15 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         address _asset,
         address _ramp,
         uint256 _minimumLiquidity,
-        uint256 _bias
+        uint256 _bias,
+        uint256 _maxDTI
     ) Operatable(_owner, _operator) {
         router = _router;
         asset = ERC20(_asset);
         ramp = IOffRamp(_ramp);
         minimumLiquidity = _minimumLiquidity;
         bias = _bias;
+        maxDTI = _maxDTI;
 
         // set the ID
         id = GetRoute.poolFactory(router).allPoolsLength();
@@ -220,23 +227,60 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     * @notice getRate returns the rate for an Agent's current position within the Pool
     * rate = inflation adjusted base rate * (bias * (100 - GCRED))
     */
+    // TODO: this is wrong, it needs fixed point math
+    // TODO: this is wrong, it needs euler's number
     function getRate(
         Account memory account,
         VerifiableCredential memory vc
     ) public view returns (uint256) {
-        // return vc.baseRate * e**(bias * (100 - vc.gcred))
-        return 15e16;
+        address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
+        // base should really be euler's number (i think)
+        // rate = baseRate * e^(bias * (100 - gcred)))
+        uint256 base = 3;
+        uint256 baseRate = vc.getBaseRate(credParser);
+        // compute the exponent
+        uint256 exp = bias * (100e18 - vc.getGCRED(credParser));
+        // compute the rate multiplier
+        uint256 rateAdjust = base**exp;
+        return baseRate * rateAdjust;
     }
 
+    // TODO: this is wrong, it needs fixed point math
+    /**
+     * @notice isOverLeveraged returns true if the Agent is over leveraged
+     * In this version, an Agent can be over-leveraged in either of two cases:
+     * 1. The Agent's principal is more than the equity weighted `agentTotalValue`
+     * 2. The Agent's expected daily payment is more than `dtiWeight` of their income
+     */
     function isOverLeveraged(
         Account memory account,
         VerifiableCredential memory vc
     ) external view returns (bool) {
+        address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
         // equity percentage
-        // your portion of agents assets = equity percentage * vc.agentTotalValue
-        // ltv = (account.principal + account.paymentsDue) / your portion of agents assets
-        // dti =
-        return false;
+        uint256 totalPrincipal = vc.getPrincipal(credParser);
+        // compute our pool's percentage of the agent's assets
+        uint256 equityPercentage = account.principal / totalPrincipal;
+
+        uint256 agentTotalValue = vc.getAgentValue(credParser);
+        // compute value used in LTV calculation (this is wrong bc equityPercentage isn't actually a % yet)
+        uint256 poolPercentageOfValue = equityPercentage * agentTotalValue;
+
+        // compute LTV (also wrong bc %)
+        uint256 ltv = poolPercentageOfValue / account.principal;
+
+        // if LTV is greater than 1, we are over leveraged (can't mortgage more than the value of your home)
+        if (ltv > 1) return true;
+
+        uint256 rate = getRate(account, vc);
+        // compute expected daily payments to align with expected daily reward
+        uint256 dailyRate = rate * EPOCHS_IN_DAY;
+        uint256 dailyRewards = vc.getExpectedDailyRewards(credParser);
+
+        // compute DTI
+        uint256 dti = dailyRate / dailyRewards;
+
+        return dti > maxDTI;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -245,6 +289,10 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
     function borrow(VerifiableCredential memory vc) external subjectIsAgentCaller(vc) {
         if (vc.value == 0) revert InvalidParams();
+
+        // if (vc.action == borrow && !belowLimit) || vc.action == refinance {
+        //     ...proceed
+        // }
 
         _checkLiquidity(vc.value);
         Account memory account = _getAccount(vc.subject);
@@ -267,7 +315,11 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     }
 
 
-    function pay(VerifiableCredential memory vc) external returns (uint256 rate, uint256 epochsPaid) {
+    function pay(
+        VerifiableCredential memory vc
+    ) external returns (
+        uint256 rate, uint256 epochsPaid, uint256 refund
+    ) {
         // grab this Agent's account from storage
         Account memory account = _getAccount(vc.subject);
         // ensure we're not making payments to a non-existent account
@@ -276,6 +328,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         rate = getRate(account, vc);
         uint256 interestOwed;
         uint256 feeBasis;
+
         // if the account is not "current", compute the amount of interest owed based on the new rate
         if (account.epochsPaid < block.number) {
             uint256 epochsToPay = block.number - account.epochsPaid;
@@ -296,9 +349,13 @@ contract GenesisPool is IPool, RouterAware, Operatable {
             feeBasis = interestOwed;
             // protect against underflow
             totalBorrowed -= (principalPaid > totalBorrowed) ? 0 : principalPaid;
+            // fully paid off
             if (principalPaid >= account.principal) {
-                // fully paid off
+                // remove the account from the pool's list of accounts
                 GetRoute.agentPolice(router).removePoolFromList(vc.subject, id);
+                // return the amount of funds overpaid
+                refund = principalPaid - account.principal;
+                // reset the account
                 account.reset();
             } else {
                 // interest and partial principal payment
@@ -321,12 +378,12 @@ contract GenesisPool is IPool, RouterAware, Operatable {
             asset,
             msg.sender,
             address(this),
-            vc.value
+            vc.value - refund
         );
 
-        emit Pay(vc.subject, rate, account.epochsPaid);
+        emit Pay(vc.subject, rate, account.epochsPaid, refund);
 
-        return (rate, account.epochsPaid);
+        return (rate, account.epochsPaid, refund);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -574,6 +631,10 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
     function setBias(uint256 _bias) public onlyOwnerOperator {
         bias = _bias;
+    }
+
+    function setMaxDTI(uint256 _maxDTI) public onlyOwnerOperator {
+        maxDTI = _maxDTI;
     }
 
     /*//////////////////////////////////////////////////////////////
