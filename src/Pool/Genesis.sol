@@ -51,11 +51,11 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     /// @dev `asset` is the token that is being borrowed in the pool
     ERC20 public asset;
 
-    /// @dev `share` is the token that represents a share in the pool
-    PoolToken public share;
+    /// @dev `liquidStakingToken` is the token that represents a liquidStakingToken in the pool
+    PoolToken public liquidStakingToken;
 
-    /// @dev `iou` is the token that represents the IOU of a borrow
-    PoolToken public iou;
+    /// @dev `exitToken` is a pegged FIL token used for exiting with the ramp
+    PoolToken public exitToken;
 
     /// @dev `ramp` is the interface that handles off-ramping
     IOffRamp public ramp;
@@ -129,23 +129,34 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     constructor(
         address _owner,
         address _operator,
-        uint256 _id,
         address _router,
         address _asset,
-        address _share,
         address _ramp,
-        address _iou,
         uint256 _minimumLiquidity,
         uint256 _bias
     ) Operatable(_owner, _operator) {
-        id = _id;
         router = _router;
-        share = PoolToken(_share);
         asset = ERC20(_asset);
-        iou = PoolToken(_iou);
         ramp = IOffRamp(_ramp);
         minimumLiquidity = _minimumLiquidity;
         bias = _bias;
+
+        // set the ID
+        id = GetRoute.poolFactory(router).allPoolsLength();
+        // deploy a new liquid staking token for the pool
+        liquidStakingToken = new PoolToken(
+            _router,
+            id,
+            "Genesis Pool Staked FIL",
+            "gstETH"
+        );
+        // deploy an exit token for the pool
+        exitToken = new PoolToken(
+            _router,
+            id,
+            "Genesis Pool Exit Token",
+            "gexETH"
+        );
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -347,7 +358,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
         SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
-        share.mint(receiver, shares);
+        liquidStakingToken.mint(receiver, shares);
         assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
     }
@@ -366,11 +377,11 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     ) public requiresRamp returns (uint256 shares) {
         shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
 
-        share.burn(owner, shares);
+        liquidStakingToken.burn(owner, shares);
 
         // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
-        iou.mint(address(this), assets);
-        iou.approve(address(ramp), assets);
+        exitToken.mint(address(this), assets);
+        exitToken.approve(address(ramp), assets);
         ramp.stakeOnBehalf(assets, receiver);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -391,11 +402,11 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         // Check for rounding error since we round down in previewRedeem.
         require((assets = previewRedeem(shares)) != 0, "ZERO_ASSETS");
 
-        share.burn(owner, shares);
+        liquidStakingToken.burn(owner, shares);
 
         // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
-        iou.mint(address(this), assets);
-        iou.approve(address(ramp), assets);
+        exitToken.mint(address(this), assets);
+        exitToken.approve(address(ramp), assets);
         ramp.stakeOnBehalf(assets, receiver);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -410,7 +421,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
      * @return shares - The amount of shares converted from assets
      */
     function convertToShares(uint256 assets) public view returns (uint256) {
-        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
     }
@@ -421,7 +432,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
      * @return assets - The amount of assets converted from shares
      */
     function convertToAssets(uint256 shares) public view returns (uint256) {
-        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
     }
@@ -441,7 +452,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
      * @return assets - The amount of assets that would be converted from shares
      */
     function previewMint(uint256 shares) public view returns (uint256) {
-        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
     }
@@ -452,7 +463,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
      * @return shares - The amount of shares to be converted from assets
      */
     function previewWithdraw(uint256 assets) public view returns (uint256) {
-        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
     }
@@ -479,11 +490,11 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     }
 
     function maxWithdraw(address owner) public view returns (uint256) {
-        return convertToAssets(share.balanceOf(owner));
+        return convertToAssets(liquidStakingToken.balanceOf(owner));
     }
 
     function maxRedeem(address owner) public view returns (uint256) {
-        return share.balanceOf(owner);
+        return liquidStakingToken.balanceOf(owner);
     }
 
 
@@ -538,8 +549,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         require(newPool.id() == id, "POOL: New pool must have same ID");
         harvestFees(feesCollected);
         asset.transfer(address(newPool), asset.balanceOf(address(this)));
-        share.transfer(address(newPool), share.balanceOf(address(this)));
-        iou.transfer(address(newPool), iou.balanceOf(address(this)));
+        liquidStakingToken.transfer(address(newPool), liquidStakingToken.balanceOf(address(this)));
+        exitToken.transfer(address(newPool), exitToken.balanceOf(address(this)));
         borrowedAmount = totalBorrowed;
     }
 
@@ -610,7 +621,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         require(assets > 0, "Pool: cannot deposit 0 assets");
         shares = previewDeposit(assets);
         SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
-        share.mint(receiver, shares);
+        liquidStakingToken.mint(receiver, shares);
         assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
     }
@@ -630,7 +641,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         require(assets > 0, "Pool: cannot deposit 0 assets");
 
         shares = previewDeposit(assets);
-        share.mint(receiver, shares);
+        liquidStakingToken.mint(receiver, shares);
         assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
     }

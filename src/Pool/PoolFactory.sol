@@ -51,50 +51,11 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
 
   /**
    * @dev Creates a new pool
-   * @param name The name of the pool
-   * @param symbol The symbol of the pool
-   * @param owner The owner of the pool
-   * @param operator The operator of the pool
-   * @return pool The address of the new pool
+   * @param pool The new pool instance
    */
-  function createPool(
-    string memory name,
-    string memory symbol,
-    address owner,
-    address operator
-  ) external onlyOwnerOperator returns (IPool pool) {
-    if (operator == address(0)) revert InvalidParams();
-
-    IPoolDeployer deployer = IPoolDeployer(IRouter(router).getRoute(ROUTE_ACCOUNTING_DEPLOYER));
-
-    uint256 poolID = allPools.length;
-    address stakingAsset = address(asset);
-
-    // Create custom ERC20 for the pools
-    (
-      address shareToken,
-      address iouToken
-    ) = PoolTokensDeployer.deploy(
-      router,
-      poolID,
-      name,
-      symbol
-    );
-
-    // deploy a new Pool Accounting instance
-    pool = deployer.deploy(
-      owner,
-      operator,
-      poolID,
-      router,
-      stakingAsset,
-      shareToken,
-      // start with no offramp
-      address(0),
-      iouToken,
-      0,
-      15
-    );
+  function attachPool(
+    IPool pool
+  ) external onlyOwnerOperator {
     // add the pool to the list of all pools
     allPools.push(address(pool));
     // cache the new pool in storage

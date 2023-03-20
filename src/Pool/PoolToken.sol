@@ -40,7 +40,7 @@ contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
     function mint(
         address account,
         uint256 _amount
-    ) public onlyPool returns (bool) {
+    ) external onlyPool returns (bool) {
       _mint(account, _amount);
       return true;
     }
@@ -48,7 +48,7 @@ contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
     function burn(
         address account,
         uint256 _amount
-    ) public returns (bool) {
+    ) external returns (bool) {
       _burn(account, _amount);
       return true;
     }

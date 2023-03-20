@@ -1,302 +1,338 @@
-// // SPDX-License-Identifier: UNLICENSED
-// pragma solidity ^0.8.15;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.15;
 
-// import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-// import "test/helpers/MockMiner.sol";
-// import {AuthController} from "src/Auth/AuthController.sol";
-// import {AccountHelpers} from "src/Pool/Account.sol";
-// import {Agent} from "src/Agent/Agent.sol";
-// import {AgentFactory} from "src/Agent/AgentFactory.sol";
-// import {WFIL} from "src/WFIL.sol";
-// import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
-// import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
-// import {IPool} from "src/Types/Interfaces/IPool.sol";
-// import {IAgent} from "src/Types/Interfaces/IAgent.sol";
-// import {IRouterAware} from "src/Types/Interfaces/IRouter.sol";
-// import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
-// import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
-// import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-// import {Account} from "src/Types/Structs/Account.sol";
-// import {Window} from "src/Types/Structs/Window.sol";
-// import {Credentials} from "src/Types/Structs/Credentials.sol";
-// import {ROUTE_AGENT_FACTORY_ADMIN, ROUTE_MINER_REGISTRY} from "src/Constants/Routes.sol";
-// import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
-// import {Roles} from "src/Constants/Roles.sol";
-// import {errorSelector} from "test/helpers/Utils.sol";
-// import {Decode, InvalidCredential, OverPowered} from "src/Errors.sol";
-// import {
-//   Unauthorized,
-//   InvalidPower,
-//   InsufficientFunds,
-//   InsufficientCollateral,
-//   InvalidParams,
-//   Internal,
-//   BadAgentState
-// } from "src/Agent/Errors.sol";
-// import "src/Constants/FuncSigs.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import "test/helpers/MockMiner.sol";
+import {AuthController} from "src/Auth/AuthController.sol";
+import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
+import {AccountHelpers} from "src/Pool/Account.sol";
+import {Agent} from "src/Agent/Agent.sol";
+import {AgentFactory} from "src/Agent/AgentFactory.sol";
+import {WFIL} from "src/WFIL.sol";
+import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IRouterAware} from "src/Types/Interfaces/IRouter.sol";
+import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
+import {Account} from "src/Types/Structs/Account.sol";
+import {Window} from "src/Types/Structs/Window.sol";
+import {Credentials} from "src/Types/Structs/Credentials.sol";
+import {ROUTE_AGENT_FACTORY_ADMIN, ROUTE_MINER_REGISTRY} from "src/Constants/Routes.sol";
+import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
+import {Roles} from "src/Constants/Roles.sol";
+import {errorSelector} from "test/helpers/Utils.sol";
+import {Decode, InvalidCredential, OverPowered} from "src/Errors.sol";
+import {
+  Unauthorized,
+  InvalidPower,
+  InsufficientFunds,
+  InsufficientCollateral,
+  InvalidParams,
+  Internal,
+  BadAgentState
+} from "src/Agent/Errors.sol";
+import "src/Constants/FuncSigs.sol";
 
-// import "./BaseTest.sol";
+import "./BaseTest.sol";
 
-// contract AgentBasicTest is BaseTest {
-//     using Credentials for VerifiableCredential;
-//     using MinerHelper for uint64;
+contract AgentBasicTest is BaseTest {
+    using Credentials for VerifiableCredential;
+    using MinerHelper for uint64;
 
-//     address investor1 = makeAddr("INVESTOR_1");
-//     address investor2 = makeAddr("INVESTOR_2");
-//     address minerOwner1 = makeAddr("MINER_OWNER_1");
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner1 = makeAddr("MINER_OWNER_1");
 
-//     uint64 miner;
-//     Agent agent;
-//     uint64[] miners = new uint64[](1);
-//     function setUp() public {
-//         miner = _newMiner(minerOwner1);
-//         miners[0] = miner;
-//         agent = _configureAgent(minerOwner1, miner);
-//     }
+    uint64 miner;
+    Agent agent;
+    function setUp() public {
+        miner = _newMiner(minerOwner1);
+        agent = _configureAgent(minerOwner1, miner);
+    }
 
-//     function assertAgentPermissions(address operator, address owner, address agent) public {
-//         assertEq(Agent(payable(agent)).owner(), owner, "wrong owner");
-//         assertEq(Agent(payable(agent)).operator(), operator, "wrong operator");
-//     }
+    function assertAgentPermissions(address operator, address owner, address agent) public {
+      assertEq(Agent(payable(agent)).owner(), owner, "wrong owner");
+      assertEq(Agent(payable(agent)).operator(), operator, "wrong operator");
+    }
 
-//     function setupMiner(address owner) public returns (MockMiner _miner) {
-//         vm.prank(owner);
-//         _miner = new MockMiner(owner);
-//     }
+    function testInitialState() public {
+      assertAgentPermissions(minerOwner1, minerOwner1, address(agent));
+    }
 
-//     function withdrawBalance(address owner, Agent agent, uint64 miner, uint256 amount, SignedCredential memory sc) public {
-//         vm.startPrank(owner);
-//         uint256 prevBalance = address(agent).balance;
-//         agent.withdrawBalance(owner, amount, sc);
-//         uint256 currBalance = address(agent).balance;
-//         assertEq(currBalance, prevBalance + amount);
-//         vm.stopPrank();
-//     }
+    function testAddMinerNonOwnerOperator() public {
+      SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), miner);
+      vm.startPrank(investor1);
+      try agent.addMiner(addMinerCred) {
+        assertTrue(false, "should have failed - unauthorized");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), Agent.Unauthorized.selector);
+      }
+    }
 
-//     function testInitialState() public {
-//         assertAgentPermissions(minerOwner1, minerOwner1, address(agent));
-//     }
+    function testAddDuplicateMiner() public {
+        // hack to get the miner's next_owner to be the agent again so we can attempt to add duplicate miners without running into other errors
+        // although i dont think this situation could ever occur (because agent would already own the miner at this point)
+        vm.startPrank(address(agent));
+        miner.changeOwnerAddress(address(agent));
+        vm.stopPrank();
 
-//     function testFailClaimOwnership() public {
-//         vm.prank(investor2);
-//         vm.expectRevert(bytes("not authorized"));
-//         agent.addMiners(miners);
-//     }
+        SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), miner);
 
-//     function testDuplicateMiner() public {
-//         // hack to get the miner's next_owner to be the agent again so we can attempt to add duplicate miners without running into other errors
-//         // although i dont think this situation could ever occur (because agent would already own the miner at this point)
-//         vm.startPrank(address(agent));
-//         miner.changeOwnerAddress(address(agent));
-//         vm.stopPrank();
+        vm.startPrank(minerOwner1);
+        try agent.addMiner(addMinerCred) {
+          assertTrue(false, "should have failed - duplicate miner");
+        } catch (bytes memory e) {
+          assertEq(errorSelector(e), MinerRegistry.DuplicateEntry.selector);
+        }
 
-//         vm.startPrank(minerOwner1);
-//         vm.expectRevert(bytes("Miner already registered"));
-//         agent.addMiners(miners);
-//         vm.stopPrank();
-//     }
+        vm.stopPrank();
+    }
 
-//     function testWithdrawNoBalance() public {
+    function testTransferOwner() public {
+        address owner = makeAddr("OWNER");
+        vm.prank(minerOwner1);
+        agent.transferOwnership(owner);
+        assertEq(agent.pendingOwner(), owner);
+        vm.prank(owner);
+        agent.acceptOwnership();
+        assertEq(agent.owner(), owner);
+    }
+
+    function testTransferOperator() public {
+        address operator = makeAddr("OPERATOR");
+        vm.prank(minerOwner1);
+        agent.transferOperator(operator);
+        assertEq(agent.pendingOperator(), operator);
+        vm.prank(operator);
+        agent.acceptOperator();
+        assertEq(agent.operator(), operator);
+    }
+
+    function testRouterConfigured() public {
+        address r = IRouterAware(address(agent)).router();
+        assertEq(IRouterAware(address(agent)).router(), address(r));
+    }
+
+    function testReceive() public {
+      uint256 transferAmt = 1e18;
+
+      vm.deal(investor1, transferAmt);
+      (Agent agent,) = configureAgent(investor1);
+      uint256 agentFILBal = address(agent).balance;
+
+      vm.prank(investor1);
+      (bool sent,) = payable(address(agent)).call{value: transferAmt}("");
+      assertTrue(sent);
+      assertEq(address(agent).balance, agentFILBal + transferAmt);
+    }
+
+    function testFallback() public {
+      uint256 transferAmt = 1e18;
+
+      vm.deal(investor1, transferAmt);
+      (Agent agent,) = configureAgent(investor1);
+      uint256 agentFILBal = address(agent).balance;
+
+      vm.prank(investor1);
+      (bool sent,) = payable(address(agent)).call{value: transferAmt}(bytes("fdsa"));
+      assertTrue(sent);
+      assertEq(address(agent).balance, agentFILBal + transferAmt);
+    }
+
+    //     function testSingleUseCredentials() public {
+//         uint256 borrowAmount = 0.5e18;
+//         vm.roll(block.number + 1);
+//         uint256 borrowBlock = block.number;
+//         vm.startPrank(minerOwner);
 //         SignedCredential memory sc = issueGenericSC(address(agent));
-//         withdrawBalance(minerOwner1, agent, miner, 0, sc);
-//     }
-
-//     function testTransferOwner() public {
-//         address owner = makeAddr("OWNER");
-//         vm.prank(minerOwner1);
-//         agent.transferOwnership(owner);
-//         assertEq(agent.pendingOwner(), owner);
-//         vm.prank(owner);
-//         agent.acceptOwnership();
-//         assertEq(agent.owner(), owner);
-//     }
-
-//     function testTransferOperator() public {
-//         address operator = makeAddr("OPERATOR");
-//         vm.prank(minerOwner1);
-//         agent.transferOperator(operator);
-//         assertEq(agent.pendingOperator(), operator);
-//         vm.prank(operator);
-//         agent.acceptOperator();
-//         assertEq(agent.operator(), operator);
-//     }
-
-//     function testRouterConfigured() public {
-//         address r = IRouterAware(address(agent)).router();
-//         assertEq(IRouterAware(address(agent)).router(), address(r));
-//     }
-
-//     function testReceive() public {
-//         uint256 transferAmt = 1e18;
-
-//         vm.deal(investor1, transferAmt);
-//         (Agent agent,) = configureAgent(investor1);
-//         uint256 agentFILBal = address(agent).balance;
-
-//         vm.prank(investor1);
-//         (bool sent,) = payable(address(agent)).call{value: transferAmt}("");
-//         assertTrue(sent);
-//         assertEq(address(agent).balance, agentFILBal + transferAmt);
-//     }
-
-//     function testFallback() public {
-//         uint256 transferAmt = 1e18;
-
-//         vm.deal(investor1, transferAmt);
-//         (Agent agent,) = configureAgent(investor1);
-//         uint256 agentFILBal = address(agent).balance;
-
-//         vm.prank(investor1);
-//         (bool sent,) = payable(address(agent)).call{value: transferAmt}(bytes("fdsa"));
-//         assertTrue(sent);
-//         assertEq(address(agent).balance, agentFILBal + transferAmt);
-//     }
-
-//     function testPullFundsFromMiners() public {
-//         uint64 secondMiner = _newMiner(minerOwner1);
-//         _agentClaimOwnership(address(agent), secondMiner, minerOwner1);
-
-//         address miner1 = idStore.ids(miner);
-//         address miner2 = idStore.ids(secondMiner);
-//         // give the miners some funds to pull
-//         vm.deal(miner1, 1e18);
-//         vm.deal(miner2, 2e18);
-
-//         IERC20 wFIL20 = IERC20(address(wFIL));
-
-//         assertEq(wFIL20.balanceOf(address(agent)), 0);
-
-//         // create calldata for pullFundsFromMiners
-//         uint64[] memory _miners = new uint64[](2);
-//         uint256[] memory _amounts = new uint256[](2);
-//         _amounts[0] = 1e18;
-//         _amounts[1] = 1e18;
-//         _miners[0] = miner;
-//         _miners[1] = secondMiner;
-//         vm.startPrank(minerOwner1);
-//         agent.pullFundsFromMiners(_miners, _amounts, issueGenericSC(address(agent)));
-//         vm.stopPrank();
-//         assertEq(address(agent).balance, 2e18);
-//         assertEq(miner1.balance, 0);
-//         assertEq(miner2.balance, 1e18);
-//     }
-
-//     function testPullMaxFundsFromMiners() public {
-//         uint64 secondMiner = configureMiner(address(agent), minerOwner1);
-
-//         address miner1 = idStore.ids(miner);
-//         address miner2 = idStore.ids(secondMiner);
-
-//         // give the miners some funds to pull
-//         vm.deal(miner1, 1e18);
-//         vm.deal(miner2, 2e18);
-
-//         IERC20 wFIL20 = IERC20(address(wFIL));
-
-//         assertEq(wFIL20.balanceOf(address(agent)), 0);
-
-//         // create calldata for pullFundsFromMiners
-//         uint64[] memory _miners = new uint64[](2);
-//         uint256[] memory _amounts = new uint256[](2);
-//         // passing 0 as the amount should draw max funds
-//         _amounts[0] = 0;
-//         _amounts[1] = 0;
-//         _miners[0] = miner;
-//         _miners[1] = secondMiner;
-//         vm.startPrank(minerOwner1);
-//         agent.pullFundsFromMiners(_miners, _amounts, issueGenericSC(address(agent)));
-//         vm.stopPrank();
-//         assertEq(address(agent).balance, 3e18);
-//         assertEq(miner1.balance, 0);
-//         assertEq(miner2.balance, 0);
-//     }
-
-//     function testPushFundsToMiners() public {
-//         uint64 secondMiner = _newMiner(minerOwner1);
-//         _agentClaimOwnership(address(agent), secondMiner, minerOwner1);
-
-//         address miner1 = idStore.ids(miner);
-//         address miner2 = idStore.ids(secondMiner);
-
-//         pushWFILFunds(address(agent), 3e18, investor1);
-//         // create calldata for pullFundsFromMiners
-//         uint64[] memory _miners = new uint64[](2);
-//         uint256[] memory _amounts = new uint256[](2);
-//         _amounts[0] = 1e18;
-//         _amounts[1] = 2e18;
-//         _miners[0] = miner;
-//         _miners[1] = secondMiner;
-//         vm.startPrank(minerOwner1);
-//         agent.pushFundsToMiners(_miners, _amounts, issueGenericSC(address(agent)));
-//         vm.stopPrank();
-
-//         assertEq(wFIL.balanceOf(address(agent)), 0);
-//         assertEq(miner1.balance, 1e18);
-//         assertEq(miner2.balance, 2e18);
-//     }
-
-//     function testPushFundsToRandomMiners() public {
-//         uint64 secondMiner = _newMiner(minerOwner1);
-
-//         address miner1 = idStore.ids(miner);
-//         address miner2 = idStore.ids(secondMiner);
-
-//         pushWFILFunds(address(agent), 3e18, investor1);
-//         // create calldata for pullFundsFromMiners
-//         uint64[] memory _miners = new uint64[](2);
-//         uint256[] memory _amounts = new uint256[](2);
-//         _amounts[0] = 1e18;
-//         _amounts[1] = 2e18;
-//         _miners[0] = miner;
-//         _miners[1] = secondMiner;
-//         vm.startPrank(minerOwner1);
-//         try agent.pushFundsToMiners(_miners, _amounts, issueGenericSC(address(agent))) {
-//             assertTrue(false, "should not be able to push funds to random miners");
-//         } catch (bytes memory b) {
-//             assertEq(errorSelector(b), Unauthorized.selector);
-//         }
-
+//         uint256 qaPower = sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER));
+//         agent.borrow(borrowAmount / 3, 0, sc, qaPower / 3);
+//         vm.expectRevert(abi.encodeWithSelector(InvalidCredential.selector));
+//         agent.borrow(borrowAmount / 3, 0, sc, qaPower / 3);
 //         vm.stopPrank();
 //     }
-// }
+}
 
-// contract AgentTest is BaseTest {
-//     using Credentials for VerifiableCredential;
-//     using AccountHelpers for Account;
-//     address investor1 = makeAddr("INVESTOR_1");
+contract AgentWithdrawTest is BaseTest {
+
+}
+
+contract AgentPushPullFundsTest is BaseTest {
+    using Credentials for VerifiableCredential;
+    using MinerHelper for uint64;
+
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner1 = makeAddr("MINER_OWNER_1");
+
+    uint64 miner;
+    Agent agent;
+    function setUp() public {
+        miner = _newMiner(minerOwner1);
+        agent = _configureAgent(minerOwner1, miner);
+    }
+
+    function testPullFundsFromMiner(uint256 drawAmount) public {
+      vm.assume(drawAmount > 0.001e18);
+      uint256 preAgentBal = address(agent).balance;
+
+      address miner1 = idStore.ids(miner);
+      // give the miner some funds to pull
+      vm.deal(miner1, drawAmount);
+
+      assertEq(wFIL.balanceOf(address(agent)), 0);
+      SignedCredential memory pullFundsCred = issuePullFundsFromMinerCred(agent.id(), miner, drawAmount);
+      vm.startPrank(minerOwner1);
+      agent.pullFundsFromMiner(pullFundsCred);
+      vm.stopPrank();
+      assertEq(address(agent).balance, drawAmount + preAgentBal);
+      assertEq(miner1.balance, 0);
+    }
+
+    function testPushFundsToMiners(uint256 pushAmount) public {
+      vm.assume(pushAmount > 0.001e18);
+      require(address(agent).balance == 0);
+
+      address miner1 = idStore.ids(miner);
+      // give the agent some funds to pull
+      vm.deal(address(agent), pushAmount);
+
+      SignedCredential memory pushFundsCred = issuePushFundsToMinerCred(agent.id(), miner, pushAmount);
+      vm.prank(minerOwner1);
+      agent.pushFundsToMiner(pushFundsCred);
+      vm.stopPrank();
+
+      assertEq(address(agent).balance, 0);
+      assertEq(miner1.balance, pushAmount);
+    }
+
+    function testPushFundsToRandomMiner() public {
+      uint64 secondMiner = _newMiner(minerOwner1);
+      address miner2 = idStore.ids(secondMiner);
+
+      SignedCredential memory pushFundsCred = issuePushFundsToMinerCred(agent.id(), secondMiner, 1e18);
+      vm.startPrank(minerOwner1);
+      try agent.pushFundsToMiner(pushFundsCred) {
+          assertTrue(false, "should not be able to push funds to random miners");
+      } catch (bytes memory b) {
+          assertEq(errorSelector(b), Unauthorized.selector);
+      }
+
+      vm.stopPrank();
+    }
+
+    function testPullFundsWithWrongCred() public {
+      SignedCredential memory pullFundsCred = issuePullFundsFromMinerCred(agent.id(), miner, 0);
+      vm.startPrank(minerOwner1);
+      try agent.pushFundsToMiner(pullFundsCred) {
+        assertTrue(false, "should not be able to pull funds with wrong cred");
+      } catch (bytes memory b) {
+        assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
+      }
+    }
+
+    function testPushFundsWithWrongCred() public {
+      SignedCredential memory pullFundsCred = issuePushFundsToMinerCred(agent.id(), miner, 0);
+      vm.startPrank(minerOwner1);
+      try agent.pullFundsFromMiner(pullFundsCred) {
+        assertTrue(false, "should not be able to pull funds with wrong cred");
+      } catch (bytes memory b) {
+        assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
+      }
+    }
+}
+
+contract AgentBorrowingTest is BaseTest {
+    using Credentials for VerifiableCredential;
+    using AccountHelpers for Account;
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner = makeAddr("MINER_OWNER");
+    uint256 stakeAmount = 1000e18;
+
+    IAgent agent;
+    uint64 miner;
+    IPool pool;
+
+    function setUp() public {
+      pool = createAndFundPool(stakeAmount, investor1);
+      (agent, miner) = configureAgent(minerOwner);
+    }
+
+    function testBorrowValid(uint256 borrowAmount) public {
+      vm.assume(borrowAmount <= stakeAmount);
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+      vm.startPrank(minerOwner);
+      uint256 borrowBlock = block.number;
+      agent.borrow(pool.id(), borrowCred);
+      vm.stopPrank();
+
+      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+      assertEq(account.principal, borrowAmount);
+      assertEq(account.startEpoch, borrowBlock);
+      assertEq(account.epochsPaid, borrowBlock);
+    }
+
+    function testBorrowMoreThanLiquid(uint256 borrowAmount) public {
+      borrowAmount = bound(borrowAmount, stakeAmount + 1, MAX_FIL);
+
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+      vm.startPrank(minerOwner);
+      try agent.borrow(pool.id(), borrowCred) {
+        assertTrue(false, "should not be able to borrow more than liquid");
+      } catch (bytes memory b) {
+        assertEq(errorSelector(b), GenesisPool.InsufficientLiquidity.selector);
+      }
+
+      vm.stopPrank();
+    }
+
+    function testBorrowNonOwnerOperator() public {
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), 1e18);
+
+      vm.startPrank(makeAddr("NON_OWNER_OPERATOR"));
+      try agent.borrow(pool.id(), borrowCred) {
+        assertTrue(false, "should not be able to borrow more than liquid");
+      } catch (bytes memory b) {
+        assertEq(errorSelector(b), Agent.Unauthorized.selector);
+      }
+
+      vm.stopPrank();
+    }
+
+    function testBorrowWrongCred() public {
+      SignedCredential memory nonBorrowCred = issueAddMinerCred(agent.id(), 0);
+
+      vm.startPrank(minerOwner);
+      try agent.borrow(pool.id(), nonBorrowCred) {
+        assertTrue(false, "should not be able to borrow more than liquid");
+      } catch (bytes memory b) {
+        assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
+      }
+
+      vm.stopPrank();
+    }
+}
+
+contract AgentTest is BaseTest {
+    using Credentials for VerifiableCredential;
+    using AccountHelpers for Account;
+    address investor1 = makeAddr("INVESTOR_1");
 //     address investor2 = makeAddr("INVESTOR_2");
-//     address minerOwner = makeAddr("MINER_OWNER");
-//     string poolName = "FIRST POOL NAME";
-//     address poolOperator = makeAddr("POOL_OPERATOR");
-//     uint256 baseInterestRate = 20e18;
+    address minerOwner = makeAddr("MINER_OWNER");
 //     uint256 borrowAmount = 0.5e18;
-//     uint256 stakeAmount = 10e18;
+    uint256 stakeAmount = 1000e18;
 //     uint256 poolFee = 2e18;
 
-//     IAgent agent;
-//     uint64 miner;
-//     IPool pool;
-//     SignedCredential signedCred;
+    IAgent agent;
+    uint64 miner;
+    IPool pool;
 
-//     address powerToken;
-
-//     function setUp() public {
-//         powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
-//         pool = createAndPrimePool(
-//             "TEST",
-//             "TEST",
-//             poolOperator,
-//             poolFee,
-//             stakeAmount,
-//             investor1
-//         );
-//         (agent, miner) = configureAgent(minerOwner);
-//         // mint some power for the agent
-//         signedCred = issueGenericSC(address(agent));
-//         vm.startPrank(_agentOperator(agent));
-//         agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
-//         vm.stopPrank();
-//     }
+    function setUp() public {
+      pool = createAndFundPool(stakeAmount, investor1);
+      (agent, miner) = configureAgent(minerOwner);
+    }
 
 //     function agentExit(IAgent _agent, uint256 _exitAmount, SignedCredential memory _signedCred, IPool _pool) internal {
 //         vm.startPrank(_agentOperator(_agent));
@@ -321,18 +357,6 @@
 //         assertEq(account.totalBorrowed, 0);
 //         assertEq(account.powerTokensStaked, 0);
 //         assertEq(account.pmtPerEpoch(), 0);
-//     }
-
-//     function testBorrow() public {
-//         SignedCredential memory sc = issueGenericSC(address(agent));
-//         agentBorrow(
-//             agent,
-//             borrowAmount,
-//             sc,
-//             pool,
-//             powerToken,
-//             signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER))
-//         );
 //     }
 
 //     function testExit() public {
@@ -390,7 +414,7 @@
 //         agent.borrow(borrowAmount / 3, 0, sc, qaPower / 3);
 //         vm.stopPrank();
 //     }
-// }
+}
 
 // contract AgentPoliceTest is BaseTest {
 //     using AccountHelpers for Account;

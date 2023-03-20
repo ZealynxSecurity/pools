@@ -43,9 +43,9 @@ interface IPool {
 
     function asset() external view returns (ERC20);
 
-    function share() external view returns (PoolToken);
+    function liquidStakingToken() external view returns (PoolToken);
 
-    function iou() external view returns (PoolToken);
+    function exitToken() external view returns (PoolToken);
 
     function ramp() external view returns (IOffRamp);
 

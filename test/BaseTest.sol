@@ -3,6 +3,7 @@ pragma solidity ^0.8.15;
 
 import "forge-std/Test.sol";
 import "test/helpers/MockMiner.sol";
+import {GenesisPool} from "src/Pool/Genesis.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
@@ -42,10 +43,7 @@ import "src/Constants/Routes.sol";
 struct StateSnapshot {
     uint256 balanceWFIL;
     uint256 poolBalanceWFIL;
-    uint256 powerStake;
     uint256 borrowed;
-    uint256 powerBalance;
-    uint256 powerBalancePool;
 }
 
 contract BaseTest is Test {
@@ -53,6 +51,8 @@ contract BaseTest is Test {
   using AccountHelpers for Account;
   using Credentials for VerifiableCredential;
 
+  // max FIL value - 2B atto
+  uint256 public constant MAX_FIL = 2e27;
   // 3 week window deadline for defaults
   uint256 public constant DEFAULT_WINDOW = EPOCHS_IN_WEEK * 3;
   address public constant ZERO_ADDRESS = address(0);
@@ -215,6 +215,9 @@ contract BaseTest is Test {
   // }
 
   function issueAddMinerCred(uint256 agent, uint64 miner) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+
     VerifiableCredential memory vc = VerifiableCredential(
       vcIssuer,
       agent,
@@ -230,7 +233,98 @@ contract BaseTest is Test {
     return signCred(vc);
   }
 
+  function issuePullFundsFromMinerCred(uint256 agent, uint64 miner, uint256 amount) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
 
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      amount,
+      Agent.pullFundsFromMiner.selector,
+      miner,
+      // agent data irrelevant for an pull funds from miner cred
+      bytes("")
+    );
+
+    return signCred(vc);
+  }
+
+  function issuePushFundsToMinerCred(uint256 agent, uint64 miner, uint256 amount) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      amount,
+      Agent.pushFundsToMiner.selector,
+      miner,
+      // agent data irrelevant for an push funds to miner cred
+      bytes("")
+    );
+
+    return signCred(vc);
+  }
+
+  function issueGenericBorrowCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      amount,
+      // good gcred score
+      80,
+      // good EDR
+      1000,
+      // no principal
+      0,
+      // no account yet (startEpoch)
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      amount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    return signCred(vc);
+  }
+
+  function createAgentData(
+    uint256 agentValue,
+    uint256 gcred,
+    uint256 expectedDailyRewards,
+    uint256 principal,
+    uint256 startEpoch
+  ) internal pure returns (AgentData memory) {
+    return AgentData(
+      agentValue,
+      15e16,
+      // collateralValue is 60% of agentValue
+      agentValue * 60 / 100,
+      // expectedDailyFaultPenalties
+      0,
+      expectedDailyRewards,
+      gcred,
+      // qaPower hardcoded
+      10e18,
+      principal,
+      startEpoch
+    );
+  }
 
   function signCred(
     VerifiableCredential memory vc
@@ -242,57 +336,43 @@ contract BaseTest is Test {
     return SignedCredential(vc, v, r, s);
   }
 
-  // function createPool(
-  //   string memory poolName,
-  //   string memory poolSymbol,
-  //   address poolOperator,
-  //   uint256 fee
-  //   ) internal returns(IPool)
-  // {
-  //   IPoolFactory poolFactory = GetRoute.poolFactory(router);
-  //   MockPoolImplementation broker = new MockPoolImplementation(fee, router);
-  //   vm.startPrank(IAuth(address(poolFactory)).owner());
-  //   poolFactory.approveImplementation(address(broker));
+  function createPool() internal returns (IPool pool) {
+    IPoolFactory poolFactory = GetRoute.poolFactory(router);
 
-  //   IPool pool = poolFactory.createPool(
-  //       poolName,
-  //       poolSymbol,
-  //       // the operator is the owner in this test case
-  //       poolOperator,
-  //       poolOperator,
-  //       address(broker)
-  //   );
-  //   vm.stopPrank();
+    pool = IPool(new GenesisPool(
+      systemAdmin,
+      systemAdmin,
+      router,
+      address(wFIL),
+      //
+      address(0),
+      // no min liquidity for test pool
+      0,
+      15e16
+    ));
+    vm.startPrank(systemAdmin);
+    poolFactory.attachPool(pool);
+    vm.stopPrank();
+  }
 
-  //   _configureOffRamp(pool);
+  function createAndFundPool(
+    uint256 amount,
+    address investor
+  ) internal returns (IPool pool) {
+    pool = createPool();
+    depositFundsIntoPool(pool, amount, investor);
+  }
 
-  //   return pool;
-  // }
-
-  // function createAndPrimePool(
-  //   string memory poolName,
-  //   string memory poolSymbol,
-  //   address poolOperator,
-  //   uint256 fee,
-  //   uint256 _amount,
-  //   address investor
-  //   ) internal returns(IPool)
-  // {
-  //   IPool pool = createPool(poolName, poolSymbol, poolOperator, fee);
-  //   primePool(pool, _amount, investor);
-  //   return pool;
-  // }
-
-  // function primePool(IPool pool, uint256 _amount, address investor) internal {
-  //   IERC4626 pool4626 = IERC4626(address(pool));
-  //   // investor1 stakes 10 FIL
-  //   vm.deal(investor, _amount);
-  //   vm.startPrank(investor);
-  //   wFIL.deposit{value: _amount}();
-  //   wFIL.approve(address(pool), _amount);
-  //   pool4626.deposit(_amount, investor);
-  //   vm.stopPrank();
-  // }
+  function depositFundsIntoPool(IPool pool, uint256 amount, address investor) internal {
+    IERC4626 pool4626 = IERC4626(address(pool));
+    // `investor` stakes `amount` FIL
+    vm.deal(investor, amount);
+    vm.startPrank(investor);
+    wFIL.deposit{value: amount}();
+    wFIL.approve(address(pool), amount);
+    pool4626.deposit(amount, investor);
+    vm.stopPrank();
+  }
 
   // function agentBorrow(
   //   IAgent _agent,
@@ -307,10 +387,7 @@ contract BaseTest is Test {
   //     StateSnapshot memory preBorrowState;
   //     preBorrowState.balanceWFIL = wFIL.balanceOf(address(_agent));
   //     Account memory account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
-  //     preBorrowState.powerStake = account.powerTokensStaked;
   //     preBorrowState.borrowed = account.totalBorrowed;
-  //     preBorrowState.powerBalance = IERC20(_powerToken).balanceOf(address(_agent));
-  //     preBorrowState.powerBalancePool = IERC20(_powerToken).balanceOf(address(_pool));
 
   //     _agent.borrow(_borrowAmount, 0, _signedCred, powerStake);
   //     vm.stopPrank();
@@ -348,24 +425,26 @@ contract BaseTest is Test {
   //     );
   //   }
 
-  // function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
-  //   ramp = IOffRamp(new OffRamp(
-  //     router,
-  //     address(pool.iou()),
-  //     address(pool.asset()),
-  //     systemAdmin,
-  //     pool.id()
-  //   ));
 
-  //   vm.prank(IAuth(address(pool)).owner());
-  //   pool.setRamp(ramp);
-  // }
 
-  // function _agentOwner(IAgent agent) internal view returns (address) {
-  //   return IAuth(address(agent)).owner();
-  // }
+  function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
+    ramp = IOffRamp(new OffRamp(
+      router,
+      address(pool.exitToken()),
+      address(pool.asset()),
+      systemAdmin,
+      pool.id()
+    ));
 
-  // function _agentOperator(IAgent agent) internal view returns (address) {
-  //   return IAuth(address(agent)).operator();
-  // }
+    vm.prank(IAuth(address(pool)).owner());
+    pool.setRamp(ramp);
+  }
+
+  function _agentOwner(IAgent agent) internal view returns (address) {
+    return IAuth(address(agent)).owner();
+  }
+
+  function _agentOperator(IAgent agent) internal view returns (address) {
+    return IAuth(address(agent)).operator();
+  }
 }
