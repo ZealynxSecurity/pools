@@ -277,7 +277,7 @@ contract BaseTest is Test {
 
     AgentData memory agentData = createAgentData(
       // agentValue => 2x the borrowAmount
-      amount,
+      amount * 2,
       // good gcred score
       80,
       // good EDR

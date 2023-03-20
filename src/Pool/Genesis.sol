@@ -37,6 +37,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     error InsufficientLiquidity();
     error AccountDNE();
     error Unauthorized();
+    error InvalidParams();
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -242,8 +243,9 @@ contract GenesisPool is IPool, RouterAware, Operatable {
                         POOL BORROWING FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    // TODO: check for default before entering
     function borrow(VerifiableCredential memory vc) external subjectIsAgentCaller(vc) {
+        if (vc.value == 0) revert InvalidParams();
+
         _checkLiquidity(vc.value);
         Account memory account = _getAccount(vc.subject);
         // fresh account, set start epoch and epochsPaid to beginning of current window

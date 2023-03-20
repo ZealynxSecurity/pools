@@ -259,7 +259,7 @@ contract AgentBorrowingTest is BaseTest {
     }
 
     function testBorrowValid(uint256 borrowAmount) public {
-      vm.assume(borrowAmount <= stakeAmount);
+      borrowAmount = bound(borrowAmount, 1, stakeAmount);
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
       vm.startPrank(minerOwner);
@@ -269,6 +269,30 @@ contract AgentBorrowingTest is BaseTest {
 
       Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
       assertEq(account.principal, borrowAmount);
+      assertEq(account.startEpoch, borrowBlock);
+      assertEq(account.epochsPaid, borrowBlock);
+    }
+
+    function testBorrowTwice(uint256 borrowAmount) public {
+      borrowAmount = bound(borrowAmount, 100, stakeAmount / 2);
+
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+      vm.startPrank(minerOwner);
+      agent.borrow(pool.id(), borrowCred);
+      uint256 borrowBlock = block.number;
+      vm.stopPrank();
+      // roll forward to test the startEpoch and epochsPaid
+      vm.roll(block.number + 1000);
+
+      borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+      vm.startPrank(minerOwner);
+      agent.borrow(pool.id(), borrowCred);
+      vm.stopPrank();
+
+      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+      assertEq(account.principal, borrowAmount * 2);
       assertEq(account.startEpoch, borrowBlock);
       assertEq(account.epochsPaid, borrowBlock);
     }
@@ -283,6 +307,19 @@ contract AgentBorrowingTest is BaseTest {
         assertTrue(false, "should not be able to borrow more than liquid");
       } catch (bytes memory b) {
         assertEq(errorSelector(b), GenesisPool.InsufficientLiquidity.selector);
+      }
+
+      vm.stopPrank();
+    }
+
+    function testBorrowNothing() public {
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), 0);
+
+      vm.startPrank(minerOwner);
+      try agent.borrow(pool.id(), borrowCred) {
+        assertTrue(false, "should not be able to borrow 0");
+      } catch (bytes memory b) {
+        assertEq(errorSelector(b), GenesisPool.InvalidParams.selector);
       }
 
       vm.stopPrank();
