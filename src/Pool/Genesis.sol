@@ -216,28 +216,28 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         return balance -= feesCollected;
     }
 
-  /**
-   * @notice getRate returns the rate for an Agent's current position within the Pool
-   * rate = inflation adjusted base rate * (bias * (100 - GCRED))
-   */
-  function getRate(
-      Account memory account,
-      VerifiableCredential memory vc
-  ) public view returns (uint256) {
-    // return vc.baseRate * e**(bias * (100 - vc.gcred))
-    return 15e16;
-  }
+    /**
+    * @notice getRate returns the rate for an Agent's current position within the Pool
+    * rate = inflation adjusted base rate * (bias * (100 - GCRED))
+    */
+    function getRate(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) public view returns (uint256) {
+        // return vc.baseRate * e**(bias * (100 - vc.gcred))
+        return 15e16;
+    }
 
-  function isOverLeveraged(
-    Account memory account,
-    VerifiableCredential memory vc
-  ) external view returns (bool) {
-    // equity percentage
-    // your portion of agents assets = equity percentage * vc.agentTotalValue
-    // ltv = (account.principal + account.paymentsDue) / your portion of agents assets
-    // dti =
-    return false;
-  }
+    function isOverLeveraged(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) external view returns (bool) {
+        // equity percentage
+        // your portion of agents assets = equity percentage * vc.agentTotalValue
+        // ltv = (account.principal + account.paymentsDue) / your portion of agents assets
+        // dti =
+        return false;
+    }
 
     /*//////////////////////////////////////////////////////////////
                         POOL BORROWING FUNCTIONS
@@ -260,7 +260,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
         totalBorrowed += vc.value;
 
-        // emit Borrow(vc.subject, vc.value, 0, 0);
+        emit Borrow(vc.subject, vc.value);
 
         // interact - here `msg.sender` must be the Agent bc of the `subjectIsAgentCaller` modifier
         SafeTransferLib.safeTransfer(asset, msg.sender, vc.value);
@@ -322,6 +322,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
             address(this),
             vc.value
         );
+
+        emit Pay(vc.subject, rate, account.epochsPaid);
 
         return (rate, account.epochsPaid);
     }

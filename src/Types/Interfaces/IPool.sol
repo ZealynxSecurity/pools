@@ -13,13 +13,14 @@ interface IPool {
     //////////////////////////////////////////////////////////////*/
 
     event Borrow(
-        address indexed agent,
+        uint256 indexed agent,
         uint256 amount
     );
 
-    event MakePayment(
-        address indexed agent,
-        uint256 rate
+    event Pay(
+        uint256 indexed agent,
+        uint256 rate,
+        uint256 epochsPaid
     );
 
     event Deposit(
