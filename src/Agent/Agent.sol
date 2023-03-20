@@ -330,7 +330,9 @@ contract Agent is IAgent, RouterAware, Operatable {
     validateAndBurnCred(sc)
     returns (uint256 rate, uint256 epochsPaid)
   {
-    (rate, epochsPaid) = GetRoute.pool(router, poolID).pay(sc.vc);
+    IPool pool = GetRoute.pool(router, poolID);
+    GetRoute.wFIL(router).approve(address(pool), sc.vc.value);
+    (rate, epochsPaid) = pool.pay(sc.vc);
   }
 
   /**
