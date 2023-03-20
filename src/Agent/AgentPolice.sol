@@ -54,12 +54,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     maxPoolsPerAgent = 10;
   }
 
-  /// @dev this modifier takes
-  modifier _isValidCredential(address agent, SignedCredential memory signedCredential) {
-    _checkCredential(_addressToID(agent), signedCredential);
-    _;
-  }
-
   modifier onlyAgent() {
     AuthController.onlyAgent(router, msg.sender);
     _;
@@ -134,9 +128,21 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function isValidCredential(
     uint256 agent,
+    bytes4 action,
     SignedCredential memory signedCredential
   ) external {
-    _checkCredential(agent, signedCredential);
+    // reverts if the credential isn't valid
+    validateCred(
+      agent,
+      action,
+      signedCredential
+    );
+
+    if (
+      _credentialUseBlock[keccak256(abi.encode(
+        signedCredential.v, signedCredential.r, signedCredential.s
+      ))] > 0
+    ) revert InvalidCredential();
   }
 
   function registerCredentialUseBlock(SignedCredential memory signedCredential) external  {
@@ -190,7 +196,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     SignedCredential memory signedCredential
   ) external
     onlyOwnerOperator
-    _isValidCredential(agent, signedCredential)
+    /// _isValidCredential(agent, signedCredential)
     /// onlyIfAgentOverLeveraged(agent)
   {
     // IAgent _agent = IAgent(agent);
@@ -313,23 +319,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   function _addressToID(address agent) internal view returns (uint256) {
     return IAgent(agent).id();
-  }
-
-  function _checkCredential(
-    uint256 agent,
-    SignedCredential memory signedCredential
-  ) internal view {
-    validateCred(
-      agent,
-      signedCredential.vc,
-      signedCredential.v,
-      signedCredential.r,
-      signedCredential.s
-    );
-
-    if (_credentialUseBlock[keccak256(abi.encode(signedCredential.v, signedCredential.r, signedCredential.s))] > 0)  {
-        revert InvalidCredential();
-      }
   }
 
   function createKey(string memory partitionKey, uint256 agentID) internal pure returns (bytes32) {

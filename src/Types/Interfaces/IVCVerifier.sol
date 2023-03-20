@@ -10,10 +10,12 @@ interface IVCVerifier {
 
   // validates a signed credential
   function validateCred(
+    uint256 agent,
+    bytes4 selector,
     SignedCredential memory
   ) external;
 
   function recover(
     SignedCredential memory
-  ) external view returns (bool);
+  ) external view returns (address);
 }

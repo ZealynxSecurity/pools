@@ -31,7 +31,7 @@ contract Agent is IAgent, RouterAware, Operatable {
   error InsufficientCollateral();
   error Internal();
   error BadAgentState();
-
+  /// @notice `id` is the GLIF Pools ID address of the Agent (not to be confused with the evm actor's ID address)
   uint256 public id;
   /// @notice `miners` Returns the minerID at a specific index
   uint64[] public miners;
@@ -50,7 +50,7 @@ contract Agent is IAgent, RouterAware, Operatable {
 
   /// @dev a modifier that checks and immediately burns a signed credential
   modifier validateAndBurnCred(SignedCredential memory signedCredential) {
-    _validateAndBurnCred(id, signedCredential);
+    _validateAndBurnCred(signedCredential);
     _;
   }
 
@@ -375,13 +375,11 @@ contract Agent is IAgent, RouterAware, Operatable {
   }
 
   function _validateAndBurnCred(
-    uint256 agent,
     SignedCredential memory signedCredential
   ) internal {
     IAgentPolice agentPolice = GetRoute.agentPolice(router);
-    agentPolice.isValidCredential(agent, signedCredential);
+    agentPolice.isValidCredential(id, msg.sig, signedCredential);
     agentPolice.registerCredentialUseBlock(signedCredential);
-    if (signedCredential.vc.action != msg.sig) revert Unauthorized();
   }
 
   function _getStakedPoolIDs() internal view returns (uint256[] memory) {

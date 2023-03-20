@@ -47,7 +47,7 @@ interface IAgentPolice {
                       CHECKERS
   //////////////////////////////////////////////*/
 
-  function isValidCredential(uint256 agent, SignedCredential memory signedCredential) external;
+  function isValidCredential(uint256 agent, bytes4 action, SignedCredential memory signedCredential) external;
 
   function registerCredentialUseBlock(SignedCredential memory signedCredential) external;
 

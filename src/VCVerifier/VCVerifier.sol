@@ -8,23 +8,19 @@ import {AuthController} from "src/Auth/AuthController.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {ROUTE_VC_ISSUER} from "src/Constants/Routes.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 
-abstract contract VCVerifier is RouterAware, EIP712 {
+abstract contract VCVerifier is IVCVerifier, RouterAware, EIP712 {
   error InvalidCredential();
 
   constructor(string memory _name, string memory _version)
     EIP712(_name, _version) {}
 
   string internal constant _VERIFIABLE_CREDENTIAL_TYPE =
-    "VerifiableCredential(address issuer,address subject,uint256 epochIssued,uint256 epochValidUntil,uint256 cap,AgentData miner)";
-  string internal constant _MINER_DATA_TYPE =
-    "AgentData(uint256 assets,uint256 expectedDailyRewards,uint256 exposureAtDefault,uint256 expectedLoss,uint256 liabilities,uint256 lossGivenDefault,uint256 probabilityOfDefault,uint256 qaPower,uint256 rawPower,uint256 startEpoch,uint256 unexpectedLoss)";
+    "VerifiableCredential(address issuer,uint256 subject,uint256 epochIssued,uint256 epochValidUntil,uint256 value,bytes4 action,uint64 target,bytes claim)";
 
   bytes32 public constant _VERIFIABLE_CREDENTIAL_TYPE_HASH =
-    keccak256(abi.encodePacked(_VERIFIABLE_CREDENTIAL_TYPE, _MINER_DATA_TYPE));
-
-  bytes32 public constant _MINER_DATA_TYPE_HASH =
-    keccak256(abi.encodePacked(_MINER_DATA_TYPE));
+    keccak256(abi.encodePacked(_VERIFIABLE_CREDENTIAL_TYPE));
 
   function deriveStructHash(VerifiableCredential memory vc) public pure returns(bytes32) {
     return keccak256(abi.encode(
@@ -34,6 +30,8 @@ abstract contract VCVerifier is RouterAware, EIP712 {
       vc.epochIssued,
       vc.epochValidUntil,
       vc.value,
+      vc.action,
+      vc.target,
       vc.claim
     ));
   }
@@ -45,23 +43,25 @@ abstract contract VCVerifier is RouterAware, EIP712 {
   }
 
   function recover(
-    VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s
+    SignedCredential memory sc
   ) public view returns (address) {
-      return ECDSA.recover(digest(vc), v, r, s);
+      return ECDSA.recover(digest(sc.vc), sc.v, sc.r, sc.s);
   }
 
   function validateCred(
     uint256 agent,
-    VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s
+    bytes4 selector,
+    SignedCredential memory sc
   ) public view {
-    address issuer = recover(vc, v, r, s);
+    address issuer = recover(sc);
     if (
-      issuer != vc.issuer ||
+      issuer != sc.vc.issuer ||
       !isValidIssuer(issuer) ||
-      vc.subject != agent ||
+      sc.vc.subject != agent ||
+      sc.vc.action != selector ||
       !(
-        block.number >= vc.epochIssued &&
-        block.number <= vc.epochValidUntil
+        block.number >= sc.vc.epochIssued &&
+        block.number <= sc.vc.epochValidUntil
       )
     ) revert InvalidCredential();
   }

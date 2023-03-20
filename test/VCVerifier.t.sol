@@ -1,92 +1,120 @@
-// // SPDX-License-Identifier: UNLICENSED
-// pragma solidity ^0.8.15;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.15;
 
-// import "src/VCVerifier/VCVerifier.sol";
-// import "./BaseTest.sol";
+import "src/VCVerifier/VCVerifier.sol";
+import {errorSelector} from "./helpers/Utils.sol";
+import "./BaseTest.sol";
 
-// contract VCVerifierMock is VCVerifier {
-//   constructor(
-//     address _router,
-//     string memory verifiedName,
-//     string memory verifiedVersion
-//   ) VCVerifier(verifiedName, verifiedVersion) {
-//     router = _router;
-//   }
-// }
+contract VCVerifierMock is VCVerifier {
+  constructor(
+    address _router,
+    string memory verifiedName,
+    string memory verifiedVersion
+  ) VCVerifier(verifiedName, verifiedVersion) {
+    router = _router;
+  }
+}
 
-// contract VCVerifierTest is BaseTest {
-//   VCVerifierMock public vcv;
-//   address public agent = makeAddr("AGENT");
+contract VCVerifierTest is BaseTest {
+  VCVerifierMock public vcv;
+  uint256 public agentID = 1;
 
-//   function setUp() public {
-//     vcv = new VCVerifierMock(address(router), "glif.io", "1");
-//     vm.stopPrank();
-//   }
+  function setUp() public {
+    vcv = new VCVerifierMock(address(router), "glif.io", "1");
+    vm.stopPrank();
+  }
 
-//   function testVerifyCredential() public {
-//     SignedCredential memory sc = issueSC(agent);
+  function testVerifyCredential() public {
+    SignedCredential memory sc = _issueSC(agentID);
 
-//     assertTrue(vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s));
-//   }
+    try vcv.validateCred(agentID, 0x0, sc) {
+      assertTrue(true);
+    } catch {
+      assertTrue(false, "Should be a valid cred");
+    }
+  }
 
-//   function testVerifyCredentialFromWrongIssuer() public {
-//     uint256 qaPower = 10e10;
+  function testVerifyCredentialFromWrongIssuer() public {
+    uint256 agentValue = 10e18;
+    uint256 collateralValue = agentValue * 60 / 100;
 
-//     AgentData memory _agent = AgentData(
-//       1e10, 100, 0, 0.5e18, 10e18, 10e18, 10, qaPower, 5e18, 0, 0
-//     );
+    AgentData memory agent = AgentData(
+      agentValue, 15e16, collateralValue, 0, 500, 80, 10e18, 5e18, 0
+    );
 
-//     VerifiableCredential memory vc = VerifiableCredential(
-//       vcIssuer,
-//       agent,
-//       block.number,
-//       block.number + 100,
-//       100,
-//       abi.encode(_agent)
-//     );
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agentID,
+      block.number,
+      block.number + 100,
+      1000,
+      // no specific action in this cred
+      0x0,
+      // no specific target in this cred
+      0,
+      abi.encode(agent)
+    );
 
-//     bytes32 digest = vcv.digest(vc);
-//     (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, digest);
-//     vm.expectRevert("VCVerifier: Not authorized");
-//     vcv.isValid(agent, vc, v, r, s);
-//   }
+    bytes32 digest = vcv.digest(vc);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, digest);
+    SignedCredential memory sc = SignedCredential(vc, v, r, s);
+    try vcv.validateCred(agentID, 0x0, sc) {
+      assertTrue(false, "Credential should be invalid - wrong issuer");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
+    }
+  }
 
-//   function testBadIssuer() public {
-//     SignedCredential memory sc = issueSC(agent);
+  function testBadIssuer() public {
+    SignedCredential memory sc = _issueSC(agentID);
 
-//     sc.vc.issuer = makeAddr("FALSE_ISSUER");
-//     vm.expectRevert("VCVerifier: Not authorized");
-//     vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s);
-//   }
+    sc.vc.issuer = makeAddr("FALSE_ISSUER");
 
-//   function testFalseSubject() public {
-//     SignedCredential memory sc = issueSC(agent);
+    try vcv.validateCred(agentID, 0x0, sc) {
+      assertTrue(false, "Credential should be invalid - bad issuer");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
+    }
+  }
 
-//     sc.vc.subject = makeAddr("FALSE_SUBJECT");
-//     vm.expectRevert("VCVerifier: Not authorized");
-//     vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s);
-//   }
+  function testFalseSubject() public {
+    SignedCredential memory sc = _issueSC(agentID);
 
-//   // we don't use the issueGenericVC funcs because we dont use the AgentPolice as the VCVerifier
-//   function issueSC(address _agent) internal returns (SignedCredential memory) {
-//     uint256 qaPower = 10e18;
+    sc.vc.subject = 2;
+    try vcv.validateCred(agentID, 0x0, sc) {
+      assertTrue(false, "Credential should be invalid - false subject");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
+    }
+  }
 
-//     AgentData memory agent = AgentData(
-//       1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0
-//     );
+  // we don't use the generic funcs because we dont use the AgentPolice as the VCVerifier
+  function _issueSC(uint256 _agent) internal returns (SignedCredential memory) {
+    uint256 agentValue = 10e18;
+    uint256 collateralValue = agentValue * 60 / 100;
 
-//     VerifiableCredential memory vc = VerifiableCredential(
-//       vcIssuer,
-//       _agent,
-//       block.number,
-//       block.number + 100,
-//       1000,
-//       abi.encode(agent)
-//     );
+    AgentData memory agent = AgentData(
+      agentValue, 15e16, collateralValue, 0, 500, 80, 10e18, 5e18, 0
+    );
 
-//     bytes32 digest = vcv.digest(vc);
-//     (uint8 v, bytes32 r, bytes32 s) = vm.sign(vcIssuerPk, digest);
-//     return SignedCredential(vc, v, r, s);
-//   }
-// }
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      _agent,
+      block.number,
+      block.number + 100,
+      1000,
+      // no specific action in this cred
+      0x0,
+      // no specific target in this cred
+      0,
+      abi.encode(agent)
+    );
+
+    bytes32 digest = vcv.digest(vc);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(vcIssuerPk, digest);
+    return SignedCredential(vc, v, r, s);
+  }
+
+
+}
 

@@ -24,8 +24,8 @@ library Deployer {
   ) internal returns (
     bytes4[] memory routeIDs, address[] memory routeAddrs
   ) {
-    routeIDs = new bytes4[](8);
-    routeAddrs = new address[](8);
+    routeIDs = new bytes4[](9);
+    routeAddrs = new address[](9);
     // Add treasury route
     routeIDs[0] = ROUTE_TREASURY;
     routeAddrs[0] = treasury;
