@@ -69,7 +69,7 @@ contract BaseTest is Test {
 
   WFIL wFIL = new WFIL();
   MockIDAddrStore idStore;
-
+  address credParser = address(new CredParser());
   constructor() {
     vm.startPrank(systemAdmin);
     // deploys the router
@@ -86,7 +86,7 @@ contract BaseTest is Test {
       // 1e17 = 10% treasury fee on yield
       address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0, systemAdmin, systemAdmin)),
       vcIssuer,
-      address(new CredParser()),
+      credParser,
       address(new AgentDeployer())
     );
     // any contract that extends RouterAware gets its router set here

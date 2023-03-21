@@ -7,7 +7,7 @@ import "src/Types/Structs/Filecoin.sol";
 
 library MinerHelper {
   // the ID store gets deployed at the same address every time in a test env
-  address constant ID_STORE_ADDR = address(0x9cb44125485f7b84E3292E01000D6A57Dfa29B21);
+  address constant ID_STORE_ADDR = address(0xc43Ff6396F0EF6a19624F29c4425217Ac3C01Ed1);
 
   /// @param target The miner actor id you want to interact with
   /// @param addr Expected owner address
