@@ -80,6 +80,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     /// @dev `isShuttingDown` is a boolean that, when true, halts deposits and borrows. Once set, it cannot be unset.
     bool public isShuttingDown = false;
 
+    uint256[] rateLookup = new uint256[](100);
+    
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
     //////////////////////////////////////////////////////////////*/
@@ -140,7 +142,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         address _ramp,
         uint256 _minimumLiquidity,
         uint256 _bias,
-        uint256 _maxDTI
+        uint256 _maxDTI,
+        uint256[100] memory _rateLookup
     ) Operatable(_owner, _operator) {
         router = _router;
         asset = ERC20(_asset);
@@ -148,7 +151,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         minimumLiquidity = _minimumLiquidity;
         bias = _bias;
         maxDTI = _maxDTI;
-
+        rateLookup = _rateLookup;
         // set the ID
         id = GetRoute.poolFactory(router).allPoolsLength();
         // deploy a new liquid staking token for the pool
@@ -234,15 +237,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         VerifiableCredential memory vc
     ) public view returns (uint256) {
         address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-        // base should really be euler's number (i think)
-        // rate = baseRate * e^(bias * (100 - gcred)))
-        uint256 base = 3;
-        uint256 baseRate = vc.getBaseRate(credParser);
-        // compute the exponent
-        uint256 exp = bias * (100e18 - vc.getGCRED(credParser));
-        // compute the rate multiplier
-        uint256 rateAdjust = base**exp;
-        return baseRate * rateAdjust;
+        return rateLookup[vc.getGCRED(credParser)];
     }
 
     // TODO: this is wrong, it needs fixed point math
