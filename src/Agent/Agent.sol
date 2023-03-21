@@ -332,7 +332,7 @@ contract Agent is IAgent, RouterAware, Operatable {
   {
     IPool pool = GetRoute.pool(router, poolID);
     GetRoute.wFIL(router).approve(address(pool), sc.vc.value);
-    (rate, epochsPaid) = pool.pay(sc.vc);
+    (rate, epochsPaid, ) = pool.pay(sc.vc);
   }
 
   /**
