@@ -290,6 +290,11 @@ contract AgentBorrowingTest is BaseTest {
       assertEq(account.epochsPaid, borrowBlock);
     }
 
+    function testGetRateGas(uint256 borrowAmount) public {
+      borrowAmount = bound(borrowAmount, 1e18, stakeAmount / 2);
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+      pool.getRate(Account(0,0,0), borrowCred.vc);
+    }
     function testBorrowMoreThanLiquid(uint256 borrowAmount) public {
       borrowAmount = bound(borrowAmount, stakeAmount + 1, MAX_FIL);
 
