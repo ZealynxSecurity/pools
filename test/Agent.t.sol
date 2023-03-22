@@ -300,7 +300,19 @@ contract AgentBorrowingTest is BaseTest {
       vm.roll(block.number + 1000);
 
       borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
-
+      // Since we've already borrowed the borrow amount we need the principle value to increase 4x
+      uint256 principle = borrowAmount * 4;
+      AgentData memory agentData = createAgentData(
+        principle,
+        80,
+        (rateArray[80] * EPOCHS_IN_DAY * principle * 2) / 1e18,
+        // principal = borrowAmount
+        borrowAmount,
+        // Account started at previous borrow block
+        borrowBlock
+      );
+      borrowCred.vc.claim = abi.encode(agentData);
+      borrowCred = signCred(borrowCred.vc);
       agentBorrow(agent, pool.id(), borrowCred);
 
       Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
