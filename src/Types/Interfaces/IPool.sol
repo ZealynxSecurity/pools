@@ -159,7 +159,7 @@ interface IPool {
 
     function setMinimumLiquidity(uint256 minLiquidity) external;
 
-    function setBias(uint256 bias) external;
+    function setBaseRate(uint256 baseRate) external;
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 }
