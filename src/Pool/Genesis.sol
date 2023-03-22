@@ -280,7 +280,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         uint256 dailyRewards = vc.getExpectedDailyRewards(credParser);
 
         // compute DTI
-        uint256 dti = dailyRate / dailyRewards;
+        uint256 dti = dailyRate * wad / dailyRewards;
 
         return dti > maxDTI;
     }
