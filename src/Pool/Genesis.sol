@@ -662,6 +662,10 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         maxDTI = _maxDTI;
     }
 
+    function setRateLookup(uint256[100] memory _rateLookup) public onlyOwnerOperator {
+        rateLookup = _rateLookup;
+    }
+
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
