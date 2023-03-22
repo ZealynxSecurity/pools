@@ -10,26 +10,11 @@ interface IAgentPolice {
                     EVENT LOGS
   //////////////////////////////////////////////*/
 
-  // emitted when `forceMakePayments` is called successfully
-  // stillOverLeveraged is `true` when the payments still do not bring down the total owed under the expected rewards
-  event ForceMakePayments(
-    address indexed agent,
-    address indexed caller,
-    uint256[] poolIDs,
-    uint256[] pmts,
-    bool stillOverLeveraged
-  );
+  event Defaulted(address agent);
 
-  event ForcePullFundsFromMiners(
-    address agent,
-    uint64[] miners,
-    uint256[] amounts
-  );
+  event OnAdministration(address agent);
 
-  event Lockout(
-    address indexed agent,
-    address indexed locker
-  );
+  event OffAdministration(address agent);
 
   /*//////////////////////////////////////////////
                       GETTERS
@@ -39,21 +24,23 @@ interface IAgentPolice {
 
   function defaultWindow() external view returns (uint256);
 
-  function isInDefault(uint256 agentID) external view returns (bool);
-
   function maxPoolsPerAgent() external view returns (uint256);
-
-  /*//////////////////////////////////////////////
-                      CHECKERS
-  //////////////////////////////////////////////*/
-
-  function isValidCredential(uint256 agent, bytes4 action, SignedCredential memory signedCredential) external;
-
-  function registerCredentialUseBlock(SignedCredential memory signedCredential) external;
 
   function isAgentOverLeveraged(VerifiableCredential memory vc) external;
 
-  function checkDefault(SignedCredential memory signedCredential) external returns (bool);
+  /*//////////////////////////////////////////////
+                    VC HANDLING
+  //////////////////////////////////////////////*/
+
+  function isValidCredential(
+    uint256 agent,
+    bytes4 action,
+    SignedCredential memory signedCredential
+  ) external;
+
+  function registerCredentialUseBlock(
+    SignedCredential memory signedCredential
+  ) external;
 
   /*//////////////////////////////////////////////
                       POLICING
@@ -63,14 +50,17 @@ interface IAgentPolice {
 
   function removePoolFromList(uint256 agentID, uint256 pool) external;
 
-  function forcePullFundsFromMiners(
-    address agent,
-    uint64[] calldata miners,
-    uint256[] calldata amounts,
-    SignedCredential memory signedCredential
-  ) external;
+  function setAgentDefaulted(address agent) external;
 
-  function lockout(address agent, uint64 miner) external;
+  function putAgentOnAdministration(address agent, address administration) external;
+
+  function rmAgentFromAdministration(address agent) external;
+
+  function prepareMinerForLiquidation(address agent, address liquidator, uint64 miner) external;
+
+  function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external;
+
+  function liquidatedAgent(uint256 agentID) external;
 
   /*//////////////////////////////////////////////
                   ADMIN CONTROLS

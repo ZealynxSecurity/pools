@@ -24,6 +24,10 @@ interface IAgent {
 
   function newAgent() external view returns (address);
 
+  function administration() external view returns (address);
+
+  function defaulted() external view returns (bool);
+
   function miners(uint256) external view returns (uint64);
 
   function minersCount() external view returns (uint256);
@@ -45,7 +49,7 @@ interface IAgent {
     SignedCredential memory sc
   ) external;
 
-  function migrateMiner(address newAgent, uint64 miner) external;
+  function migrateMiner(uint64 miner) external;
 
   function changeMinerWorker(
     uint64 miner,
@@ -54,6 +58,12 @@ interface IAgent {
   ) external;
 
   function decommissionAgent(address newAgent) external;
+
+  function setInDefault() external;
+
+  function setAdministration(address administration) external;
+
+  function prepareMinerForLiquidation(uint64 miner, address liquidator) external;
 
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS
@@ -72,7 +82,11 @@ interface IAgent {
   function pay(
     uint256 poolID,
     SignedCredential memory signedCred
-  ) external returns (uint256 rate, uint256 epochsPaid);
+  ) external returns (
+    uint256 rate,
+    uint256 epochsPaid,
+    uint256 refund
+  );
 
   function refinance(
     uint256 oldPoolID,

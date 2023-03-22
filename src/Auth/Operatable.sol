@@ -35,8 +35,10 @@ abstract contract Operatable is Ownable {
 
     /**
      * @dev Throws if called by any account other than the operator.
+     *
+     * Modifier overriden by the Agent
      */
-    modifier onlyOwnerOperator() {
+    modifier onlyOwnerOperator() virtual {
       _checkOwnerOperator();
       _;
     }

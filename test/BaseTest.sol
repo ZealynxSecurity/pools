@@ -19,6 +19,7 @@ import {PoolFactory} from "src/Pool/PoolFactory.sol";
 import {Router} from "src/Router/Router.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
@@ -228,6 +229,38 @@ contract BaseTest is Test {
     return signCred(vc);
   }
 
+  function issueGenericPayCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      amount * 2,
+      // good gcred score
+      80,
+      // good EDR
+      1000,
+      // principal = borrowAmount
+      amount,
+      // no account yet (startEpoch)
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      amount,
+      Agent.pay.selector,
+      // minerID irrelevant for pay action
+      0,
+      abi.encode(agentData)
+    );
+
+    return signCred(vc);
+  }
+
   function issueGenericBorrowCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
     // roll forward so we don't get an identical credential that's already been used
     vm.roll(block.number + 1);
@@ -239,8 +272,8 @@ contract BaseTest is Test {
       80,
       // good EDR
       1000,
-      // no principal
-      0,
+      // principal = borrowAmount
+      amount,
       // no account yet (startEpoch)
       0
     );
@@ -338,37 +371,130 @@ contract BaseTest is Test {
     uint256 poolID,
     SignedCredential memory sc
   ) internal {
-      vm.startPrank(_agentOperator(agent));
-      // Establsh the state before the borrow
-      StateSnapshot memory preBorrowState;
+    vm.startPrank(_agentOperator(agent));
+    // Establsh the state before the borrow
+    StateSnapshot memory preBorrowState;
 
-      preBorrowState.agentBalanceWFIL = wFIL.balanceOf(address(agent));
-      Account memory account = AccountHelpers.getAccount(
-        router,
-        address(agent),
-        poolID
-      );
+    preBorrowState.agentBalanceWFIL = wFIL.balanceOf(address(agent));
+    Account memory account = AccountHelpers.getAccount(
+      router,
+      address(agent),
+      poolID
+    );
 
-      preBorrowState.agentBorrowed = account.principal;
+    preBorrowState.agentBorrowed = account.principal;
 
-      uint256 borrowBlock = block.number;
-      agent.borrow(poolID, sc);
+    uint256 borrowBlock = block.number;
+    agent.borrow(poolID, sc);
 
-      vm.stopPrank();
-      // Check the state after the borrow
-      uint256 currBalance = wFIL.balanceOf(address(agent));
-      assertEq(currBalance, preBorrowState.agentBalanceWFIL + sc.vc.value);
+    vm.stopPrank();
+    // Check the state after the borrow
+    uint256 currBalance = wFIL.balanceOf(address(agent));
+    assertEq(currBalance, preBorrowState.agentBalanceWFIL + sc.vc.value);
 
-      account = AccountHelpers.getAccount(router, address(agent), poolID);
+    account = AccountHelpers.getAccount(router, address(agent), poolID);
 
-      // first time borrowing, check the startEpoch
-      if (preBorrowState.agentBorrowed == 0) {
-        assertEq(account.startEpoch, borrowBlock);
-        assertEq(account.epochsPaid, borrowBlock);
-      }
-
-      assertEq(account.principal, preBorrowState.agentBorrowed + sc.vc.value);
+    // first time borrowing, check the startEpoch
+    if (preBorrowState.agentBorrowed == 0) {
+      assertEq(account.startEpoch, borrowBlock);
+      assertEq(account.epochsPaid, borrowBlock);
     }
+
+    assertEq(account.principal, preBorrowState.agentBorrowed + sc.vc.value);
+  }
+
+  function agentPay(
+    IAgent agent,
+    IPool pool,
+    SignedCredential memory sc
+  ) internal returns (
+    uint256 rate,
+    uint256 epochsPaid,
+    uint256 refund
+  ) {
+    vm.startPrank(_agentOperator(agent));
+
+    // Establsh the state before the borrow
+    StateSnapshot memory preBorrowState;
+    preBorrowState.agentBalanceWFIL = wFIL.balanceOf(address(agent));
+    preBorrowState.poolBalanceWFIL = wFIL.balanceOf(address(pool));
+    Account memory account = AccountHelpers.getAccount(
+      router,
+      address(agent),
+      pool.id()
+    );
+
+    preBorrowState.agentBorrowed = account.principal;
+
+    uint256 borrowBlock = block.number;
+    uint256 prePayEpochsPaid = account.epochsPaid;
+
+    (
+      rate,
+      epochsPaid,
+      refund
+    ) = agent.pay(pool.id(), sc);
+
+    vm.stopPrank();
+
+    account = AccountHelpers.getAccount(
+      router,
+      address(agent),
+      pool.id()
+    );
+
+    assertGt(rate, 0, "Should not have a 0 rate");
+
+    // there is an unlikely case where these tests fail when the amount paid is _exactly_ the amount needed to exit - meaning refund is 0
+    if (refund > 0) {
+      assertEq(account.epochsPaid, 0, "Should have 0 epochs paid if there was a refund - meaning all principal was paid");
+      assertEq(account.principal, 0, "Should have 0 principal if there was a refund - meaning all principal was paid");
+    } else {
+      assertGt(account.principal, 0, "Should have some principal left");
+      assertGt(account.epochsPaid, prePayEpochsPaid, "Should have paid more epochs");
+    }
+  }
+
+  function putAgentOnAdministration(
+    IAgent agent,
+    address administration,
+    uint256 rollFwdPeriod,
+    uint256 borrowAmount,
+    uint256 poolID
+  ) internal {
+    IAgentPolice police = GetRoute.agentPolice(router);
+    SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+    agentBorrow(agent, poolID, borrowCred);
+
+    vm.roll(block.number + rollFwdPeriod);
+
+    vm.startPrank(IAuth(address(police)).owner());
+    police.putAgentOnAdministration(address(agent), administration);
+    vm.stopPrank();
+
+    assertEq(agent.administration(), administration);
+  }
+
+  function setAgentDefaulted(
+    IAgent agent,
+    uint256 rollFwdPeriod,
+    uint256 borrowAmount,
+    uint256 poolID
+  ) internal {
+    IAgentPolice police = GetRoute.agentPolice(router);
+    SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+    agentBorrow(agent, poolID, borrowCred);
+
+    vm.roll(block.number + rollFwdPeriod);
+
+    vm.startPrank(IAuth(address(police)).owner());
+    police.setAgentDefaulted(address(agent));
+    vm.stopPrank();
+
+    assertTrue(agent.defaulted(), "Agent should be put into default");
+  }
 
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
     ramp = IOffRamp(new OffRamp(
