@@ -31,7 +31,7 @@ import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credenti
 import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_AGENT_FACTORY, ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
-
+uint256 constant wad = 1e18;
 contract GenesisPool is IPool, RouterAware, Operatable {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
@@ -255,17 +255,20 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         // equity percentage
         uint256 totalPrincipal = vc.getPrincipal(credParser);
         // compute our pool's percentage of the agent's assets
-        uint256 equityPercentage = account.principal / totalPrincipal;
-
+        uint256 equityPercentage = (account.principal * wad) / totalPrincipal;
         uint256 agentTotalValue = vc.getAgentValue(credParser);
-        // compute value used in LTV calculation (this is wrong bc equityPercentage isn't actually a % yet)
-        uint256 poolPercentageOfValue = equityPercentage * agentTotalValue;
+        // compute value used in LTV calculation
+        // Since we're operating in  fixed point 1e18, we need to divide by 1e18
+        uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - account.principal) ) / wad;
 
+
+        //NOTE: I would recommend just evaluating if poolShareOfValue > account.principal it's functionally the same
+        // if (poolShareOfValue < account.principal) return true;
         // compute LTV (also wrong bc %)
-        uint256 ltv = poolPercentageOfValue / account.principal;
+        uint256 ltv = poolShareOfValue / account.principal;
+        // if LTV is greater than 1 (e18 denominated), we are over leveraged (can't mortgage more than the value of your home)
+        if (ltv > wad) return true;
 
-        // if LTV is greater than 1, we are over leveraged (can't mortgage more than the value of your home)
-        if (ltv > 1) return true;
 
         uint256 rate = getRate(account, vc);
         // compute expected daily payments to align with expected daily reward
