@@ -31,6 +31,8 @@ import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credenti
 import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
+import {console} from "forge-std/console.sol";
+
 uint256 constant wad = 1e18;
 contract GenesisPool is IPool, RouterAware, Operatable {
     using FixedPointMathLib for uint256;
@@ -258,16 +260,14 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         uint256 agentTotalValue = vc.getAgentValue(credParser);
         // compute value used in LTV calculation
         // We leave the e18 in here so we don't have to add it back in when calculating LTV
-        uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - account.principal));
-
+        uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - account.principal)) / wad;
 
         //NOTE: I would recommend just evaluating if poolShareOfValue > account.principal it's functionally the same
         // if (poolShareOfValue < account.principal) return true;
         // compute LTV (also wrong bc %)
-        uint256 ltv = poolShareOfValue / account.principal;
+        uint256 ltv = account.principal * wad / poolShareOfValue;
         // if LTV is greater than 1 (e18 denominated), we are over leveraged (can't mortgage more than the value of your home)
         if (ltv > wad) return true;
-
 
         uint256 rate = getRate(account, vc);
         // compute expected daily payments to align with expected daily reward
