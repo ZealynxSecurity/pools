@@ -549,7 +549,7 @@ contract AgentPoliceTest is BaseTest {
       );
 
       // deal enough funds to the Agent so it can make a payment back to the Pool
-      vm.deal(address(agent), borrowAmount * 2);
+      vm.deal(address(agent), borrowAmount * 4);
 
       SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
 
@@ -622,7 +622,7 @@ contract AgentPoliceTest is BaseTest {
       );
 
       // deal enough funds to the Agent so it can make a payment back to the Pool
-      vm.deal(address(agent), borrowAmount * 2);
+      vm.deal(address(agent), borrowAmount * 4);
 
       SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
 
