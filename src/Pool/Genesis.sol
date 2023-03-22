@@ -276,7 +276,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
         uint256 rate = getRate(account, vc);
         // compute expected daily payments to align with expected daily reward
-        uint256 dailyRate = rate * EPOCHS_IN_DAY;
+        uint256 dailyRate = (rate * EPOCHS_IN_DAY * accountPrincipal) / wad;
         uint256 dailyRewards = vc.getExpectedDailyRewards(credParser);
 
         // compute DTI
