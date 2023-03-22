@@ -355,6 +355,11 @@ contract BaseTest is Test {
     depositFundsIntoPool(pool, amount, investor);
   }
 
+  function createAccount(uint256 amount) internal returns(Account memory account) {
+    uint256 currentBlock = block.number;
+    account = Account(currentBlock, amount, currentBlock, false);
+  }
+
   function depositFundsIntoPool(IPool pool, uint256 amount, address investor) internal {
     IERC4626 pool4626 = IERC4626(address(pool));
     // `investor` stakes `amount` FIL
