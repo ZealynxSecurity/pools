@@ -236,7 +236,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         VerifiableCredential memory vc
     ) public view returns (uint256) {
         address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-        return rateLookup[vc.getGCRED(credParser)];
+        return (baseRate * rateLookup[vc.getGCRED(credParser)]) / wad;
     }
 
     // TODO: this is wrong, it needs fixed point math
