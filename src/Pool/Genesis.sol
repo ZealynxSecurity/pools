@@ -255,17 +255,18 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
         // equity percentage
         uint256 totalPrincipal = vc.getPrincipal(credParser);
+        uint256 accountPrincipal = account.principal;
         // compute our pool's percentage of the agent's assets
-        uint256 equityPercentage = (account.principal * wad) / totalPrincipal;
+        uint256 equityPercentage = (accountPrincipal * wad) / totalPrincipal;
         uint256 agentTotalValue = vc.getAgentValue(credParser);
         // compute value used in LTV calculation
         // We leave the e18 in here so we don't have to add it back in when calculating LTV
-        uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - account.principal)) / wad;
+        uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - accountPrincipal)) / wad;
 
-        //NOTE: I would recommend just evaluating if poolShareOfValue > account.principal it's functionally the same
-        // if (poolShareOfValue < account.principal) return true;
+        //NOTE: I would recommend just evaluating if poolShareOfValue > accountPrincipal it's functionally the same
+        // if (poolShareOfValue < accountPrincipal) return true;
         // compute LTV (also wrong bc %)
-        uint256 ltv = account.principal * wad / poolShareOfValue;
+        uint256 ltv = accountPrincipal * wad / poolShareOfValue;
         // if LTV is greater than 1 (e18 denominated), we are over leveraged (can't mortgage more than the value of your home)
         if (ltv > wad) return true;
 
