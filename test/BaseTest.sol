@@ -54,6 +54,7 @@ contract BaseTest is Test {
 
   // max FIL value - 2B atto
   uint256 public constant MAX_FIL = 2e27;
+  uint256 public constant DUST = 10000;
   // 3 week window deadline for defaults
   uint256 public constant DEFAULT_WINDOW = EPOCHS_IN_WEEK * 3;
   address public constant ZERO_ADDRESS = address(0);
