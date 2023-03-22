@@ -258,6 +258,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         uint256 accountPrincipal = account.principal;
         // compute our pool's percentage of the agent's assets
         uint256 equityPercentage = (accountPrincipal * wad) / totalPrincipal;
+        // If this pool has no equity in the agent, they are not over leveraged
+        if(equityPercentage == 0) return false;
         uint256 agentTotalValue = vc.getAgentValue(credParser);
         // compute value used in LTV calculation
         // We leave the e18 in here so we don't have to add it back in when calculating LTV
