@@ -1,23 +1,5 @@
-// // SPDX-License-Identifier: UNLICENSED
-// pragma solidity ^0.8.15;
-
-// import {ERC20} from "solmate/tokens/ERC20.sol";
-// import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
-// import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
-// import {IAgent} from "src/Types/Interfaces/IAgent.sol";
-// import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-// import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
-// import {IRouter} from "src/Types/Interfaces/IRouter.sol";
-// import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
-// import {Account} from "src/Types/Structs/Account.sol";
-// import {Window} from "src/Types/Structs/Window.sol";
-// import {Decode} from "src/Errors.sol";
-// import {Roles} from "src/Constants/Roles.sol";
-// import {Credentials} from "src/Types/Structs/Credentials.sol";
-// import {ROUTE_POOL_FACTORY_ADMIN} from "src/Constants/Routes.sol";
-// import {errorSelector} from "test/helpers/Utils.sol";
-// import {InsufficientLiquidity, Unauthorized} from "src/Errors.sol";
-// import "./BaseTest.sol";
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.15;
 
 // // a value we use to test approximation of the cursor according to a window start/close
 // // TODO: investigate how to get this to 0 or 1
