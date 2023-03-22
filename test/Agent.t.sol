@@ -302,10 +302,12 @@ contract AgentBorrowingTest is BaseTest {
       borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
       // Since we've already borrowed the borrow amount we need the principle value to increase 4x
       uint256 principle = borrowAmount * 4;
+      uint256 adjustedRate = rateArray[80] * DEFAULT_BASE_RATE / 1e18;
+
       AgentData memory agentData = createAgentData(
         principle,
         80,
-        (rateArray[80] * EPOCHS_IN_DAY * principle * 2) / 1e18,
+        (adjustedRate * EPOCHS_IN_DAY * principle * 2) / 1e18,
         // principal = borrowAmount
         borrowAmount,
         // Account started at previous borrow block

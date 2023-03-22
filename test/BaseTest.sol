@@ -268,13 +268,15 @@ contract BaseTest is Test {
     vm.roll(block.number + 1);
     uint256 principle = amount * 2;
     uint256 gCred = 80;
+    // NOTE: since we don't pull this off the pool it could be out of sync - careful
+    uint256 adjustedRate = rateArray[gCred] * DEFAULT_BASE_RATE / 1e18;
     AgentData memory agentData = createAgentData(
       // agentValue => 2x the borrowAmount
       principle,
       // good gcred score
       gCred,
       // good EDR
-      (rateArray[gCred] * EPOCHS_IN_DAY * principle * 2) / 1e18,
+      (adjustedRate * EPOCHS_IN_DAY * principle * 2) / 1e18,
       // principal = borrowAmount
       amount,
       // no account yet (startEpoch)
