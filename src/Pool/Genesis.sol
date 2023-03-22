@@ -51,8 +51,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
 
-    /// @dev `bias` sets the curve of the dynamic rate
-    uint256 private bias;
+    /// @dev `baseRate` sets the curve of the dynamic rate
+    uint256 private baseRate;
 
     /// @dev `maxDTI` is the
     uint256 private maxDTI;
@@ -142,7 +142,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         address _asset,
         address _ramp,
         uint256 _minimumLiquidity,
-        uint256 _bias,
+        uint256 _baseRate,
         uint256 _maxDTI,
         uint256[100] memory _rateLookup
     ) Operatable(_owner, _operator) {
@@ -150,7 +150,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         asset = ERC20(_asset);
         ramp = IOffRamp(_ramp);
         minimumLiquidity = _minimumLiquidity;
-        bias = _bias;
+        baseRate = _baseRate;
         maxDTI = _maxDTI;
         rateLookup = _rateLookup;
         // set the ID
@@ -229,10 +229,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
     /**
     * @notice getRate returns the rate for an Agent's current position within the Pool
-    * rate = inflation adjusted base rate * (bias * (100 - GCRED))
+    * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
     */
-    // TODO: this is wrong, it needs fixed point math
-    // TODO: this is wrong, it needs euler's number
     function getRate(
         Account memory account,
         VerifiableCredential memory vc
@@ -656,8 +654,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         isShuttingDown = true;
     }
 
-    function setBias(uint256 _bias) public onlyOwnerOperator {
-        bias = _bias;
+    function setBaseRate(uint256 _baseRate) public onlyOwnerOperator {
+        baseRate = _baseRate;
     }
 
     function setMaxDTI(uint256 _maxDTI) public onlyOwnerOperator {
