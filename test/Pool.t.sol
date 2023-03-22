@@ -106,6 +106,52 @@ contract PoolBasicSetupTest is BaseTest {
     bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
     assertEq(overLeveraged, true);
   }
+
+  function testIsOverLeveragedDTIErrorBasic() public {
+    uint256 amount = 1e18;
+    uint256 principle = amount * 2;
+    uint256 gCred = 80;
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      principle,
+      // good gcred score
+      gCred,
+      // bad EDR
+      (rateArray[gCred] * EPOCHS_IN_DAY * amount / 2) / 1e18,
+      // principal = borrowAmount
+      amount,
+      // no account yet (startEpoch)
+      0
+    );
+    vcBasic.claim = abi.encode(agentData);
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, true);
+  }
+
+  function testIsOverLeveragedDTIErrorFuzz(uint256 borrowAmount, uint256 agentValue, uint256 badEDR) public {
+    uint256 gCred = 80;
+
+    borrowAmount = bound(borrowAmount, 1e18, 1e22);
+    agentValue = bound(agentValue, borrowAmount * 2, 1e30);
+    uint256 badEDRUpper = ((rateArray[gCred] * EPOCHS_IN_DAY * borrowAmount) / 1e18) -  DUST;
+    badEDR = bound(badEDR, DUST, badEDRUpper);
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      agentValue,
+      // good gcred score
+      gCred,
+      // good EDR
+      badEDR,
+      // principal = borrowAmount
+      borrowAmount,
+      // no account yet (startEpoch)
+      0
+    );
+
+    vcBasic.claim = abi.encode(agentData);
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, true);
+  }
 }
 
 // // a value we use to test approximation of the cursor according to a window start/close
