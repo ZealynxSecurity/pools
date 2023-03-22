@@ -306,7 +306,7 @@ contract BaseTest is Test {
       // no min liquidity for test pool
       0,
       15e15,
-      1,
+      1e18,
       rateArray
     ));
     vm.startPrank(systemAdmin);
