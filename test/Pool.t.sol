@@ -86,6 +86,26 @@ contract PoolBasicSetupTest is BaseTest {
     bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
     assertEq(overLeveraged, true);
   }
+
+  function testIsOverLeveragedLTVErrorFuzz(uint256 borrowAmount, uint256 agentValue) public {
+    borrowAmount = bound(borrowAmount, 1e18, 1e22);
+    // Even for very low values of agentValue there shouldn't be issues
+    // If the agent value is less than 2x the borrow amount, we should be over leveraged
+    agentValue = bound(agentValue, 0, (borrowAmount * 2) - 1000);
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount less dust
+      agentValue,
+      gCredBasic,
+      goodEDR,
+      // principal = borrowAmount
+      borrowAmount,
+      // no account yet (startEpoch)
+      0
+    );
+    vcBasic.claim = abi.encode(agentData);
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, true);
+  }
 }
 
 // // a value we use to test approximation of the cursor according to a window start/close
