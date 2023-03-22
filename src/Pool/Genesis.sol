@@ -258,8 +258,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         uint256 equityPercentage = (account.principal * wad) / totalPrincipal;
         uint256 agentTotalValue = vc.getAgentValue(credParser);
         // compute value used in LTV calculation
-        // Since we're operating in  fixed point 1e18, we need to divide by 1e18
-        uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - account.principal) ) / wad;
+        // We leave the e18 in here so we don't have to add it back in when calculating LTV
+        uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - account.principal));
 
 
         //NOTE: I would recommend just evaluating if poolShareOfValue > account.principal it's functionally the same
