@@ -283,14 +283,14 @@ contract AgentBorrowingTest is BaseTest {
     }
 
     function testBorrowValid(uint256 borrowAmount) public {
-      borrowAmount = bound(borrowAmount, 1, stakeAmount);
+      borrowAmount = bound(borrowAmount, DUST, stakeAmount);
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
       agentBorrow(agent, pool.id(), borrowCred);
     }
 
     function testBorrowTwice(uint256 borrowAmount) public {
-      borrowAmount = bound(borrowAmount, 100, stakeAmount / 2);
+      borrowAmount = bound(borrowAmount, DUST, stakeAmount / 2);
 
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
@@ -487,7 +487,7 @@ contract AgentPoliceTest is BaseTest {
         police.defaultWindow() * 10
       );
 
-      borrowAmount = bound(borrowAmount, 1, stakeAmount);
+      borrowAmount = bound(borrowAmount, DUST, stakeAmount);
       // helper includes assertions
       putAgentOnAdministration(
         agent,
@@ -559,7 +559,7 @@ contract AgentPoliceTest is BaseTest {
         police.defaultWindow() * 10
       );
 
-      borrowAmount = bound(borrowAmount, 1, stakeAmount);
+      borrowAmount = bound(borrowAmount, DUST, stakeAmount);
       // helper includes assertions
       setAgentDefaulted(
         agent,
