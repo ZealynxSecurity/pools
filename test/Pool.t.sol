@@ -66,6 +66,26 @@ contract PoolBasicSetupTest is BaseTest {
     bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
     assertEq(overLeveraged, false);
   }
+
+  function testIsOverLeveragedLTVErrorBasic() public {
+    // For the most basic path, the equity is 100%
+    // This means the pool share of value is just total value less principal
+    // With the current logic that means that whenever the agent value
+    // is less than double the principle we should be over leveraged
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount less dust
+      (borrowAmount * 2) - 1000,
+      gCredBasic,
+      goodEDR,
+      // principal = borrowAmount
+      borrowAmount,
+      // no account yet (startEpoch)
+      0
+    );
+    vcBasic.claim = abi.encode(agentData);
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, true);
+  }
 }
 
 // // a value we use to test approximation of the cursor according to a window start/close
