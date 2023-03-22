@@ -263,6 +263,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         uint256 agentTotalValue = vc.getAgentValue(credParser);
         // compute value used in LTV calculation
         // We leave the e18 in here so we don't have to add it back in when calculating LTV
+        // If the agent's principal is greater than the value of their assets, they are over leveraged
+        if(accountPrincipal > agentTotalValue) return true;
         uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - accountPrincipal)) / wad;
 
         //NOTE: I would recommend just evaluating if poolShareOfValue > accountPrincipal it's functionally the same
