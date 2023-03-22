@@ -338,7 +338,7 @@ contract BaseTest is Test {
       address(0),
       // no min liquidity for test pool
       0,
-      15e15,
+      15e16,
       1e18,
       rateArray
     ));
