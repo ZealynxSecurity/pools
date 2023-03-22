@@ -31,7 +31,6 @@ import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credenti
 import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
-import {console} from "forge-std/console.sol";
 
 uint256 constant wad = 1e18;
 contract GenesisPool is IPool, RouterAware, Operatable {
