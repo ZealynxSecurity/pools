@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import {ERC20} from "solmate/tokens/ERC20.sol";
+import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
@@ -10,6 +12,7 @@ import {AccountHelpers} from "src/Pool/Account.sol";
 import {RouterAware} from "src/Router/RouterAware.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -36,7 +39,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   uint256 public maxPoolsPerAgent;
 
   /// @notice `_liquidated` maps agentID to whether the liquidation process has been completed
-  mapping(uint256 => bool) private _liquidated;
+  mapping(uint256 => bool) public liquidated;
 
   /// @notice `_poolIDs` maps agentID to the pools they have actively borrowed from
   mapping(uint256 => uint256[]) private _poolIDs;
@@ -138,14 +141,24 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     IAgent(agent).prepareMinerForLiquidation(miner, liquidator);
   }
 
-  function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external onlyOwnerOperator {
-    if (!_liquidated[agentID]) revert Unauthorized();
+  function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external {
+    if (!liquidated[agentID]) revert Unauthorized();
+
+    // transfer the assets into the pool
+    SafeTransferLib.safeTransferFrom(
+      ERC20(address(GetRoute.wFIL(router))),
+      msg.sender,
+      address(this),
+      amount
+    );
 
     _writeOffPools(agentID, amount);
   }
 
-  function liquidatedAgent(uint256 agentID) external onlyOwnerOperator {
-    _liquidated[agentID] = true;
+  function liquidatedAgent(address agent) external onlyOwnerOperator {
+    if (!IAgent(agent).defaulted()) revert Unauthorized();
+
+    liquidated[IAgent(agent).id()] = true;
   }
 
   /**
@@ -240,6 +253,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 _agentID,
     uint256 _totalAmount
   ) internal {
+    IWFIL wFIL = GetRoute.wFIL(router);
+
     uint256[] memory _pools = _poolIDs[_agentID];
     uint256 poolCount = _pools.length;
 
@@ -253,12 +268,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     }
 
     for (uint256 i = 0; i < poolCount; ++i) {
+      uint256 poolID = _pools[i];
       // compute this pool's percentage of the agent's assets
       // TODO: fixedpointmath
       uint256 equityPercentage = principalAmts[i] / totalPrincipal;
       // compute this pool's share of the total amount
       uint256 poolShare = equityPercentage * _totalAmount;
-
+      // approve the pool to pull in WFIL
+      wFIL.approve(address(GetRoute.pool(router, poolID)), poolShare);
+      // write off the pool's assets
       GetRoute.pool(router, _pools[i]).writeOff(_agentID, poolShare);
     }
   }

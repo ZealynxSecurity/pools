@@ -15,6 +15,7 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {IMockMiner} from "test/helpers/MockMiner.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {Account} from "src/Types/Structs/Account.sol";
@@ -595,7 +596,7 @@ contract AgentPoliceTest is BaseTest {
       }
     }
 
-    function testRmAdministrationNonAgentPolice(uint256 rollFwdPeriod) public {
+    function testRmAdministrationNonAgentPolice() public {
       uint256 rollFwdPeriod = police.defaultWindow() + 100;
       uint256 borrowAmount = 1e18;
 
@@ -648,6 +649,82 @@ contract AgentPoliceTest is BaseTest {
       } catch (bytes memory e) {
         assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
       }
+    }
+
+    function testPrepareMinerForLiquidation() public {
+      setAgentDefaulted(
+        agent,
+        police.defaultWindow() + 1,
+        1e18,
+        pool.id()
+      );
+
+      vm.startPrank(IAuth(address(police)).owner());
+      police.prepareMinerForLiquidation(address(agent), liquidator, miner);
+
+      // get the miner actor to ensure that the proposed owner on the miner is the liquidator
+      assertEq(IMockMiner(idStore.ids(miner)).proposed(), liquidator, "Mock miner should have liquidator as its proposed owner");
+    }
+
+    function testSetAgentLiquidated() public {
+      // helper contains assertions
+      setAgentLiquidated(
+        agent,
+        police.defaultWindow() + 1,
+        1e18,
+        pool.id()
+      );
+    }
+
+    function testDistributeLiquidatedFunds(
+      uint256 rollFwdPeriod,
+      uint256 borrowAmount,
+      uint256 numPools,
+      uint256 recoveredFunds
+    ) public {
+      address policeOwner = IAuth(address(police)).owner();
+
+      rollFwdPeriod = bound(
+        rollFwdPeriod,
+        police.defaultWindow() + 1,
+        police.defaultWindow() * 10
+      );
+      // borrow and stake amounts are split evenly among the pools
+      numPools = bound(numPools, 1, police.maxPoolsPerAgent());
+
+      borrowAmount = bound(borrowAmount, 1000, stakeAmount);
+
+      recoveredFunds = bound(recoveredFunds, 1000, borrowAmount);
+
+      for (uint8 i = 0; i < numPools; i++) {
+        // create a pool and fund it with the proportionate stake amount
+        IPool _pool = createAndFundPool(stakeAmount / numPools, investor1);
+
+        // borrow from the pool
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount / numPools);
+        agentBorrow(agent, _pool.id(), borrowCred);
+      }
+
+      // roll forward to the default window
+      vm.roll(block.number + rollFwdPeriod);
+
+      vm.startPrank(policeOwner);
+      // set the agent in default
+      police.setAgentDefaulted(address(agent));
+      // liquidate the agent
+      police.liquidatedAgent(address(agent));
+      vm.stopPrank();
+
+      vm.deal(policeOwner, recoveredFunds);
+      vm.startPrank(policeOwner);
+      wFIL.deposit{value: recoveredFunds}();
+      wFIL.approve(address(police), recoveredFunds);
+
+      // distribute the recovered funds
+      police.distributeLiquidatedFunds(agent.id(), recoveredFunds);
+
+      // ensure the write down amounts are correct:
+      // assertEq...
     }
 }
 

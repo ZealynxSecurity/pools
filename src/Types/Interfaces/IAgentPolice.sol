@@ -28,6 +28,8 @@ interface IAgentPolice {
 
   function isAgentOverLeveraged(VerifiableCredential memory vc) external;
 
+  function liquidated(uint256 agentID) external view returns (bool);
+
   /*//////////////////////////////////////////////
                     VC HANDLING
   //////////////////////////////////////////////*/
@@ -60,7 +62,7 @@ interface IAgentPolice {
 
   function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external;
 
-  function liquidatedAgent(uint256 agentID) external;
+  function liquidatedAgent(address agentID) external;
 
   /*//////////////////////////////////////////////
                   ADMIN CONTROLS
