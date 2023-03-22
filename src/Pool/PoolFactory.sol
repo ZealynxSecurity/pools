@@ -13,7 +13,6 @@ import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-import {ROUTE_ACCOUNTING_DEPLOYER} from "src/Constants/Routes.sol";
 import {InvalidParams, InvalidState, Unauthorized} from "src/Errors.sol";
 
 contract PoolFactory is IPoolFactory, RouterAware, Operatable {

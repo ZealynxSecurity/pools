@@ -18,11 +18,7 @@ import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Str
 import {Window} from "src/Types/Structs/Window.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Roles} from "src/Constants/Roles.sol";
-import {ROUTE_CRED_PARSER } from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
-
-string constant POWER = "POWER";
-string constant LEVERAGE = "LEVERAGE";
 
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
@@ -31,18 +27,23 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using Credentials for VerifiableCredential;
 
   error OverLeveraged();
-  error NotAuthorized();
+  error Unauthorized();
 
   /// @notice `defaultLookback` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
   uint256 public defaultWindow;
+
   /// @notice `maxPoolsPoerAgent`
   uint256 public maxPoolsPerAgent;
 
-  /// @notice `_agentState` maps agentID to whether they are overpowered or overleveraged
-  mapping(bytes32 => bool) private _agentState;
+  /// @notice `_liquidated` maps agentID to whether the liquidation process has been completed
+  mapping(uint256 => bool) private _liquidated;
+
   /// @notice `_poolIDs` maps agentID to the pools they have actively borrowed from
   mapping(uint256 => uint256[]) private _poolIDs;
+
+  /// @notice `_credentialUseBlock` maps signature bytes to when a credential was used
   mapping(bytes32 => uint256) private _credentialUseBlock;
+
   constructor(
     string memory _name,
     string memory _version,
@@ -59,6 +60,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     _;
   }
 
+  modifier onlyWhenBehindTargetEpoch(address agent) {
+    if (!_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) {
+      revert Unauthorized();
+    }
+    _;
+  }
+
   /*//////////////////////////////////////////////
                       GETTERS
   //////////////////////////////////////////////*/
@@ -71,16 +79,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     return _poolIDs[agentID];
   }
 
-  /**
-   * @notice `isInDefault` returns true if the agent is overPowered and overLeveraged
-   * @param agent the ID of the agent
-
-   TODO:
-   */
-  function isInDefault(uint256 agent) public view returns (bool) {
-    return false;
-  }
-
   /*//////////////////////////////////////////////
                       CHECKERS
   //////////////////////////////////////////////*/
@@ -88,10 +86,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function isAgentOverLeveraged(
     VerifiableCredential memory vc
   ) external view {
-    uint256[] memory poolIDs = _poolIDs[vc.subject];
+    uint256[] memory pools = _poolIDs[vc.subject];
 
-    for (uint256 i = 0; i < poolIDs.length; ++i) {
-      uint256 poolID = poolIDs[i];
+    for (uint256 i = 0; i < pools.length; ++i) {
+      uint256 poolID = pools[i];
       IPool pool = GetRoute.pool(router, poolID);
       if (pool.isOverLeveraged(
         AccountHelpers.getAccount(router, vc.subject, poolID),
@@ -103,21 +101,51 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /**
-   * @notice `checkDefault` TODO:
-   * @param sc the signed credential of the agent
+   * @notice `setAgentDefaulted` puts the agent in default permanently
+   * @param agent The address of the agent to put in default
    */
-  function checkDefault(SignedCredential memory sc) public returns (bool) {
-    // bool overPowered = checkPower(agent, signedCredential);
-    // bool overLeveraged = checkLeverage(agent, signedCredential);
-    // address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-    // if (overPowered && overLeveraged) {
-    //   uint256 liquidationValue = signedCredential.vc.getAssets(credParser) - signedCredential.vc.getLiabilities(credParser);
-    //   // write down each pool by the power token stake weight of the agent liquidation value
-    //   _proRataPoolRebalance(agent, liquidationValue);
-    // }
-    return false;
+  function setAgentDefaulted(address agent) external onlyOwnerOperator onlyWhenBehindTargetEpoch(agent) {
+    IAgent(agent).setInDefault();
+    emit Defaulted(agent);
+  }
 
-    // emit CheckDefault(agent, msg.sender, isInDefault(agent));
+  /**
+   * @notice `putAgentOnAdministration` puts the agent on administration, hopefully only temporarily
+   * @param agent The address of the agent to put on administration
+   */
+  function putAgentOnAdministration(
+    address agent, address administration
+  ) external
+    onlyOwnerOperator
+    onlyWhenBehindTargetEpoch(agent)
+  {
+    IAgent(agent).setAdministration(administration);
+    emit OnAdministration(agent);
+  }
+
+  /**
+   * @notice `rmAgentFromAdministration` removes the agent from administration
+   * @param agent The address of the agent to remove from administration
+   */
+  function rmAgentFromAdministration(address agent) external onlyOwnerOperator {
+    if (_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) revert Unauthorized();
+
+    IAgent(agent).setAdministration(address(0));
+    emit OffAdministration(agent);
+  }
+
+  function prepareMinerForLiquidation(address agent, address liquidator, uint64 miner) external onlyOwnerOperator {
+    IAgent(agent).prepareMinerForLiquidation(miner, liquidator);
+  }
+
+  function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external onlyOwnerOperator {
+    if (!_liquidated[agentID]) revert Unauthorized();
+
+    _writeOffPools(agentID, amount);
+  }
+
+  function liquidatedAgent(uint256 agentID) external onlyOwnerOperator {
+    _liquidated[agentID] = true;
   }
 
   /**
@@ -130,7 +158,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 agent,
     bytes4 action,
     SignedCredential memory signedCredential
-  ) external {
+  ) external view {
     // reverts if the credential isn't valid
     validateCred(
       agent,
@@ -139,9 +167,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     );
 
     if (
-      _credentialUseBlock[keccak256(abi.encode(
-        signedCredential.v, signedCredential.r, signedCredential.s
-      ))] > 0
+      _credentialUseBlock[
+        keccak256(abi.encode(
+          signedCredential.v, signedCredential.r, signedCredential.s
+        ))
+      ] > 0
     ) revert InvalidCredential();
   }
 
@@ -170,7 +200,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function removePoolFromList(uint256 agentID, uint256 pool) external {
     if (address(GetRoute.pool(router, pool)) != msg.sender) {
-      revert NotAuthorized();
+      revert Unauthorized();
     }
 
     uint256[] storage pools = _poolIDs[agentID];
@@ -181,77 +211,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         break;
       }
     }
-  }
-
-  /**
-   * @notice `forceMakePayments` burns any liquid power tokens on the Agent's behalf. It does not burn any tokens staked in pools.
-   * @param agent the address of the agent to burn power
-   * @param signedCredential the signed credential of the agent
-   * @dev An agent must be overPowered to force burn their power
-   * To start this method is protected and callable only by the agent police admin
-   * but once stable, can be decentralized
-   */
-  function forceMakePayments(
-    address agent,
-    SignedCredential memory signedCredential
-  ) external
-    onlyOwnerOperator
-    /// _isValidCredential(agent, signedCredential)
-    /// onlyIfAgentOverLeveraged(agent)
-  {
-    // IAgent _agent = IAgent(agent);
-    // // then, we create a pro-rata split based on power token stakes to pay back each pool thats been borrowed from
-    // (
-    //   uint256[] memory pools,
-    //   uint256[] memory pmts
-    // ) = _computeProRataAmts(agent, _totalOwed(_agent.id()));
-
-    // _agent.makePayments(pools, pmts, signedCredential);
-
-    // bool stillOverLeveraged = _updateOverLeveraged(_agent.id(), signedCredential);
-
-    // emit ForceMakePayments(agent, msg.sender, pools, pmts, stillOverLeveraged);
-  }
-
-  /**
-   * @notice `forcePullFundsFromMiners` draws up funds from the agent's miners
-   * @param agent the address of the agent to burn power
-   * @param miners the miners to pull funds from
-   * @param amounts the amounts of funds to pull from each miner
-   * @dev An agent must be overLeveraged to force pull funds
-   */
-  function forcePullFundsFromMiners(
-    address agent,
-    uint64[] calldata miners,
-    uint256[] calldata amounts,
-    SignedCredential memory sc
-  ) external
-    onlyOwnerOperator
-    /// onlyIfAgentOverLeveraged(agent)
-  {
-    // // draw up funds from all the agent's miners (non destructive)
-    // IAgent(agent).pullFundsFromMiners(miners, amounts, sc);
-
-    // emit ForcePullFundsFromMiners(agent, miners, amounts);
-  }
-
-  /**
-   * @notice `lockout` remove all external control from a miner actor
-   * @param agent the address of the agent to lock out
-   * @param miner the miner to lock out
-   * @dev An agent must be in default to lock out a miner, and only the agent police admin can call this function
-   * The reason to lockout a miner is to terminate its sectors early to recoup as much funds as possible
-   * It is a destructive action
-   * TODO only if in default
-   */
-  function lockout(
-    address agent,
-    uint64 miner
-  ) external
-    onlyOwnerOperator
-    /// onlyIfAgentInDefault(agent)
-  {
-    emit Lockout(agent, msg.sender);
   }
 
   /*//////////////////////////////////////////////
@@ -276,45 +235,48 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/
 
-  /// @dev computes the pro-rata split of a total amount based on power token stakes
-  function _computeProRataAmts(
-    address _agent,
-    uint256 _totalAmount
-  ) internal view returns (
-    uint256[] memory _pools,
-    uint256[] memory _amts
-  ) {
-    IAgent agent = IAgent(_agent);
-
-    _pools = _poolIDs[agent.id()];
-    uint256 poolCount = _pools.length;
-
-    _amts = new uint256[](poolCount);
-
-    // for (uint256 i = 0; i < poolCount; ++i) {
-    //   _amts[i] = _totalAmount * (agent.powerTokensStaked(_pools[i]) / powerTokensStaked);
-    // }
-  }
-
-  /// @dev writes down the amount of assets a pool can expect from an agent
-  function _proRataPoolRebalance(
-    address _agent,
+  /// @dev computes the pro-rata split of a total amount based on principal
+  function _writeOffPools(
+    uint256 _agentID,
     uint256 _totalAmount
   ) internal {
-    IAgent agent = IAgent(_agent);
-    uint256 poolCount = agent.borrowedPoolsCount();
+    uint256[] memory _pools = _poolIDs[_agentID];
+    uint256 poolCount = _pools.length;
 
-    // uint256 powerTokensStaked = agent.totalPowerTokensStaked();
+    uint256 totalPrincipal;
+    uint256[] memory principalAmts = new uint256[](poolCount);
+    // add up total principal across pools, and cache the principal in each pool
+    for (uint256 i = 0; i < poolCount; ++i) {
+      uint256 principal = AccountHelpers.getAccount(router, _agentID, _pools[i]).principal;
+      principalAmts[i] = principal;
+      totalPrincipal += principal;
+    }
 
-    // for (uint256 i = 0; i < poolCount; ++i) {
-    //   uint256 realizeableValue = agent
-    //     .powerTokensStaked(i)
-    //     .divWadDown(powerTokensStaked)
-    //     .mulWadDown(_totalAmount)
-    //     .divWadDown(FixedPointMathLib.WAD);
+    for (uint256 i = 0; i < poolCount; ++i) {
+      // compute this pool's percentage of the agent's assets
+      // TODO: fixedpointmath
+      uint256 equityPercentage = principalAmts[i] / totalPrincipal;
+      // compute this pool's share of the total amount
+      uint256 poolShare = equityPercentage * _totalAmount;
 
-    //   GetRoute.pool(router, i).rebalanceTotalBorrowed(agent.id(), realizeableValue);
-    // }
+      GetRoute.pool(router, _pools[i]).writeOff(_agentID, poolShare);
+    }
+  }
+
+  /// @dev returns true if any pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid)
+  function _epochsPaidBehindTarget(
+    uint256 _agentID,
+    uint256 _targetEpoch
+  ) internal view returns (bool) {
+    uint256[] memory pools = _poolIDs[_agentID];
+
+    for (uint256 i = 0; i < pools.length; ++i) {
+      if (AccountHelpers.getAccount(router, _agentID, pools[i]).epochsPaid < block.number - _targetEpoch) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   function _addressToID(address agent) internal view returns (uint256) {
@@ -324,6 +286,4 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function createKey(string memory partitionKey, uint256 agentID) internal pure returns (bytes32) {
     return keccak256(abi.encode(partitionKey, agentID));
   }
-
-
 }

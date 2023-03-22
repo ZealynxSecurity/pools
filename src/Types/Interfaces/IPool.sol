@@ -39,6 +39,8 @@ interface IPool {
         uint256 shares
     );
 
+    event WriteOff(uint256 agentID, uint256 recoveredDebt, uint256 lostAmount);
+
     /*////////////////////////////////////////////////////////
                             GETTERS
     ////////////////////////////////////////////////////////*/
@@ -158,5 +160,7 @@ interface IPool {
     function setMinimumLiquidity(uint256 minLiquidity) external;
 
     function setBias(uint256 bias) external;
+
+    function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 }
 

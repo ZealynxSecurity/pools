@@ -12,6 +12,7 @@ import {WFIL} from "src/WFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
@@ -71,47 +72,47 @@ contract AgentBasicTest is BaseTest {
     }
 
     function testAddDuplicateMiner() public {
-        // hack to get the miner's next_owner to be the agent again so we can attempt to add duplicate miners without running into other errors
-        // although i dont think this situation could ever occur (because agent would already own the miner at this point)
-        vm.startPrank(address(agent));
-        miner.changeOwnerAddress(address(agent));
-        vm.stopPrank();
+      // hack to get the miner's next_owner to be the agent again so we can attempt to add duplicate miners without running into other errors
+      // although i dont think this situation could ever occur (because agent would already own the miner at this point)
+      vm.startPrank(address(agent));
+      miner.changeOwnerAddress(address(agent));
+      vm.stopPrank();
 
-        SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), miner);
+      SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), miner);
 
-        vm.startPrank(minerOwner1);
-        try agent.addMiner(addMinerCred) {
-          assertTrue(false, "should have failed - duplicate miner");
-        } catch (bytes memory e) {
-          assertEq(errorSelector(e), MinerRegistry.InvalidParams.selector);
-        }
+      vm.startPrank(minerOwner1);
+      try agent.addMiner(addMinerCred) {
+        assertTrue(false, "should have failed - duplicate miner");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), MinerRegistry.InvalidParams.selector);
+      }
 
-        vm.stopPrank();
+      vm.stopPrank();
     }
 
     function testTransferOwner() public {
-        address owner = makeAddr("OWNER");
-        vm.prank(minerOwner1);
-        agent.transferOwnership(owner);
-        assertEq(agent.pendingOwner(), owner);
-        vm.prank(owner);
-        agent.acceptOwnership();
-        assertEq(agent.owner(), owner);
+      address owner = makeAddr("OWNER");
+      vm.prank(minerOwner1);
+      agent.transferOwnership(owner);
+      assertEq(agent.pendingOwner(), owner);
+      vm.prank(owner);
+      agent.acceptOwnership();
+      assertEq(agent.owner(), owner);
     }
 
     function testTransferOperator() public {
-        address operator = makeAddr("OPERATOR");
-        vm.prank(minerOwner1);
-        agent.transferOperator(operator);
-        assertEq(agent.pendingOperator(), operator);
-        vm.prank(operator);
-        agent.acceptOperator();
-        assertEq(agent.operator(), operator);
+      address operator = makeAddr("OPERATOR");
+      vm.prank(minerOwner1);
+      agent.transferOperator(operator);
+      assertEq(agent.pendingOperator(), operator);
+      vm.prank(operator);
+      agent.acceptOperator();
+      assertEq(agent.operator(), operator);
     }
 
     function testRouterConfigured() public {
-        address r = IRouterAware(address(agent)).router();
-        assertEq(IRouterAware(address(agent)).router(), address(r));
+      address r = IRouterAware(address(agent)).router();
+      assertEq(IRouterAware(address(agent)).router(), address(r));
     }
 
     function testReceive() public {
@@ -157,10 +158,6 @@ contract AgentBasicTest is BaseTest {
 
       vm.stopPrank();
     }
-}
-
-contract AgentWithdrawTest is BaseTest {
-
 }
 
 contract AgentPushPullFundsTest is BaseTest {
@@ -245,6 +242,28 @@ contract AgentPushPullFundsTest is BaseTest {
         assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
       }
     }
+}
+
+contract AgentWithdrawTest is BaseTest {
+  function testWithdrawWithNoLoans(uint256 withdrawAmount) internal {}
+
+  function testWithdrawWithLoans(uint256 withdrawAmount) internal {}
+
+  function testWithdrawIntoOverLeveragedLTV(uint256 withdrawAmount) internal {}
+
+  function testWithdrawIntoOverLeveragedDTI(uint256 withdrawAmount) internal {}
+
+  function testWithdrawMoreThanLiquid(uint256 withdrawAmount) internal {}
+}
+
+contract AgentRmMinerTest is BaseTest {
+  function testRmMinerWithNoLoans() internal {}
+
+  function testRmMinerWithLoans() internal {}
+
+  function testRmMinerIntoOverLeveragedLTV() internal {}
+
+  function testRmMinerIntoOverLeveragedDTI() internal {}
 }
 
 contract AgentBorrowingTest is BaseTest {
@@ -345,15 +364,13 @@ contract AgentBorrowingTest is BaseTest {
     }
 }
 
-contract AgentTest is BaseTest {
+contract AgentPayTest is BaseTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
+
     address investor1 = makeAddr("INVESTOR_1");
-//     address investor2 = makeAddr("INVESTOR_2");
     address minerOwner = makeAddr("MINER_OWNER");
-//     uint256 borrowAmount = 0.5e18;
     uint256 stakeAmount = 1000e18;
-//     uint256 poolFee = 2e18;
 
     IAgent agent;
     uint64 miner;
@@ -363,6 +380,14 @@ contract AgentTest is BaseTest {
       pool = createAndFundPool(stakeAmount, investor1);
       (agent, miner) = configureAgent(minerOwner);
     }
+
+    function testPayInterestOnly(uint256 payAmount) public {}
+
+    function testPayInterestAndPartialPrincipal(uint256 payAmount) public {}
+
+    function testPayFullExit(uint256 payAmount) public {}
+
+    function testPayTooMuch(uint256 payAmount) public {}
 
 //     function agentExit(IAgent _agent, uint256 _exitAmount, SignedCredential memory _signedCred, IPool _pool) internal {
 //         vm.startPrank(_agentOperator(_agent));
@@ -431,399 +456,200 @@ contract AgentTest is BaseTest {
 //         assertEq(newAccount.totalBorrowed, borrowAmount);
 //         vm.stopPrank();
 //     }
-
-//     function testSingleUseCredentials() public {
-//         uint256 borrowAmount = 0.5e18;
-//         vm.roll(block.number + 1);
-//         uint256 borrowBlock = block.number;
-//         vm.startPrank(minerOwner);
-//         SignedCredential memory sc = issueGenericSC(address(agent));
-//         uint256 qaPower = sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER));
-//         agent.borrow(borrowAmount / 3, 0, sc, qaPower / 3);
-//         vm.expectRevert(abi.encodeWithSelector(InvalidCredential.selector));
-//         agent.borrow(borrowAmount / 3, 0, sc, qaPower / 3);
-//         vm.stopPrank();
-//     }
 }
 
-// contract AgentPoliceTest is BaseTest {
-//     using AccountHelpers for Account;
-//     using Credentials for VerifiableCredential;
-
-//     address investor1 = makeAddr("INVESTOR_1");
-//     address investor2 = makeAddr("INVESTOR_2");
-//     address minerOwner = makeAddr("MINER_OWNER");
-//     address poolOperator = makeAddr("POOL_OPERATOR");
-//     string poolName = "FIRST POOL NAME";
-//     uint256 baseInterestRate = 20e18;
-//     uint256 poolFee = 2e18;
-//     uint256 stakeAmount = 10e18;
-
-//     IAgent agent;
-//     uint64 miner;
-//     IPool pool;
-//     IERC4626 pool4626;
-//     SignedCredential signedCred;
-//     IAgentPolice police;
-
-//     address powerToken;
-
-
-//     function setUp() public {
-//         police = GetRoute.agentPolice(router);
-//         powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
-//         pool = createAndPrimePool(
-//             "TEST",
-//             "TEST",
-//             poolOperator,
-//             poolFee,
-//             stakeAmount,
-//             investor1
-//         );
-
-//         (agent, miner) = configureAgent(minerOwner);
-//         // mint some power for the agent
-//         signedCred = issueGenericSC(address(agent));
-//         vm.startPrank(_agentOperator(agent));
-//         agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
-//         vm.stopPrank();
-//     }
-
-//     function testNextPmtWindowDeadline() public {
-//         vm.roll(0);
-//         uint256 windowLength = police.windowLength();
-//         uint256 nextPmtWindowDeadline = police.nextPmtWindowDeadline();
-//         // first window's deadline is the windowLength
-//         assertEq(nextPmtWindowDeadline, windowLength);
-
-//         vm.roll(block.number + windowLength + 10);
-//         nextPmtWindowDeadline = police.nextPmtWindowDeadline();
-//         assertEq(nextPmtWindowDeadline, windowLength * 2);
-//     }
-
-//     function testCheckOverPowered() public {
-//         uint256 powerTokenStake = 7.5e18;
-//         uint256 borrowAmount = 1e18;
-//         uint256 newQAPower = 5e18;
-//         SignedCredential memory sc = makeAgentOverPowered(powerTokenStake, borrowAmount, newQAPower);
-
-//         // since agent has not staked any power tokens, the checkPower function should burn the tokens to the correct power amount
-//         police.checkPower(address(agent), sc);
-
-//         assertTrue(police.isOverPowered(address(agent)));
-//         assertTrue(police.isOverPowered(agent.id()));
-//         assertEq(
-//             IERC20(powerToken).balanceOf(address(agent)),
-//             signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - powerTokenStake
-//         );
-//     }
-
-//     function testBorrowWhenOverPowered() public {
-//         uint256 borrowAmount = 0.5e18;
-//         uint256 powerTokenStake = 7.5e18;
-//         uint256 newQAPower = 5e18;
-//         SignedCredential memory sc = makeAgentOverPowered(powerTokenStake, borrowAmount, newQAPower);
-
-//         vm.startPrank(minerOwner);
-//         try agent.borrow(borrowAmount, 0, sc, powerTokenStake) {
-//             assertTrue(false, "Call to borrow shoudl err when over pwered");
-//         } catch (bytes memory err) {
-//             assertEq(errorSelector(err), BadAgentState.selector);
-//         }
-//     }
-
-//     function testRecoverOverPoweredByBurn() public {
-//         uint256 borrowAmount = 0.5e18;
-//         uint256 powerTokenStake = 7.5e18;
-//         uint256 newQAPower = 7.5e18;
-//         SignedCredential memory sc = makeAgentOverPowered(powerTokenStake, borrowAmount, newQAPower);
-
-//         vm.startPrank(minerOwner);
-//         agent.exit(pool.id(), borrowAmount, sc);
-//         sc = issueOverPoweredCred(address(agent), newQAPower);
-//         agent.burnPower(2.5e18, sc);
-//         vm.stopPrank();
-//         sc = issueOverPoweredCred(address(agent), newQAPower);
-//         police.checkPower(address(agent), sc);
-
-//         assertEq(IERC20(address(powerToken)).totalSupply(), 7.5e18);
-//         assertEq(police.isOverPowered(address(agent)), false);
-//     }
-
-//     function testRecoverOverPoweredStateIncreasePower() public {
-//         uint256 borrowAmount = 0.5e18;
-//         uint256 powerTokenStake = 7.5e18;
-//         uint256 newQAPower = 5e18;
-//         makeAgentOverPowered(powerTokenStake, borrowAmount, newQAPower);
-//         SignedCredential memory sc = issueGenericSC(address(agent));
-
-//         police.checkPower(address(agent), sc);
-
-//         // no power was burned
-//         assertEq(IERC20(address(powerToken)).totalSupply(), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
-//         assertEq(police.isOverPowered(address(agent)), false);    }
-
-//     function testRemoveMinerWhenOverPowered() public {
-//         uint256 borrowAmount = 0.5e18;
-//         uint256 powerTokenStake = 7.5e18;
-//         uint256 newQAPower = 5e18;
-//         makeAgentOverPowered(powerTokenStake, borrowAmount, newQAPower);
-
-//         signedCred = issueGenericSC(address(agent));
-//         vm.startPrank(minerOwner);
-//         try agent.removeMiner(address(this), miner, signedCred, signedCred) {
-//             assertTrue(false, "Call to borrow shoudl err when over pwered");
-//         } catch (bytes memory err) {
-//             assertEq(errorSelector(err), BadAgentState.selector);
-//         }
-//     }
-
-//     function testForceBurnPowerWhenNotOverPowered() public {
-//         signedCred = issueGenericSC(address(agent));
-//         try police.forceBurnPower(address(agent), signedCred) {
-//             assertTrue(false, "Call to borrow shoudl err when over pwered");
-//         } catch (bytes memory err) {
-//             (, string memory reason) = Decode.notOverPoweredError(err);
-//             assertEq(reason, "AgentPolice: Agent is not overpowered");
-//         }
-//     }
-
-//     // agent does not end up overpowered because the agent has enough power tokens liquid to cover the decrease in real power
-//     function testForceBurnPowerWithAdequateBal() public {
-//         uint256 newQAPower = 5e18;
-
-//         AgentData memory AgentData = AgentData(
-//             1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, newQAPower, 5e18, 0, 0
-//         );
-
-//         VerifiableCredential memory _vc = VerifiableCredential(
-//             vcIssuer,
-//             address(agent),
-//             block.number,
-//             block.number + 100,
-//             1000,
-//             abi.encode(AgentData)
-//         );
-
-//         SignedCredential memory sc = issueSC(_vc);
-//         police.checkPower(address(agent), sc);
-//         assertTrue(police.isOverPowered(address(agent)), "Agent should be overed powered");
-//         police.forceBurnPower(address(agent), sc);
-
-//         assertEq(IPowerToken(powerToken).powerTokensMinted(agent.id()), sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), "Agent should have 5e18 power tokens minted");
-//         assertEq(IERC20(address(powerToken)).totalSupply(), 5e18);
-//         assertEq(police.isOverPowered(address(agent)), false);
-//     }
-
-//     function testForceBurnPowerWithInadequateBal() public {
-//         uint256 borrowAmount = 0.5e18;
-//         uint256 powerTokenStake = 7.5e18;
-//         uint256 newQAPower = 5e18;
-//         SignedCredential memory sc = makeAgentOverPowered(powerTokenStake, borrowAmount, newQAPower);
-
-//         assertTrue(IERC20(address(powerToken)).balanceOf(address(agent)) == 2.5e18, "agent should have 2.5e18 power tokens");
-
-//         police.checkPower(address(agent), sc);
-//         sc = issueOverPoweredCred(address(agent), newQAPower);
-//         police.forceBurnPower(address(agent), sc);
-//         // 2.5e18 tokens should get burned because thats the balance of the agent's power tokens
-//         assertTrue(IERC20(address(powerToken)).totalSupply() == 7.5e18, "total supply should be 7.5e18");
-//         assertTrue(IERC20(address(powerToken)).balanceOf(address(pool)) == powerTokenStake, "agent should have 0 power tokens");
-//         assertTrue(IERC20(address(powerToken)).balanceOf(address(agent)) == 0, "agent should have 0 power tokens");
-//         assertTrue(police.isOverPowered(address(agent)), "agent should be overpowered");
-//     }
-
-//     function testForcePullFundsFromMinersWhenNotOverleveraged() public {
-//         // prepare a second miner to draw funds from
-//         uint64 secondMiner = configureMiner(address(agent), minerOwner);
-
-//         address miner1 = idStore.ids(miner);
-//         address miner2 = idStore.ids(secondMiner);
-
-//         // give the miners some funds to pull
-//         vm.deal(miner1, 1e18);
-//         vm.deal(miner2, 2e18);
-
-
-//         assertEq(wFIL.balanceOf(address(agent)), 0);
-
-//         // create calldata for pullFundsFromMiners
-//         uint64[] memory _miners = new uint64[](2);
-//         _miners[0] = miner;
-//         _miners[1] = secondMiner;
-
-//         vm.startPrank(IAuth(address(police)).owner());
-//         // TODO: replace with proper expect revert
-
-//         try police.forcePullFundsFromMiners(address(agent), _miners, new uint256[](2), issueGenericSC(address(agent))) {
-//             assertTrue(false, "Call to borrow shoudl err when over pwered");
-//         } catch (bytes memory err) {
-//             (, string memory reason) = Decode.notOverLeveragedError(err);
-//             assertEq(reason, "AgentPolice: Agent is not overleveraged");
-//         }
-
-//         vm.stopPrank();
-//     }
-
-//     function testForcePullFundsFromMiners() public {
-//         // TODO: Look over the logic of this test
-//         makeAgentOverLeveraged(1e18, 1e18);
-
-//         uint64 secondMiner = configureMiner(address(agent), minerOwner);
-//         address miner1 = idStore.ids(miner);
-//         address miner2 = idStore.ids(secondMiner);
-//         // give the miners some funds to pull
-//         uint256 FUND_AMOUNT = 50e18;
-//         vm.deal(miner1, FUND_AMOUNT);
-//         vm.deal(miner2, FUND_AMOUNT);
-
-//         uint256 agentBalance = wFIL.balanceOf(address(agent));
-//         // empty out agent wallet for testing
-//         vm.prank(address(agent));
-//         wFIL.transfer(minerOwner, agentBalance);
-//         // assertEq(wFIL20.balanceOf(address(agent)), 0);
-
-//         // create calldata for pullFundsFromMiners
-//         uint64[] memory _miners = new uint64[](2);
-//         _miners[0] = miner;
-//         _miners[1] = secondMiner;
-
-//         uint256 FORCE_PULL_AMNT = 10e18;
-//         uint256[] memory _amounts = new uint256[](2);
-//         _amounts[0] = FORCE_PULL_AMNT;
-//         _amounts[1] = FORCE_PULL_AMNT;
-
-//         assertEq(address(agent).balance, 0, "agent should have no FIL");
-
-//         vm.startPrank(IAuth(address(police)).owner());
-//         police.forcePullFundsFromMiners(address(agent), _miners, _amounts, issueGenericSC(address(agent)));
-
-//         assertEq(address(agent).balance, FORCE_PULL_AMNT * 2, "Agent should have 2 times the force pull amount of FIL");
-//         vm.stopPrank();
-//     }
-
-//     function testForceMakePayments() public {
-//         // give the agent enough funcds to get current
-//         pushWFILFunds(address(agent), 100e18, makeAddr("FUNDER"));
-
-
-//         SignedCredential memory signedCredential = makeAgentOverLeveraged(1e18, 1e18);
-//         vm.startPrank(IAuth(address(police)).owner());
-//         police.forceMakePayments(address(agent), signedCredential);
-//         vm.stopPrank();
-//         Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-
-//         assertEq(account.epochsPaid, police.windowInfo().deadline, "Agent should have paid up to current epoch");
-//     }
-
-//     function testSetWindowLengthNonAdmin() public {
-//         uint256 newWindowPeriod = 100;
-//         try police.setWindowLength(newWindowPeriod) {
-//             assertTrue(false, "Should have reverted with Unauthorized error");
-//         } catch (bytes memory err) {
-//             assertEq(errorSelector(err), Unauthorized.selector);
-//         }
-//     }
-
-//     function testSetWindowLength() public {
-//         uint256 newWindowPeriod = 100;
-//         vm.prank(IAuth(address(police)).owner());
-//         police.setWindowLength(newWindowPeriod);
-//         assertEq(police.windowLength(), newWindowPeriod);
-//     }
-
-//     function testTransferOwnershipNonAdmin() public {
-//         try IAuth(address(police)).transferOwnership(address(this)) {
-//             assertTrue(false, "Should not be able to transfer ownership");
-//         } catch (bytes memory b) {
-//             assertEq(errorSelector(b), Unauthorized.selector);
-//         }
-//     }
-
-//     function testTransferOwnership() public {
-//         address owner = IAuth(address(police)).owner();
-//         address newOwner = makeAddr("NEW OWNER");
-
-//         vm.prank(owner);
-//         IAuth(address(police)).transferOwnership(newOwner);
-//         vm.prank(newOwner);
-//         IAuth(address(police)).acceptOwnership();
-
-//         assertEq(IAuth(address(police)).owner(), newOwner);
-//     }
-
-//     function testTransferOperator() public {
-//         address owner = IAuth(address(police)).owner();
-//         address newOperator = makeAddr("NEW OPERATOR");
-
-//         vm.prank(owner);
-//         IAuth(address(police)).transferOperator(newOperator);
-//         vm.prank(newOperator);
-//         IAuth(address(police)).acceptOperator();
-
-//         assertEq(IAuth(address(police)).operator(), newOperator);
-//     }
-
-//     function testLockoutNonAdmin() public {
-//         try police.lockout(address(0), 0) {
-//             assertTrue(false, "Should have reverted with Unauthorized error");
-//         } catch (bytes memory err) {
-//             assertEq(errorSelector(err), Unauthorized.selector);
-//         }
-//     }
-
-//     function makeAgentOverPowered(uint256 powerTokenStake, uint256 borrowAmount, uint256 newQAPower) internal returns (
-//         SignedCredential memory sc
-//     ) {
-//         agentBorrow(agent, borrowAmount, issueGenericSC(address(agent)), pool, powerToken, powerTokenStake);
-//         assertEq(wFIL.balanceOf(address(agent)), borrowAmount);
-//         assertEq(IERC20(powerToken).balanceOf(address(pool)), powerTokenStake);
-//         uint256 agentPowTokenBal = IERC20(powerToken).balanceOf(address(agent));
-//         assertEq(agentPowTokenBal, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) - powerTokenStake);
-
-//         sc = issueOverPoweredCred(address(agent), newQAPower);
-
-//         // no funds get burned here
-//         police.checkPower(address(agent), sc);
-
-//         assertEq(IERC20(address(powerToken)).totalSupply(), signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
-//         assertTrue(police.isOverPowered(address(agent)));
-//         assertTrue(police.isOverPowered(agent.id()));
-//     }
-
-//     function issueOverPoweredCred(address agent, uint256 newQAPower) internal returns (SignedCredential memory) {
-//         vm.roll(block.number + 1);
-//         return issueSC(createCustomCredential(address(agent), newQAPower, 10e18, 5e18, 1e18));
-//     }
-
-//     function makeAgentOverLeveraged(uint256 borrowAmount, uint256 powerTokenStake) internal returns (
-//         SignedCredential memory sc
-//     ) {
-//         agentBorrow(agent, borrowAmount, issueGenericSC(address(agent)), pool, powerToken, powerTokenStake);
-
-//         sc = issueSC(createCustomCredential(
-//             address(agent),
-//             10e18,
-//             // 0 expected daily rewards
-//             0,
-//             5e18,
-//             0
-//         ));
-
-//         police.checkLeverage(address(agent), sc);
-
-//         vm.roll(block.number + 1);
-//         sc = issueSC(createCustomCredential(
-//             address(agent),
-//             10e18,
-//             // 0 expected daily rewards
-//             0,
-//             5e18,
-//             0
-//         ));
-//         assertTrue(police.isOverLeveraged(agent.id()));
-//     }
-// }
+contract AgentPoliceTest is BaseTest {
+    using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
+
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner = makeAddr("MINER_OWNER");
+    address administration = makeAddr("ADMINISTRATION");
+    address liquidator = makeAddr("LIQUIDATOR");
+
+    uint256 stakeAmount = 1000e18;
+
+    IAgent agent;
+    uint64 miner;
+    IPool pool;
+    IAgentPolice police;
+
+    function setUp() public {
+      pool = createAndFundPool(stakeAmount, investor1);
+      (agent, miner) = configureAgent(minerOwner);
+      police = GetRoute.agentPolice(router);
+    }
+
+    function testPutAgentOnAdministration(uint256 rollFwdPeriod, uint256 borrowAmount) public {
+      rollFwdPeriod = bound(
+        rollFwdPeriod,
+        police.defaultWindow() + 1,
+        police.defaultWindow() * 10
+      );
+
+      borrowAmount = bound(borrowAmount, 1, stakeAmount);
+      // helper includes assertions
+      putAgentOnAdministration(
+        agent,
+        administration,
+        rollFwdPeriod,
+        borrowAmount,
+        pool.id()
+      );
+    }
+
+    function testPutAgentOnAdministrationNoLoans() public {
+      vm.startPrank(IAuth(address(police)).owner());
+      try police.putAgentOnAdministration(address(agent), administration) {
+        assertTrue(false, "Agent should not be eligible for administration");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+      }
+    }
+
+    function testInvalidPutAgentOnAdministration() public {
+      uint256 borrowAmount = 1e18;
+
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+      agentBorrow(agent, pool.id(), borrowCred);
+
+      vm.startPrank(IAuth(address(police)).owner());
+      try police.putAgentOnAdministration(address(agent), administration) {
+        assertTrue(false, "Agent should not be eligible for administration");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+      }
+    }
+
+    function testRmAgentFromAdministration() public {
+      uint256 rollFwdPeriod = police.defaultWindow() + 100;
+      uint256 borrowAmount = 1e18;
+
+      putAgentOnAdministration(
+        agent,
+        administration,
+        rollFwdPeriod,
+        borrowAmount,
+        pool.id()
+      );
+
+      // deal enough funds to the Agent so it can make a payment back to the Pool
+      vm.deal(address(agent), borrowAmount * 2);
+
+      SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
+
+      // here we are exiting the pool by overpaying so much
+      (,uint256 epochsPaid,) = agentPay(agent, pool, sc);
+
+      require(epochsPaid == 0, "Should have exited from the pool");
+
+      // check that the agent is no longer on administration
+      vm.startPrank(IAuth(address(police)).owner());
+
+      police.rmAgentFromAdministration(address(agent));
+
+      assertEq(agent.administration(), address(0), "Agent Should not be on administration after paying up");
+    }
+
+    function testSetAgentDefaulted(uint256 rollFwdPeriod, uint256 borrowAmount) public {
+      rollFwdPeriod = bound(
+        rollFwdPeriod,
+        police.defaultWindow() + 1,
+        police.defaultWindow() * 10
+      );
+
+      borrowAmount = bound(borrowAmount, 1, stakeAmount);
+      // helper includes assertions
+      setAgentDefaulted(
+        agent,
+        rollFwdPeriod,
+        borrowAmount,
+        pool.id()
+      );
+    }
+
+    function testSetAdministrationNonAgentPolice(uint256 rollFwdPeriod) public {
+      rollFwdPeriod = bound(
+        rollFwdPeriod,
+        police.defaultWindow() + 1,
+        police.defaultWindow() * 10
+      );
+
+      uint256 borrowAmount = 1e18;
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+      agentBorrow(agent, pool.id(), borrowCred);
+
+      vm.roll(block.number + rollFwdPeriod);
+
+      try police.putAgentOnAdministration(address(agent), administration) {
+        assertTrue(false, "only agent police owner should be able to call putAgentOnAdministration");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+      }
+
+      try agent.setAdministration(administration) {
+        assertTrue(false, "only agent police should be able to put the agent on adminstration");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+      }
+    }
+
+    function testRmAdministrationNonAgentPolice(uint256 rollFwdPeriod) public {
+      uint256 rollFwdPeriod = police.defaultWindow() + 100;
+      uint256 borrowAmount = 1e18;
+
+      putAgentOnAdministration(
+        agent,
+        administration,
+        rollFwdPeriod,
+        borrowAmount,
+        pool.id()
+      );
+
+      // deal enough funds to the Agent so it can make a payment back to the Pool
+      vm.deal(address(agent), borrowAmount * 2);
+
+      SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
+
+      // here we are exiting the pool by overpaying so much
+      (,uint256 epochsPaid,) = agentPay(agent, pool, sc);
+
+      require(epochsPaid == 0, "Should have exited from the pool");
+
+      try police.rmAgentFromAdministration(address(agent)) {
+        assertTrue(false, "only agent police owner operator should be able to call rmAgentFromAdministration");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+      }
+    }
+
+    function testSetAgentDefaultedNonAgentPolice(uint256 rollFwdPeriod) public {
+      rollFwdPeriod = bound(
+        rollFwdPeriod,
+        police.defaultWindow() + 1,
+        police.defaultWindow() * 10
+      );
+
+      uint256 borrowAmount = 1e18;
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+      agentBorrow(agent, pool.id(), borrowCred);
+
+      vm.roll(block.number + rollFwdPeriod);
+
+      try police.setAgentDefaulted(address(agent)) {
+        assertTrue(false, "only agent police owner operator should be able to call setAgentInDefault");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+      }
+
+      try agent.setInDefault() {
+        assertTrue(false, "only agent police should be able to call setAgentInDefault on the agent");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+      }
+    }
+}
 
 // contract AgentDefaultTest is BaseTest {
 //     using AccountHelpers for Account;
@@ -918,7 +744,6 @@ contract AgentTest is BaseTest {
 //         assertEq(pool1PostDefaultTotalBorrowed, 1e18 / 2, "Wrong write down amount");
 //         assertEq(pool2PostDefaultTotalBorrowed, 1e18 / 2, "Wrong write down amount");
 //     }
-// }
 
 // contract AgentCollateralsTest is BaseTest {
 //     using AccountHelpers for Account;

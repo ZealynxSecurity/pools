@@ -31,20 +31,29 @@ contract Agent is IAgent, RouterAware, Operatable {
   error InsufficientCollateral();
   error Internal();
   error BadAgentState();
+
   /// @notice `id` is the GLIF Pools ID address of the Agent (not to be confused with the evm actor's ID address)
   uint256 public id;
+
   /// @notice `miners` Returns the minerID at a specific index
   uint64[] public miners;
+
   /// @notice `newAgent` returns an address of an upgraded agent during the upgrade process
   address public newAgent;
+
+  /// @notice `administration` returns the address of an admin that can make payments on behalf of the agent, _only_ when the Agent falls behind on payments
+  address public administration;
+
+  /// @notice `defaulted` returns true if the agent is in default
+  bool public defaulted;
+
   /*//////////////////////////////////////
                 MODIFIERS
   //////////////////////////////////////*/
 
-  /// @dev a modifier that protects function calls
-  /// only owner, operator, or agent police can call
-  modifier onlyAuthOrPolice {
-    _onlyAuthOrPolice();
+  /// @dev we override the onlyOwnerOperator modifier to include the administration
+  modifier onlyOwnerOperator() override {
+    _onlyOwnerOperatorOverride();
     _;
   }
 
@@ -56,6 +65,21 @@ contract Agent is IAgent, RouterAware, Operatable {
 
   modifier onlyAgentFactory() {
     AuthController.onlyAgentFactory(router, msg.sender);
+    _;
+  }
+
+  modifier onlyAgentPolice() {
+    AuthController.onlyAgentPolice(router, msg.sender);
+    _;
+  }
+
+  modifier notOnAdministration() {
+    if (administration != address(0)) revert Unauthorized();
+    _;
+  }
+
+  modifier notInDefault() {
+    if (defaulted) revert BadAgentState();
     _;
   }
 
@@ -141,10 +165,6 @@ contract Agent is IAgent, RouterAware, Operatable {
    * @notice Removes a miner from the miner registry
    * @param newMinerOwner The address that will become the new owner of the miner
    * @param sc The signed credential of the agent attempting to remove the miner. The `target` will be the uint64 miner ID to remove and the `value` will be the value of assets that would be removed along with this particular miner.
-   *
-   *
-   * If an Agent is not actively borrowing from any Pools, it can always remove its Miners
-   TODO: Default
    */
   function removeMiner(
     address newMinerOwner,
@@ -152,6 +172,8 @@ contract Agent is IAgent, RouterAware, Operatable {
   )
     external
     onlyOwner
+    notOnAdministration
+    notInDefault
     validateAndBurnCred(sc)
   {
     // Remove the miner from the central registry
@@ -169,8 +191,6 @@ contract Agent is IAgent, RouterAware, Operatable {
    * @param _newAgent The address of the new agent to which the miner will be migrated
    */
   function decommissionAgent(address _newAgent) public onlyAgentFactory {
-    // if the newAgent is already set, we've already started teh migration
-    if (newAgent != address(0)) revert BadAgentState();
     // if the newAgent has a mismatching ID, revert
     if(IAgent(_newAgent).id() != id) revert Unauthorized();
     // set the newAgent in storage, which marks the upgrade process as starting
@@ -183,11 +203,10 @@ contract Agent is IAgent, RouterAware, Operatable {
   /**
    * @notice Migrates a miner from the current agent to a new agent
    * This function is useful for upgrading an agent to a new version
-   * @param newAgent The address of the new agent to which the miner will be migrated
    * @param miner The address of the miner to be migrated
    */
-  function migrateMiner(address newAgent, uint64 miner) external onlyOwner {
-    if (address(newAgent) != msg.sender) revert Unauthorized();
+  function migrateMiner(uint64 miner) external {
+    if (newAgent != msg.sender) revert Unauthorized();
     uint256 newId = IAgent(newAgent).id();
     if (
       // first check to make sure the agentFactory knows about this "agent"
@@ -205,6 +224,17 @@ contract Agent is IAgent, RouterAware, Operatable {
   }
 
   /**
+   * @notice Prepares a miner for liquidation by changing its owner address
+   * @param miner The ID of the miner to be liquidated
+   * @param liquidator The address of the liquidator
+   */
+  function prepareMinerForLiquidation(uint64 miner, address liquidator) external onlyAgentPolice {
+  if (!defaulted) revert Unauthorized();
+
+    miner.changeOwnerAddress(liquidator);
+  }
+
+  /**
    * @notice Changes the worker address associated with a miner
    * @param miner The address of the miner whose worker address will be changed
    * @param worker the worker address
@@ -215,9 +245,33 @@ contract Agent is IAgent, RouterAware, Operatable {
     uint64 miner,
     uint64 worker,
     uint64[] calldata controlAddresses
-  ) external onlyOwner {
+  ) external {
+    if (
+      msg.sender != owner() &&
+      msg.sender != administration
+    ) revert Unauthorized();
+
     miner.changeWorkerAddress(worker, controlAddresses);
     emit ChangeMinerWorker(miner, worker, controlAddresses);
+  }
+
+  /**
+   * @notice Sets the Agent in default to prepare for a liquidation
+   *
+   * This process is irreversible
+   */
+  function setInDefault() external onlyAgentPolice {
+    defaulted = true;
+  }
+
+  /**
+   * @notice Sets the administration address
+   * @param _administration The address of the administration
+   *
+   * This process is reversible - it is the first step towards getting the Agent back in good standing
+   */
+  function setAdministration(address _administration) external onlyAgentPolice {
+    administration = _administration;
   }
 
   /*//////////////////////////////////////////////
@@ -233,7 +287,12 @@ contract Agent is IAgent, RouterAware, Operatable {
   function withdrawBalance(
     address receiver,
     SignedCredential memory sc
-  ) external onlyOwner validateAndBurnCred(sc) {
+  ) external
+    onlyOwner
+    notInDefault
+    notOnAdministration
+    validateAndBurnCred(sc)
+  {
     _poolFundsInFIL(sc.vc.value);
 
     (bool success,) = receiver.call{value: sc.vc.value}("");
@@ -254,7 +313,7 @@ contract Agent is IAgent, RouterAware, Operatable {
    */
   function pullFundsFromMiner(SignedCredential memory sc)
     external
-    onlyAuthOrPolice
+    onlyOwnerOperator
     validateAndBurnCred(sc)
   {
     // revert if this agent does not own the underlying miner
@@ -268,11 +327,12 @@ contract Agent is IAgent, RouterAware, Operatable {
    * @param sc The signed credential of the user attempting to push funds to a miner. The credential must contain a `pushFundsFromMiner` action type with the `value` field set to the amount to push, and the `target` as the ID of the miner to push funds to
    * @dev The Agent must own the miner its withdrawing funds from
    * If the agents FIL balance is less than the total amount to push, the function will attempt to convert any wFIL before reverting
-   * TODO: this function cannot be called if the Agent is in default
    */
   function pushFundsToMiner(SignedCredential memory sc)
     external
     onlyOwnerOperator
+    notOnAdministration
+    notInDefault
     validateAndBurnCred(sc)
   {
     // revert if this agent does not own the underlying miner
@@ -295,7 +355,7 @@ contract Agent is IAgent, RouterAware, Operatable {
     SignedCredential memory sc
   ) external
     onlyOwnerOperator
-    /// notInDefault (check with police)
+    notInDefault
     validateAndBurnCred(sc)
   {
     IPool pool = GetRoute.pool(router, poolID);
@@ -328,11 +388,16 @@ contract Agent is IAgent, RouterAware, Operatable {
   ) external
     onlyOwnerOperator
     validateAndBurnCred(sc)
-    returns (uint256 rate, uint256 epochsPaid)
+    returns (uint256 rate, uint256 epochsPaid, uint256 refund)
   {
+    // get the Pool address
     IPool pool = GetRoute.pool(router, poolID);
-    GetRoute.wFIL(router).approve(address(pool), sc.vc.value);
-    (rate, epochsPaid) = pool.pay(sc.vc);
+    // aggregate funds into WFIL to make a payment
+    _poolFundsInWFIL(sc.vc.value);
+    // approve the pool to pull in the WFIL asset
+    GetRoute.wFIL(router).approve(address(GetRoute.pool(router, poolID)), sc.vc.value);
+    // make the payment
+    (rate, epochsPaid, refund) = pool.pay(sc.vc);
   }
 
   /**
@@ -343,12 +408,31 @@ contract Agent is IAgent, RouterAware, Operatable {
    * @param newPoolID The ID of the pool to borrow from
    * @param sc The signed credential of the agent refinance the pool
    * @dev This function acts like one Pool "buying out" the position of an Agent on another Pool
+   *
+   * The `value` in the `refinance` credential must be equal to the total amount of FIL owed to the old pool
    */
   function refinance(
     uint256 oldPoolID,
     uint256 newPoolID,
     SignedCredential memory sc
-  ) external onlyOwnerOperator validateAndBurnCred(sc) {}
+  ) external
+    onlyOwnerOperator
+    notInDefault
+    validateAndBurnCred(sc)
+  {
+    // borrow the amount of FIL owed to the old pool (including interest) from the new pool
+    GetRoute.pool(router, newPoolID).borrow(sc.vc);
+
+    IPool oldPool = GetRoute.pool(router, oldPoolID);
+    // approve old Pool to take wFIL from this agent
+    GetRoute.wFIL(router).approve(address(oldPool), sc.vc.value);
+    // pay back the old pool principal + interest
+    (,uint256 epochsPaid,) = oldPool.pay(sc.vc);
+    // ensure the account is closed on the old pool
+    if (epochsPaid > 0) revert BadAgentState();
+    // transaction will revert if any of the pool's accounts reject the new agent's state
+    GetRoute.agentPolice(router).isAgentOverLeveraged(sc.vc);
+  }
 
   /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
@@ -368,12 +452,18 @@ contract Agent is IAgent, RouterAware, Operatable {
     wFIL.withdraw(amount - filBal);
   }
 
-  function _onlyAuthOrPolice() internal view {
-    if (
-      owner() != _msgSender() &&
-      operator() != _msgSender() &&
-      IRouter(router).getRoute(ROUTE_AGENT_POLICE) != msg.sender
-    ) revert Unauthorized();
+  // ensures theres enough wFIL bal in the agent to make payments to pools
+  function _poolFundsInWFIL(uint256 amount) internal {
+    IWFIL wFIL = GetRoute.wFIL(router);
+    uint256 wFILBal = wFIL.balanceOf(address(this));
+
+    if (wFILBal >= amount) {
+      return;
+    }
+
+    if (address(this).balance + wFILBal < amount) revert InsufficientFunds();
+
+    wFIL.deposit{value: amount - wFILBal}();
   }
 
   function _validateAndBurnCred(
@@ -394,6 +484,15 @@ contract Agent is IAgent, RouterAware, Operatable {
 
   function _checkMinerRegistered(uint64 miner) internal view {
     if (!GetRoute.minerRegistry(router).minerRegistered(id, miner)) revert Unauthorized();
+  }
+
+  function _onlyOwnerOperatorOverride() internal view {
+    // only allow calls from the owner, operator, or administration address (if one is set)
+    if (
+      msg.sender != owner() &&
+      msg.sender != operator() &&
+      msg.sender != administration
+    ) revert Unauthorized();
   }
 
   function _popMinerFromList(uint64 miner) internal {

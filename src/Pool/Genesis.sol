@@ -29,7 +29,7 @@ import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Roles} from "src/Constants/Roles.sol";
-import {ROUTE_AGENT_FACTORY, ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
+import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
 contract GenesisPool is IPool, RouterAware, Operatable {
@@ -42,6 +42,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     error Unauthorized();
     error InvalidParams();
     error PoolShuttingDown();
+    error AlreadyDefaulted();
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -256,7 +257,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         Account memory account,
         VerifiableCredential memory vc
     ) external view returns (bool) {
-        address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
+                address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
         // equity percentage
         uint256 totalPrincipal = vc.getPrincipal(credParser);
         // compute our pool's percentage of the agent's assets
@@ -281,6 +282,34 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         uint256 dti = dailyRate / dailyRewards;
 
         return dti > maxDTI;
+    }
+
+    function writeOff(uint256 agentID, uint256 recoveredDebt) external onlyAgentPolice {
+        Account memory account = _getAccount(agentID);
+
+        if (account.defaulted) revert AlreadyDefaulted();
+
+        uint256 owed = account.principal;
+
+        if (recoveredDebt > owed) recoveredDebt = owed;
+
+        // transfer the assets into the pool
+        SafeTransferLib.safeTransferFrom(
+            asset,
+            msg.sender,
+            address(this),
+            recoveredDebt
+        );
+        // whatever we couldn't pay back
+        uint256 lostAmt = owed - recoveredDebt;
+        // write off only what we lost
+        totalBorrowed -= lostAmt;
+
+        account.defaulted = true;
+
+        account.save(router, agentID, id);
+
+        emit WriteOff(agentID, recoveredDebt, lostAmt);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -661,25 +690,6 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         uint256 available = totalBorrowableAssets();
         if (available < amount) {
             revert InsufficientLiquidity();
-        }
-    }
-
-    function _accrueFees(
-        uint256 pmt,
-        Account memory account
-    ) internal returns (uint256 fee) {
-        IPoolFactory poolFactory = GetRoute.poolFactory(router);
-
-        fee = _computeFeePerPmt(pmt);
-
-        feesCollected += fee;
-
-        // harvest when our Max(liquidAssets, feesCollected) surpass our fee harvest threshold
-        uint256 liquidAssets = asset.balanceOf(address(this));
-        uint256 harvestAmount = feesCollected > liquidAssets
-            ? liquidAssets : feesCollected;
-        if (harvestAmount >= poolFactory.feeThreshold()) {
-            harvestFees(harvestAmount);
         }
     }
 

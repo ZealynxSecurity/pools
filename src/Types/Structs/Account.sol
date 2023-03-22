@@ -10,4 +10,6 @@ struct Account {
     uint256 principal;
     // a cursor that represents the agent's payment history within the pool
     uint256 epochsPaid;
+    // set to true after an Account has been writtenOff
+    bool defaulted;
 }
