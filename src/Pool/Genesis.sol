@@ -250,7 +250,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         Account memory account,
         VerifiableCredential memory vc
     ) external view returns (bool) {
-                address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
+        address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
         // equity percentage
         uint256 totalPrincipal = vc.getPrincipal(credParser);
         // compute our pool's percentage of the agent's assets
