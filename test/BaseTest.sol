@@ -57,6 +57,7 @@ contract BaseTest is Test {
   uint256 public constant DUST = 10000;
   // 3 week window deadline for defaults
   uint256 public constant DEFAULT_WINDOW = EPOCHS_IN_WEEK * 3;
+  uint256 public constant DEFAULT_BASE_RATE = 15e18;
   address public constant ZERO_ADDRESS = address(0);
   address public treasury = makeAddr('TREASURY');
   address public router;
@@ -340,7 +341,8 @@ contract BaseTest is Test {
       address(0),
       // no min liquidity for test pool
       0,
-      15e16,
+      // Default base rate is multiplicative in 1e18 denominations
+      DEFAULT_BASE_RATE,
       1e18,
       rateArray
     ));
