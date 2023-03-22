@@ -9,8 +9,8 @@ contract PoolBasicSetupTest is BaseTest {
   IPool pool;
   uint256 borrowAmount = 1e18;
   uint256 stakeAmount = 1000e18;
-  uint256 expectedRateBasic = 0.15e18;
-  uint256 goodEDR = 1000;
+  uint256 expectedRateBasic = 15e18;
+  uint256 goodEDR = .01e18;
   address investor1 = makeAddr("INVESTOR_1");
   address minerOwner = makeAddr("MINER_OWNER");
   uint256 gCredBasic;
