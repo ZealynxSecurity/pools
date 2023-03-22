@@ -45,6 +45,8 @@ interface IPool {
                             GETTERS
     ////////////////////////////////////////////////////////*/
 
+    function baseRate() external view returns (uint256);
+    
     function asset() external view returns (ERC20);
 
     function liquidStakingToken() external view returns (PoolToken);

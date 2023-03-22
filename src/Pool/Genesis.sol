@@ -52,7 +52,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     uint256 public immutable id;
 
     /// @dev `baseRate` sets the curve of the dynamic rate
-    uint256 private baseRate;
+    uint256 public baseRate;
 
     /// @dev `maxDTI` is the
     uint256 private maxDTI;
