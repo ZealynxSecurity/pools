@@ -1,6 +1,68 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
+import "./BaseTest.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
+contract PoolBasicSetupTest is BaseTest {
+  using Credentials for VerifiableCredential;
+
+  IPool pool;
+  uint256 borrowAmount = 1e18;
+  uint256 stakeAmount = 1000e18;
+  uint256 expectedRateBasic = 0.15e18;
+  uint256 goodEDR = 1000;
+  address investor1 = makeAddr("INVESTOR_1");
+  address minerOwner = makeAddr("MINER_OWNER");
+  uint256 gCredBasic;
+  SignedCredential borrowCredBasic;
+  VerifiableCredential vcBasic;
+  IAgent agent;
+  uint64 miner;
+  uint256 baseRate;
+
+  function setUp() public {
+    pool = createAndFundPool(stakeAmount, investor1);
+    (agent, miner) = configureAgent(minerOwner);
+    borrowCredBasic = issueGenericBorrowCred(agent.id(), borrowAmount);
+    vcBasic = borrowCredBasic.vc;
+    gCredBasic = vcBasic.getGCRED(credParser);
+    baseRate = pool.baseRate();
+  }
+
+  function testGetBaseRate() public {
+    // We could denominate this differently but this reads nicely; 15% representation in 1e18 denomination
+    uint256 _baseRate = pool.baseRate();
+    assertEq(_baseRate, expectedRateBasic);
+  }
+
+  function testGetRateBasic() public {
+    uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
+    uint256 expectedRate = baseRate * rateArray[gCredBasic] / 1e18;
+    assertEq(rate, expectedRate);
+  }
+
+  function testGetRateFuzz(uint256 gCRED) public {
+    gCRED = bound(gCRED, 0, 99);
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      borrowAmount * 2,
+      // good gcred score
+      gCRED,
+      // good EDR
+      goodEDR,
+      // principal = borrowAmount
+      borrowAmount,
+      // no account yet (startEpoch)
+      0
+    );
+    vcBasic.claim = abi.encode(agentData);
+    pool.getRate(Account(0,0,0, true), vcBasic);
+    uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
+    uint256 expectedRate = baseRate * rateArray[gCRED] / 1e18;
+    assertEq(rate, expectedRate);
+  }
+}
+
 // // a value we use to test approximation of the cursor according to a window start/close
 // // TODO: investigate how to get this to 0 or 1
 // uint256 constant EPOCH_CURSOR_ACCEPTANCE_DELTA = 1;
