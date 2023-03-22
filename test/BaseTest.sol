@@ -37,7 +37,7 @@ import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
 import {MinerHelper} from "helpers/MinerHelper.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
-import {EPOCHS_IN_WEEK, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
+import {EPOCHS_IN_WEEK, EPOCHS_IN_DAY,  EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
 import "src/Constants/Routes.sol";
 
@@ -264,14 +264,15 @@ contract BaseTest is Test {
   function issueGenericBorrowCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
     // roll forward so we don't get an identical credential that's already been used
     vm.roll(block.number + 1);
-
+    uint256 principle = amount * 2;
+    uint256 gCred = 80;
     AgentData memory agentData = createAgentData(
       // agentValue => 2x the borrowAmount
-      amount * 2,
+      principle,
       // good gcred score
-      80,
+      gCred,
       // good EDR
-      1000,
+      (rateArray[gCred] * EPOCHS_IN_DAY * principle * 2) / 1e18,
       // principal = borrowAmount
       amount,
       // no account yet (startEpoch)
