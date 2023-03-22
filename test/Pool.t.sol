@@ -61,6 +61,11 @@ contract PoolBasicSetupTest is BaseTest {
     uint256 expectedRate = baseRate * rateArray[gCRED] / 1e18;
     assertEq(rate, expectedRate);
   }
+
+  function testIsOverLeveragedBasic() public {
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, false);
+  }
 }
 
 // // a value we use to test approximation of the cursor according to a window start/close
