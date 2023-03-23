@@ -4,7 +4,6 @@ pragma solidity ^0.8.15;
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -21,7 +20,7 @@ import {
 } from "src/Constants/Routes.sol";
 import {MinerHelper} from "helpers/MinerHelper.sol";
 
-contract Agent is IAgent, RouterAware, Operatable {
+contract Agent is IAgent, Operatable {
 
   using Credentials for VerifiableCredential;
   using MinerHelper for uint64;
@@ -40,6 +39,8 @@ contract Agent is IAgent, RouterAware, Operatable {
 
   /// @notice `newAgent` returns an address of an upgraded agent during the upgrade process
   address public newAgent;
+
+  address public router;
 
   /// @notice `administration` returns the address of an admin that can make payments on behalf of the agent, _only_ when the Agent falls behind on payments
   address public administration;

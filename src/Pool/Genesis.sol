@@ -9,8 +9,6 @@ import {ERC4626} from "solmate/mixins/ERC4626.sol";
 
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {Agent} from "src/Agent/Agent.sol";
-import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
@@ -34,7 +32,7 @@ import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
-contract GenesisPool is IPool, RouterAware, Operatable {
+contract GenesisPool is IPool, Operatable {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
@@ -67,6 +65,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
     /// @dev `ramp` is the interface that handles off-ramping
     IOffRamp public ramp;
+
+    address public router;
 
     /// @dev `feesCollected` is the total fees collected in this pool
     uint256 public feesCollected = 0;

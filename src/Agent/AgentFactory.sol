@@ -3,7 +3,6 @@ pragma solidity ^0.8.15;
 
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Agent} from "src/Agent/Agent.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -15,13 +14,19 @@ import {
   ROUTE_MINER_REGISTRY
 } from "src/Constants/Routes.sol";
 
-contract AgentFactory is IAgentFactory, RouterAware {
+contract AgentFactory is IAgentFactory {
 
   error Unauthorized();
 
   mapping(address => uint256) public agents;
   // we start at ID 1 because ID 0 is reserved for empty agent ID
   uint256 public agentCount = 0;
+
+  address public router;
+
+  constructor(address _router) {
+    router = _router;
+  }
 
   function create(address owner, address operator) external returns (address agent) {
     agentCount++;

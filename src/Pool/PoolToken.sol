@@ -2,16 +2,15 @@
 pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {IPoolTokenPlus} from "src/Types/Interfaces/IPoolTokenPlus.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {Unauthorized} from "src/Errors.sol";
 
-contract PoolToken is IPoolTokenPlus, RouterAware, ERC20 {
+contract PoolToken is IPoolTokenPlus, ERC20 {
     uint256 public poolID;
-
+    address public router;
     /*//////////////////////////////////////////////////////////////
                                 MODIFIERS
     //////////////////////////////////////////////////////////////*/

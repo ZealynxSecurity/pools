@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
@@ -9,12 +8,18 @@ import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {ROUTE_AGENT_FACTORY} from "src/Constants/Routes.sol";
 
-contract MinerRegistry is IMinerRegistry, RouterAware {
+contract MinerRegistry is IMinerRegistry {
+
+  address public router;
 
   error InvalidParams();
 
   // maps keccak256(agentID, minerAddr) => registered status
   mapping(bytes32 => bool) private _minerRegistered;
+
+  constructor(address _router) {
+    router = _router;
+  }
 
   /*///////////////////////////////////////////////////////////////
                             GETTERS

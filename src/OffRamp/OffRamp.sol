@@ -5,11 +5,10 @@ import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 
-contract OffRamp is IOffRamp, RouterAware, Ownable {
+contract OffRamp is IOffRamp, Ownable {
     using SafeTransferLib for ERC20;
 
     // the conversionWindow protects against flash loan attacks
@@ -18,7 +17,8 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
     address public iouToken;
     // the desired token to convert into
     address public exitToken;
-
+    // the router address
+    address public router;
     /**
      * @dev iouTokens start staked,
      * and then move into iouTokensToRealize during the phased distribution,

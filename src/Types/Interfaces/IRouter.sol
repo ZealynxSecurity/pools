@@ -22,6 +22,4 @@ interface IRouter {
 
 interface IRouterAware {
     function router() external view returns (address);
-
-    function setRouter(address router) external;
 }

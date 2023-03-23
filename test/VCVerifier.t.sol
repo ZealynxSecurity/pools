@@ -10,8 +10,7 @@ contract VCVerifierMock is VCVerifier {
     address _router,
     string memory verifiedName,
     string memory verifiedVersion
-  ) VCVerifier(verifiedName, verifiedVersion) {
-    router = _router;
+  ) VCVerifier(verifiedName, verifiedVersion, _router) {
   }
 }
 

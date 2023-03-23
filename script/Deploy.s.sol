@@ -39,13 +39,13 @@ contract Deploy is Script {
         // deploys the router
         router = address(new Router(deployerAddr));
 
-        address minerRegistry = address(new MinerRegistry());
-        address agentFactory = address(new AgentFactory());
+        address minerRegistry = address(new MinerRegistry(router));
+        address agentFactory = address(new AgentFactory(router));
         address agentPolice = address(
-            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr)
+            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router)
         );
         address poolFactory = address(
-            new PoolFactory(IERC20(address(wFIL)), 1e17, 0, deployerAddr, deployerAddr)
+            new PoolFactory(IERC20(address(wFIL)), 1e17, 0, deployerAddr, deployerAddr, router)
         );
         address credParser = address(new CredParser());
         address agentDeployer = address(new AgentDeployer());
@@ -64,10 +64,6 @@ contract Deploy is Script {
             credParser,
             agentDeployer
         );
-
-        // any contract that extends RouterAware gets its router set here
-        Deployer.setRouterOnContracts(address(router));
-
         vm.stopBroadcast();
     }
 }

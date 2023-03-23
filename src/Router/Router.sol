@@ -23,7 +23,7 @@ contract Router is IRouter, Ownable {
     return route;
   }
 
-  function getRoute(string memory id) public view returns (address) {
+  function getRoute(string memory id) external view returns (address) {
     return getRoute(bytes4(keccak256(bytes(id))));
   }
 
@@ -37,14 +37,14 @@ contract Router is IRouter, Ownable {
     pushRoute(bytes4(keccak256(bytes(id))), newRoute);
   }
 
-  function pushRoutes(string[] calldata ids, address[] calldata newRoutes) public onlyOwner {
+  function pushRoutes(string[] calldata ids, address[] calldata newRoutes) external onlyOwner {
     require(ids.length == newRoutes.length, "Router: ids and newRoutes must be same length");
     for (uint i = 0; i < ids.length; i++) {
       pushRoute(ids[i], newRoutes[i]);
     }
   }
 
-  function pushRoutes(bytes4[] calldata ids, address[] calldata newRoutes) public onlyOwner {
+  function pushRoutes(bytes4[] calldata ids, address[] calldata newRoutes) external onlyOwner {
     require(ids.length == newRoutes.length, "Router: ids and newRoutes must be same length");
     for (uint i = 0; i < ids.length; i++) {
       pushRoute(ids[i], newRoutes[i]);
@@ -54,7 +54,7 @@ contract Router is IRouter, Ownable {
   function getAccount(
     uint256 agentID,
     uint256 poolID
-  ) public view returns (Account memory) {
+  ) external view returns (Account memory) {
     return _accounts[createAccountKey(agentID, poolID)];
   }
 
@@ -62,7 +62,7 @@ contract Router is IRouter, Ownable {
     uint256 agentID,
     uint256 poolID,
     Account memory account
-  ) public {
+  ) external {
     if (address(GetRoute.pool(address(this), poolID)) != msg.sender) {
       revert Unauthorized();
     }

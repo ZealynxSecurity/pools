@@ -3,7 +3,6 @@ pragma solidity ^0.8.15;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {PoolTokensDeployer} from "deploy/PoolTokens.sol";
 import {IPoolDeployer} from "src/Types/Interfaces/IPoolDeployer.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
@@ -15,7 +14,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {InvalidParams, InvalidState, Unauthorized} from "src/Errors.sol";
 
-contract PoolFactory is IPoolFactory, RouterAware, Operatable {
+contract PoolFactory is IPoolFactory, Operatable {
   /**
    * @notice The PoolFactoryAdmin can change the treasury fee up to the MAX_TREASURY_FEE
    * @dev treasury fee is denominated by 1e18, in other words, 1e17 is 10% fee
@@ -25,6 +24,7 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
   uint256 public feeThreshold;
   IERC20 public asset;
   address[] public allPools;
+  address public router;
   // poolExists
   mapping(address => bool) internal exists;
 
@@ -37,11 +37,13 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
     uint256 _treasuryFeeRate,
     uint256 _feeThreshold,
     address _owner,
-    address _operator
+    address _operator,
+    address _router
   ) Operatable(_owner, _operator) {
     asset = _asset;
     treasuryFeeRate = _treasuryFeeRate;
     feeThreshold = _feeThreshold;
+    router = _router;
   }
 
   function allPoolsLength() public view returns (uint256) {

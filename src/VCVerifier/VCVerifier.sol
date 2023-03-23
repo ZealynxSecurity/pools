@@ -3,18 +3,19 @@ pragma solidity ^0.8.15;
 
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {ROUTE_VC_ISSUER} from "src/Constants/Routes.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 
-abstract contract VCVerifier is IVCVerifier, RouterAware, EIP712 {
+abstract contract VCVerifier is IVCVerifier, EIP712 {
   error InvalidCredential();
-
-  constructor(string memory _name, string memory _version)
-    EIP712(_name, _version) {}
+  address public router;
+  constructor(string memory _name, string memory _version, address _router)
+    EIP712(_name, _version) {
+      router = _router;
+    }
 
   string internal constant _VERIFIABLE_CREDENTIAL_TYPE =
     "VerifiableCredential(address issuer,uint256 subject,uint256 epochIssued,uint256 epochValidUntil,uint256 value,bytes4 action,uint64 target,bytes claim)";

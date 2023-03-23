@@ -32,7 +32,6 @@ import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
 import {MinerHelper} from "helpers/MinerHelper.sol";
@@ -84,17 +83,15 @@ contract BaseTest is Test {
       address(router),
       treasury,
       address(wFIL),
-      address(new MinerRegistry()),
-      address(new AgentFactory()),
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin)),
+      address(new MinerRegistry(router)),
+      address(new AgentFactory(router)),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router)),
       // 1e17 = 10% treasury fee on yield
-      address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0, systemAdmin, systemAdmin)),
+      address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0, systemAdmin, systemAdmin, router)),
       vcIssuer,
       credParser,
       address(new AgentDeployer())
     );
-    // any contract that extends RouterAware gets its router set here
-    Deployer.setRouterOnContracts(address(router));
     // roll forward at least 1 window length so our computations dont overflow/underflow
     vm.roll(block.number + DEFAULT_WINDOW);
 

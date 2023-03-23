@@ -2,8 +2,6 @@
 pragma solidity ^0.8.15;
 
 import {Operatable} from "src/Auth/Operatable.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
-
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {Account} from "src/Types/Structs/Account.sol";
@@ -11,7 +9,7 @@ import {Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.s
 import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
-contract RateModule is IRateModule, Operatable, RouterAware {
+contract RateModule is IRateModule, Operatable {
 
     using Credentials for VerifiableCredential;
 
@@ -28,6 +26,8 @@ contract RateModule is IRateModule, Operatable, RouterAware {
 
     /// @dev `credParser` is the cached cred parser
     address public credParser;
+
+    address public router;
 
     constructor(
         address _owner,

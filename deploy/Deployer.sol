@@ -5,7 +5,7 @@ import {Router} from "src/Router/Router.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
-import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import "src/Constants/Routes.sol";
 
 library Deployer {
@@ -57,16 +57,4 @@ library Deployer {
     IRouter(router).pushRoutes(routeIDs, routeAddrs);
   }
 
-  function setRouterOnContracts(address router) internal {
-    bytes4[4] memory routerAwareRoutes = [
-      ROUTE_AGENT_FACTORY,
-      ROUTE_MINER_REGISTRY,
-      ROUTE_POOL_FACTORY,
-      ROUTE_AGENT_POLICE
-    ];
-
-    for (uint256 i = 0; i < routerAwareRoutes.length; ++i) {
-      IRouterAware(IRouter(router).getRoute(routerAwareRoutes[i])).setRouter(router);
-    }
-  }
 }

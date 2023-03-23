@@ -9,7 +9,6 @@ import {Operatable} from "src/Auth/Operatable.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
@@ -52,8 +51,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     string memory _version,
     uint256 _defaultWindow,
     address _owner,
-    address _operator
-  ) VCVerifier(_name, _version) Operatable(_owner, _operator) {
+    address _operator,
+    address _router
+  ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
     defaultWindow = _defaultWindow;
     maxPoolsPerAgent = 10;
   }
