@@ -5,6 +5,7 @@ import {PoolToken} from "src/Pool/PoolToken.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
+import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 
 interface IPool {
 
@@ -52,6 +53,8 @@ interface IPool {
     function exitToken() external view returns (PoolToken);
 
     function ramp() external view returns (IOffRamp);
+
+    function rateModule() external view returns (IRateModule);
 
     function id() external view returns (uint256);
 
@@ -158,8 +161,6 @@ interface IPool {
     function setRamp(IOffRamp newRamp) external;
 
     function setMinimumLiquidity(uint256 minLiquidity) external;
-
-    function setBias(uint256 bias) external;
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 }

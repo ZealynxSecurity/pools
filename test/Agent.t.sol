@@ -284,14 +284,14 @@ contract AgentBorrowingTest is BaseTest {
     }
 
     function testBorrowValid(uint256 borrowAmount) public {
-      borrowAmount = bound(borrowAmount, 1, stakeAmount);
+      borrowAmount = bound(borrowAmount, DUST, stakeAmount);
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
       agentBorrow(agent, pool.id(), borrowCred);
     }
 
     function testBorrowTwice(uint256 borrowAmount) public {
-      borrowAmount = bound(borrowAmount, 100, stakeAmount / 2);
+      borrowAmount = bound(borrowAmount, DUST, stakeAmount / 2);
 
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
@@ -301,7 +301,21 @@ contract AgentBorrowingTest is BaseTest {
       vm.roll(block.number + 1000);
 
       borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+      // Since we've already borrowed the borrow amount we need the principle value to increase 4x
+      uint256 principle = borrowAmount * 4;
+      uint256 adjustedRate = rateArray[80] * DEFAULT_BASE_RATE / 1e18;
 
+      AgentData memory agentData = createAgentData(
+        principle,
+        80,
+        (adjustedRate * EPOCHS_IN_DAY * principle * 2) / 1e18,
+        // principal = borrowAmount
+        borrowAmount,
+        // Account started at previous borrow block
+        borrowBlock
+      );
+      borrowCred.vc.claim = abi.encode(agentData);
+      borrowCred = signCred(borrowCred.vc);
       agentBorrow(agent, pool.id(), borrowCred);
 
       Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
@@ -488,7 +502,7 @@ contract AgentPoliceTest is BaseTest {
         police.defaultWindow() * 10
       );
 
-      borrowAmount = bound(borrowAmount, 1, stakeAmount);
+      borrowAmount = bound(borrowAmount, DUST, stakeAmount);
       // helper includes assertions
       putAgentOnAdministration(
         agent,
@@ -536,7 +550,7 @@ contract AgentPoliceTest is BaseTest {
       );
 
       // deal enough funds to the Agent so it can make a payment back to the Pool
-      vm.deal(address(agent), borrowAmount * 2);
+      vm.deal(address(agent), borrowAmount * 4);
 
       SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
 
@@ -560,7 +574,7 @@ contract AgentPoliceTest is BaseTest {
         police.defaultWindow() * 10
       );
 
-      borrowAmount = bound(borrowAmount, 1, stakeAmount);
+      borrowAmount = bound(borrowAmount, DUST, stakeAmount);
       // helper includes assertions
       setAgentDefaulted(
         agent,
@@ -609,7 +623,7 @@ contract AgentPoliceTest is BaseTest {
       );
 
       // deal enough funds to the Agent so it can make a payment back to the Pool
-      vm.deal(address(agent), borrowAmount * 2);
+      vm.deal(address(agent), borrowAmount * 4);
 
       SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
 
@@ -683,7 +697,7 @@ contract AgentPoliceTest is BaseTest {
       uint256 recoveredFunds
     ) public {
       address policeOwner = IAuth(address(police)).owner();
-
+      IPool _pool;
       rollFwdPeriod = bound(
         rollFwdPeriod,
         police.defaultWindow() + 1,
@@ -698,12 +712,14 @@ contract AgentPoliceTest is BaseTest {
 
       for (uint8 i = 0; i < numPools; i++) {
         // create a pool and fund it with the proportionate stake amount
-        IPool _pool = createAndFundPool(stakeAmount / numPools, investor1);
+        _pool = createAndFundPool(stakeAmount / numPools, investor1);
 
         // borrow from the pool
         SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount / numPools);
         agentBorrow(agent, _pool.id(), borrowCred);
       }
+
+      uint256 balanceBefore = wFIL.balanceOf(address(_pool));
 
       // roll forward to the default window
       vm.roll(block.number + rollFwdPeriod);
@@ -722,9 +738,10 @@ contract AgentPoliceTest is BaseTest {
 
       // distribute the recovered funds
       police.distributeLiquidatedFunds(agent.id(), recoveredFunds);
+      uint256 balanceAfter = wFIL.balanceOf(address(_pool));
 
-      // ensure the write down amounts are correct:
-      // assertEq...
+      // ensure the write down amount is correct:
+      assertEq(balanceAfter - balanceBefore, recoveredFunds / numPools, "Pool should have received the correct amount of funds");
     }
 }
 

@@ -1,23 +1,158 @@
-// // SPDX-License-Identifier: UNLICENSED
-// pragma solidity ^0.8.15;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.15;
 
-// import {ERC20} from "solmate/tokens/ERC20.sol";
-// import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
-// import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
-// import {IAgent} from "src/Types/Interfaces/IAgent.sol";
-// import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-// import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
-// import {IRouter} from "src/Types/Interfaces/IRouter.sol";
-// import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
-// import {Account} from "src/Types/Structs/Account.sol";
-// import {Window} from "src/Types/Structs/Window.sol";
-// import {Decode} from "src/Errors.sol";
-// import {Roles} from "src/Constants/Roles.sol";
-// import {Credentials} from "src/Types/Structs/Credentials.sol";
-// import {ROUTE_POOL_FACTORY_ADMIN} from "src/Constants/Routes.sol";
-// import {errorSelector} from "test/helpers/Utils.sol";
-// import {InsufficientLiquidity, Unauthorized} from "src/Errors.sol";
-// import "./BaseTest.sol";
+import "./BaseTest.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
+
+contract PoolBasicSetupTest is BaseTest {
+  using Credentials for VerifiableCredential;
+
+  IPool pool;
+  uint256 borrowAmount = 1e18;
+  uint256 stakeAmount = 1000e18;
+  uint256 expectedRateBasic = 15e18;
+  uint256 goodEDR = .01e18;
+  address investor1 = makeAddr("INVESTOR_1");
+  address minerOwner = makeAddr("MINER_OWNER");
+  uint256 gCredBasic;
+  SignedCredential borrowCredBasic;
+  VerifiableCredential vcBasic;
+  IAgent agent;
+  uint64 miner;
+  uint256 baseRate;
+
+  function setUp() public {
+    pool = createAndFundPool(stakeAmount, investor1);
+    (agent, miner) = configureAgent(minerOwner);
+    borrowCredBasic = issueGenericBorrowCred(agent.id(), borrowAmount);
+    vcBasic = borrowCredBasic.vc;
+    gCredBasic = vcBasic.getGCRED(credParser);
+    baseRate = vcBasic.getBaseRate(credParser);
+  }
+
+  function testGetBaseRate() public {
+    // We could denominate this differently but this reads nicely; 15% representation in 1e18 denomination
+    assertEq(baseRate, expectedRateBasic);
+  }
+
+  function testGetRateBasic() public {
+    uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
+    uint256 expectedRate = baseRate * rateArray[gCredBasic] / 1e18;
+    assertEq(rate, expectedRate);
+  }
+
+  function testGetRateFuzz(uint256 gCRED) public {
+    gCRED = bound(gCRED, 0, 99);
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      borrowAmount * 2,
+      // good gcred score
+      gCRED,
+      // good EDR
+      goodEDR,
+      // principal = borrowAmount
+      borrowAmount,
+      // no account yet (startEpoch)
+      0
+    );
+    vcBasic.claim = abi.encode(agentData);
+    pool.getRate(Account(0,0,0, true), vcBasic);
+    uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
+    uint256 expectedRate = baseRate * rateArray[gCRED] / 1e18;
+    assertEq(rate, expectedRate);
+  }
+
+  function testIsOverLeveragedBasic() public {
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, false);
+  }
+
+  function testIsOverLeveragedLTVErrorBasic() public {
+    // For the most basic path, the equity is 100%
+    // This means the pool share of value is just total value less principal
+    // With the current logic that means that whenever the agent value
+    // is less than double the principle we should be over leveraged
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount less dust
+      (borrowAmount * 2) - 1000,
+      gCredBasic,
+      goodEDR,
+      // principal = borrowAmount
+      borrowAmount,
+      // no account yet (startEpoch)
+      0
+    );
+    vcBasic.claim = abi.encode(agentData);
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, true);
+  }
+
+  function testIsOverLeveragedLTVErrorFuzz(uint256 borrowAmount, uint256 agentValue) public {
+    borrowAmount = bound(borrowAmount, 1e18, 1e22);
+    // Even for very low values of agentValue there shouldn't be issues
+    // If the agent value is less than 2x the borrow amount, we should be over leveraged
+    agentValue = bound(agentValue, 0, (borrowAmount * 2) - 1000);
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount less dust
+      agentValue,
+      gCredBasic,
+      goodEDR,
+      // principal = borrowAmount
+      borrowAmount,
+      // no account yet (startEpoch)
+      0
+    );
+    vcBasic.claim = abi.encode(agentData);
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, true);
+  }
+
+  function testIsOverLeveragedDTIErrorBasic() public {
+    uint256 amount = 1e18;
+    uint256 principle = amount * 2;
+    uint256 gCred = 80;
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      principle,
+      // good gcred score
+      gCred,
+      // bad EDR
+      (rateArray[gCred] * EPOCHS_IN_DAY * amount / 2) / 1e18,
+      // principal = borrowAmount
+      amount,
+      // no account yet (startEpoch)
+      0
+    );
+    vcBasic.claim = abi.encode(agentData);
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, true);
+  }
+
+  function testIsOverLeveragedDTIErrorFuzz(uint256 borrowAmount, uint256 agentValue, uint256 badEDR) public {
+    uint256 gCred = 80;
+
+    borrowAmount = bound(borrowAmount, 1e18, 1e22);
+    agentValue = bound(agentValue, borrowAmount * 2, 1e30);
+    uint256 badEDRUpper = ((rateArray[gCred] * EPOCHS_IN_DAY * borrowAmount) / 1e18) -  DUST;
+    badEDR = bound(badEDR, DUST, badEDRUpper);
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      agentValue,
+      // good gcred score
+      gCred,
+      // good EDR
+      badEDR,
+      // principal = borrowAmount
+      borrowAmount,
+      // no account yet (startEpoch)
+      0
+    );
+
+    vcBasic.claim = abi.encode(agentData);
+    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
+    assertEq(overLeveraged, true);
+  }
+}
 
 // // a value we use to test approximation of the cursor according to a window start/close
 // // TODO: investigate how to get this to 0 or 1

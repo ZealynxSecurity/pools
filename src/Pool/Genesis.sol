@@ -16,9 +16,11 @@ import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
+
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
@@ -51,12 +53,6 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
 
-    /// @dev `bias` sets the curve of the dynamic rate
-    uint256 private bias;
-
-    /// @dev `maxDTI` is the
-    uint256 private maxDTI;
-
     /// @dev `asset` is the token that is being borrowed in the pool
     ERC20 public asset;
 
@@ -65,6 +61,9 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
     /// @dev `exitToken` is a pegged FIL token used for exiting with the ramp
     PoolToken public exitToken;
+
+    /// @dev `rateModule` is a separate module for computing rates and determining lending eligibility
+    IRateModule public rateModule;
 
     /// @dev `ramp` is the interface that handles off-ramping
     IOffRamp public ramp;
@@ -138,18 +137,13 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         address _operator,
         address _router,
         address _asset,
-        address _ramp,
-        uint256 _minimumLiquidity,
-        uint256 _bias,
-        uint256 _maxDTI
+        address _rateModule,
+        uint256 _minimumLiquidity
     ) Operatable(_owner, _operator) {
         router = _router;
         asset = ERC20(_asset);
-        ramp = IOffRamp(_ramp);
+        rateModule = IRateModule(_rateModule);
         minimumLiquidity = _minimumLiquidity;
-        bias = _bias;
-        maxDTI = _maxDTI;
-
         // set the ID
         id = GetRoute.poolFactory(router).allPoolsLength();
         // deploy a new liquid staking token for the pool
@@ -226,27 +220,15 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
     /**
     * @notice getRate returns the rate for an Agent's current position within the Pool
-    * rate = inflation adjusted base rate * (bias * (100 - GCRED))
+    * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
     */
-    // TODO: this is wrong, it needs fixed point math
-    // TODO: this is wrong, it needs euler's number
     function getRate(
         Account memory account,
         VerifiableCredential memory vc
     ) public view returns (uint256) {
-        address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-        // base should really be euler's number (i think)
-        // rate = baseRate * e^(bias * (100 - gcred)))
-        uint256 base = 3;
-        uint256 baseRate = vc.getBaseRate(credParser);
-        // compute the exponent
-        uint256 exp = bias * (100e18 - vc.getGCRED(credParser));
-        // compute the rate multiplier
-        uint256 rateAdjust = base**exp;
-        return baseRate * rateAdjust;
+        return rateModule.getRate(account, vc);
     }
 
-    // TODO: this is wrong, it needs fixed point math
     /**
      * @notice isOverLeveraged returns true if the Agent is over leveraged
      * In this version, an Agent can be over-leveraged in either of two cases:
@@ -257,31 +239,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         Account memory account,
         VerifiableCredential memory vc
     ) external view returns (bool) {
-                address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-        // equity percentage
-        uint256 totalPrincipal = vc.getPrincipal(credParser);
-        // compute our pool's percentage of the agent's assets
-        uint256 equityPercentage = account.principal / totalPrincipal;
-
-        uint256 agentTotalValue = vc.getAgentValue(credParser);
-        // compute value used in LTV calculation (this is wrong bc equityPercentage isn't actually a % yet)
-        uint256 poolPercentageOfValue = equityPercentage * agentTotalValue;
-
-        // compute LTV (also wrong bc %)
-        uint256 ltv = poolPercentageOfValue / account.principal;
-
-        // if LTV is greater than 1, we are over leveraged (can't mortgage more than the value of your home)
-        if (ltv > 1) return true;
-
-        uint256 rate = getRate(account, vc);
-        // compute expected daily payments to align with expected daily reward
-        uint256 dailyRate = rate * EPOCHS_IN_DAY;
-        uint256 dailyRewards = vc.getExpectedDailyRewards(credParser);
-
-        // compute DTI
-        uint256 dti = dailyRate / dailyRewards;
-
-        return dti > maxDTI;
+        return rateModule.isOverLeveraged(account, vc);
     }
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external onlyAgentPolice {
@@ -658,12 +616,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         isShuttingDown = true;
     }
 
-    function setBias(uint256 _bias) public onlyOwnerOperator {
-        bias = _bias;
-    }
-
-    function setMaxDTI(uint256 _maxDTI) public onlyOwnerOperator {
-        maxDTI = _maxDTI;
+    function setRateModule(IRateModule _rateModule) public onlyOwnerOperator {
+        rateModule = _rateModule;
     }
 
     /*//////////////////////////////////////////////////////////////
