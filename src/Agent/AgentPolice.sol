@@ -22,7 +22,7 @@ import {Window} from "src/Types/Structs/Window.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
-
+uint256 constant wad = 1e18;
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   using AccountHelpers for Account;
@@ -253,31 +253,33 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 _agentID,
     uint256 _totalAmount
   ) internal {
+    // Setup the variables we use in the loops here to save gas
+    uint256 totalPrincipal;
+    uint256 i;
+    uint256 poolID;
+    uint256 poolShare;
+    uint256 principal;
     IWFIL wFIL = GetRoute.wFIL(router);
 
     uint256[] memory _pools = _poolIDs[_agentID];
     uint256 poolCount = _pools.length;
 
-    uint256 totalPrincipal;
     uint256[] memory principalAmts = new uint256[](poolCount);
     // add up total principal across pools, and cache the principal in each pool
-    for (uint256 i = 0; i < poolCount; ++i) {
-      uint256 principal = AccountHelpers.getAccount(router, _agentID, _pools[i]).principal;
+    for (i = 0; i < poolCount; ++i) {
+      principal = AccountHelpers.getAccount(router, _agentID, _pools[i]).principal;
       principalAmts[i] = principal;
       totalPrincipal += principal;
     }
 
-    for (uint256 i = 0; i < poolCount; ++i) {
-      uint256 poolID = _pools[i];
-      // compute this pool's percentage of the agent's assets
-      // TODO: fixedpointmath
-      uint256 equityPercentage = principalAmts[i] / totalPrincipal;
+    for (i = 0; i < poolCount; ++i) {
+      poolID = _pools[i];
       // compute this pool's share of the total amount
-      uint256 poolShare = equityPercentage * _totalAmount;
+      poolShare = (principalAmts[i] * _totalAmount / totalPrincipal);
       // approve the pool to pull in WFIL
       wFIL.approve(address(GetRoute.pool(router, poolID)), poolShare);
       // write off the pool's assets
-      GetRoute.pool(router, _pools[i]).writeOff(_agentID, poolShare);
+      GetRoute.pool(router, poolID).writeOff(_agentID, poolShare);
     }
   }
 

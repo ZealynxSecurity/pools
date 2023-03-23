@@ -697,7 +697,7 @@ contract AgentPoliceTest is BaseTest {
       uint256 recoveredFunds
     ) public {
       address policeOwner = IAuth(address(police)).owner();
-
+      IPool _pool;
       rollFwdPeriod = bound(
         rollFwdPeriod,
         police.defaultWindow() + 1,
@@ -712,12 +712,14 @@ contract AgentPoliceTest is BaseTest {
 
       for (uint8 i = 0; i < numPools; i++) {
         // create a pool and fund it with the proportionate stake amount
-        IPool _pool = createAndFundPool(stakeAmount / numPools, investor1);
+        _pool = createAndFundPool(stakeAmount / numPools, investor1);
 
         // borrow from the pool
         SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount / numPools);
         agentBorrow(agent, _pool.id(), borrowCred);
       }
+
+      uint256 balanceBefore = wFIL.balanceOf(address(_pool));
 
       // roll forward to the default window
       vm.roll(block.number + rollFwdPeriod);
@@ -736,9 +738,10 @@ contract AgentPoliceTest is BaseTest {
 
       // distribute the recovered funds
       police.distributeLiquidatedFunds(agent.id(), recoveredFunds);
+      uint256 balanceAfter = wFIL.balanceOf(address(_pool));
 
-      // ensure the write down amounts are correct:
-      // assertEq...
+      // ensure the write down amount is correct:
+      assertEq(balanceAfter - balanceBefore, recoveredFunds / numPools, "Pool should have received the correct amount of funds");
     }
 }
 
