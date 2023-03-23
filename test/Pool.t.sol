@@ -3,6 +3,7 @@ pragma solidity ^0.8.15;
 
 import "./BaseTest.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+
 contract PoolBasicSetupTest is BaseTest {
   using Credentials for VerifiableCredential;
 
@@ -26,13 +27,12 @@ contract PoolBasicSetupTest is BaseTest {
     borrowCredBasic = issueGenericBorrowCred(agent.id(), borrowAmount);
     vcBasic = borrowCredBasic.vc;
     gCredBasic = vcBasic.getGCRED(credParser);
-    baseRate = pool.baseRate();
+    baseRate = vcBasic.getBaseRate(credParser);
   }
 
   function testGetBaseRate() public {
     // We could denominate this differently but this reads nicely; 15% representation in 1e18 denomination
-    uint256 _baseRate = pool.baseRate();
-    assertEq(_baseRate, expectedRateBasic);
+    assertEq(baseRate, expectedRateBasic);
   }
 
   function testGetRateBasic() public {

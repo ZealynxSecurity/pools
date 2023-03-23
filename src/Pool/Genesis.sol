@@ -16,9 +16,11 @@ import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
+
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
@@ -32,7 +34,6 @@ import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
-uint256 constant wad = 1e18;
 contract GenesisPool is IPool, RouterAware, Operatable {
     using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
@@ -52,12 +53,6 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
 
-    /// @dev `baseRate` sets the curve of the dynamic rate
-    uint256 public baseRate;
-
-    /// @dev `maxDTI` is the
-    uint256 private maxDTI;
-
     /// @dev `asset` is the token that is being borrowed in the pool
     ERC20 public asset;
 
@@ -66,6 +61,9 @@ contract GenesisPool is IPool, RouterAware, Operatable {
 
     /// @dev `exitToken` is a pegged FIL token used for exiting with the ramp
     PoolToken public exitToken;
+
+    /// @dev `rateModule` is a separate module for computing rates and determining lending eligibility
+    IRateModule public rateModule;
 
     /// @dev `ramp` is the interface that handles off-ramping
     IOffRamp public ramp;
@@ -82,8 +80,6 @@ contract GenesisPool is IPool, RouterAware, Operatable {
     /// @dev `isShuttingDown` is a boolean that, when true, halts deposits and borrows. Once set, it cannot be unset.
     bool public isShuttingDown = false;
 
-    uint256[] rateLookup = new uint256[](100);
-    
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
     //////////////////////////////////////////////////////////////*/
@@ -141,19 +137,13 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         address _operator,
         address _router,
         address _asset,
-        address _ramp,
-        uint256 _minimumLiquidity,
-        uint256 _baseRate,
-        uint256 _maxDTI,
-        uint256[100] memory _rateLookup
+        address _rateModule,
+        uint256 _minimumLiquidity
     ) Operatable(_owner, _operator) {
         router = _router;
         asset = ERC20(_asset);
-        ramp = IOffRamp(_ramp);
+        rateModule = IRateModule(_rateModule);
         minimumLiquidity = _minimumLiquidity;
-        baseRate = _baseRate;
-        maxDTI = _maxDTI;
-        rateLookup = _rateLookup;
         // set the ID
         id = GetRoute.poolFactory(router).allPoolsLength();
         // deploy a new liquid staking token for the pool
@@ -236,11 +226,9 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         Account memory account,
         VerifiableCredential memory vc
     ) public view returns (uint256) {
-        address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-        return (baseRate * rateLookup[vc.getGCRED(credParser)]) / wad;
+        return rateModule.getRate(account, vc);
     }
 
-    // TODO: this is wrong, it needs fixed point math
     /**
      * @notice isOverLeveraged returns true if the Agent is over leveraged
      * In this version, an Agent can be over-leveraged in either of two cases:
@@ -251,37 +239,7 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         Account memory account,
         VerifiableCredential memory vc
     ) external view returns (bool) {
-        address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-        // equity percentage
-        uint256 totalPrincipal = vc.getPrincipal(credParser);
-        uint256 accountPrincipal = account.principal;
-        // compute our pool's percentage of the agent's assets
-        uint256 equityPercentage = (accountPrincipal * wad) / totalPrincipal;
-        // If this pool has no equity in the agent, they are not over leveraged
-        if(equityPercentage == 0) return false;
-        uint256 agentTotalValue = vc.getAgentValue(credParser);
-        // compute value used in LTV calculation
-        // We leave the e18 in here so we don't have to add it back in when calculating LTV
-        // If the agent's principal is greater than the value of their assets, they are over leveraged
-        if(accountPrincipal > agentTotalValue) return true;
-        uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - accountPrincipal)) / wad;
-
-        //NOTE: I would recommend just evaluating if poolShareOfValue > accountPrincipal it's functionally the same
-        // if (poolShareOfValue < accountPrincipal) return true;
-        // compute LTV (also wrong bc %)
-        uint256 ltv = accountPrincipal * wad / poolShareOfValue;
-        // if LTV is greater than 1 (e18 denominated), we are over leveraged (can't mortgage more than the value of your home)
-        if (ltv > wad) return true;
-
-        uint256 rate = getRate(account, vc);
-        // compute expected daily payments to align with expected daily reward
-        uint256 dailyRate = (rate * EPOCHS_IN_DAY * accountPrincipal) / wad;
-        uint256 dailyRewards = vc.getExpectedDailyRewards(credParser);
-
-        // compute DTI
-        uint256 dti = dailyRate * wad / dailyRewards;
-
-        return dti > maxDTI;
+        return rateModule.isOverLeveraged(account, vc);
     }
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external onlyAgentPolice {
@@ -658,16 +616,8 @@ contract GenesisPool is IPool, RouterAware, Operatable {
         isShuttingDown = true;
     }
 
-    function setBaseRate(uint256 _baseRate) public onlyOwnerOperator {
-        baseRate = _baseRate;
-    }
-
-    function setMaxDTI(uint256 _maxDTI) public onlyOwnerOperator {
-        maxDTI = _maxDTI;
-    }
-
-    function setRateLookup(uint256[100] memory _rateLookup) public onlyOwnerOperator {
-        rateLookup = _rateLookup;
+    function setRateModule(IRateModule _rateModule) public onlyOwnerOperator {
+        rateModule = _rateModule;
     }
 
     /*//////////////////////////////////////////////////////////////
