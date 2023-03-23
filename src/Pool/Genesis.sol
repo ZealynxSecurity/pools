@@ -13,7 +13,6 @@ import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
-import {PoolToken} from "src/Pool/PoolToken.sol";
 
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -21,6 +20,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {Account} from "src/Types/Structs/Account.sol";
@@ -55,10 +55,7 @@ contract GenesisPool is IPool, Operatable {
     ERC20 public asset;
 
     /// @dev `liquidStakingToken` is the token that represents a liquidStakingToken in the pool
-    PoolToken public liquidStakingToken;
-
-    /// @dev `exitToken` is a pegged FIL token used for exiting with the ramp
-    PoolToken public exitToken;
+    IPoolToken public liquidStakingToken;
 
     /// @dev `rateModule` is a separate module for computing rates and determining lending eligibility
     IRateModule public rateModule;
@@ -138,6 +135,7 @@ contract GenesisPool is IPool, Operatable {
         address _router,
         address _asset,
         address _rateModule,
+        address _liquidStakingToken,
         uint256 _minimumLiquidity
     ) Operatable(_owner, _operator) {
         router = _router;
@@ -147,19 +145,7 @@ contract GenesisPool is IPool, Operatable {
         // set the ID
         id = GetRoute.poolFactory(router).allPoolsLength();
         // deploy a new liquid staking token for the pool
-        liquidStakingToken = new PoolToken(
-            _router,
-            id,
-            "Genesis Pool Staked FIL",
-            "gstETH"
-        );
-        // deploy an exit token for the pool
-        exitToken = new PoolToken(
-            _router,
-            id,
-            "Genesis Pool Exit Token",
-            "gexETH"
-        );
+        liquidStakingToken = IPoolToken(_liquidStakingToken);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -424,14 +410,7 @@ contract GenesisPool is IPool, Operatable {
         address receiver,
         address owner
     ) public requiresRamp returns (uint256 shares) {
-        shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
-
-        liquidStakingToken.burn(owner, shares);
-
-        // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
-        exitToken.mint(address(this), assets);
-        exitToken.approve(address(ramp), assets);
-        ramp.stakeOnBehalf(assets, receiver);
+        shares = ramp.withdraw(assets, receiver, owner, totalAssets());
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
@@ -447,16 +426,7 @@ contract GenesisPool is IPool, Operatable {
         address receiver,
         address owner
     ) public requiresRamp returns (uint256 assets) {
-
-        // Check for rounding error since we round down in previewRedeem.
-        require((assets = previewRedeem(shares)) != 0, "ZERO_ASSETS");
-
-        liquidStakingToken.burn(owner, shares);
-
-        // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
-        exitToken.mint(address(this), assets);
-        exitToken.approve(address(ramp), assets);
-        ramp.stakeOnBehalf(assets, receiver);
+        assets = ramp.redeem(assets, receiver, owner, totalAssets());
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
@@ -554,7 +524,7 @@ contract GenesisPool is IPool, Operatable {
     /**
      * @dev Distributes funds to the offramp when the liquid assets are below the liquidity threshold
      */
-    function harvestToRamp() public {
+    function harvestToRamp() public requiresRamp {
         // distribute funds to the offramp when we are below the liquidity threshold
         uint256 exitDemand = ramp.totalIOUStaked();
         uint256 rampAssets = asset.balanceOf(address(ramp));
@@ -599,7 +569,6 @@ contract GenesisPool is IPool, Operatable {
         harvestFees(feesCollected);
         asset.transfer(address(newPool), asset.balanceOf(address(this)));
         liquidStakingToken.transfer(address(newPool), liquidStakingToken.balanceOf(address(this)));
-        exitToken.transfer(address(newPool), exitToken.balanceOf(address(this)));
         borrowedAmount = totalBorrowed;
     }
 

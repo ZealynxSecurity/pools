@@ -4,6 +4,7 @@ pragma solidity ^0.8.15;
 import "forge-std/Test.sol";
 import "test/helpers/MockMiner.sol";
 import {GenesisPool} from "src/Pool/Genesis.sol";
+import {PoolToken} from "src/Pool/PoolToken.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
@@ -25,6 +26,7 @@ import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
@@ -331,7 +333,7 @@ contract BaseTest is Test {
 
   function createPool() internal returns (IPool pool) {
     IPoolFactory poolFactory = GetRoute.poolFactory(router);
-
+    PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin, systemAdmin);
     pool = IPool(new GenesisPool(
       systemAdmin,
       systemAdmin,
@@ -340,8 +342,11 @@ contract BaseTest is Test {
       //
       address(new RateModule(systemAdmin, systemAdmin, router, rateArray)),
       // no min liquidity for test pool
+      address(liquidStakingToken),
       0
     ));
+    vm.prank(systemAdmin);
+    liquidStakingToken.setMinter(address(pool));
     vm.startPrank(systemAdmin);
     poolFactory.attachPool(pool);
     vm.stopPrank();
@@ -524,13 +529,21 @@ contract BaseTest is Test {
   }
 
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
+    IPoolToken liquidStakingToken = pool.liquidStakingToken();
+    PoolToken iou = new PoolToken("IOU", "IOU",systemAdmin, systemAdmin);
     ramp = IOffRamp(new OffRamp(
       router,
-      address(pool.exitToken()),
+      address(iou),
       address(pool.asset()),
+      address(liquidStakingToken),
       systemAdmin,
       pool.id()
     ));
+    vm.startPrank(systemAdmin);
+    iou.setMinter(address(ramp));
+    iou.setBurner(address(ramp));
+    liquidStakingToken.setBurner(address(ramp));
+    vm.stopPrank();
 
     vm.prank(IAuth(address(pool)).owner());
     pool.setRamp(ramp);

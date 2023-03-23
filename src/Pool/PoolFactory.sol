@@ -3,7 +3,6 @@ pragma solidity ^0.8.15;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {PoolTokensDeployer} from "deploy/PoolTokens.sol";
 import {IPoolDeployer} from "src/Types/Interfaces/IPoolDeployer.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
