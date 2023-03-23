@@ -60,8 +60,6 @@ contract RateModule is IRateModule, Operatable, RouterAware {
      * In this version, an Agent can be over-leveraged in either of two cases:
      * 1. The Agent's principal is more than the equity weighted `agentTotalValue`
      * 2. The Agent's expected daily payment is more than `dtiWeight` of their income
-     *
-     * NOTE: (KP): I would recommend just evaluating if poolShareOfValue > accountPrincipal it's functionally the same
      */
     function isOverLeveraged(
         Account memory account,
