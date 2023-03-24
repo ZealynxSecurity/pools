@@ -1,67 +1,61 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import {FilAddress} from "shim/FilAddress.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
-import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Roles} from "src/Constants/Roles.sol";
-import {
-  InvalidCredential,
-  NotOverPowered,
-  NotOverLeveraged,
-  NotInDefault,
-  Unauthorized
-} from "src/Errors.sol";
-import {ROUTE_CRED_PARSER } from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
-string constant POWER = "POWER";
-string constant LEVERAGE = "LEVERAGE";
-
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
+
   using AccountHelpers for Account;
   using FixedPointMathLib for uint256;
   using Credentials for VerifiableCredential;
+  using FilAddress for address;
 
-  /// @notice `windowLength` is the number of epochs between window.start and window.deadline
-  uint256 public windowLength;
+  error OverLeveraged();
+  error Unauthorized();
+
+  /// @notice `defaultLookback` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
+  uint256 public defaultWindow;
+
   /// @notice `maxPoolsPoerAgent`
   uint256 public maxPoolsPerAgent;
 
-  /// @notice `_agentState` maps agentID to whether they are overpowered or overleveraged
-  mapping(bytes32 => bool) private _agentState;
+  /// @notice `_liquidated` maps agentID to whether the liquidation process has been completed
+  mapping(uint256 => bool) public liquidated;
+
   /// @notice `_poolIDs` maps agentID to the pools they have actively borrowed from
   mapping(uint256 => uint256[]) private _poolIDs;
+
+  /// @notice `_credentialUseBlock` maps signature bytes to when a credential was used
   mapping(bytes32 => uint256) private _credentialUseBlock;
+
   constructor(
     string memory _name,
     string memory _version,
-    uint256 _windowLength,
+    uint256 _defaultWindow,
     address _owner,
-    address _operator
-  ) VCVerifier(_name, _version) Operatable(_owner, _operator) {
-    windowLength = _windowLength;
+    address _operator,
+    address _router
+  ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
+    defaultWindow = _defaultWindow;
     maxPoolsPerAgent = 10;
-  }
-
-  modifier _isValidCredential(address agent, SignedCredential memory signedCredential) {
-    _checkCredential(agent, signedCredential);
-    _;
   }
 
   modifier onlyAgent() {
@@ -69,13 +63,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     _;
   }
 
-  modifier onlyIfAgentOverLeveraged(address agent) {
-    _revertIfNotOverLeveraged(_addressToID(agent));
-    _;
-  }
-
-  modifier onlyIfAgentInDefault(address agent) {
-    _revertIfNotInDefault(_addressToID(agent));
+  modifier onlyWhenBehindTargetEpoch(address agent) {
+    if (!_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) {
+      revert Unauthorized();
+    }
     _;
   }
 
@@ -91,134 +82,104 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     return _poolIDs[agentID];
   }
 
-  /**
-   * @notice `windowInfo` returns the current window start, length, and deadline
-   */
-  function windowInfo() public view returns (Window memory) {
-    uint256 deadline = nextPmtWindowDeadline();
-    return Window(deadline - windowLength, deadline, windowLength);
-  }
-
-  /**
-   * @notice `nextPmtWindowDeadline` returns the first window deadline is epoch 0 + windowLength
-   */
-  function nextPmtWindowDeadline() public view returns (uint256) {
-    return (windowLength + block.number - (block.number % windowLength));
-  }
-
-  /**
-   * @notice `isOverPowered` returns true if the agent has minted more power than they have in real quality adjusted power
-   * @param agent the address of the agent
-   */
-  function isOverPowered(address agent) public view returns (bool) {
-    return isOverPowered(_addressToID(agent));
-  }
-
-  /**
-   * @notice `isOverPowered` returns true if the agent has minted more power than they have in real quality adjusted power
-   * @param agent the ID of the agent
-   */
-  function isOverPowered(uint256 agent) public view returns (bool) {
-    return _agentState[createKey(POWER, agent)];
-  }
-
-  /**
-   * @notice `isOverLeveraged` returns true if the agent owes more in total to all pool than they expect to earn in the same window period
-   * @param agent the address of the agent
-   */
-  function isOverLeveraged(address agent) public view returns (bool) {
-    return isOverLeveraged(_addressToID(agent));
-  }
-
-  /**
-   * @notice `isOverLeveraged` returns true if the agent owes more in total to all pool than they expect to earn in the same window period
-   * @param agent the ID of the agent
-   */
-  function isOverLeveraged(uint256 agent) public view returns (bool) {
-    return _agentState[createKey(LEVERAGE, agent)];
-  }
-
-  /**
-   * @notice `isInDefault` returns true if the agent is overPowered and overLeveraged
-   * @param agent the ID of the agent
-   */
-  function isInDefault(uint256 agent) public view returns (bool) {
-    return isOverPowered(agent) && isOverLeveraged(agent);
-  }
-
-  /**
-   * @notice `isInDefault` returns true if the agent is overPowered and overLeveraged
-   * @param agent the address of the agent
-   */
-  function isInDefault(address agent) public view returns (bool) {
-    return isInDefault(_addressToID(agent));
-  }
-
   /*//////////////////////////////////////////////
                       CHECKERS
   //////////////////////////////////////////////*/
 
-  /**
-   * @notice `checkPower` updates the overPowered state of the agent and returns true if they are overpowered
-   * @param agent the address of the agent
-   * @param signedCredential the signed credential of the agent
-   */
-  function checkPower(
-    address agent,
-    SignedCredential memory signedCredential
-  ) public _isValidCredential(agent, signedCredential) returns (bool) {
-    bool overPowered = _updateOverPowered(agent, signedCredential);
-    emit CheckPower(agent, msg.sender, overPowered);
-    return overPowered;
-  }
+  function isAgentOverLeveraged(
+    VerifiableCredential memory vc
+  ) external view {
+    uint256[] memory pools = _poolIDs[vc.subject];
 
-  /**
-   * @notice `checkLeverage` updates the overLeveraged state of the agent and returns true if they are overLeveraged
-   * @param agent the address of the agent
-   * @param signedCredential the signed credential of the agent
-   *
-   * @dev an agent is overleveraged if they owe more in total to all pools than they expect to earn in the same window period
-   * the agent's expectedDailyRewards as computed in the `signedCredential` are applied to the window period
-   */
-  function checkLeverage(
-    address agent,
-    SignedCredential memory signedCredential
-  ) _isValidCredential(agent, signedCredential) public returns (bool) {
-    uint256 agentID = AccountHelpers.agentAddrToID(agent);
-    bool overLeveraged = _updateOverLeveraged(agentID, signedCredential);
-    emit CheckLeverage(agent, msg.sender, overLeveraged);
-    return overLeveraged;
-  }
-
-  /**
-   * @notice `checkDefault` updates the overPowered and overLeveraged state of the agent and returns true if they are both true (in default)
-   * @param agent the address of the agent
-   * @param signedCredential the signed credential of the agent
-   */
-  function checkDefault(address agent, SignedCredential memory signedCredential) public {
-    bool overPowered = checkPower(agent, signedCredential);
-    bool overLeveraged = checkLeverage(agent, signedCredential);
-    address credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
-    if (overPowered && overLeveraged) {
-      uint256 liquidationValue = signedCredential.vc.getAssets(credParser) - signedCredential.vc.getLiabilities(credParser);
-      // write down each pool by the power token stake weight of the agent liquidation value
-      _proRataPoolRebalance(agent, liquidationValue);
+    for (uint256 i = 0; i < pools.length; ++i) {
+      uint256 poolID = pools[i];
+      IPool pool = GetRoute.pool(router, poolID);
+      if (pool.isOverLeveraged(
+        AccountHelpers.getAccount(router, vc.subject, poolID),
+        vc
+      )) {
+        revert OverLeveraged();
+      }
     }
+  }
 
-    emit CheckDefault(agent, msg.sender, isInDefault(agent));
+  /**
+   * @notice `setAgentDefaulted` puts the agent in default permanently
+   * @param agent The address of the agent to put in default
+   */
+  function setAgentDefaulted(address agent) external onlyOwnerOperator onlyWhenBehindTargetEpoch(agent) {
+    IAgent(agent).setInDefault();
+    emit Defaulted(agent);
+  }
+
+  /**
+   * @notice `putAgentOnAdministration` puts the agent on administration, hopefully only temporarily
+   * @param agent The address of the agent to put on administration
+   */
+  function putAgentOnAdministration(
+    address agent, address administration
+  ) external
+    onlyOwnerOperator
+    onlyWhenBehindTargetEpoch(agent)
+  {
+    IAgent(agent).setAdministration(administration.normalize());
+    emit OnAdministration(agent);
+  }
+
+  /**
+   * @notice `rmAgentFromAdministration` removes the agent from administration
+   * @param agent The address of the agent to remove from administration
+   */
+  function rmAgentFromAdministration(address agent) external onlyOwnerOperator {
+    if (_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) revert Unauthorized();
+
+    IAgent(agent).setAdministration(address(0));
+    emit OffAdministration(agent);
+  }
+
+  function prepareMinerForLiquidation(address agent, address liquidator, uint64 miner) external onlyOwnerOperator {
+    IAgent(agent).prepareMinerForLiquidation(miner, liquidator.normalize());
+  }
+
+  function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external {
+    if (!liquidated[agentID]) revert Unauthorized();
+
+    // transfer the assets into the pool
+    GetRoute.wFIL(router).transferFrom(msg.sender, address(this), amount);
+    _writeOffPools(agentID, amount);
+  }
+
+  function liquidatedAgent(address agent) external onlyOwnerOperator {
+    if (!IAgent(agent).defaulted()) revert Unauthorized();
+
+    liquidated[IAgent(agent).id()] = true;
   }
 
   /**
    * @notice `isValidCredential` returns true if the credential is valid
-   * @param agent the address of the agent
+   * @param agent the ID of the agent
    * @param signedCredential the signed credential of the agent
    * @dev a credential is valid if it's subject is `agent` and is signed by an authorized issuer
    */
   function isValidCredential(
-    address agent,
+    uint256 agent,
+    bytes4 action,
     SignedCredential memory signedCredential
-  ) external {
-      _checkCredential(agent, signedCredential);
+  ) external view {
+    // reverts if the credential isn't valid
+    validateCred(
+      agent,
+      action,
+      signedCredential
+    );
+
+    if (
+      _credentialUseBlock[
+        keccak256(abi.encode(
+          signedCredential.v, signedCredential.r, signedCredential.s
+        ))
+      ] > 0
+    ) revert InvalidCredential();
   }
 
   function registerCredentialUseBlock(SignedCredential memory signedCredential) external  {
@@ -244,8 +205,12 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param pool the id of the pool to add
    * @dev only an agent can add a pool to its list
    */
-  function removePoolFromList(uint256 pool) public onlyAgent {
-    uint256[] storage pools = _poolIDs[_addressToID(msg.sender)];
+  function removePoolFromList(uint256 agentID, uint256 pool) external {
+    if (address(GetRoute.pool(router, pool)) != msg.sender) {
+      revert Unauthorized();
+    }
+
+    uint256[] storage pools = _poolIDs[agentID];
     for (uint256 i = 0; i < pools.length; i++) {
       if (pools[i] == pool) {
         pools[i] = pools[pools.length - 1];
@@ -255,112 +220,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     }
   }
 
-  /**
-   * @notice `forceBurnPower` burns any liquid power tokens on the Agnet's behalf. It does not burn any tokens staked in pools.
-   * @param agent the address of the agent to burn power
-   * @param signedCredential the signed credential of the agent
-   * @dev An agent must be overPowered to force burn their power
-   * This method is not protected - anyone can call when the conditions permit
-   */
-  function forceBurnPower(
-    address agent,
-    SignedCredential memory signedCredential
-  ) external _isValidCredential(agent, signedCredential)  {
-    uint256 agentID = _addressToID(agent);
-    _revertIfNotOverPowered(agentID);
-
-    // Compute the amount to burn
-    IERC20 powerToken = GetRoute.powerToken20(router);
-    uint256 underPowerAmt = _powerTokensMinted(agentID) - signedCredential.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER));
-    uint256 powerTokensLiquid = powerToken.balanceOf(agent);
-    uint256 burnAmount = powerTokensLiquid >= underPowerAmt
-      ? underPowerAmt
-      : powerTokensLiquid;
-
-    // burn the amount
-    uint256 amountBurned = IAgent(agent).burnPower(burnAmount, signedCredential);
-
-    // set overPowered if needed
-    bool stillOverPowered = _updateOverPowered(agent, signedCredential);
-
-    emit ForceBurnPower(agent, msg.sender, amountBurned, stillOverPowered);
-  }
-
-  /**
-   * @notice `forceMakePayments` burns any liquid power tokens on the Agent's behalf. It does not burn any tokens staked in pools.
-   * @param agent the address of the agent to burn power
-   * @param signedCredential the signed credential of the agent
-   * @dev An agent must be overPowered to force burn their power
-   * To start this method is protected and callable only by the agent police admin
-   * but once stable, can be decentralized
-   */
-  function forceMakePayments(
-    address agent,
-    SignedCredential memory signedCredential
-  ) external
-    onlyOwnerOperator
-    _isValidCredential(agent, signedCredential)
-    onlyIfAgentOverLeveraged(agent)
-  {
-    IAgent _agent = IAgent(agent);
-    // then, we create a pro-rata split based on power token stakes to pay back each pool thats been borrowed from
-    (
-      uint256[] memory pools,
-      uint256[] memory pmts
-    ) = _computeProRataAmts(agent, _totalOwed(_agent.id()));
-
-    _agent.makePayments(pools, pmts, signedCredential);
-
-    bool stillOverLeveraged = _updateOverLeveraged(_agent.id(), signedCredential);
-
-    emit ForceMakePayments(agent, msg.sender, pools, pmts, stillOverLeveraged);
-  }
-
-  /**
-   * @notice `forcePullFundsFromMiners` draws up funds from the agent's miners
-   * @param agent the address of the agent to burn power
-   * @param miners the miners to pull funds from
-   * @param amounts the amounts of funds to pull from each miner
-   * @dev An agent must be overLeveraged to force pull funds
-   */
-  function forcePullFundsFromMiners(
-    address agent,
-    uint64[] calldata miners,
-    uint256[] calldata amounts,
-    SignedCredential memory sc
-  ) external onlyOwnerOperator onlyIfAgentOverLeveraged(agent) {
-
-    // draw up funds from all the agent's miners (non destructive)
-    IAgent(agent).pullFundsFromMiners(miners, amounts, sc);
-
-    emit ForcePullFundsFromMiners(agent, miners, amounts);
-  }
-
-  /**
-   * @notice `lockout` remove all external control from a miner actor
-   * @param agent the address of the agent to lock out
-   * @param miner the miner to lock out
-   * @dev An agent must be in default to lock out a miner, and only the agent police admin can call this function
-   * The reason to lockout a miner is to terminate its sectors early to recoup as much funds as possible
-   * It is a destructive action
-   * TODO
-   */
-  function lockout(
-    address agent,
-    uint64 miner
-  ) external onlyOwnerOperator onlyIfAgentInDefault(agent) {
-    emit Lockout(agent, msg.sender);
-  }
-
   /*//////////////////////////////////////////////
                   ADMIN CONTROLS
   //////////////////////////////////////////////*/
 
   /**
-   * @notice `setWindowLength` changes the window length
+   * @notice `setDefaultWindow` changes the default window epochs
    */
-  function setWindowLength(uint256 _windowLength) external onlyOwnerOperator {
-    windowLength = _windowLength;
+  function setDefaultWindow(uint256 _defaultWindow) external onlyOwnerOperator {
+    defaultWindow = _defaultWindow;
   }
 
   /**
@@ -374,138 +242,59 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/
 
-  /// @dev computes the pro-rata split of a total amount based on power token stakes
-  function _computeProRataAmts(
-    address _agent,
-    uint256 _totalAmount
-  ) internal view returns (
-    uint256[] memory _pools,
-    uint256[] memory _amts
-  ) {
-    IAgent agent = IAgent(_agent);
-
-    _pools = _poolIDs[agent.id()];
-    uint256 poolCount = _pools.length;
-
-    _amts = new uint256[](poolCount);
-
-    uint256 powerTokensStaked = agent.totalPowerTokensStaked();
-
-    for (uint256 i = 0; i < poolCount; ++i) {
-      _amts[i] = _totalAmount * (agent.powerTokensStaked(_pools[i]) / powerTokensStaked);
-    }
-  }
-
-  /// @dev writes down the amount of assets a pool can expect from an agent
-  function _proRataPoolRebalance(
-    address _agent,
+  /// @dev computes the pro-rata split of a total amount based on principal
+  function _writeOffPools(
+    uint256 _agentID,
     uint256 _totalAmount
   ) internal {
-    IAgent agent = IAgent(_agent);
-    uint256 poolCount = agent.stakedPoolsCount();
+    // Setup the variables we use in the loops here to save gas
+    uint256 totalPrincipal;
+    uint256 i;
+    uint256 poolID;
+    uint256 poolShare;
+    uint256 principal;
+    IWFIL wFIL = GetRoute.wFIL(router);
 
-    uint256 powerTokensStaked = agent.totalPowerTokensStaked();
+    uint256[] memory _pools = _poolIDs[_agentID];
+    uint256 poolCount = _pools.length;
 
-    for (uint256 i = 0; i < poolCount; ++i) {
-      uint256 realizeableValue = agent
-        .powerTokensStaked(i)
-        .divWadDown(powerTokensStaked)
-        .mulWadDown(_totalAmount)
-        .divWadDown(FixedPointMathLib.WAD);
+    uint256[] memory principalAmts = new uint256[](poolCount);
+    // add up total principal across pools, and cache the principal in each pool
+    for (i = 0; i < poolCount; ++i) {
+      principal = AccountHelpers.getAccount(router, _agentID, _pools[i]).principal;
+      principalAmts[i] = principal;
+      totalPrincipal += principal;
+    }
 
-      GetRoute.pool(router, i).rebalanceTotalBorrowed(agent.id(), realizeableValue);
+    for (i = 0; i < poolCount; ++i) {
+      poolID = _pools[i];
+      // compute this pool's share of the total amount
+      poolShare = (principalAmts[i] * _totalAmount / totalPrincipal);
+      // approve the pool to pull in WFIL
+      wFIL.approve(address(GetRoute.pool(router, poolID)), poolShare);
+      // write off the pool's assets
+      GetRoute.pool(router, poolID).writeOff(_agentID, poolShare);
     }
   }
 
-  function _updateOverPowered(
-    address agent,
-    SignedCredential memory sc
-  ) internal returns (bool) {
-    uint256 agentID = _addressToID(agent);
-    bool overPowered = sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) < _powerTokensMinted(agentID);
+  /// @dev returns true if any pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid)
+  function _epochsPaidBehindTarget(
+    uint256 _agentID,
+    uint256 _targetEpoch
+  ) internal view returns (bool) {
+    uint256[] memory pools = _poolIDs[_agentID];
 
-    _agentState[createKey(POWER, agentID)] = overPowered;
+    for (uint256 i = 0; i < pools.length; ++i) {
+      if (AccountHelpers.getAccount(router, _agentID, pools[i]).epochsPaid < block.number - _targetEpoch) {
+        return true;
+      }
+    }
 
-    return overPowered;
+    return false;
   }
 
   function _addressToID(address agent) internal view returns (uint256) {
     return IAgent(agent).id();
-  }
-
-  function _powerTokensMinted(uint256 agent) internal view returns (uint256) {
-    return GetRoute.powerToken(router).powerTokensMinted(agent);
-  }
-
-  /// @dev returns the total amount owed across all pools to get to the next window close
-  function _totalOwed(uint256 agentID) internal view returns (uint256 totalOwed) {
-    uint256[] memory stakedPools = _poolIDs[agentID];
-    // loop through all and add up all the owed amounts to get to the next window close
-    for (uint256 i = 0; i < stakedPools.length; ++i) {
-      totalOwed += AccountHelpers.getAccount(
-        router,
-        agentID,
-        stakedPools[i]
-      ).getMinPmtForWindowClose(
-        windowInfo(),
-        router,
-        GetRoute.pool(router, stakedPools[i]).implementation()
-      );
-    }
-  }
-
-  function _updateOverLeveraged(
-    uint256 agentID,
-    SignedCredential memory signedCredential
-  ) internal returns (bool) {
-    // expected per epoch rewards = expected daily rewards / epochs in a day
-    // expected earnings = expected per epoch rewards * epochs until window close
-    uint256 perEpochExpRewards = signedCredential.vc.getExpectedDailyRewards(IRouter(router).getRoute(ROUTE_CRED_PARSER)) / EPOCHS_IN_DAY;
-    uint256 expectedEarnings = perEpochExpRewards * (nextPmtWindowDeadline() - block.number);
-
-    // if the agent owes more than their total expected rewards in the window period, they're overleveraged
-    bool overLeveraged = _totalOwed(agentID) > expectedEarnings;
-
-    _agentState[createKey(LEVERAGE, agentID)] = overLeveraged;
-
-    return overLeveraged;
-  }
-
-  function _checkCredential(
-    address agent,
-    SignedCredential memory signedCredential
-  ) internal view {
-    if (!isValid(
-        agent,
-        signedCredential.vc,
-        signedCredential.v,
-        signedCredential.r,
-        signedCredential.s
-      )) {
-        revert InvalidCredential();
-      }
-    if (_credentialUseBlock[keccak256(abi.encode(signedCredential.v, signedCredential.r, signedCredential.s))] > 0)  {
-        revert InvalidCredential();
-      }
-
-  }
-
-  function _revertIfNotOverPowered(uint256 agent) internal view {
-    if (!isOverPowered(agent)) {
-      revert NotOverPowered(agent, "AgentPolice: Agent is not overpowered");
-    }
-  }
-
-  function _revertIfNotOverLeveraged(uint256 agent) internal view {
-    if (!isOverLeveraged(agent)) {
-      revert NotOverLeveraged(agent, "AgentPolice: Agent is not overleveraged");
-    }
-  }
-
-  function _revertIfNotInDefault(uint256 agent) internal view {
-    if (!isOverPowered(agent) || !isOverLeveraged(agent)) {
-      revert NotInDefault(agent, "AgentPolice: Agent is not in default");
-    }
   }
 
   function createKey(string memory partitionKey, uint256 agentID) internal pure returns (bytes32) {

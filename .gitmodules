@@ -14,10 +14,13 @@
 [submodule "lib/filecoin-solidity"]
 	path = lib/filecoin-solidity
 	url = https://github.com/Zondax/filecoin-solidity
-  branch = v3.0.0-beta.1
+  branch = v4.0.2
 [submodule "lib/solidity-cborutils"]
 	path = lib/solidity-cborutils
 	url = https://github.com/smartcontractkit/solidity-cborutils
 [submodule "lib/buffer"]
 	path = lib/buffer
 	url = https://github.com/ensdomains/buffer
+[submodule "lib/fevmate"]
+	path = lib/fevmate
+	url = https://github.com/wadealexc/fevmate

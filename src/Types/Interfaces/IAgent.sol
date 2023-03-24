@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {SignedCredential} from "src/Types/Structs/Credentials.sol";
 import "src/Types/Structs/Filecoin.sol";
@@ -16,48 +16,40 @@ interface IAgent {
 
   event WithdrawBalance(address indexed receiver, uint256 amount);
 
-  event PullFundsFromMiners(uint64[] miners, uint256[] amounts);
-
-  event PushFundsToMiners(uint64[] miners, uint256[] amounts);
-
   /*//////////////////////////////////////////////////
                         GETTERS
   //////////////////////////////////////////////////*/
 
   function id() external view returns (uint256);
 
+  function newAgent() external view returns (address);
+
+  function administration() external view returns (address);
+
+  function defaulted() external view returns (bool);
+
   function miners(uint256) external view returns (uint64);
 
   function minersCount() external view returns (uint256);
 
-  function hasMiner(uint64 miner) external view returns (bool);
-
-  // powerTokensMinted - powerTokensBurned
-  function totalPowerTokensStaked() external view returns (uint256);
-
-  function powerTokensStaked(uint256 poolID) external view returns (uint256 powerTokensStaked);
-
-  function stakedPoolsCount() external view returns (uint256);
-
-  function maxWithdraw(SignedCredential memory sc) external view returns (uint256);
+  function borrowedPoolsCount() external view returns (uint256);
 
   function liquidAssets() external view returns (uint256);
-
 
   /*//////////////////////////////////////////////////
         MINER OWNERSHIP/WORKER/OPERATOR CHANGES
   //////////////////////////////////////////////////*/
 
-  function addMiners(uint64[] calldata miners) external;
+  function addMiner(
+    SignedCredential memory sc
+  ) external;
 
   function removeMiner(
     address newMinerOwner,
-    uint64 miner,
-    SignedCredential memory agentCred,
-    SignedCredential memory minerCred
+    SignedCredential memory sc
   ) external;
 
-  function migrateMiner(address newAgent, uint64 miner) external;
+  function migrateMiner(uint64 miner) external;
 
   function changeMinerWorker(
     uint64 miner,
@@ -65,19 +57,13 @@ interface IAgent {
     uint64[] calldata controlAddresses
   ) external;
 
-  /*//////////////////////////////////////////////////
-                POWER TOKEN FUNCTIONS
-  //////////////////////////////////////////////////*/
+  function decommissionAgent(address newAgent) external;
 
-  function mintPower(
-    uint256 amount,
-    SignedCredential memory sc
-  ) external;
+  function setInDefault() external;
 
-  function burnPower(
-    uint256 amount,
-    SignedCredential memory sc
-  ) external returns (uint256 burnedAmt);
+  function setAdministration(address administration) external;
+
+  function prepareMinerForLiquidation(uint64 miner, address liquidator) external;
 
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS
@@ -85,45 +71,34 @@ interface IAgent {
 
   function withdrawBalance(
     address receiver,
-    uint256 amount,
-    SignedCredential memory signedCredential
+    SignedCredential memory signedCred
   ) external;
 
   function borrow(
-    uint256 amount,
     uint256 poolID,
-    SignedCredential memory vc,
-    uint256 powerTokenAmount
+    SignedCredential memory signedCred
   ) external;
 
-  function exit(
+  function pay(
     uint256 poolID,
-    uint256 assetAmount,
-    SignedCredential memory vc
-  ) external;
-
-  function makePayments(
-    uint256[] calldata poolIDs,
-    uint256[] calldata amounts,
-    SignedCredential memory vc
-  ) external;
+    SignedCredential memory signedCred
+  ) external returns (
+    uint256 rate,
+    uint256 epochsPaid,
+    uint256 refund
+  );
 
   function refinance(
     uint256 oldPoolID,
     uint256 newPoolID,
-    uint256 additionalPowerTokens,
-    SignedCredential memory signedCredential
+    SignedCredential memory signedCred
   ) external;
 
-  function pullFundsFromMiners(
-    uint64[] calldata miners,
-    uint256[] calldata amounts,
-    SignedCredential memory signedCredential
+  function pullFundsFromMiner(
+    SignedCredential memory signedCred
   ) external;
 
-  function pushFundsToMiners(
-    uint64[] calldata miners,
-    uint256[] calldata amounts,
-    SignedCredential memory signedCredential
+  function pushFundsToMiner(
+    SignedCredential memory signedCred
   ) external;
 }

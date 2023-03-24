@@ -1,7 +1,7 @@
 # Compiler files
 cache/
 out/
-out-filecoin-sol/
+out-fevm/
 
 # Ignores development broadcast logs
 !/broadcast

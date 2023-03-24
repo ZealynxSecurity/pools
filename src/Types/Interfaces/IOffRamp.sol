@@ -29,13 +29,13 @@ interface IOffRamp {
 
   function totalIOUStaked() external view returns (uint256);
 
-  function exitToken() external view returns (address);
+  function asset() external view returns (address);
 
   function iouTokensStaked(address) external view returns (uint256);
 
   function iouTokensToRealize(address) external view returns (uint256);
 
-  function exitTokensToClaim(address) external view returns (uint256);
+  function assetsToClaim(address) external view returns (uint256);
 
   function lastAccountUpdateCursor(address) external view returns (uint256);
 
@@ -43,7 +43,7 @@ interface IOffRamp {
 
   function userList(uint256) external view returns (address);
 
-  function liquidExitTokens() external view returns (uint256);
+  function liquidAssets() external view returns (uint256);
 
   function lastDepositBlock() external view returns (uint256);
 
@@ -81,8 +81,8 @@ interface IOffRamp {
   function distribute(address receiver, uint256 amount) external;
 
   function stake(uint256 amount) external;
-
-  function stakeOnBehalf(uint256 amount, address recipient) external;
+    
+  function unstake(uint256 amount) external;
 
   function realize() external;
 
@@ -97,5 +97,19 @@ interface IOffRamp {
   function realizeClaimAndWithdraw() external;
 
   function setConversionWindow(uint256 newConversionWindow) external;
+  
+  function redeem(
+    uint256 shares,
+    address receiver,
+    address owner,
+    uint256 totalAssets
+  ) external  returns (uint256 assets);
+
+  function withdraw(
+      uint256 assets,
+      address receiver,
+      address owner,
+      uint256 totalAssets
+  ) external returns (uint256 shares);
 }
 

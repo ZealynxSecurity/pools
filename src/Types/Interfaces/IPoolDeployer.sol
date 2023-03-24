@@ -7,11 +7,11 @@ interface IPoolDeployer {
         address _operator,
         uint256 _id,
         address _router,
-        address _poolImplementation,
         address _asset,
         address _share,
         address _ramp,
         address _iou,
-        uint256 _minimumLiquidity
+        uint256 _minimumLiquidity,
+        uint256 _bias
     ) external returns (IPool);
 }

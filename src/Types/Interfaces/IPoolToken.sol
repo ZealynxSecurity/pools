@@ -93,4 +93,8 @@ interface IPoolToken {
         address to,
         uint256 amount
     ) external returns (bool);
+
+    function setMinter(address minter) external;
+
+    function setBurner(address minter) external;
 }

@@ -1,28 +1,27 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {ROUTE_VC_ISSUER} from "src/Constants/Routes.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 
-abstract contract VCVerifier is RouterAware, EIP712 {
-  constructor(string memory _name, string memory _version)
-    EIP712(_name, _version) {}
+abstract contract VCVerifier is IVCVerifier, EIP712 {
+  error InvalidCredential();
+  address public router;
+  constructor(string memory _name, string memory _version, address _router)
+    EIP712(_name, _version) {
+      router = _router;
+    }
 
   string internal constant _VERIFIABLE_CREDENTIAL_TYPE =
-    "VerifiableCredential(address issuer,address subject,uint256 epochIssued,uint256 epochValidUntil,uint256 cap,AgentData miner)";
-  string internal constant _MINER_DATA_TYPE =
-    "AgentData(uint256 assets,uint256 expectedDailyRewards,uint256 exposureAtDefault,uint256 expectedLoss,uint256 liabilities,uint256 lossGivenDefault,uint256 probabilityOfDefault,uint256 qaPower,uint256 rawPower,uint256 startEpoch,uint256 unexpectedLoss)";
+    "VerifiableCredential(address issuer,uint256 subject,uint256 epochIssued,uint256 epochValidUntil,uint256 value,bytes4 action,uint64 target,bytes claim)";
 
   bytes32 public constant _VERIFIABLE_CREDENTIAL_TYPE_HASH =
-    keccak256(abi.encodePacked(_VERIFIABLE_CREDENTIAL_TYPE, _MINER_DATA_TYPE));
-
-  bytes32 public constant _MINER_DATA_TYPE_HASH =
-    keccak256(abi.encodePacked(_MINER_DATA_TYPE));
+    keccak256(abi.encodePacked(_VERIFIABLE_CREDENTIAL_TYPE));
 
   function deriveStructHash(VerifiableCredential memory vc) public pure returns(bytes32) {
     return keccak256(abi.encode(
@@ -31,7 +30,9 @@ abstract contract VCVerifier is RouterAware, EIP712 {
       vc.subject,
       vc.epochIssued,
       vc.epochValidUntil,
-      vc.cap,
+      vc.value,
+      vc.action,
+      vc.target,
       vc.claim
     ));
   }
@@ -43,38 +44,30 @@ abstract contract VCVerifier is RouterAware, EIP712 {
   }
 
   function recover(
-    VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s
+    SignedCredential memory sc
   ) public view returns (address) {
-      return ECDSA.recover(digest(vc), v, r, s);
+      return ECDSA.recover(digest(sc.vc), sc.v, sc.r, sc.s);
   }
 
-  // TODO: Use error library
-  function isValid(
-    address agent,
-    VerifiableCredential memory vc, uint8 v, bytes32 r, bytes32 s
-  ) public view returns (bool) {
-    address issuer = recover(vc, v, r, s);
-    require(issuer == vc.issuer, "VCVerifier: Not authorized");
-    require(isValidIssuer(issuer), "VCVerifier: Not authorized");
-    require(vc.subject == agent, "VCVerifier: Not authorized");
-    require(block.number >= vc.epochIssued && block.number <= vc.epochValidUntil, "Verifiable Credential not in valid epoch range");
-
-    return true;
+  function validateCred(
+    uint256 agent,
+    bytes4 selector,
+    SignedCredential memory sc
+  ) public view {
+    address issuer = recover(sc);
+    if (
+      issuer != sc.vc.issuer ||
+      !isValidIssuer(issuer) ||
+      sc.vc.subject != agent ||
+      sc.vc.action != selector ||
+      !(
+        block.number >= sc.vc.epochIssued &&
+        block.number <= sc.vc.epochValidUntil
+      )
+    ) revert InvalidCredential();
   }
 
   function isValidIssuer(address issuer) internal view returns (bool) {
     return IRouter(router).getRoute(ROUTE_VC_ISSUER) == issuer;
-  }
-
-  function _isValidVC(address agent, SignedCredential memory signedCredential) internal view returns (bool) {
-    require(isValid(
-      agent,
-      signedCredential.vc,
-      signedCredential.v,
-      signedCredential.r,
-      signedCredential.s
-    ), "Invalid VC");
-
-    return true;
   }
 }

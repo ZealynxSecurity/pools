@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import "src/VCVerifier/VCVerifier.sol";
+import {errorSelector} from "./helpers/Utils.sol";
 import "./BaseTest.sol";
 
 contract VCVerifierMock is VCVerifier {
@@ -9,14 +10,13 @@ contract VCVerifierMock is VCVerifier {
     address _router,
     string memory verifiedName,
     string memory verifiedVersion
-  ) VCVerifier(verifiedName, verifiedVersion) {
-    router = _router;
+  ) VCVerifier(verifiedName, verifiedVersion, _router) {
   }
 }
 
 contract VCVerifierTest is BaseTest {
   VCVerifierMock public vcv;
-  address public agent = makeAddr("AGENT");
+  uint256 public agentID = 1;
 
   function setUp() public {
     vcv = new VCVerifierMock(address(router), "glif.io", "1");
@@ -24,55 +24,76 @@ contract VCVerifierTest is BaseTest {
   }
 
   function testVerifyCredential() public {
-    SignedCredential memory sc = issueSC(agent);
+    SignedCredential memory sc = _issueSC(agentID);
 
-    assertTrue(vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s));
+    try vcv.validateCred(agentID, 0x0, sc) {
+      assertTrue(true);
+    } catch {
+      assertTrue(false, "Should be a valid cred");
+    }
   }
 
   function testVerifyCredentialFromWrongIssuer() public {
-    uint256 qaPower = 10e10;
+    uint256 agentValue = 10e18;
+    uint256 collateralValue = agentValue * 60 / 100;
 
-    AgentData memory _agent = AgentData(
-      1e10, 100, 0, 0.5e18, 10e18, 10e18, 10, qaPower, 5e18, 0, 0
+    AgentData memory agent = AgentData(
+      agentValue, 15e16, collateralValue, 0, 500, 80, 10e18, 5e18, 0
     );
 
     VerifiableCredential memory vc = VerifiableCredential(
       vcIssuer,
-      agent,
+      agentID,
       block.number,
       block.number + 100,
-      100,
-      abi.encode(_agent)
+      1000,
+      // no specific action in this cred
+      0x0,
+      // no specific target in this cred
+      0,
+      abi.encode(agent)
     );
 
     bytes32 digest = vcv.digest(vc);
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, digest);
-    vm.expectRevert("VCVerifier: Not authorized");
-    vcv.isValid(agent, vc, v, r, s);
+    SignedCredential memory sc = SignedCredential(vc, v, r, s);
+    try vcv.validateCred(agentID, 0x0, sc) {
+      assertTrue(false, "Credential should be invalid - wrong issuer");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
+    }
   }
 
   function testBadIssuer() public {
-    SignedCredential memory sc = issueSC(agent);
+    SignedCredential memory sc = _issueSC(agentID);
 
     sc.vc.issuer = makeAddr("FALSE_ISSUER");
-    vm.expectRevert("VCVerifier: Not authorized");
-    vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s);
+
+    try vcv.validateCred(agentID, 0x0, sc) {
+      assertTrue(false, "Credential should be invalid - bad issuer");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
+    }
   }
 
   function testFalseSubject() public {
-    SignedCredential memory sc = issueSC(agent);
+    SignedCredential memory sc = _issueSC(agentID);
 
-    sc.vc.subject = makeAddr("FALSE_SUBJECT");
-    vm.expectRevert("VCVerifier: Not authorized");
-    vcv.isValid(agent, sc.vc, sc.v, sc.r, sc.s);
+    sc.vc.subject = 2;
+    try vcv.validateCred(agentID, 0x0, sc) {
+      assertTrue(false, "Credential should be invalid - false subject");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
+    }
   }
 
-  // we don't use the issueGenericVC funcs because we dont use the AgentPolice as the VCVerifier
-  function issueSC(address _agent) internal returns (SignedCredential memory) {
-    uint256 qaPower = 10e18;
+  // we don't use the generic funcs because we dont use the AgentPolice as the VCVerifier
+  function _issueSC(uint256 _agent) internal returns (SignedCredential memory) {
+    uint256 agentValue = 10e18;
+    uint256 collateralValue = agentValue * 60 / 100;
 
     AgentData memory agent = AgentData(
-      1e10, 20e18, 0.5e18, 10e18, 10e18, 0, 10, qaPower, 5e18, 0, 0
+      agentValue, 15e16, collateralValue, 0, 500, 80, 10e18, 5e18, 0
     );
 
     VerifiableCredential memory vc = VerifiableCredential(
@@ -81,6 +102,10 @@ contract VCVerifierTest is BaseTest {
       block.number,
       block.number + 100,
       1000,
+      // no specific action in this cred
+      0x0,
+      // no specific target in this cred
+      0,
       abi.encode(agent)
     );
 
@@ -88,5 +113,7 @@ contract VCVerifierTest is BaseTest {
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(vcIssuerPk, digest);
     return SignedCredential(vc, v, r, s);
   }
+
+
 }
 

@@ -1,34 +1,44 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
-import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
-import {ERC20} from "solmate/tokens/ERC20.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 
-contract OffRamp is IOffRamp, RouterAware, Ownable {
-    using SafeTransferLib for ERC20;
+// The Offramp relies on 3 main tokens -
+// 1. The IOU token - this is the token that is staked into the Offramp.
+// 2. The asset token - this is the token that is distributed to the IOU token holders.
+// 3. The liquidStakingToken - this represents an ERC4626 _share_.
+//
+// We're basically using the IOU token as a way to throttle the conversion from liquidStakngTokens
+// into the asset which in most of our cases is wrapped FIL. Since there isn't necesarily
+// enough balance to cover all wrapped FIL (or asset) exits we need to use the IOU as an intermediary.
+//
+// This contract needs to be able to have mint permissions over the IOU token, and it needs to be able
+// to burn IOU tokens (when they're exchanged for asset) and liquid staking tokens (when they're exchanged for IOU).
 
+contract OffRamp is IOffRamp, Ownable {
     // the conversionWindow protects against flash loan attacks
     uint256 public conversionWindow;
-    // the token that gets staked into the Offramp to accrue a balance
+    // the token that gets staked into the Offramp to accrue a balance and eventually exit into the asset.
+    // This is the intermediary or synthetic token.
     address public iouToken;
-    // the desired token to convert into
-    address public exitToken;
-
+    // the desired token to convert into over time.
+    address public asset;
+    // This represents an ERC4626 _share_. This is the token that we're "throttling" the exit of.
+    address public liquidStakingToken;
+    address public router;
     /**
      * @dev iouTokens start staked,
      * and then move into iouTokensToRealize during the phased distribution,
-     * and then move into the exitTokensToClaim after calling `realize`
-     * finally, tokens can be claimed when they are in the exitTokensToClaim bucket
+     * and then move into the assetsToClaim after calling `realize`
+     * finally, tokens can be claimed when they are in the assetsToClaim bucket
      */
     mapping(address => uint256) public iouTokensStaked;
     mapping(address => uint256) public iouTokensToRealize;
-    mapping(address => uint256) public exitTokensToClaim;
+    mapping(address => uint256) public assetsToClaim;
     // the last point in which the user's bucket was updated
     // the cursor _is_ the value of `totalDividendPoints` at the time of the last update
     mapping(address => uint256) public lastAccountUpdateCursor;
@@ -38,7 +48,7 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
     uint256 public nextUser;
 
     uint256 public totalIOUStaked;
-    uint256 public liquidExitTokens;
+    uint256 public liquidAssets;
     uint256 public lastDepositBlock;
 
     ///@dev values needed to calculate the distribution of base asset in proportion for ious staked
@@ -53,14 +63,16 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
     constructor(
         address _router,
         address _iouToken,
-        address _exitToken,
+        address _asset,
+        address _liquidStakingToken,
         address _owner,
         uint256 _poolID
     ) Ownable(_owner){
         router = _router;
         iouToken = _iouToken;
-        exitToken = _exitToken;
+        asset = _asset;
         poolID = _poolID;
+        liquidStakingToken = _liquidStakingToken;
         conversionWindow = 50;
     }
 
@@ -96,11 +108,11 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
     modifier runPhasedDistribution() {
         uint256 _currentBlock = block.number;
         uint256 _toDistribute = _getToDistribute();
-        uint256 _canDistribute = liquidExitTokens;
+        uint256 _canDistribute = liquidAssets;
 
         if(_toDistribute > 0){
             // distribute as many tokens as we have liquid (and not accounted for)
-            liquidExitTokens = _toDistribute < _canDistribute
+            liquidAssets = _toDistribute < _canDistribute
                 ? _canDistribute - (_toDistribute)
                 : 0;
             // increase the allocation
@@ -125,10 +137,10 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
     ///This function reverts if there is no realisedToken balance
     function claim() public {
         address sender = msg.sender;
-        require(exitTokensToClaim[sender] > 0);
-        uint256 value = exitTokensToClaim[sender];
-        exitTokensToClaim[sender] = 0;
-        ERC20(exitToken).safeTransfer(sender, value);
+        require(assetsToClaim[sender] > 0);
+        uint256 value = assetsToClaim[sender];
+        assetsToClaim[sender] = 0;
+        IERC20(asset).transfer(sender, value);
     }
 
     ///@dev Withdraws staked ious from the transmuter
@@ -142,7 +154,7 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
         require(iouTokensStaked[sender] >= amount,"Transmuter: unstake amount exceeds deposited amount");
         iouTokensStaked[sender] = iouTokensStaked[sender] - (amount);
         totalIOUStaked = totalIOUStaked - (amount);
-        ERC20(iouToken).safeTransfer(sender, amount);
+        IPoolToken(iouToken).transfer(sender, amount);
     }
     ///@dev Deposits ious into the transmuter
     ///
@@ -156,7 +168,7 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
         // requires approval of iouToken first
         address sender = msg.sender;
         //require tokens transferred in;
-        ERC20(iouToken).safeTransferFrom(sender, address(this), amount);
+        IPoolToken(iouToken).transferFrom(sender, address(this), amount);
         totalIOUStaked = totalIOUStaked + (amount);
         iouTokensStaked[sender] = iouTokensStaked[sender] + (amount);
     }
@@ -165,7 +177,7 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
     ///
     ///@param amount the amount of ious to stake
     function stakeOnBehalf(uint256 amount, address recipient)
-        public
+        internal
         runPhasedDistribution()
         updateAccount(msg.sender)
         checkIfNewUser()
@@ -173,7 +185,7 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
         // requires approval of iouToken first
         address sender = msg.sender;
         //require tokens transferred in;
-        ERC20(iouToken).safeTransferFrom(sender, address(this), amount);
+        IPoolToken(iouToken).transferFrom(sender, address(this), amount);
         totalIOUStaked = totalIOUStaked + (amount);
         iouTokensStaked[recipient] = iouTokensStaked[recipient] + (amount);
     }
@@ -209,7 +221,7 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
         increaseAllocations(diff);
 
         // add payout
-        exitTokensToClaim[sender] = exitTokensToClaim[sender] + (iousToRealize);
+        assetsToClaim[sender] = assetsToClaim[sender] + (iousToRealize);
     }
 
     /// @dev Executes realize() on another account that has had more base tokens allocated to it than ious staked.
@@ -256,13 +268,13 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
         iouTokensToRealize[sender] = iouTokensToRealize[sender] + (diff);
 
         // add payout
-        exitTokensToClaim[victim] = exitTokensToClaim[victim] + (iousToRealize);
+        assetsToClaim[victim] = assetsToClaim[victim] + (iousToRealize);
 
         // force payout of realised tokens of the victim address
-        if (exitTokensToClaim[victim] > 0) {
-            uint256 value = exitTokensToClaim[victim];
-            exitTokensToClaim[victim] = 0;
-            ERC20(exitToken).safeTransfer(victim, value);
+        if (assetsToClaim[victim] > 0) {
+            uint256 value = assetsToClaim[victim];
+            assetsToClaim[victim] = 0;
+            IERC20(asset).transfer(victim, value);
         }
     }
 
@@ -304,8 +316,8 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
         address origin,
         uint256 amount
     ) public runPhasedDistribution() {
-        ERC20(exitToken).safeTransferFrom(origin, address(this), amount);
-        liquidExitTokens = liquidExitTokens + (amount);
+        IERC20(asset).transferFrom(origin, address(this), amount);
+        liquidAssets = liquidAssets + (amount);
     }
 
     /// @dev Allocates the incoming yield proportionally to all iouToken stakers.
@@ -318,7 +330,7 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
             );
             unclaimedDividends = unclaimedDividends + (amount);
         } else {
-            liquidExitTokens = liquidExitTokens + (amount);
+            liquidAssets = liquidAssets + (amount);
         }
     }
 
@@ -344,7 +356,7 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
         uint256 _toDistribute = _getToDistribute();
         pendingDivs = totalIOUStaked  > 0 ? (_toDistribute * iouTokensStaked[user]) / (totalIOUStaked) : 0;
         realizeableIOUs = iouTokensToRealize[user] + (dividendsOwing(user));
-        claimableIOUs = exitTokensToClaim[user];
+        claimableIOUs = assetsToClaim[user];
     }
 
     /// @dev Gets the status of multiple users in one call
@@ -379,32 +391,90 @@ contract OffRamp is IOffRamp, RouterAware, Ownable {
         return (_theUserList, _theUserData);
     }
 
-    /// @dev Gets info on the liquidExitTokens
+    /// @dev Gets info on the liquidAssets
     ///
     /// This function is used to query the contract to get the
-    /// latest state of the liquidExitTokens
+    /// latest state of the liquidAssets
     ///
     /// @return _toDistribute the amount ready to be distributed
     /// @return _deltaBlocks the amount of time since the last phased distribution
-    /// @return _canDistribute the amount in the liquidExitTokens
+    /// @return _canDistribute the amount in the liquidAssets
     function bufferInfo() public view returns (
         uint256 _toDistribute,
         uint256 _deltaBlocks,
         uint256 _canDistribute
     ) {
         _deltaBlocks = block.number - (lastDepositBlock);
-        _canDistribute = liquidExitTokens;
+        _canDistribute = liquidAssets;
         _toDistribute = _getToDistribute();
     }
 
     function _getToDistribute() internal view returns (uint256 _toDistribute){
         uint256 deltaBlocks = block.number - lastDepositBlock;
         if (deltaBlocks >= conversionWindow) {
-            return liquidExitTokens;
-        } else if(liquidExitTokens * deltaBlocks > conversionWindow) {
-            return (liquidExitTokens * deltaBlocks) / conversionWindow;
+            return liquidAssets;
+        } else if(liquidAssets * deltaBlocks > conversionWindow) {
+            return (liquidAssets * deltaBlocks) / conversionWindow;
         }
         return 0;
     }
 
+
+    /**
+     * @dev Allows the Staker to redeem their shares for assets
+     * @param shares The number of shares to burn
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     * @return assets The assets received from burning the shares
+     */
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address owner,
+        uint256 totalAssets
+    ) public  returns (uint256 assets) {
+        require((assets = previewRedeem(shares, totalAssets)) != 0, "ZERO_ASSETS");
+        IPoolToken(liquidStakingToken).burn(owner, shares);
+        IPoolToken(iouToken).mint(address(this), assets);
+        stakeOnBehalf(assets, receiver);
+    }
+
+    /**
+     * @dev Allows Staker to withdraw assets
+     * @param assets The assets to withdraw
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     * @return shares - the number of shares burned
+     */
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address owner,
+        uint256 totalAssets
+    ) public returns (uint256 shares) {
+        shares = previewWithdraw(assets, totalAssets);
+        IPoolToken(liquidStakingToken).burn(owner, shares);
+        IPoolToken(iouToken).mint(address(this), assets);
+        stakeOnBehalf(assets, receiver);
+    }
+
+    /**
+     * @dev Previews the withdraw
+     * @param assets The amount of assets to withdraw
+     * @return shares - The amount of shares to be converted from assets
+     */
+    function previewWithdraw(uint256 assets, uint256 totalAssets) public view returns (uint256) {
+        uint256 supply = IPoolToken(liquidStakingToken).totalSupply();
+        return supply == 0 ? assets : assets * supply / totalAssets;
+    }
+
+    /**
+     * @dev Previews an amount of assets to redeem for a given number of `shares`
+     * @param shares The amount of shares to hypothetically burn
+     * @return assets - The amount of assets that would be converted from shares
+     */
+    function previewRedeem(uint256 shares, uint256 totalAssets) public view returns (uint256) {
+        uint256 supply = IPoolToken(liquidStakingToken).totalSupply();
+        return supply == 0 ? shares : shares * totalAssets / supply;
+    }
 }

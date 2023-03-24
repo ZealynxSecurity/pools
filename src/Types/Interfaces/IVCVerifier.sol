@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 
@@ -9,11 +9,13 @@ interface IVCVerifier {
   ) external view returns(bytes32);
 
   // validates a signed credential
-  function isValidCredential(
+  function validateCred(
+    uint256 agent,
+    bytes4 selector,
     SignedCredential memory
-  ) external view returns (bool);
+  ) external;
 
   function recover(
     SignedCredential memory
-  ) external view returns (bool);
+  ) external view returns (address);
 }

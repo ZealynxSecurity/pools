@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity ^0.8.15;
-import {ERC20} from "solmate/tokens/ERC20.sol";
-import {PoolToken} from "src/Pool/PoolToken.sol";
-import {SignedCredential} from "src/Types/Structs/Credentials.sol";
+pragma solidity 0.8.17;
+
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
+import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
-import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
+import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
 interface IPool {
 
@@ -15,21 +15,15 @@ interface IPool {
     //////////////////////////////////////////////////////////////*/
 
     event Borrow(
-        address indexed agent,
-        uint256 amount,
-        uint256 powerTokenAmount,
-        uint256 rate
+        uint256 indexed agent,
+        uint256 amount
     );
 
-    event ExitPool(
-        address indexed agent,
-        uint256 amount,
-        uint256 powerTokensReturned
-    );
-
-    event MakePayment(
-        address indexed agent,
-        uint256 pmt
+    event Pay(
+        uint256 indexed agent,
+        uint256 rate,
+        uint256 epochsPaid,
+        uint256 refund
     );
 
     event Deposit(
@@ -47,27 +41,19 @@ interface IPool {
         uint256 shares
     );
 
-    event RebalanceTotalBorrowed(
-        uint256 indexed agentID,
-        uint256 realAccountValue,
-        uint256 totalBorrowed
-    );
-
-    event SetOperatorRole(address indexed operator, bool enabled);
+    event WriteOff(uint256 agentID, uint256 recoveredDebt, uint256 lostAmount);
 
     /*////////////////////////////////////////////////////////
                             GETTERS
     ////////////////////////////////////////////////////////*/
 
-    function asset() external view returns (ERC20);
+    function asset() external view returns (IERC20);
 
-    function share() external view returns (PoolToken);
-
-    function implementation() external view returns (IPoolImplementation);
-
-    function iou() external view returns (PoolToken);
+    function liquidStakingToken() external view returns (IPoolToken);
 
     function ramp() external view returns (IOffRamp);
+
+    function rateModule() external view returns (IRateModule);
 
     function id() external view returns (uint256);
 
@@ -85,17 +71,29 @@ interface IPool {
 
     function getLiquidAssets() external view returns (uint256);
 
+    function getRate(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) external view returns (uint256);
+
+    function isOverLeveraged(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) external view returns (bool);
+
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function borrow(uint256 amount, SignedCredential memory sc, uint256 powerTokenAmount) external;
+    function borrow(VerifiableCredential memory vc) external;
 
-    function exitPool( address agent, SignedCredential memory sc, uint256 amount) external returns (uint256);
-
-    function makePayment(address agent,uint256 pmt) external;
-
-    function rebalanceTotalBorrowed(uint256 agentID, uint256 realAccountValue) external;
+    function pay(
+        VerifiableCredential memory vc
+    ) external returns (
+        uint256 rate,
+        uint256 epochsPaid,
+        uint256 refund
+    );
 
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC
@@ -161,8 +159,8 @@ interface IPool {
 
     function setRamp(IOffRamp newRamp) external;
 
-    function setImplementation(IPoolImplementation poolImplementation) external;
-
     function setMinimumLiquidity(uint256 minLiquidity) external;
+
+    function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 }
 

@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
-import {PoolTokensDeployer} from "deploy/PoolTokens.sol";
 import {IPoolDeployer} from "src/Types/Interfaces/IPoolDeployer.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
@@ -13,13 +11,9 @@ import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-import {ROUTE_ACCOUNTING_DEPLOYER} from "src/Constants/Routes.sol";
 import {InvalidParams, InvalidState, Unauthorized} from "src/Errors.sol";
 
-string constant IMPLEMENTATION = "IMPLEMENTATION";
-string constant ACCOUNTING = "ACCOUNTING";
-
-contract PoolFactory is IPoolFactory, RouterAware, Operatable {
+contract PoolFactory is IPoolFactory, Operatable {
   /**
    * @notice The PoolFactoryAdmin can change the treasury fee up to the MAX_TREASURY_FEE
    * @dev treasury fee is denominated by 1e18, in other words, 1e17 is 10% fee
@@ -29,8 +23,9 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
   uint256 public feeThreshold;
   IERC20 public asset;
   address[] public allPools;
+  address public router;
   // poolExists
-  mapping(bytes32 => bool) public exists;
+  mapping(address => bool) internal exists;
 
   /*//////////////////////////////////////
                 MODIFIERS
@@ -41,11 +36,13 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
     uint256 _treasuryFeeRate,
     uint256 _feeThreshold,
     address _owner,
-    address _operator
+    address _operator,
+    address _router
   ) Operatable(_owner, _operator) {
     asset = _asset;
     treasuryFeeRate = _treasuryFeeRate;
     feeThreshold = _feeThreshold;
+    router = _router;
   }
 
   function allPoolsLength() public view returns (uint256) {
@@ -54,93 +51,39 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
 
   /**
    * @dev Creates a new pool
-   * @param name The name of the pool
-   * @param symbol The symbol of the pool
-   * @param owner The owner of the pool
-   * @param operator The operator of the pool
-   * @param implementation The implementation of the pool
-   * @return pool The address of the new pool
+   * @param pool The new pool instance
    */
-  function createPool(
-    string memory name,
-    string memory symbol,
-    address owner,
-    address operator,
-    address implementation
-  ) external onlyOwnerOperator returns (IPool pool) {
-    if (!isPoolImplementation(implementation)) revert InvalidParams();
-    if (operator == address(0)) revert InvalidParams();
-
-    IPoolDeployer deployer = IPoolDeployer(IRouter(router).getRoute(ROUTE_ACCOUNTING_DEPLOYER));
-
-    uint256 poolID = allPools.length;
-    address stakingAsset = address(asset);
-
-    // Create custom ERC20 for the pools
-    (
-      address shareToken,
-      address iouToken
-    ) = PoolTokensDeployer.deploy(
-      router,
-      poolID,
-      name,
-      symbol
-    );
-
-    // deploy a new Pool Accounting instance
-    pool = deployer.deploy(
-      owner,
-      operator,
-      poolID,
-      router,
-      implementation,
-      stakingAsset,
-      shareToken,
-      // start with no offramp
-      address(0),
-      iouToken,
-      0
-    );
+  function attachPool(
+    IPool pool
+  ) external onlyOwnerOperator {
     // add the pool to the list of all pools
     allPools.push(address(pool));
     // cache the new pool in storage
-    exists[createKey(ACCOUNTING, address(pool))] = true;
+    exists[address(pool)] = true;
   }
 
   /**
-   * @dev upgrades a Pool Accounting instance
-   * @param poolId The id of the pool to upgrade
+   * @notice upgrades a Pool Accounting instance
+   * @param newPool The address of the pool to upgrade
+   *
+   * @dev only the Pool Factory owner or operator can upgrade pools
    */
   function upgradePool(
-    uint256 poolId
-  ) external returns (IPool newPool) {
-    IPool oldPool = IPool(allPools[poolId]);
-    // only the Pool's owner or operator can upgrade
-    if (IAuth(address(oldPool)).owner() != msg.sender && IAuth(address(oldPool)).operator() != msg.sender) revert Unauthorized();
+    IPool newPool
+  ) external onlyOwnerOperator {
+    uint256 poolID = newPool.id();
+    IPool oldPool = IPool(allPools[poolID]);
+
     // the pool must be shutting down (deposits disabled) to upgrade
     if (!oldPool.isShuttingDown()) revert InvalidState();
 
-    IPoolDeployer deployer = IPoolDeployer(IRouter(router).getRoute(ROUTE_ACCOUNTING_DEPLOYER));
-    // deploy a new instance of PoolAccounting
-    newPool = deployer.deploy(
-      IAuth(address(oldPool)).owner(),
-      IAuth(address(oldPool)).operator(),
-      poolId,
-      router,
-      address(oldPool.implementation()),
-      address(oldPool.asset()),
-      address(oldPool.share()),
-      address(oldPool.ramp()),
-      address(oldPool.iou()),
-      oldPool.minimumLiquidity()
-    );
     // Update the pool to exist before we decomission the old pool so transfer checks will succeed
-    allPools[poolId] = address(newPool);
-    exists[createKey(ACCOUNTING, address(newPool))] = true;
+    allPools[poolID] = address(newPool);
+    exists[address(newPool)] = true;
     uint256 borrowedAmount = oldPool.decommissionPool(newPool);
     // change update the pointer in factory storage
     // reset pool mappings
-    exists[createKey(ACCOUNTING, address(oldPool))] = false;
+    exists[address(oldPool)] = false;
     // update the accounting in the new pool
     newPool.jumpStartTotalBorrowed(borrowedAmount);
   }
@@ -150,33 +93,7 @@ contract PoolFactory is IPoolFactory, RouterAware, Operatable {
    * @param pool The address of the pool
    */
   function isPool(address pool) external view returns (bool) {
-    return exists[createKey(ACCOUNTING, pool)];
-  }
-
-  /**
-   * @dev Returns if a Pool Implementation instance exists
-   * @param implementation The address of the implementation
-   */
-  function isPoolImplementation(address implementation) public view returns (bool) {
-    return exists[createKey(IMPLEMENTATION, implementation)];
-  }
-
-  /**
-   * @dev Approves a new Pool Implementation
-   * @notice only the factory admin can approve new implementations
-   */
-  function approveImplementation(address implementation) external onlyOwnerOperator {
-    exists[createKey(IMPLEMENTATION, address(implementation))] = true;
-  }
-
-  /**
-   * @dev Revokes an Implementation
-   * @notice only the factory admin can revoke an implementation
-   *
-   * TODO: Not sure about side effects of removing live versions? Should be safe - deprecation
-   */
-  function revokeImplementation(address implementation) external onlyOwnerOperator {
-    exists[createKey(IMPLEMENTATION, address(implementation))] = false;
+    return exists[pool];
   }
 
   /**

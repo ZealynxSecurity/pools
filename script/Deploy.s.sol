@@ -3,18 +3,17 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
-import {WFIL} from "../src/WFIL.sol";
+import {WFIL} from "shim/WFIL.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {Router} from "src/Router/Router.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {PoolFactory} from "src/Pool/PoolFactory.sol";
-import {PowerToken} from "src/PowerToken/PowerToken.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
-import {PoolAccountingDeployer} from "deploy/PoolAccounting.sol";
+import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import "src/Constants/Routes.sol";
 
 contract Deploy is Script {
@@ -35,42 +34,36 @@ contract Deploy is Script {
         address deployerAddr = vm.addr(deployerPrivateKey);
         vm.startBroadcast(deployerPrivateKey);
 
-        WFIL wFIL = new WFIL();
+        address wFIL = vm.envAddress("WFIL_ADDR");
 
         // deploys the router
         router = address(new Router(deployerAddr));
 
-        address minerRegistry = address(new MinerRegistry());
-        address agentFactory = address(new AgentFactory());
+        address minerRegistry = address(new MinerRegistry(router));
+        address agentFactory = address(new AgentFactory(router));
         address agentPolice = address(
-            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr)
+            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router)
         );
         address poolFactory = address(
-            new PoolFactory(IERC20(address(wFIL)), 1e17, 0, deployerAddr, deployerAddr)
+            new PoolFactory(IERC20(wFIL), 1e17, 0, deployerAddr, deployerAddr, router)
         );
-        address powerToken = address(new PowerToken());
         address credParser = address(new CredParser());
-        address accountingDeployer = address(new PoolAccountingDeployer());
+        address agentDeployer = address(new AgentDeployer());
 
         vcIssuer = vm.addr(vcIssuerPk);
 
         Deployer.setupContractRoutes(
             router,
             treasury,
-            address(wFIL),
+            wFIL,
             minerRegistry,
             agentFactory,
             agentPolice,
             poolFactory,
-            powerToken,
             vcIssuer,
             credParser,
-            accountingDeployer
+            agentDeployer
         );
-
-        // any contract that extends RouterAware gets its router set here
-        Deployer.setRouterOnContracts(address(router));
-
         vm.stopBroadcast();
     }
 }

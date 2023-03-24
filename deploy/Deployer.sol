@@ -5,7 +5,7 @@ import {Router} from "src/Router/Router.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
-import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import "src/Constants/Routes.sol";
 
 library Deployer {
@@ -18,15 +18,14 @@ library Deployer {
     address agentFactory,
     address agentPolice,
     address poolFactory,
-    address powerToken,
     address vcIssuer,
     address credParser,
-    address accountingDeployer
+    address agentDeployer
   ) internal returns (
     bytes4[] memory routeIDs, address[] memory routeAddrs
   ) {
-    routeIDs = new bytes4[](10);
-    routeAddrs = new address[](10);
+    routeIDs = new bytes4[](9);
+    routeAddrs = new address[](9);
     // Add treasury route
     routeIDs[0] = ROUTE_TREASURY;
     routeAddrs[0] = treasury;
@@ -42,36 +41,20 @@ library Deployer {
     // Add pool factory route
     routeIDs[4] = ROUTE_POOL_FACTORY;
     routeAddrs[4] = poolFactory;
-    // Add power token route
-    routeIDs[5] = ROUTE_POWER_TOKEN;
-    routeAddrs[5] = powerToken;
     // Add vc issuer route
-    routeIDs[6] = ROUTE_VC_ISSUER;
-    routeAddrs[6] = vcIssuer;
+    routeIDs[5] = ROUTE_VC_ISSUER;
+    routeAddrs[5] = vcIssuer;
     // Add agent police route
-    routeIDs[7] = ROUTE_AGENT_POLICE;
-    routeAddrs[7] = agentPolice;
+    routeIDs[6] = ROUTE_AGENT_POLICE;
+    routeAddrs[6] = agentPolice;
     // Add cred parser
-    routeIDs[8] = ROUTE_CRED_PARSER;
-    routeAddrs[8] = credParser;
-    // Add cred parser
-    routeIDs[9] = ROUTE_ACCOUNTING_DEPLOYER;
-    routeAddrs[9] = accountingDeployer;
+    routeIDs[7] = ROUTE_CRED_PARSER;
+    routeAddrs[7] = credParser;
+    // Add agent deployer
+    routeIDs[8] = ROUTE_AGENT_DEPLOYER;
+    routeAddrs[8] = agentDeployer;
 
     IRouter(router).pushRoutes(routeIDs, routeAddrs);
   }
 
-  function setRouterOnContracts(address router) internal {
-    bytes4[5] memory routerAwareRoutes = [
-      ROUTE_AGENT_FACTORY,
-      ROUTE_MINER_REGISTRY,
-      ROUTE_POOL_FACTORY,
-      ROUTE_POWER_TOKEN,
-      ROUTE_AGENT_POLICE
-    ];
-
-    for (uint256 i = 0; i < routerAwareRoutes.length; ++i) {
-      IRouterAware(IRouter(router).getRoute(routerAwareRoutes[i])).setRouter(router);
-    }
-  }
 }

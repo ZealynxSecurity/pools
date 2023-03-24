@@ -8,10 +8,7 @@ pragma solidity ^0.8.0;
         to the ERC20 interface to include minting and burning.
  */
 interface IPoolTokenPlus {
-    /**
-     * @dev Returns the poolID of the pool this token belongs to.
-     */
-    function poolID() external view returns (uint256);
+
     /**
      * @dev Mints PoolTokens. Protected call.
      */
@@ -20,4 +17,8 @@ interface IPoolTokenPlus {
      * @dev Burns PoolTokens. Protected call.
      */
     function burn(address account, uint256 amount) external returns (bool);
+
+    function setMinter(address minter) external;
+
+    function setBurner(address minter) external;
 }

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IAgentDeployer} from "src/Types/Interfaces/IAgentDeployer.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -18,24 +18,16 @@ library GetRoute {
     return IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
   }
 
+  function agentDeployer(address router) internal view returns (IAgentDeployer) {
+    return IAgentDeployer(IRouter(router).getRoute(ROUTE_AGENT_DEPLOYER));
+  }
+
   function poolFactory(address router) internal view returns (IPoolFactory) {
     return IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
   }
 
-  function powerToken(address router) internal view returns (IPowerToken) {
-    return IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
-  }
-
-  function powerToken20(address router) internal view returns (IERC20) {
-    return IERC20(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
-  }
-
   function wFIL(address router) internal view returns (IWFIL) {
     return IWFIL(IRouter(router).getRoute(ROUTE_WFIL_TOKEN));
-  }
-
-  function wFIL20(address router) internal view returns (IERC20) {
-    return IERC20(IRouter(router).getRoute(ROUTE_WFIL_TOKEN));
   }
 
   function minerRegistry(address router) internal view returns (IMinerRegistry) {

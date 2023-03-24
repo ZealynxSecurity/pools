@@ -1,54 +1,52 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
 import "test/helpers/MockMiner.sol";
+import {GenesisPool} from "src/Pool/Genesis.sol";
+import {PoolToken} from "src/Pool/PoolToken.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
+import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {WFIL} from "src/WFIL.sol";
-import {PowerToken} from "src/PowerToken/PowerToken.sol";
+import {WFIL} from "shim/WFIL.sol";
 import {PoolFactory} from "src/Pool/PoolFactory.sol";
 import {Router} from "src/Router/Router.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
+import {RateModule} from "src/Pool/RateModule.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
-import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
-import {MockPoolImplementation} from "test/helpers/MockPoolImplementation.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
-import {PoolAccountingDeployer} from "deploy/PoolAccounting.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
-import {MinerHelper} from "helpers/MinerHelper.sol";
+import {MinerHelper} from "shim/MinerHelper.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
+import {EPOCHS_IN_WEEK, EPOCHS_IN_DAY,  EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
 import "src/Constants/Routes.sol";
 
 struct StateSnapshot {
-    uint256 balanceWFIL;
+    uint256 agentBalanceWFIL;
     uint256 poolBalanceWFIL;
-    uint256 powerStake;
-    uint256 borrowed;
-    uint256 powerBalance;
-    uint256 powerBalancePool;
+    uint256 agentBorrowed;
 }
 
 contract BaseTest is Test {
@@ -56,7 +54,12 @@ contract BaseTest is Test {
   using AccountHelpers for Account;
   using Credentials for VerifiableCredential;
 
-  uint256 public constant WINDOW_LENGTH = 1000;
+  // max FIL value - 2B atto
+  uint256 public constant MAX_FIL = 2e27;
+  uint256 public constant DUST = 10000;
+  // 3 week window deadline for defaults
+  uint256 public constant DEFAULT_WINDOW = EPOCHS_IN_WEEK * 3;
+  uint256 public constant DEFAULT_BASE_RATE = 15e18;
   address public constant ZERO_ADDRESS = address(0);
   address public treasury = makeAddr('TREASURY');
   address public router;
@@ -69,9 +72,9 @@ contract BaseTest is Test {
   string constant public VERIFIED_NAME = "glif.io";
   string constant public VERIFIED_VERSION = "1";
 
-  WFIL wFIL = new WFIL();
+  WFIL wFIL = new WFIL(systemAdmin);
   MockIDAddrStore idStore;
-
+  address credParser = address(new CredParser());
   constructor() {
     vm.startPrank(systemAdmin);
     // deploys the router
@@ -82,20 +85,17 @@ contract BaseTest is Test {
       address(router),
       treasury,
       address(wFIL),
-      address(new MinerRegistry()),
-      address(new AgentFactory()),
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, systemAdmin, systemAdmin)),
+      address(new MinerRegistry(router)),
+      address(new AgentFactory(router)),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router)),
       // 1e17 = 10% treasury fee on yield
-      address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0, systemAdmin, systemAdmin)),
-      address(new PowerToken()),
+      address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0, systemAdmin, systemAdmin, router)),
       vcIssuer,
-      address(new CredParser()),
-      address(new PoolAccountingDeployer())
+      credParser,
+      address(new AgentDeployer())
     );
-    // any contract that extends RouterAware gets its router set here
-    Deployer.setRouterOnContracts(address(router));
     // roll forward at least 1 window length so our computations dont overflow/underflow
-    vm.roll(block.number + WINDOW_LENGTH);
+    vm.roll(block.number + DEFAULT_WINDOW);
 
     // deploy an ID address store for mocking built-in miner actors
     idStore = new MockIDAddrStore();
@@ -137,74 +137,115 @@ contract BaseTest is Test {
     miner.setID(id);
   }
 
-  function pushWFILFunds(address target, uint256 amount, address sender) public {
-    vm.deal(sender, amount);
-    vm.startPrank(sender);
-    uint256 startingBalance = wFIL.balanceOf(address(target));
-    // give the agent some funds to push
-    wFIL.deposit{value: amount}();
-    wFIL.transfer(address(target), amount);
-
-
-    assertEq(wFIL.balanceOf(address(target)), startingBalance + amount);
-    vm.stopPrank();
-  }
-
   function _agentClaimOwnership(address _agent, uint64 _miner, address _minerOwner) internal {
     IMinerRegistry registry = IMinerRegistry(IRouter(router).getRoute(ROUTE_MINER_REGISTRY));
     IAgent agent = IAgent(_agent);
 
-    uint64[] memory miners = new uint64[](1);
-    miners[0] = _miner;
     vm.startPrank(_minerOwner);
     _miner.changeOwnerAddress(address(_agent));
     vm.stopPrank();
 
+    SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), _miner);
     // confirm change owner address (agent now owns miner)
     vm.startPrank(_minerOwner);
-    agent.addMiners(miners);
-    require(agent.hasMiner(_miner), "Miner not registered");
-    assertTrue(_miner.isOwner(_agent), "The mock miner's owner should change to the agent");
-    assertTrue(agent.hasMiner(_miner), "The miner should be registered as a miner on the agent");
-    assertTrue(registry.minerRegistered(agent.id(), _miner), "After adding the miner the registry should have the miner's address as a registered miner");
+    agent.addMiner(addMinerCred);
     vm.stopPrank();
+
+    assertTrue(_miner.isOwner(_agent), "The mock miner's owner should change to the agent");
+    assertTrue(registry.minerRegistered(agent.id(), _miner), "After adding the miner the registry should have the miner's address as a registered miner");
   }
 
-  function createCustomCredential(
-      address agent,
-      uint256 qaPower,
-      uint256 expectedDailyRewards,
-      uint256 assets,
-      uint256 liabilities
-    ) internal view returns (VerifiableCredential memory vc) {
-      AgentData memory _miner = AgentData(
-          assets, expectedDailyRewards, 0, 0.5e18, liabilities, 10e18, 10, qaPower, 5e18, 0, 0
-      );
-
-      vc = VerifiableCredential(
-          vcIssuer,
-          address(agent),
-          block.number,
-          block.number + 100,
-          1000,
-          abi.encode(_miner)
-      );
-  }
-
-  function issueGenericSC(
-    address agent
-  ) public returns (
-    SignedCredential memory
-  ) {
-    // roll forward a block so our credentials do not result in the same signature
+  function issueAddMinerCred(uint256 agent, uint64 miner) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
     vm.roll(block.number + 1);
-    uint256 qaPower = 10e18;
-    uint256 expectedDailyRewards = 20e18;
-    uint256 assets = 10e18;
-    uint256 liabilities = 2e18;
 
-    AgentData memory miner = AgentData(
-      assets, expectedDailyRewards, 0, 0.5e18, liabilities, 10e18, 10, qaPower, 5e18, 0, 0
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      1000,
+      Agent.addMiner.selector,
+      miner,
+      // agent data irrelevant for an add miner cred
+      bytes("")
+    );
+
+    return signCred(vc);
+  }
+
+  function issueRemoveMinerCred(uint256 agent, uint64 miner) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      1000,
+      Agent.removeMiner.selector,
+      miner,
+      // agent data irrelevant for an remove miner cred
+      bytes("")
+    );
+
+    return signCred(vc);
+  }
+
+  function issuePullFundsFromMinerCred(uint256 agent, uint64 miner, uint256 amount) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      amount,
+      Agent.pullFundsFromMiner.selector,
+      miner,
+      // agent data irrelevant for an pull funds from miner cred
+      bytes("")
+    );
+
+    return signCred(vc);
+  }
+
+  function issuePushFundsToMinerCred(uint256 agent, uint64 miner, uint256 amount) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      amount,
+      Agent.pushFundsToMiner.selector,
+      miner,
+      // agent data irrelevant for an push funds to miner cred
+      bytes("")
+    );
+
+    return signCred(vc);
+  }
+
+  function issueGenericPayCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      amount * 2,
+      // good gcred score
+      80,
+      // good EDR
+      1000,
+      // principal = borrowAmount
+      amount,
+      // no account yet (startEpoch)
+      0
     );
 
     VerifiableCredential memory vc = VerifiableCredential(
@@ -212,14 +253,75 @@ contract BaseTest is Test {
       agent,
       block.number,
       block.number + 100,
-      expectedDailyRewards * 5,
-      abi.encode(miner)
+      amount,
+      Agent.pay.selector,
+      // minerID irrelevant for pay action
+      0,
+      abi.encode(agentData)
     );
 
-    return issueSC(vc);
+    return signCred(vc);
   }
 
-  function issueSC(
+  function issueGenericBorrowCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
+    // roll forward so we don't get an identical credential that's already been used
+    vm.roll(block.number + 1);
+    uint256 principle = amount * 2;
+    uint256 gCred = 80;
+    // NOTE: since we don't pull this off the pool it could be out of sync - careful
+    uint256 adjustedRate = rateArray[gCred] * DEFAULT_BASE_RATE / 1e18;
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      principle,
+      // good gcred score
+      gCred,
+      // good EDR
+      (adjustedRate * EPOCHS_IN_DAY * principle * 2) / 1e18,
+      // principal = borrowAmount
+      amount,
+      // no account yet (startEpoch)
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      amount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    return signCred(vc);
+  }
+
+  function createAgentData(
+    uint256 agentValue,
+    uint256 gcred,
+    uint256 expectedDailyRewards,
+    uint256 principal,
+    uint256 startEpoch
+  ) internal pure returns (AgentData memory) {
+    return AgentData(
+      agentValue,
+      DEFAULT_BASE_RATE,
+      // collateralValue is 60% of agentValue
+      agentValue * 60 / 100,
+      // expectedDailyFaultPenalties
+      0,
+      expectedDailyRewards,
+      gcred,
+      // qaPower hardcoded
+      10e18,
+      principal,
+      startEpoch
+    );
+  }
+
+  function signCred(
     VerifiableCredential memory vc
   ) public returns (
     SignedCredential memory
@@ -229,120 +331,219 @@ contract BaseTest is Test {
     return SignedCredential(vc, v, r, s);
   }
 
-  function createPool(
-    string memory poolName,
-    string memory poolSymbol,
-    address poolOperator,
-    uint256 fee
-    ) internal returns(IPool)
-  {
+  function createPool() internal returns (IPool pool) {
     IPoolFactory poolFactory = GetRoute.poolFactory(router);
-    MockPoolImplementation broker = new MockPoolImplementation(fee, router);
-    vm.startPrank(IAuth(address(poolFactory)).owner());
-    poolFactory.approveImplementation(address(broker));
-
-    IPool pool = poolFactory.createPool(
-        poolName,
-        poolSymbol,
-        // the operator is the owner in this test case
-        poolOperator,
-        poolOperator,
-        address(broker)
-    );
+    PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin, systemAdmin);
+    pool = IPool(new GenesisPool(
+      systemAdmin,
+      systemAdmin,
+      router,
+      address(wFIL),
+      //
+      address(new RateModule(systemAdmin, systemAdmin, router, rateArray)),
+      // no min liquidity for test pool
+      address(liquidStakingToken),
+      0
+    ));
+    vm.prank(systemAdmin);
+    liquidStakingToken.setMinter(address(pool));
+    vm.startPrank(systemAdmin);
+    poolFactory.attachPool(pool);
     vm.stopPrank();
-
-    _configureOffRamp(pool);
-
-    return pool;
   }
 
-  function createAndPrimePool(
-    string memory poolName,
-    string memory poolSymbol,
-    address poolOperator,
-    uint256 fee,
-    uint256 _amount,
+  function createAndFundPool(
+    uint256 amount,
     address investor
-    ) internal returns(IPool)
-  {
-    IPool pool = createPool(poolName, poolSymbol, poolOperator, fee);
-    primePool(pool, _amount, investor);
-    return pool;
+  ) internal returns (IPool pool) {
+    pool = createPool();
+    depositFundsIntoPool(pool, amount, investor);
   }
 
-  function primePool(IPool pool, uint256 _amount, address investor) internal {
+  function createAccount(uint256 amount) internal returns(Account memory account) {
+    uint256 currentBlock = block.number;
+    account = Account(currentBlock, amount, currentBlock, false);
+  }
+
+  function depositFundsIntoPool(IPool pool, uint256 amount, address investor) internal {
     IERC4626 pool4626 = IERC4626(address(pool));
-    // investor1 stakes 10 FIL
-    vm.deal(investor, _amount);
+    // `investor` stakes `amount` FIL
+    vm.deal(investor, amount);
     vm.startPrank(investor);
-    wFIL.deposit{value: _amount}();
-    wFIL.approve(address(pool), _amount);
-    pool4626.deposit(_amount, investor);
+    wFIL.deposit{value: amount}();
+    wFIL.approve(address(pool), amount);
+    pool4626.deposit(amount, investor);
     vm.stopPrank();
   }
 
   function agentBorrow(
-    IAgent _agent,
-    uint256 _borrowAmount,
-    SignedCredential memory _signedCred,
-    IPool _pool,
-    address _powerToken,
-    uint256 powerStake
+    IAgent agent,
+    uint256 poolID,
+    SignedCredential memory sc
   ) internal {
-      vm.startPrank(_agentOperator(_agent));
-      // Establsh the state before the borrow
-      StateSnapshot memory preBorrowState;
-      preBorrowState.balanceWFIL = wFIL.balanceOf(address(_agent));
-      Account memory account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
-      preBorrowState.powerStake = account.powerTokensStaked;
-      preBorrowState.borrowed = account.totalBorrowed;
-      preBorrowState.powerBalance = IERC20(_powerToken).balanceOf(address(_agent));
-      preBorrowState.powerBalancePool = IERC20(_powerToken).balanceOf(address(_pool));
+    vm.startPrank(_agentOperator(agent));
+    // Establsh the state before the borrow
+    StateSnapshot memory preBorrowState;
 
-      _agent.borrow(_borrowAmount, 0, _signedCred, powerStake);
-      vm.stopPrank();
-      // Check the state after the borrow
-      uint256 currBalance = wFIL.balanceOf(address(_agent));
-      assertEq(currBalance, preBorrowState.balanceWFIL + _borrowAmount);
+    preBorrowState.agentBalanceWFIL = wFIL.balanceOf(address(agent));
+    Account memory account = AccountHelpers.getAccount(
+      router,
+      address(agent),
+      poolID
+    );
 
-      account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
+    preBorrowState.agentBorrowed = account.principal;
 
-      // first time borrowing, check the startEpoch
-      if (preBorrowState.borrowed == 0) {
-        assertEq(account.startEpoch, block.number);
-      }
-      assertGt(account.pmtPerEpoch(), 0);
+    uint256 borrowBlock = block.number;
+    agent.borrow(poolID, sc);
 
-      uint256 rate = _pool.implementation().getRate(
-          _borrowAmount,
-          powerStake,
-          GetRoute.agentPolice(router).windowLength(),
-          account,
-          _signedCred.vc
-      );
-      assertEq(account.perEpochRate, rate);
-      assertEq(account.powerTokensStaked, preBorrowState.powerStake + powerStake);
-      assertEq(account.totalBorrowed, preBorrowState.borrowed + _borrowAmount);
+    vm.stopPrank();
+    // Check the state after the borrow
+    uint256 currBalance = wFIL.balanceOf(address(agent));
+    assertEq(currBalance, preBorrowState.agentBalanceWFIL + sc.vc.value);
 
-      assertEq(
-          IERC20(_powerToken).balanceOf(address(_agent)),
-          preBorrowState.powerBalance - powerStake
-      );
+    account = AccountHelpers.getAccount(router, address(agent), poolID);
 
-      assertEq(
-          IERC20(_powerToken).balanceOf(address(_pool)),
-          preBorrowState.powerBalancePool + powerStake
-      );
+    // first time borrowing, check the startEpoch
+    if (preBorrowState.agentBorrowed == 0) {
+      assertEq(account.startEpoch, borrowBlock);
+      assertEq(account.epochsPaid, borrowBlock);
     }
 
+    assertEq(account.principal, preBorrowState.agentBorrowed + sc.vc.value);
+  }
+
+  function agentPay(
+    IAgent agent,
+    IPool pool,
+    SignedCredential memory sc
+  ) internal returns (
+    uint256 rate,
+    uint256 epochsPaid,
+    uint256 refund
+  ) {
+    vm.startPrank(_agentOperator(agent));
+
+    // Establsh the state before the borrow
+    StateSnapshot memory preBorrowState;
+    preBorrowState.agentBalanceWFIL = wFIL.balanceOf(address(agent));
+    preBorrowState.poolBalanceWFIL = wFIL.balanceOf(address(pool));
+    Account memory account = AccountHelpers.getAccount(
+      router,
+      address(agent),
+      pool.id()
+    );
+
+    preBorrowState.agentBorrowed = account.principal;
+
+    uint256 borrowBlock = block.number;
+    uint256 prePayEpochsPaid = account.epochsPaid;
+
+    (
+      rate,
+      epochsPaid,
+      refund
+    ) = agent.pay(pool.id(), sc);
+
+    vm.stopPrank();
+
+    account = AccountHelpers.getAccount(
+      router,
+      address(agent),
+      pool.id()
+    );
+
+    assertGt(rate, 0, "Should not have a 0 rate");
+
+    // there is an unlikely case where these tests fail when the amount paid is _exactly_ the amount needed to exit - meaning refund is 0
+    if (refund > 0) {
+      assertEq(account.epochsPaid, 0, "Should have 0 epochs paid if there was a refund - meaning all principal was paid");
+      assertEq(account.principal, 0, "Should have 0 principal if there was a refund - meaning all principal was paid");
+    } else {
+      assertGt(account.principal, 0, "Should have some principal left");
+      assertGt(account.epochsPaid, prePayEpochsPaid, "Should have paid more epochs");
+    }
+  }
+
+  function putAgentOnAdministration(
+    IAgent agent,
+    address administration,
+    uint256 rollFwdPeriod,
+    uint256 borrowAmount,
+    uint256 poolID
+  ) internal {
+    IAgentPolice police = GetRoute.agentPolice(router);
+    SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+    agentBorrow(agent, poolID, borrowCred);
+
+    vm.roll(block.number + rollFwdPeriod);
+
+    vm.startPrank(IAuth(address(police)).owner());
+    police.putAgentOnAdministration(address(agent), administration);
+    vm.stopPrank();
+
+    assertEq(agent.administration(), administration);
+  }
+
+  function setAgentDefaulted(
+    IAgent agent,
+    uint256 rollFwdPeriod,
+    uint256 borrowAmount,
+    uint256 poolID
+  ) internal {
+    IAgentPolice police = GetRoute.agentPolice(router);
+    SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+    agentBorrow(agent, poolID, borrowCred);
+
+    vm.roll(block.number + rollFwdPeriod);
+
+    vm.startPrank(IAuth(address(police)).owner());
+    police.setAgentDefaulted(address(agent));
+    vm.stopPrank();
+
+    assertTrue(agent.defaulted(), "Agent should be put into default");
+  }
+
+  function setAgentLiquidated(
+    IAgent agent,
+    uint256 rollFwdPeriod,
+    uint256 borrowAmount,
+    uint256 poolID
+  ) internal {
+    IAgentPolice police = GetRoute.agentPolice(router);
+
+    setAgentDefaulted(
+      agent,
+      police.defaultWindow() + 1,
+      1e18,
+      poolID
+    );
+
+    vm.startPrank(IAuth(address(police)).owner());
+    police.liquidatedAgent(address(agent));
+    vm.stopPrank();
+
+    assertTrue(police.liquidated(agent.id()), "Agent should be liquidated");
+  }
+
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
+    IPoolToken liquidStakingToken = pool.liquidStakingToken();
+    PoolToken iou = new PoolToken("IOU", "IOU",systemAdmin, systemAdmin);
     ramp = IOffRamp(new OffRamp(
       router,
-      address(pool.iou()),
+      address(iou),
       address(pool.asset()),
+      address(liquidStakingToken),
       systemAdmin,
       pool.id()
     ));
+    vm.startPrank(systemAdmin);
+    iou.setMinter(address(ramp));
+    iou.setBurner(address(ramp));
+    liquidStakingToken.setBurner(address(ramp));
+    vm.stopPrank();
 
     vm.prank(IAuth(address(pool)).owner());
     pool.setRamp(ramp);
@@ -355,4 +556,107 @@ contract BaseTest is Test {
   function _agentOperator(IAgent agent) internal view returns (address) {
     return IAuth(address(agent)).operator();
   }
+
+  uint256[100] rateArray = [
+    4414965412778580000 / EPOCHS_IN_YEAR,
+    4349235141062740000 / EPOCHS_IN_YEAR,
+    4284483465602120000 / EPOCHS_IN_YEAR,
+    4220695816996550000 / EPOCHS_IN_YEAR,
+    4157857842756010000 / EPOCHS_IN_YEAR,
+    4095955404071180000 / EPOCHS_IN_YEAR,
+    4034974572632200000 / EPOCHS_IN_YEAR,
+    3974901627494750000 / EPOCHS_IN_YEAR,
+    3915723051992720000 / EPOCHS_IN_YEAR,
+    3857425530696970000 / EPOCHS_IN_YEAR,
+    3799995946419270000 / EPOCHS_IN_YEAR,
+    3743421377260860000 / EPOCHS_IN_YEAR,
+    3687689093705020000 / EPOCHS_IN_YEAR,
+    3632786555752810000 / EPOCHS_IN_YEAR,
+    3578701410101580000 / EPOCHS_IN_YEAR,
+    3525421487365380000 / EPOCHS_IN_YEAR,
+    3472934799336830000 / EPOCHS_IN_YEAR,
+    3421229536289670000 / EPOCHS_IN_YEAR,
+    3370294064321610000 / EPOCHS_IN_YEAR,
+    3320116922736550000 / EPOCHS_IN_YEAR,
+    3270686821465950000 / EPOCHS_IN_YEAR,
+    3221992638528500000 / EPOCHS_IN_YEAR,
+    3174023417527600000 / EPOCHS_IN_YEAR,
+    3126768365186160000 / EPOCHS_IN_YEAR,
+    3080216848918030000 / EPOCHS_IN_YEAR,
+    3034358394435680000 / EPOCHS_IN_YEAR,
+    2989182683393360000 / EPOCHS_IN_YEAR,
+    2944679551065520000 / EPOCHS_IN_YEAR,
+    2900838984059630000 / EPOCHS_IN_YEAR,
+    2857651118063160000 / EPOCHS_IN_YEAR,
+    2815106235624060000 / EPOCHS_IN_YEAR,
+    2773194763964300000 / EPOCHS_IN_YEAR,
+    2731907272825930000 / EPOCHS_IN_YEAR,
+    2691234472349260000 / EPOCHS_IN_YEAR,
+    2651167210982610000 / EPOCHS_IN_YEAR,
+    2611696473423120000 / EPOCHS_IN_YEAR,
+    2572813378588330000 / EPOCHS_IN_YEAR,
+    2534509177617850000 / EPOCHS_IN_YEAR,
+    2496775251904890000 / EPOCHS_IN_YEAR,
+    2459603111156950000 / EPOCHS_IN_YEAR,
+    2422984391485550000 / EPOCHS_IN_YEAR,
+    2386910853524280000 / EPOCHS_IN_YEAR,
+    2351374380574900000 / EPOCHS_IN_YEAR,
+    2316366976781090000 / EPOCHS_IN_YEAR,
+    2281880765329300000 / EPOCHS_IN_YEAR,
+    2247907986676470000 / EPOCHS_IN_YEAR,
+    2214440996804070000 / EPOCHS_IN_YEAR,
+    2181472265498200000 / EPOCHS_IN_YEAR,
+    2148994374655220000 / EPOCHS_IN_YEAR,
+    2117000016612670000 / EPOCHS_IN_YEAR,
+    2085481992505030000 / EPOCHS_IN_YEAR,
+    2054433210643890000 / EPOCHS_IN_YEAR,
+    2023846684922350000 / EPOCHS_IN_YEAR,
+    1993715533243080000 / EPOCHS_IN_YEAR,
+    1964032975969850000 / EPOCHS_IN_YEAR,
+    1934792334402030000 / EPOCHS_IN_YEAR,
+    1905987029271920000 / EPOCHS_IN_YEAR,
+    1877610579264340000 / EPOCHS_IN_YEAR,
+    1849656599558330000 / EPOCHS_IN_YEAR,
+    1822118800390510000 / EPOCHS_IN_YEAR,
+    1794990985639900000 / EPOCHS_IN_YEAR,
+    1768267051433740000 / EPOCHS_IN_YEAR,
+    1741940984774080000 / EPOCHS_IN_YEAR,
+    1716006862184860000 / EPOCHS_IN_YEAR,
+    1690458848379090000 / EPOCHS_IN_YEAR,
+    1665291194945890000 / EPOCHS_IN_YEAR,
+    1640498239057040000 / EPOCHS_IN_YEAR,
+    1616074402192890000 / EPOCHS_IN_YEAR,
+    1592014188887100000 / EPOCHS_IN_YEAR,
+    1568312185490170000 / EPOCHS_IN_YEAR,
+    1544963058951340000 / EPOCHS_IN_YEAR,
+    1521961555618630000 / EPOCHS_IN_YEAR,
+    1499302500056770000 / EPOCHS_IN_YEAR,
+    1476980793882640000 / EPOCHS_IN_YEAR,
+    1454991414618200000 / EPOCHS_IN_YEAR,
+    1433329414560340000 / EPOCHS_IN_YEAR,
+    1411989919667660000 / EPOCHS_IN_YEAR,
+    1390968128463780000 / EPOCHS_IN_YEAR,
+    1370259310957000000 / EPOCHS_IN_YEAR,
+    1349858807576000000 / EPOCHS_IN_YEAR,
+    1329762028121470000 / EPOCHS_IN_YEAR,
+    1309964450733250000 / EPOCHS_IN_YEAR,
+    1290461620872890000 / EPOCHS_IN_YEAR,
+    1271249150321400000 / EPOCHS_IN_YEAR,
+    1252322716191860000 / EPOCHS_IN_YEAR,
+    1233678059956740000 / EPOCHS_IN_YEAR,
+    1215310986489730000 / EPOCHS_IN_YEAR,
+    1197217363121810000 / EPOCHS_IN_YEAR,
+    1179393118711390000 / EPOCHS_IN_YEAR,
+    1161834242728280000 / EPOCHS_IN_YEAR,
+    1144536784351310000 / EPOCHS_IN_YEAR,
+    1127496851579380000 / EPOCHS_IN_YEAR,
+    1110710610355710000 / EPOCHS_IN_YEAR,
+    1094174283705210000 / EPOCHS_IN_YEAR,
+    1077884150884630000 / EPOCHS_IN_YEAR,
+    1061836546545360000 / EPOCHS_IN_YEAR,
+    1046027859908720000 / EPOCHS_IN_YEAR,
+    1030454533953520000 / EPOCHS_IN_YEAR,
+    1015113064615720000 / EPOCHS_IN_YEAR,
+    1000000000000000000 / EPOCHS_IN_YEAR
+  ];
 }

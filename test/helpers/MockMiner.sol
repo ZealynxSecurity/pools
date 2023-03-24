@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 import "forge-std/Test.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
 import {IMockMiner} from "test/helpers/IMockMiner.sol";

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
-import {OffRamp} from "src/OffRamp/OffRamp.sol";
+import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {PoolToken} from "src/Pool/PoolToken.sol";
 import {console} from "forge-std/console.sol";
 import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
@@ -15,7 +14,7 @@ import {ROUTE_POOL_FACTORY} from "src/Constants/Routes.sol";
 import {BaseTest} from "./BaseTest.sol";
 
 contract OffRampTest is BaseTest {
-  OffRamp ramp;
+  IOffRamp ramp;
   PoolToken iou;
   IPool pool;
   address poolFactory = makeAddr("POOLFACTORY");
@@ -32,18 +31,11 @@ contract OffRampTest is BaseTest {
     // mock the pool factory for offramp permissioning
     vm.prank(systemAdmin);
 
-    // Our "asset" in most cases is wrapped fil
-    iou = new PoolToken(router, 0, "iou", "iou");
-    ramp = new OffRamp(router, address(iou), address(wFIL), systemAdmin, 0);
-
-    conversionWindow = ramp.conversionWindow();
     vm.stopPrank();
-    pool = createPool(
-      "TEST",
-      "TEST",
-      poolOperator,
-      2e18
-    );
+    pool = createPool();
+    ramp = _configureOffRamp(pool);
+    conversionWindow = ramp.conversionWindow();
+    iou = PoolToken(ramp.iouToken());
   }
   function testDistributeSimple(uint256 initialBalance, uint256 timeChunk) public {
     (initialBalance, timeChunk) = _loadAssumptions(initialBalance, timeChunk);
@@ -182,21 +174,16 @@ contract OffRampTest is BaseTest {
     vm.stopPrank();
   }
 
-  function testForceTransmuteSimple() public {
-
-  }
 
 
-  function basicSettersTest () public {
-    // Set Governanve on the ramp
-    // Set transmutation period on the ramp
-  }
+
+
 
 
 
   function _initialInvestorStakeSetup(uint256 amount) internal {
     _mintWFILToOfframp(amount);
-    vm.prank(address(pool));
+    vm.prank(address(ramp));
     iou.mint(investor1, amount);
     vm.prank(investor1);
     iou.approve(address(ramp), amount);

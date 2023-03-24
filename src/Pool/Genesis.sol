@@ -1,39 +1,49 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
-import {ERC20} from "solmate/tokens/ERC20.sol";
-import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import {FilAddress} from "shim/FilAddress.sol";
+
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {Agent} from "src/Agent/Agent.sol";
-import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
-import {ERC4626} from "solmate/mixins/ERC4626.sol";
-import {RouterAware} from "src/Router/RouterAware.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
-import {PoolToken} from "src/Pool/PoolToken.sol";
+
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
-import {IPoolImplementation} from "src/Types/Interfaces/IPoolImplementation.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
-import {IPowerToken} from "src/Types/Interfaces/IPowerToken.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {Account} from "src/Types/Structs/Account.sol";
+import {AccountHelpers} from "src/Pool/Account.sol";
+import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Roles} from "src/Constants/Roles.sol";
-import {ROUTE_AGENT_FACTORY, ROUTE_POWER_TOKEN} from "src/Constants/Routes.sol";
-import {InsufficientLiquidity, AccountDNE, Unauthorized} from "src/Errors.sol";
+import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
+import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
-contract PoolAccounting is IPool, RouterAware, Operatable {
-    using FixedPointMathLib for uint256;
+contract GenesisPool is IPool, Operatable {
     using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
+    using FilAddress for address;
+
+    uint256 constant WAD = 1e18;
+
+    error InsufficientLiquidity();
+    error AccountDNE();
+    error Unauthorized();
+    error InvalidParams();
+    error PoolShuttingDown();
+    error AlreadyDefaulted();
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -42,20 +52,19 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
 
-    /// @dev `implementation handles logic for approving borrow requests and setting rates/account health
-    IPoolImplementation public implementation;
-
     /// @dev `asset` is the token that is being borrowed in the pool
-    ERC20 public asset;
+    IERC20 public asset;
 
-    /// @dev `share` is the token that represents a share in the pool
-    PoolToken public share;
+    /// @dev `liquidStakingToken` is the token that represents a liquidStakingToken in the pool
+    IPoolToken public liquidStakingToken;
 
-    /// @dev `iou` is the token that represents the IOU of a borrow
-    PoolToken public iou;
+    /// @dev `rateModule` is a separate module for computing rates and determining lending eligibility
+    IRateModule public rateModule;
 
     /// @dev `ramp` is the interface that handles off-ramping
     IOffRamp public ramp;
+
+    address public router;
 
     /// @dev `feesCollected` is the total fees collected in this pool
     uint256 public feesCollected = 0;
@@ -83,6 +92,14 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         _;
     }
 
+    /// @dev a modifier that ensures the caller matches the `vc.subject` and that the caller is an agent
+    modifier subjectIsAgentCaller(VerifiableCredential memory vc) {
+        if (
+            GetRoute.agentFactory(router).agents(msg.sender) != vc.subject
+        ) revert Unauthorized();
+        _;
+    }
+
     modifier onlyAgentPolice() {
         AuthController.onlyAgentPolice(router, msg.sender);
         _;
@@ -94,7 +111,7 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     }
 
     modifier isOpen() {
-        require(!isShuttingDown, "Pool is shutting down");
+        if (isShuttingDown) revert PoolShuttingDown();
         _;
     }
 
@@ -116,23 +133,20 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     constructor(
         address _owner,
         address _operator,
-        uint256 _id,
         address _router,
-        address _poolImplementation,
         address _asset,
-        address _share,
-        address _ramp,
-        address _iou,
+        address _rateModule,
+        address _liquidStakingToken,
         uint256 _minimumLiquidity
     ) Operatable(_owner, _operator) {
-        id = _id;
         router = _router;
-        implementation = IPoolImplementation(_poolImplementation);
-        share = PoolToken(_share);
-        asset = ERC20(_asset);
-        iou = PoolToken(_iou);
-        ramp = IOffRamp(_ramp);
+        asset = IERC20(_asset);
+        rateModule = IRateModule(_rateModule);
         minimumLiquidity = _minimumLiquidity;
+        // set the ID
+        id = GetRoute.poolFactory(router).allPoolsLength();
+        // deploy a new liquid staking token for the pool
+        liquidStakingToken = IPoolToken(_liquidStakingToken);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -145,7 +159,7 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
      * @return totalBorrowed The total borrowed from the agent
      */
     function getAgentBorrowed(uint256 agentID) public view returns (uint256) {
-        return AccountHelpers.getAccount(router, agentID, id).totalBorrowed;
+        return AccountHelpers.getAccount(router, agentID, id).principal;
     }
 
     /**
@@ -173,7 +187,7 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
      * @return minLiquidity The minimum amount of FIL to keep in reserves
      */
     function getAbsMinLiquidity() public view returns (uint256) {
-        return totalAssets().mulWadDown(minimumLiquidity);
+        return (totalAssets() * minimumLiquidity / WAD);
     }
 
     /**
@@ -191,151 +205,149 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         return balance -= feesCollected;
     }
 
+    /**
+    * @notice getRate returns the rate for an Agent's current position within the Pool
+    * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
+    */
+    function getRate(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) public view returns (uint256) {
+        return rateModule.getRate(account, vc);
+    }
+
+    /**
+     * @notice isOverLeveraged returns true if the Agent is over leveraged
+     * In this version, an Agent can be over-leveraged in either of two cases:
+     * 1. The Agent's principal is more than the equity weighted `agentTotalValue`
+     * 2. The Agent's expected daily payment is more than `dtiWeight` of their income
+     */
+    function isOverLeveraged(
+        Account memory account,
+        VerifiableCredential memory vc
+    ) external view returns (bool) {
+        return rateModule.isOverLeveraged(account, vc);
+    }
+
+    function writeOff(uint256 agentID, uint256 recoveredDebt) external onlyAgentPolice {
+        Account memory account = _getAccount(agentID);
+
+        if (account.defaulted) revert AlreadyDefaulted();
+
+        uint256 owed = account.principal;
+
+        if (recoveredDebt > owed) recoveredDebt = owed;
+
+        // transfer the assets into the pool
+        asset.transferFrom(msg.sender, address(this), recoveredDebt);
+        // whatever we couldn't pay back
+        uint256 lostAmt = owed - recoveredDebt;
+        // write off only what we lost
+        totalBorrowed -= lostAmt;
+
+        account.defaulted = true;
+
+        account.save(router, agentID, id);
+
+        emit WriteOff(agentID, recoveredDebt, lostAmt);
+    }
+
     /*//////////////////////////////////////////////////////////////
                         POOL BORROWING FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @dev Allows user to borrow asset
-     * @param amount The amount of asset to borrow
-     * @param sc The Agent's signed credential from the VC issuer
-     * @param powerTokenAmount The amount of power tokens to pledge to the Pool
-     */
-    function borrow(
-        uint256 amount,
-        SignedCredential memory sc,
-        uint256 powerTokenAmount
-    )
-        public
-        onlyAgent
-        isOpen
-    {
-        // NOTE: this could be a modifier but it's only used here
-        _checkLiquidity(amount);
-        address agent = msg.sender;
-        // pull the powerTokens into the pool
-        GetRoute.powerToken(router).transferFrom(agent, address(this), powerTokenAmount);
+    function borrow(VerifiableCredential memory vc) external subjectIsAgentCaller(vc) {
+        if (vc.value == 0) revert InvalidParams();
 
-        Account memory account = _getAccount(agent);
-        _accountNotInPenalty(agent, account);
-        implementation.beforeBorrow(
-            amount,
-            powerTokenAmount,
-            account,
-            sc.vc
-        );
+        // if (vc.action == borrow && !belowLimit) || vc.action == refinance {
+        //     ...proceed
+        // }
 
-        if (amount > sc.vc.cap) {
-            revert Unauthorized();
+        _checkLiquidity(vc.value);
+        Account memory account = _getAccount(vc.subject);
+        // fresh account, set start epoch and epochsPaid to beginning of current window
+        if (account.principal == 0) {
+            uint256 currentEpoch = block.number;
+            account.startEpoch = currentEpoch;
+            account.epochsPaid = currentEpoch;
         }
 
-        account.borrow(
-            router,
-            amount,
-            powerTokenAmount,
-            sc.vc,
-            implementation
-        );
+        account.principal += vc.value;
+        account.save(router, vc.subject, id);
 
-        account.save(router, sc.vc.subject, id);
+        totalBorrowed += vc.value;
 
-        totalBorrowed += amount;
+        emit Borrow(vc.subject, vc.value);
 
-        emit Borrow(sc.vc.subject, amount, account.perEpochRate, account.totalBorrowed);
-
-        // interact
-        SafeTransferLib.safeTransfer(asset, agent, amount);
+        // interact - here `msg.sender` must be the Agent bc of the `subjectIsAgentCaller` modifier
+        asset.transfer(msg.sender, vc.value);
     }
 
-    /**
-     * @dev Makes a payment of `pmt` to the Pool
-     * @param agent The address of the agent to credit the payment for
-     * @param pmt The amount to pay
-     */
-    function makePayment(
-        address agent,
-        uint256 pmt
-    )  public {
-        Account memory account = _getAccount(agent);
-        // NOTE: we could compound this into the account getter
-        _accountExists(agent, account, msg.sig);
 
-        (,uint256 remainingPmt) = _accrueFees(pmt, account);
-
-        implementation.beforeMakePayment(
-            remainingPmt,
-            account
-        );
-
-        Window memory window = GetRoute.agentPolice(router).windowInfo();
-        uint256 penaltyEpochs = account.getPenaltyEpochs(window);
-
-        if (penaltyEpochs > 0) {
-            account.creditInPenalty(
-                remainingPmt,
-                penaltyEpochs,
-                implementation.rateSpike(
-                    penaltyEpochs,
-                    window.length,
-                    account
-                )
-            );
-        } else {
-            account.credit(remainingPmt);
-        }
-
-        account.save(router, agent, id);
-
-        emit MakePayment(agent, remainingPmt);
-
-        SafeTransferLib.safeTransferFrom(
-            asset,
-            msg.sender,
-            address(this),
-            remainingPmt
-        );
-    }
-    /**
-     * @dev Allows an agent to exit the pool and returns the powerTokens to the agent
-     * @param agent The agent who is exiting (and where to send the `powerTokensToReturn`)
-     * @param sc The signed credential of the agent
-     * @param amount The amount of borrowed assets that the agent will return
-     * @return powerTokensToReturn the amount of power tokens to return to the agent
-     */
-    function exitPool(
-        address agent,
-        SignedCredential memory sc,
-        uint256 amount
-    ) public onlyAgent returns (
-        uint256 powerTokensToReturn
+    function pay(
+        VerifiableCredential memory vc
+    ) external returns (
+        uint256 rate, uint256 epochsPaid, uint256 refund
     ) {
-        address subject = sc.vc.subject;
-        // Pull back the borrowed asset
-        SafeTransferLib.safeTransferFrom(
-            asset,
-            agent,
-            address(this),
-            amount
-        );
+        // grab this Agent's account from storage
+        Account memory account = _getAccount(vc.subject);
+        // ensure we're not making payments to a non-existent account
+        _accountExists(account);
+        // compute a rate based on the agent's current financial situation
+        rate = getRate(account, vc);
+        uint256 interestOwed;
+        uint256 feeBasis;
 
-        Account memory account = _getAccount(agent);
+        // if the account is not "current", compute the amount of interest owed based on the new rate
+        if (account.epochsPaid < block.number) {
+            uint256 epochsToPay = block.number - account.epochsPaid;
+            interestOwed = rate * epochsToPay;
+        }
+        // if the payment is less than the interest owed, pay interest only
+        if (vc.value <= interestOwed) {
+            // compute the amount of epochs this payment covers
+            uint256 epochsForward = vc.value / rate;
+            // update the account's `epochsPaid` cursor
+            account.epochsPaid += epochsForward;
+            // since the entire payment is interest, the entire payment is used to compute the fee (principal payments are fee-free)
+            feeBasis = vc.value;
+        } else {
+            // pay interest and principal
+            uint256 principalPaid = vc.value - interestOwed;
+            // the fee basis only applies to the interest payment
+            feeBasis = interestOwed;
+            // protect against underflow
+            totalBorrowed -= (principalPaid > totalBorrowed) ? 0 : principalPaid;
+            // fully paid off
+            if (principalPaid >= account.principal) {
+                // remove the account from the pool's list of accounts
+                GetRoute.agentPolice(router).removePoolFromList(vc.subject, id);
+                // return the amount of funds overpaid
+                refund = principalPaid - account.principal;
+                // reset the account
+                account.reset();
+            } else {
+                // interest and partial principal payment
+                account.principal -= principalPaid;
+                // move the `epochsPaid` cursor to mark the account as "current"
+                account.epochsPaid = block.number;
+            }
 
-        _accountCurrent(subject, account);
+        }
+        // update the account in storage
+        account.save(router, vc.subject, id);
+        // take fee
+        feesCollected += GetRoute
+            .poolFactory(router)
+            .treasuryFeeRate()
+             * feeBasis / WAD;
 
-        implementation.beforeExit(
-            amount,
-            account,
-            sc.vc
-        );
+        // transfer the assets into the pool
+        asset.transferFrom(msg.sender, address(this), vc.value - refund);
 
-        AccountHelpers._amountGt(account.totalBorrowed, amount);
-        totalBorrowed -= amount;
-        powerTokensToReturn = account.exit(amount);
-        account.save(router, subject, id);
-        emit ExitPool(subject, amount, powerTokensToReturn);
+        emit Pay(vc.subject, rate, account.epochsPaid, refund);
 
-        // Return the power tokens to the agent
-        GetRoute.powerToken(router).transfer(subject, powerTokensToReturn);
+        return (rate, account.epochsPaid, refund);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -371,8 +383,8 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         require(shares > 0, "Pool: cannot mint 0 shares");
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
-        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
-        share.mint(receiver, shares);
+        asset.transferFrom(msg.sender, address(this), assets);
+        liquidStakingToken.mint(receiver, shares);
         assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
     }
@@ -389,14 +401,7 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         address receiver,
         address owner
     ) public requiresRamp returns (uint256 shares) {
-        shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
-
-        share.burn(owner, shares);
-
-        // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
-        iou.mint(address(this), assets);
-        iou.approve(address(ramp), assets);
-        ramp.stakeOnBehalf(assets, receiver);
+        shares = ramp.withdraw(assets, receiver, owner, totalAssets());
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
@@ -412,16 +417,7 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         address receiver,
         address owner
     ) public requiresRamp returns (uint256 assets) {
-
-        // Check for rounding error since we round down in previewRedeem.
-        require((assets = previewRedeem(shares)) != 0, "ZERO_ASSETS");
-
-        share.burn(owner, shares);
-
-        // Handle minimum liquidity in case that PoolAccounting has sufficient balance to cover
-        iou.mint(address(this), assets);
-        iou.approve(address(ramp), assets);
-        ramp.stakeOnBehalf(assets, receiver);
+        assets = ramp.redeem(assets, receiver, owner, totalAssets());
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
@@ -435,9 +431,9 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
      * @return shares - The amount of shares converted from assets
      */
     function convertToShares(uint256 assets) public view returns (uint256) {
-        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
+        return supply == 0 ? assets : assets * supply / totalAssets();
     }
 
     /**
@@ -446,34 +442,9 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
      * @return assets - The amount of assets converted from shares
      */
     function convertToAssets(uint256 shares) public view returns (uint256) {
-        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
-    }
-
-    /**
-     * @dev Rebalances the total borrowed amount after checking the actual value of an account
-     * @param agentID The ID of the agent's account
-     * @param realAccountValue The actual value of the account
-     */
-    function rebalanceTotalBorrowed(
-        uint256 agentID,
-        uint256 realAccountValue
-    ) external onlyAgentPolice {
-        uint256 prevAccountBorrowed = AccountHelpers.getAccount(router, agentID, id).totalBorrowed;
-
-        // rebalance the books
-        if (realAccountValue > prevAccountBorrowed) {
-            // we have more assets than we thought
-            // here we just write up to the actual account borrowed amount
-            totalBorrowed += prevAccountBorrowed;
-        } else {
-            // we have less assets than we thought
-            // so we write down the diff of what we actually have from what we thought we had
-            totalBorrowed -= (prevAccountBorrowed - realAccountValue);
-        }
-
-        emit RebalanceTotalBorrowed(agentID, realAccountValue, totalBorrowed);
+        return supply == 0 ? shares : shares * totalAssets() / supply;
     }
 
     /**
@@ -491,9 +462,9 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
      * @return assets - The amount of assets that would be converted from shares
      */
     function previewMint(uint256 shares) public view returns (uint256) {
-        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
+        return supply == 0 ? shares : shares * totalAssets() / supply;
     }
 
     /**
@@ -502,9 +473,9 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
      * @return shares - The amount of shares to be converted from assets
      */
     function previewWithdraw(uint256 assets) public view returns (uint256) {
-        uint256 supply = share.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
+        return supply == 0 ? assets : assets * supply / totalAssets();
     }
 
     /**
@@ -529,11 +500,11 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     }
 
     function maxWithdraw(address owner) public view returns (uint256) {
-        return convertToAssets(share.balanceOf(owner));
+        return convertToAssets(liquidStakingToken.balanceOf(owner));
     }
 
     function maxRedeem(address owner) public view returns (uint256) {
-        return share.balanceOf(owner);
+        return liquidStakingToken.balanceOf(owner);
     }
 
 
@@ -544,7 +515,7 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     /**
      * @dev Distributes funds to the offramp when the liquid assets are below the liquidity threshold
      */
-    function harvestToRamp() public {
+    function harvestToRamp() public requiresRamp {
         // distribute funds to the offramp when we are below the liquidity threshold
         uint256 exitDemand = ramp.totalIOUStaked();
         uint256 rampAssets = asset.balanceOf(address(ramp));
@@ -587,11 +558,8 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         require(isShuttingDown, "POOL: Must be shutting down");
         require(newPool.id() == id, "POOL: New pool must have same ID");
         harvestFees(feesCollected);
-        IPowerToken powerToken = GetRoute.powerToken(router);
-        powerToken.transfer(address(newPool), powerToken.balanceOf(address(this)));
         asset.transfer(address(newPool), asset.balanceOf(address(this)));
-        share.transfer(address(newPool), share.balanceOf(address(this)));
-        iou.transfer(address(newPool), iou.balanceOf(address(this)));
+        liquidStakingToken.transfer(address(newPool), liquidStakingToken.balanceOf(address(this)));
         borrowedAmount = totalBorrowed;
     }
 
@@ -608,12 +576,8 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         isShuttingDown = true;
     }
 
-    function setImplementation(IPoolImplementation poolImplementation) public onlyOwnerOperator {
-        require(
-            GetRoute.poolFactory(router).isPoolImplementation(address(poolImplementation)),
-            "Pool: Invalid implementation"
-        );
-        implementation = poolImplementation;
+    function setRateModule(IRateModule _rateModule) public onlyOwnerOperator {
+        rateModule = _rateModule;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -624,85 +588,30 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
         return IAgent(agent).id();
     }
 
-    function _getAccount(address agent) internal view returns (Account memory) {
+    function _getAccount(uint256 agent) internal view returns (Account memory) {
         return AccountHelpers.getAccount(router, agent, id);
     }
 
     function _accountExists(
-        address agent,
-        Account memory account,
-        bytes4 sig
-    ) internal pure returns (bool) {
-        if (!account.exists()) {
-            revert AccountDNE(
-                agent,
-                sig,
-                "Pool: Account does not exist"
-            );
-        }
-
-        return true;
-    }
-
-    function _accountNotInPenalty(
-        address agent,
         Account memory account
-    ) internal view returns (bool) {
-        if (account.getPenaltyEpochs(GetRoute.agentPolice(router).windowInfo()) > 0) {
-            revert Unauthorized();
+    ) internal pure {
+        if (!account.exists()) {
+            revert AccountDNE();
         }
-
-        return true;
-    }
-
-    function _accountCurrent(address agent, Account memory account) internal view returns (bool) {
-        if (GetRoute.agentPolice(router).windowInfo().start > account.epochsPaid) {
-            revert Unauthorized();
-        }
-
-        return true;
     }
 
     function _checkLiquidity(uint256 amount) internal view {
         uint256 available = totalBorrowableAssets();
         if (available < amount) {
-            revert InsufficientLiquidity(
-                address(this),
-                msg.sender,
-                amount,
-                available,
-                msg.sig,
-                "Pool: Insufficient liquidity"
-            );
-        }
-    }
-
-    function _accrueFees(
-        uint256 pmt,
-        Account memory account
-    ) internal returns (
-        uint256 fee, uint256 remainingPmt
-    ) {
-        IPoolFactory poolFactory = GetRoute.poolFactory(router);
-
-        (fee, remainingPmt) = account.computeFeePerPmt(pmt, poolFactory.treasuryFeeRate());
-
-        feesCollected += fee;
-
-        // harvest when our Max(liquidAssets, feesCollected) surpass our fee harvest threshold
-        uint256 liquidAssets = asset.balanceOf(address(this));
-        uint256 harvestAmount = feesCollected > liquidAssets
-            ? liquidAssets : feesCollected;
-        if (harvestAmount >= poolFactory.feeThreshold()) {
-            harvestFees(harvestAmount);
+            revert InsufficientLiquidity();
         }
     }
 
     function _deposit(uint256 assets, address receiver) internal returns (uint256 shares) {
         require(assets > 0, "Pool: cannot deposit 0 assets");
         shares = previewDeposit(assets);
-        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
-        share.mint(receiver, shares);
+        asset.transferFrom(msg.sender, address(this), assets);
+        liquidStakingToken.mint(receiver, shares);
         assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
     }
@@ -710,21 +619,22 @@ contract PoolAccounting is IPool, RouterAware, Operatable {
     function _depositFIL(address receiver) internal returns (uint256 shares) {
         IWFIL wFIL = GetRoute.wFIL(router);
 
-        // in this Pool, the asset must be wFIL
-        require(
-            address(asset) == address(wFIL),
-            "Asset must be wFIL to deposit FIL"
-        );
         // handle FIL deposit
-        uint256 assets = msg.value;
-        wFIL.deposit{value: assets}();
-        wFIL.transfer(address(this), assets);
-        require(assets > 0, "Pool: cannot deposit 0 assets");
+        wFIL.deposit{value: msg.value}();
+        wFIL.transfer(address(this), msg.value);
+        require(msg.value > 0, "Pool: cannot deposit 0 assets");
 
-        shares = previewDeposit(assets);
-        share.mint(receiver, shares);
-        assets = convertToAssets(shares);
-        emit Deposit(msg.sender, receiver, assets, shares);
+        shares = previewDeposit(msg.value);
+        liquidStakingToken.mint(receiver, shares);
+        emit Deposit(msg.sender, receiver.normalize(),  convertToAssets(shares), shares);
+    }
+
+    function _computeFeePerPmt(uint256 pmt) internal view returns (uint256 fee) {
+        // protocol fee % * pmt
+        fee = GetRoute
+            .poolFactory(router)
+            .treasuryFeeRate()
+            * pmt / WAD;
     }
 }
 

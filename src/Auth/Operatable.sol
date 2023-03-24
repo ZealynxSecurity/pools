@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Inspired by OpenZeppelin Contracts (last updated v4.7.0) (access/Ownable.sol)
 
-pragma solidity 0.8.15;
+pragma solidity 0.8.17;
 
+import {FilAddress} from "shim/FilAddress.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 import {Unauthorized, InvalidParams} from "src/Errors.sol";
 
@@ -18,6 +19,9 @@ import {Unauthorized, InvalidParams} from "src/Errors.sol";
  * from parent (Operatable).
  */
 abstract contract Operatable is Ownable {
+
+    using FilAddress for address;
+
     address private _operator;
     address private _pendingOperator;
 
@@ -29,14 +33,17 @@ abstract contract Operatable is Ownable {
      * @dev Initializes the contract setting `_initialOperator` as the initial operator.
      */
     constructor(address _owner, address _initialOperator) Ownable(_owner) {
+      _initialOperator = _initialOperator.normalize();
       if (_initialOperator == address(0)) revert InvalidParams();
       _transferOperator(_initialOperator);
     }
 
     /**
      * @dev Throws if called by any account other than the operator.
+     *
+     * Modifier overriden by the Agent
      */
-    modifier onlyOwnerOperator() {
+    modifier onlyOwnerOperator() virtual {
       _checkOwnerOperator();
       _;
     }
@@ -59,7 +66,7 @@ abstract contract Operatable is Ownable {
      * @dev Throws if the sender is not the owner.
      */
     function _checkOwnerOperator() internal view virtual {
-      if (operator() != _msgSender() && owner() != _msgSender()) revert Unauthorized();
+      if (operator() != msg.sender && owner() != msg.sender) revert Unauthorized();
     }
 
     /**
@@ -79,16 +86,15 @@ abstract contract Operatable is Ownable {
     function _transferOperator(address newOperator) internal virtual {
       delete _pendingOperator;
       address oldOperator = _operator;
-      _operator = newOperator;
-      emit OperatorTransferred(oldOperator, newOperator);
+      _operator = newOperator.normalize();
+      emit OperatorTransferred(oldOperator, _operator);
     }
 
     /**
      * @dev The new owner accepts the ownership transfer.
      */
     function acceptOperator() external {
-      address sender = _msgSender();
-      if (pendingOperator() != sender) revert Unauthorized();
-      _transferOperator(sender);
+      if (pendingOperator() != msg.sender) revert Unauthorized();
+      _transferOperator(msg.sender);
     }
 }

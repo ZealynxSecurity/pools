@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {IMockMiner} from "test/helpers/IMockMiner.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
@@ -7,7 +7,7 @@ import "src/Types/Structs/Filecoin.sol";
 
 library MinerHelper {
   // the ID store gets deployed at the same address every time in a test env
-  address constant ID_STORE_ADDR = address(0x1d5b19009676d9da5C030e7e72B2c7165e449676);
+  address constant ID_STORE_ADDR = address(0xc43Ff6396F0EF6a19624F29c4425217Ac3C01Ed1);
 
   /// @param target The miner actor id you want to interact with
   /// @param addr Expected owner address
