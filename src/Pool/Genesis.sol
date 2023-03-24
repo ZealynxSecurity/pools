@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
-import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
-import {ERC4626} from "solmate/mixins/ERC4626.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import {FilAddress} from "shim/FilAddress.sol";
 
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {Agent} from "src/Agent/Agent.sol";
@@ -22,6 +21,7 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
@@ -34,6 +34,7 @@ import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 contract GenesisPool is IPool, Operatable {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
+    using FilAddress for address;
 
     uint256 constant WAD = 1e18;
 
@@ -52,7 +53,7 @@ contract GenesisPool is IPool, Operatable {
     uint256 public immutable id;
 
     /// @dev `asset` is the token that is being borrowed in the pool
-    ERC20 public asset;
+    IERC20 public asset;
 
     /// @dev `liquidStakingToken` is the token that represents a liquidStakingToken in the pool
     IPoolToken public liquidStakingToken;
@@ -139,7 +140,7 @@ contract GenesisPool is IPool, Operatable {
         uint256 _minimumLiquidity
     ) Operatable(_owner, _operator) {
         router = _router;
-        asset = ERC20(_asset);
+        asset = IERC20(_asset);
         rateModule = IRateModule(_rateModule);
         minimumLiquidity = _minimumLiquidity;
         // set the ID
@@ -238,12 +239,7 @@ contract GenesisPool is IPool, Operatable {
         if (recoveredDebt > owed) recoveredDebt = owed;
 
         // transfer the assets into the pool
-        SafeTransferLib.safeTransferFrom(
-            asset,
-            msg.sender,
-            address(this),
-            recoveredDebt
-        );
+        asset.transferFrom(msg.sender, address(this), recoveredDebt);
         // whatever we couldn't pay back
         uint256 lostAmt = owed - recoveredDebt;
         // write off only what we lost
@@ -284,7 +280,7 @@ contract GenesisPool is IPool, Operatable {
         emit Borrow(vc.subject, vc.value);
 
         // interact - here `msg.sender` must be the Agent bc of the `subjectIsAgentCaller` modifier
-        SafeTransferLib.safeTransfer(asset, msg.sender, vc.value);
+        asset.transfer(msg.sender, vc.value);
     }
 
 
@@ -347,12 +343,7 @@ contract GenesisPool is IPool, Operatable {
              * feeBasis / WAD;
 
         // transfer the assets into the pool
-        SafeTransferLib.safeTransferFrom(
-            asset,
-            msg.sender,
-            address(this),
-            vc.value - refund
-        );
+        asset.transferFrom(msg.sender, address(this), vc.value - refund);
 
         emit Pay(vc.subject, rate, account.epochsPaid, refund);
 
@@ -392,7 +383,7 @@ contract GenesisPool is IPool, Operatable {
         require(shares > 0, "Pool: cannot mint 0 shares");
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
-        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
+        asset.transferFrom(msg.sender, address(this), assets);
         liquidStakingToken.mint(receiver, shares);
         assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
@@ -619,7 +610,7 @@ contract GenesisPool is IPool, Operatable {
     function _deposit(uint256 assets, address receiver) internal returns (uint256 shares) {
         require(assets > 0, "Pool: cannot deposit 0 assets");
         shares = previewDeposit(assets);
-        SafeTransferLib.safeTransferFrom(ERC20(asset), msg.sender, address(this), assets);
+        asset.transferFrom(msg.sender, address(this), assets);
         liquidStakingToken.mint(receiver, shares);
         assets = convertToAssets(shares);
         emit Deposit(msg.sender, receiver, assets, shares);
@@ -628,21 +619,14 @@ contract GenesisPool is IPool, Operatable {
     function _depositFIL(address receiver) internal returns (uint256 shares) {
         IWFIL wFIL = GetRoute.wFIL(router);
 
-        // in this Pool, the asset must be wFIL
-        require(
-            address(asset) == address(wFIL),
-            "Asset must be wFIL to deposit FIL"
-        );
         // handle FIL deposit
-        uint256 assets = msg.value;
-        wFIL.deposit{value: assets}();
-        wFIL.transfer(address(this), assets);
-        require(assets > 0, "Pool: cannot deposit 0 assets");
+        wFIL.deposit{value: msg.value}();
+        wFIL.transfer(address(this), msg.value);
+        require(msg.value > 0, "Pool: cannot deposit 0 assets");
 
-        shares = previewDeposit(assets);
+        shares = previewDeposit(msg.value);
         liquidStakingToken.mint(receiver, shares);
-        assets = convertToAssets(shares);
-        emit Deposit(msg.sender, receiver, assets, shares);
+        emit Deposit(msg.sender, receiver.normalize(),  convertToAssets(shares), shares);
     }
 
     function _computeFeePerPmt(uint256 pmt) internal view returns (uint256 fee) {

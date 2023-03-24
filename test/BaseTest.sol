@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
 import "test/helpers/MockMiner.sol";
@@ -15,7 +15,7 @@ import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {WFIL} from "src/WFIL.sol";
+import {WFIL} from "shim/WFIL.sol";
 import {PoolFactory} from "src/Pool/PoolFactory.sol";
 import {Router} from "src/Router/Router.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
@@ -36,7 +36,7 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
-import {MinerHelper} from "helpers/MinerHelper.sol";
+import {MinerHelper} from "shim/MinerHelper.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {EPOCHS_IN_WEEK, EPOCHS_IN_DAY,  EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
@@ -72,7 +72,7 @@ contract BaseTest is Test {
   string constant public VERIFIED_NAME = "glif.io";
   string constant public VERIFIED_VERSION = "1";
 
-  WFIL wFIL = new WFIL();
+  WFIL wFIL = new WFIL(systemAdmin);
   MockIDAddrStore idStore;
   address credParser = address(new CredParser());
   constructor() {

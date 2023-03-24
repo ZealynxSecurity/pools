@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Account} from "src/Types/Structs/Account.sol";

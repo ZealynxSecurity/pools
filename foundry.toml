@@ -1,8 +1,8 @@
 [profile.default]
 src = 'src'
 out = 'out'
-libs = ['lib', 'helpers/MockMiner']
-solce_version = "0.8.15"
+libs = ['lib', 'shim/Mock']
+solc_version = "0.8.17"
 remappings = [
   "ds-test/=lib/forge-std/lib/ds-test/src/",
   "forge-std/=lib/forge-std/src/",
@@ -11,17 +11,17 @@ remappings = [
   "bytes-utils/=lib/solidity-bytes-utils/contracts/",
   "filecoin-solidity/=lib/filecoin-solidity/contracts/v0.8/",
   "solidity-cborutils/=lib/solidity-cborutils/",
-  "helpers/=helpers/MockMiner/",
   "@ensdomains/buffer/=lib/buffer/",
   "src/=src/",
-  "deploy/=deploy/"
+  "deploy/=deploy/",
+  "shim/=shim/Mock/"
 ]
 
-[profile.filecoin-sol]
+[profile.fevm]
 src = 'src'
-out = 'out-filecoin-sol'
-libs = ['lib', 'helpers/FilecoinSol']
-solce_version = "0.8.15"
+out = 'out-fevm'
+libs = ['lib', 'shim/FEVM']
+solc_version = "0.8.17"
 remappings = [
   "ds-test/=lib/forge-std/lib/ds-test/src/",
   "forge-std/=lib/forge-std/src/",
@@ -29,12 +29,15 @@ remappings = [
   "solmate/=lib/solmate/src/",
   "bytes-utils/=lib/solidity-bytes-utils/contracts/",
   "filecoin-solidity/=lib/filecoin-solidity/contracts/v0.8/",
-  "solidity-bignumber/=lib/solidity-BigNumber/src/",
   "solidity-cborutils/=lib/solidity-cborutils/",
   "@ensdomains/buffer/=lib/buffer/",
   "src/=src/",
-  "deploy/=deploy/"
+  "deploy/=deploy/",
+  "shim/=shim/FEVM/",
+  "fevmate/=lib/fevmate/contracts/",
+  "@zondax/solidity-bignumber/=lib/filecoin-solidity/lib/solidity-bignumber/"
 ]
+optimizer_details.yul = false
 
 [fuzz]
 runs = 1024

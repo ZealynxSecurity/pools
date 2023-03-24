@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {Operatable} from "src/Auth/Operatable.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";

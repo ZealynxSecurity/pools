@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
@@ -18,12 +18,15 @@ import {SignedCredential, VerifiableCredential, Credentials} from "src/Types/Str
 import {
   ROUTE_AGENT_POLICE
 } from "src/Constants/Routes.sol";
-import {MinerHelper} from "helpers/MinerHelper.sol";
+import {MinerHelper} from "shim/MinerHelper.sol";
+import {FilAddress} from "shim/FilAddress.sol";
 
 contract Agent is IAgent, Operatable {
 
   using Credentials for VerifiableCredential;
   using MinerHelper for uint64;
+  using FilAddress for address;
+  using FilAddress for address payable;
 
   error Unauthorized();
   error InsufficientFunds();
@@ -294,13 +297,13 @@ contract Agent is IAgent, Operatable {
     notOnAdministration
     validateAndBurnCred(sc)
   {
+    receiver = receiver.normalize();
     _poolFundsInFIL(sc.vc.value);
-
-    (bool success,) = receiver.call{value: sc.vc.value}("");
-    if (!success) revert Internal();
 
     // revert the transaction if any of the pools reject the removal
     GetRoute.agentPolice(router).isAgentOverLeveraged(sc.vc);
+
+    payable(receiver).sendValue(sc.vc.value);
 
     emit WithdrawBalance(receiver, sc.vc.value);
   }

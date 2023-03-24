@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
-import {ERC20} from "solmate/tokens/ERC20.sol";
-import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import {FilAddress} from "shim/FilAddress.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
@@ -27,6 +26,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using AccountHelpers for Account;
   using FixedPointMathLib for uint256;
   using Credentials for VerifiableCredential;
+  using FilAddress for address;
 
   error OverLeveraged();
   error Unauthorized();
@@ -122,7 +122,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     onlyOwnerOperator
     onlyWhenBehindTargetEpoch(agent)
   {
-    IAgent(agent).setAdministration(administration);
+    IAgent(agent).setAdministration(administration.normalize());
     emit OnAdministration(agent);
   }
 
@@ -138,20 +138,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   function prepareMinerForLiquidation(address agent, address liquidator, uint64 miner) external onlyOwnerOperator {
-    IAgent(agent).prepareMinerForLiquidation(miner, liquidator);
+    IAgent(agent).prepareMinerForLiquidation(miner, liquidator.normalize());
   }
 
   function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external {
     if (!liquidated[agentID]) revert Unauthorized();
 
     // transfer the assets into the pool
-    SafeTransferLib.safeTransferFrom(
-      ERC20(address(GetRoute.wFIL(router))),
-      msg.sender,
-      address(this),
-      amount
-    );
-
+    GetRoute.wFIL(router).transferFrom(msg.sender, address(this), amount);
     _writeOffPools(agentID, amount);
   }
 

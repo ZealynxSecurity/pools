@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";

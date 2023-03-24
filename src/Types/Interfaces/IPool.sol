@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity ^0.8.15;
-import {ERC20} from "solmate/tokens/ERC20.sol";
+pragma solidity 0.8.17;
+
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
 interface IPool {
 
@@ -46,7 +47,7 @@ interface IPool {
                             GETTERS
     ////////////////////////////////////////////////////////*/
 
-    function asset() external view returns (ERC20);
+    function asset() external view returns (IERC20);
 
     function liquidStakingToken() external view returns (IPoolToken);
 

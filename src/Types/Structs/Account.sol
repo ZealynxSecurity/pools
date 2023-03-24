@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 /// @dev an Account is a struct for storing information about an agent's borrowing activity within a specific pool
 /// each pool has 1 account per agent

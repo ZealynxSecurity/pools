@@ -1,30 +1,25 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
-import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
-import {ERC20} from "solmate/tokens/ERC20.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 
-
-
-// The Offramp relies on 3 main tokens - 
+// The Offramp relies on 3 main tokens -
 // 1. The IOU token - this is the token that is staked into the Offramp.
 // 2. The asset token - this is the token that is distributed to the IOU token holders.
 // 3. The liquidStakingToken - this represents an ERC4626 _share_.
-// 
+//
 // We're basically using the IOU token as a way to throttle the conversion from liquidStakngTokens
 // into the asset which in most of our cases is wrapped FIL. Since there isn't necesarily
 // enough balance to cover all wrapped FIL (or asset) exits we need to use the IOU as an intermediary.
-// 
+//
 // This contract needs to be able to have mint permissions over the IOU token, and it needs to be able
 // to burn IOU tokens (when they're exchanged for asset) and liquid staking tokens (when they're exchanged for IOU).
 
 contract OffRamp is IOffRamp, Ownable {
-    using SafeTransferLib for ERC20;
-
     // the conversionWindow protects against flash loan attacks
     uint256 public conversionWindow;
     // the token that gets staked into the Offramp to accrue a balance and eventually exit into the asset.
@@ -145,7 +140,7 @@ contract OffRamp is IOffRamp, Ownable {
         require(assetsToClaim[sender] > 0);
         uint256 value = assetsToClaim[sender];
         assetsToClaim[sender] = 0;
-        ERC20(asset).safeTransfer(sender, value);
+        IERC20(asset).transfer(sender, value);
     }
 
     ///@dev Withdraws staked ious from the transmuter
@@ -159,7 +154,7 @@ contract OffRamp is IOffRamp, Ownable {
         require(iouTokensStaked[sender] >= amount,"Transmuter: unstake amount exceeds deposited amount");
         iouTokensStaked[sender] = iouTokensStaked[sender] - (amount);
         totalIOUStaked = totalIOUStaked - (amount);
-        ERC20(iouToken).safeTransfer(sender, amount);
+        IPoolToken(iouToken).transfer(sender, amount);
     }
     ///@dev Deposits ious into the transmuter
     ///
@@ -173,7 +168,7 @@ contract OffRamp is IOffRamp, Ownable {
         // requires approval of iouToken first
         address sender = msg.sender;
         //require tokens transferred in;
-        ERC20(iouToken).safeTransferFrom(sender, address(this), amount);
+        IPoolToken(iouToken).transferFrom(sender, address(this), amount);
         totalIOUStaked = totalIOUStaked + (amount);
         iouTokensStaked[sender] = iouTokensStaked[sender] + (amount);
     }
@@ -190,7 +185,7 @@ contract OffRamp is IOffRamp, Ownable {
         // requires approval of iouToken first
         address sender = msg.sender;
         //require tokens transferred in;
-        ERC20(iouToken).safeTransferFrom(sender, address(this), amount);
+        IPoolToken(iouToken).transferFrom(sender, address(this), amount);
         totalIOUStaked = totalIOUStaked + (amount);
         iouTokensStaked[recipient] = iouTokensStaked[recipient] + (amount);
     }
@@ -279,7 +274,7 @@ contract OffRamp is IOffRamp, Ownable {
         if (assetsToClaim[victim] > 0) {
             uint256 value = assetsToClaim[victim];
             assetsToClaim[victim] = 0;
-            ERC20(asset).safeTransfer(victim, value);
+            IERC20(asset).transfer(victim, value);
         }
     }
 
@@ -321,7 +316,7 @@ contract OffRamp is IOffRamp, Ownable {
         address origin,
         uint256 amount
     ) public runPhasedDistribution() {
-        ERC20(asset).safeTransferFrom(origin, address(this), amount);
+        IERC20(asset).transferFrom(origin, address(this), amount);
         liquidAssets = liquidAssets + (amount);
     }
 
@@ -479,7 +474,7 @@ contract OffRamp is IOffRamp, Ownable {
      * @return assets - The amount of assets that would be converted from shares
      */
     function previewRedeem(uint256 shares, uint256 totalAssets) public view returns (uint256) {
-        uint256 supply = IPoolToken(liquidStakingToken).totalSupply(); 
+        uint256 supply = IPoolToken(liquidStakingToken).totalSupply();
         return supply == 0 ? shares : shares * totalAssets / supply;
     }
 }

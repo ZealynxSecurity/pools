@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 interface IAgentFactory {
   event CreateAgent(uint256 indexed agentID, address indexed agent, address indexed operator);

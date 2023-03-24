@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
-import {WFIL} from "../src/WFIL.sol";
+import {WFIL} from "shim/WFIL.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {Router} from "src/Router/Router.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
@@ -34,7 +34,7 @@ contract Deploy is Script {
         address deployerAddr = vm.addr(deployerPrivateKey);
         vm.startBroadcast(deployerPrivateKey);
 
-        WFIL wFIL = new WFIL();
+        address wFIL = vm.envAddress("WFIL_ADDR");
 
         // deploys the router
         router = address(new Router(deployerAddr));
@@ -45,7 +45,7 @@ contract Deploy is Script {
             new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router)
         );
         address poolFactory = address(
-            new PoolFactory(IERC20(address(wFIL)), 1e17, 0, deployerAddr, deployerAddr, router)
+            new PoolFactory(IERC20(wFIL), 1e17, 0, deployerAddr, deployerAddr, router)
         );
         address credParser = address(new CredParser());
         address agentDeployer = address(new AgentDeployer());
@@ -55,7 +55,7 @@ contract Deploy is Script {
         Deployer.setupContractRoutes(
             router,
             treasury,
-            address(wFIL),
+            wFIL,
             minerRegistry,
             agentFactory,
             agentPolice,

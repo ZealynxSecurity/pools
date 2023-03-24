@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
-import {ERC20} from "solmate/tokens/ERC20.sol";
+import {ERC20} from "shim/ERC20.sol";
 import {IPoolTokenPlus} from "src/Types/Interfaces/IPoolTokenPlus.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 
@@ -10,7 +10,7 @@ contract PoolToken is IPoolTokenPlus, ERC20, Operatable {
     address public burner;
 
     error Unauthorized();
-    
+
     /*//////////////////////////////////////////////////////////////
                                 MODIFIERS
     //////////////////////////////////////////////////////////////*/

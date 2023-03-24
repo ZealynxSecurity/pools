@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import "test/helpers/MockMiner.sol";
@@ -8,7 +8,7 @@ import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
-import {WFIL} from "src/WFIL.sol";
+import {WFIL} from "shim/WFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";

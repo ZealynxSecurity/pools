@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {MinerAPI} from "filecoin-solidity/MinerAPI.sol";
 import {MinerTypes} from "filecoin-solidity/types/MinerTypes.sol";
 import {CommonTypes} from "filecoin-solidity/types/CommonTypes.sol";
 import {PrecompilesAPI} from "filecoin-solidity/PrecompilesAPI.sol";
 import {SendAPI} from "filecoin-solidity/SendAPI.sol";
-import {BytesLib} from "bytes-utils/BytesLib.sol";
+import {Misc} from "filecoin-solidity/utils/Misc.sol";
 
 import "filecoin-solidity/utils/FilAddresses.sol";
 
 library MinerHelper {
+
+  using Misc for CommonTypes.ChainEpoch;
+
+  error NegativeValueNotAllowed();
+
   /// @dev Only here to get the library to compile in test envs
   address constant ID_STORE_ADDR = address(0);
   /**
@@ -34,12 +39,11 @@ library MinerHelper {
    * @param target The miner actor id to get the balance of
    * @return balance - The FIL balance of the miner actor
    */
-  function balance(uint64 target) internal returns (uint256) {
-    CommonTypes.BigInt memory ret = MinerAPI.getAvailableBalance(
+  function balance(uint64 target) internal returns (uint256 balance) {
+    // here we do not check the success boolean because the available balance cannot overflow max uint256
+    balance = toUint256(MinerAPI.getAvailableBalance(
       CommonTypes.FilActorId.wrap(target)
-    );
-
-    return ret.neg ? 0 : toUint256(ret.val);
+    ));
   }
 
   /**
@@ -72,15 +76,11 @@ library MinerHelper {
     }
 
     // if the beneficiary address is expired, then Agent will be ok to take ownership
-    if (ret.active.term.expiration < block.timestamp) {
-      return true;
-    }
-    // if the quota is fully used, then Agent will be ok to take ownership
     if (
-      toUint256(ret.active.term.quota.val) <= toUint256(ret.active.term.used_quota.val)
-    ) {
-      return true;
-    }
+      ret.active.term.expiration.getChainEpochSize() < block.timestamp
+    ) return true;
+
+    if (toUint256(ret.active.term.quota) <= toUint256(ret.active.term.used_quota)) return true;
 
     return false;
   }
@@ -143,12 +143,17 @@ library MinerHelper {
     );
   }
 
-  function toUint256(bytes memory _bytes) internal pure returns (uint256) {
-    bytes memory padding = new bytes(32 - _bytes.length);
-    return BytesLib.toUint256(bytes.concat(padding, _bytes), 0);
-  }
-
   function _getOwner(uint64 target) internal returns (bytes memory) {
     MinerAPI.getOwner(CommonTypes.FilActorId.wrap(target)).owner.data;
+  }
+
+  /// @dev None of the numbers we use according to Filecoin spec can overflow max uint256
+  /// largest number can be 2 billion attofil
+  function toUint256(CommonTypes.BigInt memory self) internal view returns (uint256 value) {
+    if (self.neg) {
+      revert NegativeValueNotAllowed();
+    }
+
+    return uint256(bytes32(self.val));
   }
 }

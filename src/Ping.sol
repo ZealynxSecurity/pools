@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
-import {MinerHelper} from "helpers/MinerHelper.sol";
+import {MinerHelper} from "shim/MinerHelper.sol";
+import {VERSION, IS_FEVM} from "shim/Version.sol";
 
-contract MinerHelperTester {
+// used for testing what environments were in
+contract Ping {
   event IsOwner(bool);
+  event Balance(uint256);
+  event AmountWithdrawn(uint256);
+  event Received(address, uint256);
 
   function checkIsOwner(uint64 target) public {
     emit IsOwner(MinerHelper.isOwner(target, address(this)));
   }
 
-  event Balance(uint256);
-
   function getBalance(uint64 target) public {
     emit Balance(MinerHelper.balance(target));
   }
-
-  event AmountWithdrawn(uint256);
 
   function withdrawBalance(uint64 target, uint256 amount) public {
     uint256 amountWithdrawn = MinerHelper.withdrawBalance(target, amount);
@@ -31,9 +32,15 @@ contract MinerHelperTester {
     MinerHelper.changeOwnerAddress(target, address(this));
   }
 
-  event Received(address, uint256);
-
   receive() external payable {
     emit Received(msg.sender, msg.value);
+  }
+
+  function getVersion() public pure returns (uint256) {
+    return VERSION;
+  }
+
+  function getIsFEVM() public pure returns (bool) {
+    return IS_FEVM;
   }
 }

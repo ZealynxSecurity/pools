@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {AuthController} from "src/Auth/AuthController.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";

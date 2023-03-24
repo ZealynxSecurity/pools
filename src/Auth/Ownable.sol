@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Inspired by OpenZeppelin Contracts (last updated v4.7.0) (access/Ownable.sol)
 
-pragma solidity 0.8.15;
+pragma solidity 0.8.17;
 
-import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+import {FilAddress} from "shim/FilAddress.sol";
 import {Unauthorized, InvalidParams} from "src/Errors.sol";
 
 /**
@@ -17,7 +17,9 @@ import {Unauthorized, InvalidParams} from "src/Errors.sol";
  * This module is used through inheritance. It will make available all functions
  * from parent (Ownable).
  */
-abstract contract Ownable is Context {
+abstract contract Ownable {
+    using FilAddress for address;
+
     address private _owner;
     address private _pendingOwner;
 
@@ -29,6 +31,7 @@ abstract contract Ownable is Context {
      * @dev Initializes the contract setting `owner` as the initial owner.
      */
     constructor(address _initialOwner) {
+      _initialOwner = _initialOwner.normalize();
       if (_initialOwner == address(0)) revert InvalidParams();
 
       _transferOwnership(_initialOwner);
@@ -60,7 +63,7 @@ abstract contract Ownable is Context {
      * @dev Throws if the sender is not the owner.
      */
     function _checkOwner() internal view virtual {
-      if (owner() != _msgSender()) revert Unauthorized();
+      if (owner() != msg.sender) revert Unauthorized();
     }
 
     /**
@@ -68,8 +71,8 @@ abstract contract Ownable is Context {
      * Can only be called by the current owner.
      */
     function transferOwnership(address newOwner) public virtual onlyOwner {
-        _pendingOwner = newOwner;
-        emit OwnershipTransferStarted(owner(), newOwner);
+        _pendingOwner = newOwner.normalize();
+        emit OwnershipTransferStarted(owner(), _pendingOwner);
     }
 
 
@@ -80,16 +83,15 @@ abstract contract Ownable is Context {
     function _transferOwnership(address newOwner) internal virtual {
       delete _pendingOwner;
       address oldOwner = _owner;
-      _owner = newOwner;
-      emit OwnershipTransferred(oldOwner, newOwner);
+      _owner = newOwner.normalize();
+      emit OwnershipTransferred(oldOwner, _owner);
     }
 
     /**
      * @dev The new owner accepts the ownership transfer.
      */
     function acceptOwnership() external {
-      address sender = _msgSender();
-      if (pendingOwner() != sender) revert Unauthorized();
-      _transferOwnership(sender);
+      if (pendingOwner() != msg.sender) revert Unauthorized();
+      _transferOwnership(msg.sender);
     }
 }

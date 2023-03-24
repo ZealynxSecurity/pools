@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.15;
+pragma solidity 0.8.17;
 
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
