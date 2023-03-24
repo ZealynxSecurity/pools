@@ -3,7 +3,6 @@ pragma solidity ^0.8.15;
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 
@@ -33,9 +32,10 @@ import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
 contract GenesisPool is IPool, Operatable {
-    using FixedPointMathLib for uint256;
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
+
+    uint256 constant WAD = 1e18;
 
     error InsufficientLiquidity();
     error AccountDNE();
@@ -186,7 +186,7 @@ contract GenesisPool is IPool, Operatable {
      * @return minLiquidity The minimum amount of FIL to keep in reserves
      */
     function getAbsMinLiquidity() public view returns (uint256) {
-        return totalAssets().mulWadDown(minimumLiquidity);
+        return (totalAssets() * minimumLiquidity / WAD);
     }
 
     /**
@@ -344,7 +344,7 @@ contract GenesisPool is IPool, Operatable {
         feesCollected += GetRoute
             .poolFactory(router)
             .treasuryFeeRate()
-            .mulWadUp(feeBasis);
+             * feeBasis / WAD;
 
         // transfer the assets into the pool
         SafeTransferLib.safeTransferFrom(
@@ -442,7 +442,7 @@ contract GenesisPool is IPool, Operatable {
     function convertToShares(uint256 assets) public view returns (uint256) {
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
+        return supply == 0 ? assets : assets * supply / totalAssets();
     }
 
     /**
@@ -453,7 +453,7 @@ contract GenesisPool is IPool, Operatable {
     function convertToAssets(uint256 shares) public view returns (uint256) {
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
+        return supply == 0 ? shares : shares * totalAssets() / supply;
     }
 
     /**
@@ -473,7 +473,7 @@ contract GenesisPool is IPool, Operatable {
     function previewMint(uint256 shares) public view returns (uint256) {
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
+        return supply == 0 ? shares : shares * totalAssets() / supply;
     }
 
     /**
@@ -484,7 +484,7 @@ contract GenesisPool is IPool, Operatable {
     function previewWithdraw(uint256 assets) public view returns (uint256) {
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
+        return supply == 0 ? assets : assets * supply / totalAssets();
     }
 
     /**
@@ -650,7 +650,7 @@ contract GenesisPool is IPool, Operatable {
         fee = GetRoute
             .poolFactory(router)
             .treasuryFeeRate()
-            .mulWadUp(pmt);
+            * pmt / WAD;
     }
 }
 
