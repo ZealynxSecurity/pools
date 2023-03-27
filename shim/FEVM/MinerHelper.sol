@@ -7,14 +7,14 @@ import {CommonTypes} from "filecoin-solidity/types/CommonTypes.sol";
 import {PrecompilesAPI} from "filecoin-solidity/PrecompilesAPI.sol";
 import {SendAPI} from "filecoin-solidity/SendAPI.sol";
 import {Misc} from "filecoin-solidity/utils/Misc.sol";
+import {BigInts} from "filecoin-solidity/utils/BigInts.sol";
 
 import "filecoin-solidity/utils/FilAddresses.sol";
 
 library MinerHelper {
 
   using Misc for CommonTypes.ChainEpoch;
-
-  error NegativeValueNotAllowed();
+  using BigInts for CommonTypes.BigInt;
 
   /// @dev Only here to get the library to compile in test envs
   address constant ID_STORE_ADDR = address(0);
@@ -25,13 +25,8 @@ library MinerHelper {
    * @return isOwner - Returns true if the contract is the owner of the miner
    */
   function isOwner(uint64 target, address addr) internal returns (bool) {
-    return keccak256(
-      _getOwner(target)
-    ) == keccak256(
-      FilAddresses.fromActorID(
-        PrecompilesAPI.resolveEthAddress(addr)
-      ).data
-    );
+    CommonTypes.FilActorId minerId = _getMinerId(target);
+    return _getOwner(minerId) == PrecompilesAPI.resolveEthAddress(addr);
   }
 
   /**
@@ -40,10 +35,9 @@ library MinerHelper {
    * @return balance - The FIL balance of the miner actor
    */
   function balance(uint64 target) internal returns (uint256 balance) {
+    CommonTypes.FilActorId minerId = _getMinerId(target);
     // here we do not check the success boolean because the available balance cannot overflow max uint256
-    balance = toUint256(MinerAPI.getAvailableBalance(
-      CommonTypes.FilActorId.wrap(target)
-    ));
+    balance = _toUint256(MinerAPI.getAvailableBalance(minerId));
   }
 
   /**
@@ -52,7 +46,8 @@ library MinerHelper {
    * @param amount The amount of attofil to send
    */
   function transfer(uint64 target, uint256 amount) internal {
-    SendAPI.send(CommonTypes.FilActorId.wrap(target), amount);
+    CommonTypes.FilActorId minerId = _getMinerId(target);
+    SendAPI.send(minerId, amount);
   }
 
   /**
@@ -67,20 +62,19 @@ library MinerHelper {
    * otherwise beneficiary can withdraw, is not configuredForTakeover
    */
   function configuredForTakeover(uint64 target) internal returns (bool) {
-    MinerTypes.GetBeneficiaryReturn memory ret =
-      MinerAPI.getBeneficiary(CommonTypes.FilActorId.wrap(target));
+    CommonTypes.FilActorId minerId = _getMinerId(target);
+    MinerTypes.GetBeneficiaryReturn memory ret = MinerAPI.getBeneficiary(minerId);
 
     // if the beneficiary address is the miner's owner, then the agent will assume beneficiary
-    if (keccak256(_getOwner(target)) == keccak256(ret.active.beneficiary.data)) {
+    if (_getOwner(minerId) == PrecompilesAPI.resolveAddress(ret.active.beneficiary)) {
       return true;
     }
 
     // if the beneficiary address is expired, then Agent will be ok to take ownership
-    if (
-      ret.active.term.expiration.getChainEpochSize() < block.timestamp
-    ) return true;
+    MinerTypes.BeneficiaryTerm memory term = ret.active.term;
+    if (term.expiration.getChainEpochSize() < block.timestamp) return true;
 
-    if (toUint256(ret.active.term.quota) <= toUint256(ret.active.term.used_quota)) return true;
+    if (_toUint256(term.quota) <= _toUint256(term.used_quota)) return true;
 
     return false;
   }
@@ -92,11 +86,10 @@ library MinerHelper {
    * @notice If invoked by the current owner, proposes a new owner address for confirmation. If the proposed address is the current owner address, revokes any existing proposal that proposed address.
    */
   function changeOwnerAddress(uint64 target, address addr) internal {
+    CommonTypes.FilActorId minerId = _getMinerId(target);
     MinerAPI.changeOwnerAddress(
-      CommonTypes.FilActorId.wrap(target),
-      FilAddresses.fromActorID(
-        PrecompilesAPI.resolveEthAddress(addr)
-      )
+      minerId,
+      FilAddresses.fromActorID(PrecompilesAPI.resolveEthAddress(addr))
     );
   }
 
@@ -112,6 +105,7 @@ library MinerHelper {
     uint64 workerAddr,
     uint64[] calldata controllerAddrs
   ) external {
+    CommonTypes.FilActorId minerId = _getMinerId(target);
     // resolve the controllers
     CommonTypes.FilAddress[] memory controllers;
     for (uint256 i = 0; i < controllerAddrs.length; i++) {
@@ -119,7 +113,7 @@ library MinerHelper {
     }
 
     MinerAPI.changeWorkerAddress(
-      CommonTypes.FilActorId.wrap(target),
+      minerId,
       MinerTypes.ChangeWorkerAddressParams(
         FilAddresses.fromActorID(workerAddr),
         controllers
@@ -137,23 +131,24 @@ library MinerHelper {
     internal
     returns (uint256 amountWithdrawn)
   {
+    CommonTypes.FilActorId minerId = _getMinerId(target);
     MinerAPI.withdrawBalance(
-      CommonTypes.FilActorId.wrap(target),
-      CommonTypes.BigInt(abi.encodePacked(amount), false)
+      minerId,
+      BigInts.fromUint256(amount)
     );
   }
 
-  function _getOwner(uint64 target) internal returns (bytes memory) {
-    MinerAPI.getOwner(CommonTypes.FilActorId.wrap(target)).owner.data;
+  function _getMinerId(uint64 target) internal returns (CommonTypes.FilActorId) {
+    return CommonTypes.FilActorId.wrap(target);
+  }
+
+  function _getOwner(CommonTypes.FilActorId minerId) internal returns (uint64) {
+    return PrecompilesAPI.resolveAddress(MinerAPI.getOwner(minerId).owner);
   }
 
   /// @dev None of the numbers we use according to Filecoin spec can overflow max uint256
   /// largest number can be 2 billion attofil
-  function toUint256(CommonTypes.BigInt memory self) internal view returns (uint256 value) {
-    if (self.neg) {
-      revert NegativeValueNotAllowed();
-    }
-
-    return uint256(bytes32(self.val));
+  function _toUint256(CommonTypes.BigInt memory self) internal view returns (uint256 value) {
+    (value, ) = self.toUint256();
   }
 }
