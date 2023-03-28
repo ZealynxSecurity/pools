@@ -143,15 +143,15 @@ contract AgentBasicTest is BaseTest {
     }
 
     function testSingleUseCredentials() public {
-      // testing that single use credentials are consumed through pushFundsToMiner call
+      // testing that single use credentials are consumed through pushFunds call
       uint256 pushAmount = 1e18;
       vm.deal(address(agent), pushAmount);
-      SignedCredential memory pushFundsCred = issuePushFundsToMinerCred(agent.id(), miner, pushAmount);
+      SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), miner, pushAmount);
 
       vm.startPrank(minerOwner1);
-      agent.pushFundsToMiner(pushFundsCred);
+      agent.pushFunds(pushFundsCred);
 
-      try agent.pushFundsToMiner(pushFundsCred) {
+      try agent.pushFunds(pushFundsCred) {
         assertTrue(false, "should have failed - single use credential");
       } catch (bytes memory e) {
         assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
@@ -175,7 +175,7 @@ contract AgentPushPullFundsTest is BaseTest {
         agent = _configureAgent(minerOwner1, miner);
     }
 
-    function testPullFundsFromMiner(uint256 drawAmount) public {
+    function testPullFunds(uint256 drawAmount) public {
       vm.assume(drawAmount > 0.001e18);
       uint256 preAgentBal = address(agent).balance;
 
@@ -184,15 +184,15 @@ contract AgentPushPullFundsTest is BaseTest {
       vm.deal(miner1, drawAmount);
 
       assertEq(wFIL.balanceOf(address(agent)), 0);
-      SignedCredential memory pullFundsCred = issuePullFundsFromMinerCred(agent.id(), miner, drawAmount);
+      SignedCredential memory pullFundsCred = issuePullFundsCred(agent.id(), miner, drawAmount);
       vm.startPrank(minerOwner1);
-      agent.pullFundsFromMiner(pullFundsCred);
+      agent.pullFunds(pullFundsCred);
       vm.stopPrank();
       assertEq(address(agent).balance, drawAmount + preAgentBal);
       assertEq(miner1.balance, 0);
     }
 
-    function testPushFundsToMiner(uint256 pushAmount) public {
+    function testPushFunds(uint256 pushAmount) public {
       vm.assume(pushAmount > 0.001e18);
       require(address(agent).balance == 0);
 
@@ -200,9 +200,9 @@ contract AgentPushPullFundsTest is BaseTest {
       // give the agent some funds to pull
       vm.deal(address(agent), pushAmount);
 
-      SignedCredential memory pushFundsCred = issuePushFundsToMinerCred(agent.id(), miner, pushAmount);
+      SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), miner, pushAmount);
       vm.prank(minerOwner1);
-      agent.pushFundsToMiner(pushFundsCred);
+      agent.pushFunds(pushFundsCred);
       vm.stopPrank();
 
       assertEq(address(agent).balance, 0);
@@ -213,9 +213,9 @@ contract AgentPushPullFundsTest is BaseTest {
       uint64 secondMiner = _newMiner(minerOwner1);
       address miner2 = idStore.ids(secondMiner);
 
-      SignedCredential memory pushFundsCred = issuePushFundsToMinerCred(agent.id(), secondMiner, 1e18);
+      SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), secondMiner, 1e18);
       vm.startPrank(minerOwner1);
-      try agent.pushFundsToMiner(pushFundsCred) {
+      try agent.pushFunds(pushFundsCred) {
           assertTrue(false, "should not be able to push funds to random miners");
       } catch (bytes memory b) {
           assertEq(errorSelector(b), Unauthorized.selector);
@@ -225,9 +225,9 @@ contract AgentPushPullFundsTest is BaseTest {
     }
 
     function testPullFundsWithWrongCred() public {
-      SignedCredential memory pullFundsCred = issuePullFundsFromMinerCred(agent.id(), miner, 0);
+      SignedCredential memory pullFundsCred = issuePullFundsCred(agent.id(), miner, 0);
       vm.startPrank(minerOwner1);
-      try agent.pushFundsToMiner(pullFundsCred) {
+      try agent.pushFunds(pullFundsCred) {
         assertTrue(false, "should not be able to pull funds with wrong cred");
       } catch (bytes memory b) {
         assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
@@ -235,9 +235,9 @@ contract AgentPushPullFundsTest is BaseTest {
     }
 
     function testPushFundsWithWrongCred() public {
-      SignedCredential memory pullFundsCred = issuePushFundsToMinerCred(agent.id(), miner, 0);
+      SignedCredential memory pullFundsCred = issuePushFundsCred(agent.id(), miner, 0);
       vm.startPrank(minerOwner1);
-      try agent.pullFundsFromMiner(pullFundsCred) {
+      try agent.pullFunds(pullFundsCred) {
         assertTrue(false, "should not be able to pull funds with wrong cred");
       } catch (bytes memory b) {
         assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
@@ -953,7 +953,7 @@ contract AgentPoliceTest is BaseTest {
 
 //         assertEq(receiver.balance, 0, "Receiver should have no balance");
 //         vm.startPrank(minerOwner);
-//         agent.withdrawBalance(receiver, withdrawAmount, issueGenericSC(address(agent)));
+//         agent.withdraw(receiver, withdrawAmount, issueGenericSC(address(agent)));
 //         vm.stopPrank();
 //         assertEq(receiver.balance, withdrawAmount, "Wrong withdraw amount");
 //     }
@@ -965,7 +965,7 @@ contract AgentPoliceTest is BaseTest {
 
 //         assertEq(receiver.balance, 0, "Receiver should have no balance");
 //         vm.startPrank(minerOwner);
-//         agent.withdrawBalance(receiver, withdrawAmount, issueGenericSC(address(agent)));
+//         agent.withdraw(receiver, withdrawAmount, issueGenericSC(address(agent)));
 //         assertEq(receiver.balance, withdrawAmount, "Wrong withdraw amount");
 //         vm.stopPrank();
 //     }
@@ -975,7 +975,7 @@ contract AgentPoliceTest is BaseTest {
 //         uint256 withdrawAmount = agent.maxWithdraw(signedCred);
 //         vm.assume(overWithdrawAmt > withdrawAmount);
 //         vm.startPrank(minerOwner);
-//         try agent.withdrawBalance(receiver, withdrawAmount * 2, issueGenericSC(address(agent))) {
+//         try agent.withdraw(receiver, withdrawAmount * 2, issueGenericSC(address(agent))) {
 //             assertTrue(false, "Should not be able to withdraw more than the maxwithdraw amount");
 //         } catch (bytes memory b) {
 //             assertEq(errorSelector(b), InsufficientCollateral.selector);
@@ -991,7 +991,7 @@ contract AgentPoliceTest is BaseTest {
 //         _amounts[0] = agent.liquidAssets() - LIQUID_AMOUNT;
 //         _miners[0] = uint64(miner);
 //         vm.startPrank(minerOwner);
-//         agent.pushFundsToMiners(_miners, _amounts, issueGenericSC(address(agent)));
+//         agent.pushFunds(_miners, _amounts, issueGenericSC(address(agent)));
 
 //         uint256 withdrawAmount = agent.maxWithdraw(issueGenericSC(address(agent)));
 
@@ -1065,7 +1065,7 @@ contract AgentPoliceTest is BaseTest {
 //         address recipient = makeAddr("RECIPIENT");
 //         uint256 withdrawAmount = agent.maxWithdraw(issueGenericSC(address(agent)));
 //         vm.startPrank(minerOwner);
-//         agent.withdrawBalance(recipient, withdrawAmount, issueGenericSC(address(agent)));
+//         agent.withdraw(recipient, withdrawAmount, issueGenericSC(address(agent)));
 
 //         // in this example, remove a miner that contributes all the assets
 //         SignedCredential memory minerCred = issueSC(createCustomCredential(

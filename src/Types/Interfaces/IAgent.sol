@@ -14,7 +14,7 @@ interface IAgent {
 
   event ChangeMinerWorker(uint64 indexed miner, uint64 newWorker, uint64[] newControlAddresses);
 
-  event WithdrawBalance(address indexed receiver, uint256 amount);
+  event Withdraw(address indexed receiver, uint256 amount);
 
   /*//////////////////////////////////////////////////
                         GETTERS
@@ -69,7 +69,7 @@ interface IAgent {
                 FINANCIAL FUNCTIONS
   //////////////////////////////////////////////*/
 
-  function withdrawBalance(
+  function withdraw(
     address receiver,
     SignedCredential memory signedCred
   ) external;
@@ -94,11 +94,11 @@ interface IAgent {
     SignedCredential memory signedCred
   ) external;
 
-  function pullFundsFromMiner(
+  function pullFunds(
     SignedCredential memory signedCred
   ) external;
 
-  function pushFundsToMiner(
+  function pushFunds(
     SignedCredential memory signedCred
   ) external;
 }

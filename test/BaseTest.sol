@@ -193,7 +193,7 @@ contract BaseTest is Test {
     return signCred(vc);
   }
 
-  function issuePullFundsFromMinerCred(uint256 agent, uint64 miner, uint256 amount) internal returns (SignedCredential memory) {
+  function issuePullFundsCred(uint256 agent, uint64 miner, uint256 amount) internal returns (SignedCredential memory) {
     // roll forward so we don't get an identical credential that's already been used
     vm.roll(block.number + 1);
 
@@ -203,7 +203,7 @@ contract BaseTest is Test {
       block.number,
       block.number + 100,
       amount,
-      Agent.pullFundsFromMiner.selector,
+      Agent.pullFunds.selector,
       miner,
       // agent data irrelevant for an pull funds from miner cred
       bytes("")
@@ -212,7 +212,7 @@ contract BaseTest is Test {
     return signCred(vc);
   }
 
-  function issuePushFundsToMinerCred(uint256 agent, uint64 miner, uint256 amount) internal returns (SignedCredential memory) {
+  function issuePushFundsCred(uint256 agent, uint64 miner, uint256 amount) internal returns (SignedCredential memory) {
     // roll forward so we don't get an identical credential that's already been used
     vm.roll(block.number + 1);
 
@@ -222,7 +222,7 @@ contract BaseTest is Test {
       block.number,
       block.number + 100,
       amount,
-      Agent.pushFundsToMiner.selector,
+      Agent.pushFunds.selector,
       miner,
       // agent data irrelevant for an push funds to miner cred
       bytes("")

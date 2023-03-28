@@ -288,7 +288,7 @@ contract Agent is IAgent, Operatable {
    * @param sc The signed credential of the user attempting to withdraw balance with a `withdraw` action type
    * @dev A credential must be passed when existing $FIL is borrowed in order to compute the max withdraw amount
    */
-  function withdrawBalance(
+  function withdraw(
     address receiver,
     SignedCredential memory sc
   ) external
@@ -305,7 +305,7 @@ contract Agent is IAgent, Operatable {
 
     payable(receiver).sendValue(sc.vc.value);
 
-    emit WithdrawBalance(receiver, sc.vc.value);
+    emit Withdraw(receiver, sc.vc.value);
   }
 
   /**
@@ -315,7 +315,7 @@ contract Agent is IAgent, Operatable {
    *
    * This function adds a native FIL balance to the Agent
    */
-  function pullFundsFromMiner(SignedCredential memory sc)
+  function pullFunds(SignedCredential memory sc)
     external
     onlyOwnerOperator
     validateAndBurnCred(sc)
@@ -332,7 +332,7 @@ contract Agent is IAgent, Operatable {
    * @dev The Agent must own the miner its withdrawing funds from
    * If the agents FIL balance is less than the total amount to push, the function will attempt to convert any wFIL before reverting
    */
-  function pushFundsToMiner(SignedCredential memory sc)
+  function pushFunds(SignedCredential memory sc)
     external
     onlyOwnerOperator
     notOnAdministration
