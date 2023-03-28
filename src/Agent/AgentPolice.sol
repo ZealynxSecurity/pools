@@ -63,6 +63,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     _;
   }
 
+  // ensures that only the pool can change its own state in the agent police
+  modifier onlyPool(uint256 poolID) {
+    if (address(GetRoute.pool(router, poolID)) != msg.sender) {
+      revert Unauthorized();
+    }
+    _;
+  }
+
   modifier onlyWhenBehindTargetEpoch(address agent) {
     if (!_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) {
       revert Unauthorized();
@@ -196,8 +204,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @dev only an agent can add a pool to its list
    * The agent itself ensures the pool is not a duplicate before calling this function
    */
-  function addPoolToList(uint256 pool) public onlyAgent {
-    _poolIDs[_addressToID(msg.sender)].push(pool);
+  function addPoolToList(uint256 agentID, uint256 pool) external onlyPool(pool) {
+    _poolIDs[agentID].push(pool);
   }
 
   /**
@@ -205,11 +213,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param pool the id of the pool to add
    * @dev only an agent can add a pool to its list
    */
-  function removePoolFromList(uint256 agentID, uint256 pool) external {
-    if (address(GetRoute.pool(router, pool)) != msg.sender) {
-      revert Unauthorized();
-    }
-
+  function removePoolFromList(uint256 agentID, uint256 pool) external onlyPool(pool) {
     uint256[] storage pools = _poolIDs[agentID];
     for (uint256 i = 0; i < pools.length; i++) {
       if (pools[i] == pool) {
@@ -291,10 +295,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     }
 
     return false;
-  }
-
-  function _addressToID(address agent) internal view returns (uint256) {
-    return IAgent(agent).id();
   }
 
   function createKey(string memory partitionKey, uint256 agentID) internal pure returns (bytes32) {

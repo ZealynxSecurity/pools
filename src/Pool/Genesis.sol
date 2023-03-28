@@ -270,6 +270,7 @@ contract GenesisPool is IPool, Operatable {
             uint256 currentEpoch = block.number;
             account.startEpoch = currentEpoch;
             account.epochsPaid = currentEpoch;
+            GetRoute.agentPolice(router).addPoolToList(vc.subject, id);
         }
 
         account.principal += vc.value;

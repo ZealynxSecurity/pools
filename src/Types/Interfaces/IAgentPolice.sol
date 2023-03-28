@@ -48,7 +48,7 @@ interface IAgentPolice {
                       POLICING
   //////////////////////////////////////////////*/
 
-  function addPoolToList(uint256 pool) external;
+  function addPoolToList(uint256 agentID, uint256 pool) external;
 
   function removePoolFromList(uint256 agentID, uint256 pool) external;
 

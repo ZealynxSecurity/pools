@@ -362,20 +362,9 @@ contract Agent is IAgent, Operatable {
     notInDefault
     validateAndBurnCred(sc)
   {
-    IPool pool = GetRoute.pool(router, poolID);
-
-    IAgentPolice police = GetRoute.agentPolice(router);
-    // first time staking, add the poolID to the list of pools this agent is staking in
-    if (pool.getAgentBorrowed(id) == 0) {
-      if (borrowedPoolsCount() > police.maxPoolsPerAgent()) {
-        revert BadAgentState();
-      }
-      police.addPoolToList(poolID);
-    }
-
-    pool.borrow(sc.vc);
+    GetRoute.pool(router, poolID).borrow(sc.vc);
     // transaction will revert if any of the pool's accounts reject the new agent's state
-    police.isAgentOverLeveraged(sc.vc);
+    GetRoute.agentPolice(router).isAgentOverLeveraged(sc.vc);
   }
 
   /**
