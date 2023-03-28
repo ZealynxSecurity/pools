@@ -3,6 +3,7 @@ pragma solidity 0.8.17;
 
 import "./BaseTest.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
 contract PoolBasicSetupTest is BaseTest {
   using Credentials for VerifiableCredential;
@@ -62,95 +63,53 @@ contract PoolBasicSetupTest is BaseTest {
     assertEq(rate, expectedRate);
   }
 
-  function testIsOverLeveragedBasic() public {
-    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
-    assertEq(overLeveraged, false);
+  function testIsApprovedBasic() public {
+    bool approved = pool.isApproved(createAccount(borrowAmount), vcBasic);
+    assertTrue(approved, "Should be approved");
   }
 
-  function testIsOverLeveragedLTVErrorBasic() public {
-    // For the most basic path, the equity is 100%
-    // This means the pool share of value is just total value less principal
-    // With the current logic that means that whenever the agent value
-    // is less than double the principle we should be over leveraged
-    AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount less dust
-      (borrowAmount * 2) - 1000,
-      gCredBasic,
-      goodEDR,
-      // principal = borrowAmount
-      borrowAmount,
-      // no account yet (startEpoch)
-      0
-    );
-    vcBasic.claim = abi.encode(agentData);
-    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
-    assertEq(overLeveraged, true);
-  }
-
-  function testIsOverLeveragedLTVErrorFuzz(uint256 borrowAmount, uint256 agentValue) public {
-    borrowAmount = bound(borrowAmount, 1e18, 1e22);
+  function testIsApprovedLTVError(uint256 principal, uint256 lockedFunds) public {
+    principal = bound(principal, 1e18, 1e40);
     // Even for very low values of agentValue there shouldn't be issues
     // If the agent value is less than 2x the borrow amount, we should be over leveraged
-    agentValue = bound(agentValue, 0, (borrowAmount * 2) - 1000);
+    lockedFunds = bound(lockedFunds, 0, principal);
+
     AgentData memory agentData = createAgentData(
       // agentValue => 2x the borrowAmount less dust
-      agentValue,
-      gCredBasic,
+      lockedFunds,
+      GCRED,
       goodEDR,
       // principal = borrowAmount
-      borrowAmount,
+      principal,
       // no account yet (startEpoch)
       0
     );
     vcBasic.claim = abi.encode(agentData);
-    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
-    assertEq(overLeveraged, true);
+    bool approved = pool.isApproved(createAccount(borrowAmount), vcBasic);
+    assertFalse(approved, "Should not be approved");
   }
 
-  function testIsOverLeveragedDTIErrorBasic() public {
-    uint256 amount = 1e18;
-    uint256 principle = amount * 2;
-    uint256 gCred = 80;
+  function testIsApprovedDTIError(uint256 principal, uint256 lockedFunds, uint256 edr) public {
+    lockedFunds = bound(lockedFunds, 1e18, 1e40);
+    principal = bound(principal, 1e18, lockedFunds);
+
+    uint256 adjustedRate = _getAdjustedRate(GCRED);
+    uint256 expectedDailyPayment = (principal * adjustedRate * EPOCHS_IN_DAY) / 1e18;
+
+    edr = bound(edr, 1, expectedDailyPayment - 1);
+
     AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount
-      principle,
-      // good gcred score
-      gCred,
-      // bad EDR
-      (rateArray[gCred] * EPOCHS_IN_DAY * amount / 2) / 1e18,
-      // principal = borrowAmount
-      amount,
+      lockedFunds,
+      GCRED,
+      // edr < expectedDailyPayment
+      edr,
+      principal,
       // no account yet (startEpoch)
       0
     );
     vcBasic.claim = abi.encode(agentData);
-    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
-    assertEq(overLeveraged, true);
-  }
-
-  function testIsOverLeveragedDTIErrorFuzz(uint256 borrowAmount, uint256 agentValue, uint256 badEDR) public {
-    uint256 gCred = 80;
-
-    borrowAmount = bound(borrowAmount, 1e18, 1e22);
-    agentValue = bound(agentValue, borrowAmount * 2, 1e30);
-    uint256 badEDRUpper = ((rateArray[gCred] * EPOCHS_IN_DAY * borrowAmount) / 1e18) -  DUST;
-    badEDR = bound(badEDR, DUST, badEDRUpper);
-    AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount
-      agentValue,
-      // good gcred score
-      gCred,
-      // good EDR
-      badEDR,
-      // principal = borrowAmount
-      borrowAmount,
-      // no account yet (startEpoch)
-      0
-    );
-
-    vcBasic.claim = abi.encode(agentData);
-    bool overLeveraged = pool.isOverLeveraged(createAccount(borrowAmount), vcBasic);
-    assertEq(overLeveraged, true);
+    bool approved = pool.isApproved(createAccount(principal), vcBasic);
+    assertFalse(approved, "Should not be approved");
   }
 }
 

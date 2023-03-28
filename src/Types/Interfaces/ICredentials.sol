@@ -5,4 +5,5 @@ interface ICredentials {
   function getExpectedDailyRewards(bytes memory _agentData) external pure returns (uint256);
   function getPrincipal(bytes memory _agentData) external pure returns (uint256);
   function getGCRED(bytes memory _agentData) external pure returns (uint256);
+  function getLockedFunds(bytes memory _agentData) external pure returns (uint256);
 }

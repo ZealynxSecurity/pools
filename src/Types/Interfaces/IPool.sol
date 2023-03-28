@@ -23,6 +23,7 @@ interface IPool {
         uint256 indexed agent,
         uint256 rate,
         uint256 epochsPaid,
+        uint256 principalPaid,
         uint256 refund
     );
 
@@ -76,7 +77,7 @@ interface IPool {
         VerifiableCredential memory vc
     ) external view returns (uint256);
 
-    function isOverLeveraged(
+    function isApproved(
         Account memory account,
         VerifiableCredential memory vc
     ) external view returns (bool);
@@ -92,6 +93,7 @@ interface IPool {
     ) external returns (
         uint256 rate,
         uint256 epochsPaid,
+        uint256 principalPaid,
         uint256 refund
     );
 

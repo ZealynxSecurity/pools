@@ -15,6 +15,9 @@ contract CredParser {
   function getGCRED(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(_agentData, (AgentData)).gcred;
   }
+  function getLockedFunds(bytes memory _agentData) external pure returns (uint256) {
+    return abi.decode(_agentData, (AgentData)).lockedFunds;
+  }
   function getPrincipal(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(_agentData, (AgentData)).principal;
   }

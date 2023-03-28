@@ -22,6 +22,7 @@ struct AgentData {
   uint256 expectedDailyFaultPenalties;
   uint256 expectedDailyRewards;
   uint256 gcred;
+  uint256 lockedFunds;
   uint256 qaPower;
   uint256 principal;
   uint256 startEpoch;
@@ -122,5 +123,12 @@ library Credentials {
     address credParser
   ) internal pure returns (uint256) {
     return ICredentials(credParser).getPrincipal(vc.claim);
+  }
+
+  function getLockedFunds(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return ICredentials(credParser).getLockedFunds(vc.claim);
   }
 }

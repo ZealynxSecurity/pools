@@ -26,7 +26,7 @@ interface IAgentPolice {
 
   function maxPoolsPerAgent() external view returns (uint256);
 
-  function isAgentOverLeveraged(VerifiableCredential memory vc) external;
+  function agentApproved(VerifiableCredential memory vc) external;
 
   function liquidated(uint256 agentID) external view returns (bool);
 

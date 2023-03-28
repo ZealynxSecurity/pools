@@ -28,7 +28,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using Credentials for VerifiableCredential;
   using FilAddress for address;
 
-  error OverLeveraged();
+  error AgentStateRejected();
   error Unauthorized();
 
   /// @notice `defaultLookback` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
@@ -94,7 +94,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
                       CHECKERS
   //////////////////////////////////////////////*/
 
-  function isAgentOverLeveraged(
+  function agentApproved(
     VerifiableCredential memory vc
   ) external view {
     uint256[] memory pools = _poolIDs[vc.subject];
@@ -102,11 +102,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     for (uint256 i = 0; i < pools.length; ++i) {
       uint256 poolID = pools[i];
       IPool pool = GetRoute.pool(router, poolID);
-      if (pool.isOverLeveraged(
+      if (!pool.isApproved(
         AccountHelpers.getAccount(router, vc.subject, poolID),
         vc
       )) {
-        revert OverLeveraged();
+        revert AgentStateRejected();
       }
     }
   }

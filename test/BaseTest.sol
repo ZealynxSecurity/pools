@@ -47,6 +47,8 @@ struct StateSnapshot {
     uint256 agentBalanceWFIL;
     uint256 poolBalanceWFIL;
     uint256 agentBorrowed;
+    uint256 agentPoolBorrowCount;
+    uint256 accountEpochsPaid;
 }
 
 contract BaseTest is Test {
@@ -54,12 +56,15 @@ contract BaseTest is Test {
   using AccountHelpers for Account;
   using Credentials for VerifiableCredential;
 
+  uint256 public constant WAD = 1e18;
   // max FIL value - 2B atto
   uint256 public constant MAX_FIL = 2e27;
   uint256 public constant DUST = 10000;
   // 3 week window deadline for defaults
   uint256 public constant DEFAULT_WINDOW = EPOCHS_IN_WEEK * 3;
   uint256 public constant DEFAULT_BASE_RATE = 15e18;
+  // by default, moderately good GCRED
+  uint256 public constant GCRED = 80;
   address public constant ZERO_ADDRESS = address(0);
   address public treasury = makeAddr('TREASURY');
   address public router;
@@ -239,7 +244,7 @@ contract BaseTest is Test {
       // agentValue => 2x the borrowAmount
       amount * 2,
       // good gcred score
-      80,
+      GCRED,
       // good EDR
       1000,
       // principal = borrowAmount
@@ -266,19 +271,18 @@ contract BaseTest is Test {
   function issueGenericBorrowCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
     // roll forward so we don't get an identical credential that's already been used
     vm.roll(block.number + 1);
-    uint256 principle = amount * 2;
-    uint256 gCred = 80;
+    uint256 principal = amount;
     // NOTE: since we don't pull this off the pool it could be out of sync - careful
-    uint256 adjustedRate = rateArray[gCred] * DEFAULT_BASE_RATE / 1e18;
+    uint256 adjustedRate = _getAdjustedRate(GCRED);
     AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount
-      principle,
+      // lockedFunds => 2x the borrowAmount
+      amount * 2,
       // good gcred score
-      gCred,
-      // good EDR
-      (adjustedRate * EPOCHS_IN_DAY * principle * 2) / 1e18,
+      GCRED,
+      // good EDR (5x expected payments)
+      (adjustedRate * EPOCHS_IN_DAY * principal * 5) / WAD,
       // principal = borrowAmount
-      amount,
+      principal,
       // no account yet (startEpoch)
       0
     );
@@ -299,21 +303,22 @@ contract BaseTest is Test {
   }
 
   function createAgentData(
-    uint256 agentValue,
+    uint256 lockedFunds,
     uint256 gcred,
     uint256 expectedDailyRewards,
     uint256 principal,
     uint256 startEpoch
   ) internal pure returns (AgentData memory) {
     return AgentData(
-      agentValue,
+      lockedFunds * 120 / 100,
       DEFAULT_BASE_RATE,
-      // collateralValue is 60% of agentValue
-      agentValue * 60 / 100,
+      // collateralValue is 60% of lockedFunds
+      lockedFunds * 60 / 100,
       // expectedDailyFaultPenalties
       0,
       expectedDailyRewards,
       gcred,
+      lockedFunds,
       // qaPower hardcoded
       10e18,
       principal,
@@ -383,24 +388,17 @@ contract BaseTest is Test {
   ) internal {
     vm.startPrank(_agentOperator(agent));
     // Establsh the state before the borrow
-    StateSnapshot memory preBorrowState;
-
-    preBorrowState.agentBalanceWFIL = wFIL.balanceOf(address(agent));
-    Account memory account = AccountHelpers.getAccount(
-      router,
-      address(agent),
-      poolID
-    );
-
-    preBorrowState.agentBorrowed = account.principal;
-
+    StateSnapshot memory preBorrowState = _snapshot(address(agent), poolID);
+    Account memory account = AccountHelpers.getAccount(router, address(agent), poolID);
     uint256 borrowBlock = block.number;
     agent.borrow(poolID, sc);
 
     vm.stopPrank();
     // Check the state after the borrow
-    uint256 currBalance = wFIL.balanceOf(address(agent));
-    assertEq(currBalance, preBorrowState.agentBalanceWFIL + sc.vc.value);
+    uint256 currentAgentBal = wFIL.balanceOf(address(agent));
+    uint256 currentPoolBal = wFIL.balanceOf(address(GetRoute.pool(router, poolID)));
+    assertEq(currentAgentBal, preBorrowState.agentBalanceWFIL + sc.vc.value);
+    assertEq(currentPoolBal, preBorrowState.poolBalanceWFIL - sc.vc.value);
 
     account = AccountHelpers.getAccount(router, address(agent), poolID);
 
@@ -420,28 +418,36 @@ contract BaseTest is Test {
   ) internal returns (
     uint256 rate,
     uint256 epochsPaid,
-    uint256 refund
+    uint256 principalPaid,
+    uint256 refund,
+    StateSnapshot memory prePayState
   ) {
+    vm.startPrank(address(agent));
+    vm.deal(address(agent), sc.vc.value);
+    wFIL.deposit{value: sc.vc.value}();
+    wFIL.approve(address(pool), sc.vc.value);
+    vm.stopPrank();
+
     vm.startPrank(_agentOperator(agent));
 
     // Establsh the state before the borrow
-    StateSnapshot memory preBorrowState;
-    preBorrowState.agentBalanceWFIL = wFIL.balanceOf(address(agent));
-    preBorrowState.poolBalanceWFIL = wFIL.balanceOf(address(pool));
+    StateSnapshot memory preBorrowState = _snapshot(address(agent), pool.id());
+
     Account memory account = AccountHelpers.getAccount(
       router,
       address(agent),
       pool.id()
     );
 
-    preBorrowState.agentBorrowed = account.principal;
-
     uint256 borrowBlock = block.number;
     uint256 prePayEpochsPaid = account.epochsPaid;
+
+    prePayState = _snapshot(address(agent), pool.id());
 
     (
       rate,
       epochsPaid,
+      principalPaid,
       refund
     ) = agent.pay(pool.id(), sc);
 
@@ -555,6 +561,19 @@ contract BaseTest is Test {
 
   function _agentOperator(IAgent agent) internal view returns (address) {
     return IAuth(address(agent)).operator();
+  }
+
+  function _snapshot(address agent, uint256 poolID) internal view returns (StateSnapshot memory snapshot) {
+    Account memory account = AccountHelpers.getAccount(router, agent, poolID);
+    snapshot.agentBalanceWFIL = wFIL.balanceOf(agent);
+    snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(router, poolID)));
+    snapshot.agentBorrowed = account.principal;
+    snapshot.accountEpochsPaid = account.epochsPaid;
+    snapshot.agentPoolBorrowCount = IAgent(agent).borrowedPoolsCount();
+  }
+
+  function _getAdjustedRate(uint256 gcred) internal view returns (uint256) {
+    return rateArray[gcred] * DEFAULT_BASE_RATE / 1e18;
   }
 
   uint256[100] rateArray = [

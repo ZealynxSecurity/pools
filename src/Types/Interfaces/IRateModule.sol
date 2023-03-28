@@ -14,7 +14,7 @@ interface IRateModule {
       VerifiableCredential memory vc
   ) external view returns (uint256);
 
-  function isOverLeveraged(
+  function isApproved(
       Account memory account,
       VerifiableCredential memory vc
   ) external view returns (bool);
@@ -22,6 +22,8 @@ interface IRateModule {
   function setMaxDTI(uint256 _maxDTI) external;
 
   function setMaxLTV(uint256 _maxLTV) external;
+
+  function setMinGCRED(uint256 _minGCRED) external;
 
   function setRateLookup(uint256[100] memory _rateLookup) external;
 

@@ -36,8 +36,6 @@ contract GenesisPool is IPool, Operatable {
     using Credentials for VerifiableCredential;
     using FilAddress for address;
 
-    uint256 constant WAD = 1e18;
-
     error InsufficientLiquidity();
     error AccountDNE();
     error Unauthorized();
@@ -48,6 +46,8 @@ contract GenesisPool is IPool, Operatable {
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
+
+    uint256 constant WAD = 1e18;
 
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
@@ -217,16 +217,16 @@ contract GenesisPool is IPool, Operatable {
     }
 
     /**
-     * @notice isOverLeveraged returns true if the Agent is over leveraged
-     * In this version, an Agent can be over-leveraged in either of two cases:
-     * 1. The Agent's principal is more than the equity weighted `agentTotalValue`
+     * @notice isApproved returns false if the Agent is in an unacceptable state
+     * In this version, an Agent will be rejected in either of two cases:
+     * 1. The Agent's principal is more than the equity weighted `collateralValue`
      * 2. The Agent's expected daily payment is more than `dtiWeight` of their income
      */
-    function isOverLeveraged(
+    function isApproved(
         Account memory account,
         VerifiableCredential memory vc
     ) external view returns (bool) {
-        return rateModule.isOverLeveraged(account, vc);
+        return rateModule.isApproved(account, vc);
     }
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external onlyAgentPolice {
@@ -257,7 +257,8 @@ contract GenesisPool is IPool, Operatable {
     //////////////////////////////////////////////////////////////*/
 
     function borrow(VerifiableCredential memory vc) external subjectIsAgentCaller(vc) {
-        if (vc.value == 0) revert InvalidParams();
+        // 1e18 => 1 FIL, can't borrow less than 1 FIL
+        if (vc.value < WAD) revert InvalidParams();
 
         // if (vc.action == borrow && !belowLimit) || vc.action == refinance {
         //     ...proceed
@@ -288,7 +289,10 @@ contract GenesisPool is IPool, Operatable {
     function pay(
         VerifiableCredential memory vc
     ) external returns (
-        uint256 rate, uint256 epochsPaid, uint256 refund
+        uint256 rate,
+        uint256 epochsPaid,
+        uint256 principalPaid,
+        uint256 refund
     ) {
         // grab this Agent's account from storage
         Account memory account = _getAccount(vc.subject);
@@ -297,24 +301,31 @@ contract GenesisPool is IPool, Operatable {
         // compute a rate based on the agent's current financial situation
         rate = getRate(account, vc);
         uint256 interestOwed;
+        uint256 interestPerEpoch;
         uint256 feeBasis;
 
         // if the account is not "current", compute the amount of interest owed based on the new rate
         if (account.epochsPaid < block.number) {
+            // compute the number of epochs that are owed to get current
             uint256 epochsToPay = block.number - account.epochsPaid;
-            interestOwed = rate * epochsToPay;
+            // multiply the rate by the principal to get the per epoch interest rate
+            interestPerEpoch = (rate * account.principal) / WAD;
+            // ensure the payment is greater than or equal to at least 1 epochs worth of interest
+            if (vc.value < interestPerEpoch) revert InvalidParams();
+            // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
+            interestOwed = interestPerEpoch * epochsToPay;
         }
         // if the payment is less than the interest owed, pay interest only
         if (vc.value <= interestOwed) {
             // compute the amount of epochs this payment covers
-            uint256 epochsForward = vc.value / rate;
+            uint256 epochsForward = vc.value / interestPerEpoch;
             // update the account's `epochsPaid` cursor
             account.epochsPaid += epochsForward;
             // since the entire payment is interest, the entire payment is used to compute the fee (principal payments are fee-free)
             feeBasis = vc.value;
         } else {
             // pay interest and principal
-            uint256 principalPaid = vc.value - interestOwed;
+            principalPaid = vc.value - interestOwed;
             // the fee basis only applies to the interest payment
             feeBasis = interestOwed;
             // protect against underflow
@@ -346,9 +357,9 @@ contract GenesisPool is IPool, Operatable {
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), vc.value - refund);
 
-        emit Pay(vc.subject, rate, account.epochsPaid, refund);
+        emit Pay(vc.subject, rate, account.epochsPaid, principalPaid, refund);
 
-        return (rate, account.epochsPaid, refund);
+        return (rate, account.epochsPaid, principalPaid, refund);
     }
 
     /*//////////////////////////////////////////////////////////////

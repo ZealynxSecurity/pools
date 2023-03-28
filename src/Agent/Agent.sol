@@ -185,7 +185,7 @@ contract Agent is IAgent, Operatable {
     // remove this miner from the Agent's list of miners
     _popMinerFromList(sc.vc.target);
     // revert the transaction if any of the pools reject the removal
-    GetRoute.agentPolice(router).isAgentOverLeveraged(sc.vc);
+    GetRoute.agentPolice(router).agentApproved(sc.vc);
     // change the owner address of the miner to the new miner owner
     sc.vc.target.changeOwnerAddress(newMinerOwner);
   }
@@ -301,7 +301,7 @@ contract Agent is IAgent, Operatable {
     _poolFundsInFIL(sc.vc.value);
 
     // revert the transaction if any of the pools reject the removal
-    GetRoute.agentPolice(router).isAgentOverLeveraged(sc.vc);
+    GetRoute.agentPolice(router).agentApproved(sc.vc);
 
     payable(receiver).sendValue(sc.vc.value);
 
@@ -352,7 +352,7 @@ contract Agent is IAgent, Operatable {
    * @param poolID The ID of the pool to borrow from
    * @param sc The signed credential of the user attempting to borrow funds from a pool. The credential must contain a `borrow` action type with the `value` field set to the amount to borrow. In case of a `borrow` action, the `target` field goes unused
    *
-   * @dev The transaction will revert if the agent becomes overleveraged after borrowing
+   * @dev The transaction will revert if the agent is in a bad state after borrowing
    */
   function borrow(
     uint256 poolID,
@@ -364,7 +364,7 @@ contract Agent is IAgent, Operatable {
   {
     GetRoute.pool(router, poolID).borrow(sc.vc);
     // transaction will revert if any of the pool's accounts reject the new agent's state
-    GetRoute.agentPolice(router).isAgentOverLeveraged(sc.vc);
+    GetRoute.agentPolice(router).agentApproved(sc.vc);
   }
 
   /**
@@ -381,7 +381,7 @@ contract Agent is IAgent, Operatable {
   ) external
     onlyOwnerOperator
     validateAndBurnCred(sc)
-    returns (uint256 rate, uint256 epochsPaid, uint256 refund)
+    returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
   {
     // get the Pool address
     IPool pool = GetRoute.pool(router, poolID);
@@ -390,7 +390,7 @@ contract Agent is IAgent, Operatable {
     // approve the pool to pull in the WFIL asset
     GetRoute.wFIL(router).approve(address(GetRoute.pool(router, poolID)), sc.vc.value);
     // make the payment
-    (rate, epochsPaid, refund) = pool.pay(sc.vc);
+    return pool.pay(sc.vc);
   }
 
   /**
@@ -420,11 +420,11 @@ contract Agent is IAgent, Operatable {
     // approve old Pool to take wFIL from this agent
     GetRoute.wFIL(router).approve(address(oldPool), sc.vc.value);
     // pay back the old pool principal + interest
-    (,uint256 epochsPaid,) = oldPool.pay(sc.vc);
+    (,uint256 epochsPaid,,) = oldPool.pay(sc.vc);
     // ensure the account is closed on the old pool
     if (epochsPaid > 0) revert BadAgentState();
     // transaction will revert if any of the pool's accounts reject the new agent's state
-    GetRoute.agentPolice(router).isAgentOverLeveraged(sc.vc);
+    GetRoute.agentPolice(router).agentApproved(sc.vc);
   }
 
   /*//////////////////////////////////////////////

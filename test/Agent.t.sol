@@ -250,9 +250,9 @@ contract AgentWithdrawTest is BaseTest {
 
   function testWithdrawWithLoans(uint256 withdrawAmount) internal {}
 
-  function testWithdrawIntoOverLeveragedLTV(uint256 withdrawAmount) internal {}
+  function testWithdrawIntoUnapprovedLTV(uint256 withdrawAmount) internal {}
 
-  function testWithdrawIntoOverLeveragedDTI(uint256 withdrawAmount) internal {}
+  function testWithdrawIntoUnapprovedDTI(uint256 withdrawAmount) internal {}
 
   function testWithdrawMoreThanLiquid(uint256 withdrawAmount) internal {}
 }
@@ -262,9 +262,9 @@ contract AgentRmMinerTest is BaseTest {
 
   function testRmMinerWithLoans() internal {}
 
-  function testRmMinerIntoOverLeveragedLTV() internal {}
+  function testRmMinerIntoUnapprovedLTV() internal {}
 
-  function testRmMinerIntoOverLeveragedDTI() internal {}
+  function testRmMinerIntoUnapprovedDTI() internal {}
 }
 
 contract AgentBorrowingTest is BaseTest {
@@ -284,14 +284,14 @@ contract AgentBorrowingTest is BaseTest {
     }
 
     function testBorrowValid(uint256 borrowAmount) public {
-      borrowAmount = bound(borrowAmount, DUST, stakeAmount);
+      borrowAmount = bound(borrowAmount, WAD, stakeAmount);
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
       agentBorrow(agent, pool.id(), borrowCred);
     }
 
     function testBorrowTwice(uint256 borrowAmount) public {
-      borrowAmount = bound(borrowAmount, DUST, stakeAmount / 2);
+      borrowAmount = bound(borrowAmount, WAD, stakeAmount / 2);
 
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
@@ -301,16 +301,17 @@ contract AgentBorrowingTest is BaseTest {
       vm.roll(block.number + 1000);
 
       borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
-      // Since we've already borrowed the borrow amount we need the principle value to increase 4x
-      uint256 principle = borrowAmount * 4;
-      uint256 adjustedRate = rateArray[80] * DEFAULT_BASE_RATE / 1e18;
+      // Since we've already borrowed, we pretend the SP locks substantially more funds
+      uint256 lockedFunds = borrowAmount * 4;
+
+      uint256 adjustedRate = rateArray[GCRED] * DEFAULT_BASE_RATE / 1e18;
 
       AgentData memory agentData = createAgentData(
-        principle,
-        80,
-        (adjustedRate * EPOCHS_IN_DAY * principle * 2) / 1e18,
-        // principal = borrowAmount
-        borrowAmount,
+        lockedFunds,
+        GCRED,
+        borrowCred.vc.getExpectedDailyRewards(credParser),
+        // principal = borrowAmount * 2 (second time borrowing)
+        borrowAmount * 2,
         // Account started at previous borrow block
         borrowBlock
       );
@@ -396,81 +397,151 @@ contract AgentPayTest is BaseTest {
       (agent, miner) = configureAgent(minerOwner);
     }
 
-    function testPayInterestOnly(uint256 payAmount) public {}
+    function testPayInterestOnly(uint256 borrowAmount, uint256 payAmount, uint256 rollFwdAmt) public {
+      rollFwdAmt = bound(rollFwdAmt, 1, GetRoute.agentPolice(router).defaultWindow() - 1);
+      borrowAmount = bound(borrowAmount, 1e18, stakeAmount);
 
-    function testPayInterestAndPartialPrincipal(uint256 payAmount) public {}
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+      (uint256 interestOwed, uint256 interestOwedPerEpoch) = calculateInterestOwed(agent, pool, borrowCred.vc, borrowAmount, rollFwdAmt);
+
+      // bind the pay amount to less than the interest owed
+      payAmount = bound(payAmount, interestOwedPerEpoch + DUST, interestOwed - DUST);
+
+      StateSnapshot memory prePayState = borrowRollFwdAndPay(
+        agent,
+        pool,
+        borrowCred,
+        borrowAmount,
+        payAmount,
+        rollFwdAmt
+      );
+
+      assertEq(
+        prePayState.agentBorrowed,
+        AccountHelpers.getAccount(router, agent.id(), pool.id()).principal,
+        "principal should not change"
+      );
+    }
+
+    function testPayInterestAndPartialPrincipal(uint256 borrowAmount, uint256 payAmount, uint256 rollFwdAmt) public {
+      rollFwdAmt = bound(rollFwdAmt, 1, GetRoute.agentPolice(router).defaultWindow() - 1);
+      // bind borrow amount min 1e18 to ensure theres a decent amount of principal to repay
+      borrowAmount = bound(borrowAmount, 1e18, stakeAmount);
+
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+      (uint256 interestOwed,) = calculateInterestOwed(agent, pool, borrowCred.vc, borrowAmount, rollFwdAmt);
+      // bind the pay amount to in between the interest owed and less than the principal
+      payAmount = bound(payAmount, interestOwed + DUST, interestOwed + borrowAmount - DUST);
+
+      StateSnapshot memory prePayState = borrowRollFwdAndPay(
+        agent,
+        pool,
+        borrowCred,
+        borrowAmount,
+        payAmount,
+        rollFwdAmt
+      );
+
+      uint256 principalPaid = payAmount - interestOwed;
+
+      Account memory postPaymentAccount = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+      assertEq(
+        prePayState.agentBorrowed - principalPaid,
+        postPaymentAccount.principal,
+        "account should have decreased principal"
+      );
+      assertEq(postPaymentAccount.epochsPaid, block.number, "epochs paid should be current");
+    }
 
     function testPayFullExit(uint256 payAmount) public {}
 
     function testPayTooMuch(uint256 payAmount) public {}
 
-//     function agentExit(IAgent _agent, uint256 _exitAmount, SignedCredential memory _signedCred, IPool _pool) internal {
-//         vm.startPrank(_agentOperator(_agent));
-//         // Establsh the state before the borrow
-//         StateSnapshot memory preBorrowState;
-//         preBorrowState.balanceWFIL = wFIL.balanceOf(address(_agent));
-//         preBorrowState.poolBalanceWFIL = wFIL.balanceOf(address(_pool));
-//         Account memory account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
-//         preBorrowState.powerStake = account.powerTokensStaked;
-//         preBorrowState.borrowed = account.totalBorrowed;
-//         preBorrowState.powerBalance = IERC20(powerToken).balanceOf(address(_agent));
-//         preBorrowState.powerBalancePool = IERC20(powerToken).balanceOf(address(_pool));
+    function calculateInterestOwed(
+      IAgent agent,
+      IPool pool,
+      VerifiableCredential memory vc,
+      uint256 borrowAmount,
+      uint256 rollFwdAmt
+    ) internal view returns (
+      uint256 interestOwed,
+      uint256 interestOwedPerEpoch
+    ) {
+      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
-//         wFIL.approve(address(_pool), _exitAmount);
-//         _agent.exit(_pool.id(), _exitAmount, _signedCred);
-//         vm.stopPrank();
+      // since gcred is hardcoded in the credential, we know the rate ahead of time (rate does not change if gcred does not change, even if other financial statistics change)
+      uint256 rate = pool.getRate(account, vc);
 
-//         assertEq(IERC20(address(wFIL)).balanceOf(address(_agent)), preBorrowState.balanceWFIL - _exitAmount);
-//         assertEq(IERC20(address(wFIL)).balanceOf(address(_pool)), preBorrowState.poolBalanceWFIL + _exitAmount);
+      // note we add 1 more bock of interest owed to account for the roll forward of 1 epoch inside agentBorrow helper
+      interestOwedPerEpoch = borrowAmount * rate / WAD;
+      interestOwed = (interestOwedPerEpoch * (rollFwdAmt + 1));
+    }
 
-//         account = AccountHelpers.getAccount(router, address(_agent), _pool.id());
-//         assertEq(account.totalBorrowed, 0);
-//         assertEq(account.powerTokensStaked, 0);
-//         assertEq(account.pmtPerEpoch(), 0);
-//     }
+    function borrowRollFwdAndPay(
+      IAgent agent,
+      IPool pool,
+      SignedCredential memory borrowCred,
+      uint256 borrowAmount,
+      uint256 payAmount,
+      uint256 rollFwdAmt
+    ) internal returns (
+      StateSnapshot memory
+    ) {
+      uint256 agentID = agent.id();
+      uint256 poolID = pool.id();
+      agentBorrow(agent, poolID, borrowCred);
 
-//     function testExit() public {
-//         SignedCredential memory sc = issueGenericSC(address(agent));
-//         agentBorrow(
-//             agent,
-//             borrowAmount,
-//             sc,
-//             pool,
-//             powerToken,
-//             sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER))
-//         );
-//         agentExit(agent, borrowAmount, issueGenericSC(address(agent)), pool);
-//     }
-//     function testRefinance() public {
-//         IPool pool2 = createAndPrimePool(
-//             "TEST",
-//             "TEST",
-//             poolOperator,
-//             poolFee,
-//             stakeAmount,
-//             investor1
-//         );
+      vm.roll(block.number + rollFwdAmt);
+      uint256 prevAccountEpochsPaid = AccountHelpers.getAccount(router, agentID, poolID).epochsPaid;
+      uint256 prevAgentPoolBorrowCount = agent.borrowedPoolsCount();
 
+      (
+        ,uint256 epochsPaid,
+        uint256 principalPaid,
+        uint256 refund,
+        StateSnapshot memory prePayState
+      ) = agentPay(agent, pool, issueGenericPayCred(agentID, payAmount));
 
-//         uint256 oldPoolID = pool.id();
-//         uint256 newPoolID = pool2.id();
-//         Account memory oldAccount;
-//         Account memory newAccount;
+      assertPmtSuccess(agent, pool, prePayState, payAmount, principalPaid, refund);
 
-//         uint256 borrowAmount = 0.5e18;
+      return prePayState;
+    }
 
-//         SignedCredential memory sc = issueGenericSC(address(agent));
-//         agentBorrow(agent, borrowAmount, sc, pool, powerToken, sc.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)));
-//         oldAccount = AccountHelpers.getAccount(router, address(agent), oldPoolID);
-//         assertEq(oldAccount.totalBorrowed, borrowAmount);
-//         vm.startPrank(minerOwner);
-//         agent.refinance(oldPoolID, newPoolID, 0, issueGenericSC(address(agent)));
-//         oldAccount = AccountHelpers.getAccount(router, address(agent), oldPoolID);
-//         newAccount = AccountHelpers.getAccount(router, address(agent), newPoolID);
-//         assertEq(oldAccount.totalBorrowed, 0);
-//         assertEq(newAccount.totalBorrowed, borrowAmount);
-//         vm.stopPrank();
-//     }
+    function assertPmtSuccess(
+      IAgent agent,
+      IPool pool,
+      StateSnapshot memory prePayState,
+      uint256 payAmount,
+      uint256 principalPaid,
+      uint256 refund
+    ) internal {
+      assertEq(prePayState.poolBalanceWFIL + payAmount, wFIL.balanceOf(address(pool)), "pool should have received funds");
+      assertEq(prePayState.agentBalanceWFIL - payAmount, wFIL.balanceOf(address(agent)), "agent should have paid funds");
+
+      Account memory postPaymentAccount = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+      // full exit
+      if (principalPaid >= prePayState.agentBorrowed) {
+        // refund should be greater than 0 if too much principal was paid
+        if (principalPaid > prePayState.agentBorrowed) {
+          assertEq(principalPaid - refund, prePayState.agentBorrowed, "should be a refund");
+        }
+
+        assertEq(postPaymentAccount.principal, 0, "principal should be 0");
+        assertEq(postPaymentAccount.epochsPaid, 0, "epochs paid should be reset");
+        assertEq(postPaymentAccount.startEpoch, 0, "start epoch should be reset");
+
+        assertEq(agent.borrowedPoolsCount() - 1, prePayState.agentPoolBorrowCount, "agent should have removed pool from borrowed list");
+      } else {
+        // partial exit or interest only payment
+        assertGt(postPaymentAccount.epochsPaid, prePayState.accountEpochsPaid, "epochs paid should have moved forward");
+        assertLe(postPaymentAccount.epochsPaid, block.number, "epochs paid should not be in the future");
+        assertEq(agent.borrowedPoolsCount(), prePayState.agentPoolBorrowCount, "agent should not have removed pool from borrowed list");
+
+      }
+    }
 }
 
 contract AgentPoliceTest is BaseTest {
@@ -502,7 +573,7 @@ contract AgentPoliceTest is BaseTest {
         police.defaultWindow() * 10
       );
 
-      borrowAmount = bound(borrowAmount, DUST, stakeAmount);
+      borrowAmount = bound(borrowAmount, WAD, stakeAmount);
       // helper includes assertions
       putAgentOnAdministration(
         agent,
@@ -523,7 +594,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testInvalidPutAgentOnAdministration() public {
-      uint256 borrowAmount = 1e18;
+      uint256 borrowAmount = WAD;
 
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
@@ -539,7 +610,7 @@ contract AgentPoliceTest is BaseTest {
 
     function testRmAgentFromAdministration() public {
       uint256 rollFwdPeriod = police.defaultWindow() + 100;
-      uint256 borrowAmount = 1e18;
+      uint256 borrowAmount = WAD;
 
       putAgentOnAdministration(
         agent,
@@ -555,7 +626,7 @@ contract AgentPoliceTest is BaseTest {
       SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
 
       // here we are exiting the pool by overpaying so much
-      (,uint256 epochsPaid,) = agentPay(agent, pool, sc);
+      (,uint256 epochsPaid,,,) = agentPay(agent, pool, sc);
 
       require(epochsPaid == 0, "Should have exited from the pool");
 
@@ -574,7 +645,7 @@ contract AgentPoliceTest is BaseTest {
         police.defaultWindow() * 10
       );
 
-      borrowAmount = bound(borrowAmount, DUST, stakeAmount);
+      borrowAmount = bound(borrowAmount, WAD, stakeAmount);
       // helper includes assertions
       setAgentDefaulted(
         agent,
@@ -591,7 +662,7 @@ contract AgentPoliceTest is BaseTest {
         police.defaultWindow() * 10
       );
 
-      uint256 borrowAmount = 1e18;
+      uint256 borrowAmount = WAD;
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
       agentBorrow(agent, pool.id(), borrowCred);
 
@@ -612,7 +683,7 @@ contract AgentPoliceTest is BaseTest {
 
     function testRmAdministrationNonAgentPolice() public {
       uint256 rollFwdPeriod = police.defaultWindow() + 100;
-      uint256 borrowAmount = 1e18;
+      uint256 borrowAmount = WAD;
 
       putAgentOnAdministration(
         agent,
@@ -628,7 +699,7 @@ contract AgentPoliceTest is BaseTest {
       SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
 
       // here we are exiting the pool by overpaying so much
-      (,uint256 epochsPaid,) = agentPay(agent, pool, sc);
+      (,uint256 epochsPaid,,,) = agentPay(agent, pool, sc);
 
       require(epochsPaid == 0, "Should have exited from the pool");
 
@@ -646,7 +717,7 @@ contract AgentPoliceTest is BaseTest {
         police.defaultWindow() * 10
       );
 
-      uint256 borrowAmount = 1e18;
+      uint256 borrowAmount = WAD;
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
       agentBorrow(agent, pool.id(), borrowCred);
 
@@ -669,7 +740,7 @@ contract AgentPoliceTest is BaseTest {
       setAgentDefaulted(
         agent,
         police.defaultWindow() + 1,
-        1e18,
+        WAD,
         pool.id()
       );
 
@@ -685,7 +756,7 @@ contract AgentPoliceTest is BaseTest {
       setAgentLiquidated(
         agent,
         police.defaultWindow() + 1,
-        1e18,
+        WAD,
         pool.id()
       );
     }
@@ -706,7 +777,7 @@ contract AgentPoliceTest is BaseTest {
       // borrow and stake amounts are split evenly among the pools
       numPools = bound(numPools, 1, police.maxPoolsPerAgent());
 
-      borrowAmount = bound(borrowAmount, 1000, stakeAmount);
+      borrowAmount = bound(borrowAmount, WAD * numPools, stakeAmount);
 
       recoveredFunds = bound(recoveredFunds, 1000, borrowAmount);
 
@@ -744,100 +815,6 @@ contract AgentPoliceTest is BaseTest {
       assertEq(balanceAfter - balanceBefore, recoveredFunds / numPools, "Pool should have received the correct amount of funds");
     }
 }
-
-// contract AgentDefaultTest is BaseTest {
-//     using AccountHelpers for Account;
-//     using Credentials for VerifiableCredential;
-
-//     address investor1 = makeAddr("INVESTOR_1");
-//     address investor2 = makeAddr("INVESTOR_2");
-//     address minerOwner = makeAddr("MINER_OWNER");
-//     address poolOperator = makeAddr("POOL_OPERATOR");
-//     string poolName = "FIRST POOL NAME";
-//     uint256 baseInterestRate = 20e18;
-//     uint256 stakeAmount;
-
-//     IAgent agent;
-//     uint64 miner;
-//     IPool pool1;
-//     IPool pool2;
-//     IERC4626 pool46261;
-//     IERC4626 pool46262;
-
-//     SignedCredential signedCred;
-//     IAgentPolice police;
-
-//     address powerToken;
-
-//     function setUp() public {
-//         police = GetRoute.agentPolice(router);
-//         powerToken = IRouter(router).getRoute(ROUTE_POWER_TOKEN);
-
-//         pool1 = createPool(
-//             "TEST1",
-//             "TEST1",
-//             poolOperator,
-//             2e18
-//         );
-//         pool46261 = IERC4626(address(pool1));
-
-//         pool2 = createPool(
-//             "TEST2",
-//             "TEST2",
-//             poolOperator,
-//             2e18
-//         );
-//         pool46262 = IERC4626(address(pool2));
-//         // investor1 stakes 10 FIL
-//         vm.deal(investor1, 11e18);
-//         stakeAmount = 5e18;
-//         vm.startPrank(investor1);
-//         wFIL.deposit{value: stakeAmount*2}();
-//         wFIL.approve(address(pool1), stakeAmount);
-//         wFIL.approve(address(pool2), stakeAmount);
-//         pool46261.deposit(stakeAmount, investor1);
-//         pool46262.deposit(stakeAmount, investor1);
-//         vm.stopPrank();
-
-//         (agent, miner) = configureAgent(minerOwner);
-//         // mint some power for the agent
-//         signedCred = issueGenericSC(address(agent));
-//         vm.startPrank(minerOwner);
-//         agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
-//         signedCred = issueGenericSC(address(agent));
-//         agent.borrow(stakeAmount / 2, pool1.id(), signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) / 2);
-//         signedCred = issueGenericSC(address(agent));
-//         agent.borrow(stakeAmount / 2, pool2.id(), signedCred, signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)) / 2);
-//         vm.stopPrank();
-//     }
-
-//     function testCheckOverLeveraged() public {
-//         // 0 expected daily rewards
-//         SignedCredential memory sc = issueSC(createCustomCredential(address(agent), 5e18, 0, 5e18, 4e18));
-
-//         police.checkLeverage(address(agent), sc);
-
-//         assertTrue(police.isOverLeveraged(address(agent)), "Agent should be over leveraged");
-//     }
-
-//     // in this test, we check default
-//     // resulting in pools borrowAmounts being written down by the power token weighted agent liquidation value
-//     function testCheckDefault() public {
-//         // this credential gives a 1e18 liquidation value, and overleverage / overpowered
-//         SignedCredential memory sc = issueSC(createCustomCredential(address(agent), 5e18, 0, 5e18, 4e18));
-
-//         police.checkDefault(address(agent), sc);
-
-//         assertTrue(police.isOverLeveraged(address(agent)), "Agent should be over leveraged");
-//         assertTrue(police.isOverPowered(address(agent)), "Agent should be over powered");
-//         assertTrue(police.isInDefault(address(agent)), "Agent should be in default");
-//         uint256 pool1PostDefaultTotalBorrowed = pool1.totalBorrowed();
-//         uint256 pool2PostDefaultTotalBorrowed = pool2.totalBorrowed();
-
-//         // since _total_ MLV is 1e18, each pool should be be left with 1e18/2
-//         assertEq(pool1PostDefaultTotalBorrowed, 1e18 / 2, "Wrong write down amount");
-//         assertEq(pool2PostDefaultTotalBorrowed, 1e18 / 2, "Wrong write down amount");
-//     }
 
 // contract AgentCollateralsTest is BaseTest {
 //     using AccountHelpers for Account;

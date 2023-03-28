@@ -85,6 +85,7 @@ interface IAgent {
   ) external returns (
     uint256 rate,
     uint256 epochsPaid,
+    uint256 principalPaid,
     uint256 refund
   );
 

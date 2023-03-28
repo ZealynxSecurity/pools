@@ -16,13 +16,16 @@ contract RateModule is IRateModule, Operatable {
     uint256 constant WAD = 1e18;
 
     /// @dev `maxDTI` is the maximum ratio of expected daily interest payments to expected daily rewards (1)
-    uint256 private maxDTI = 0.5e18;
+    uint256 public maxDTI = 0.5e18;
 
     /// @dev `maxLTV` is the maximum ratio of principal to collateral
-    uint256 private maxLTV = 0.95e18;
+    uint256 public maxLTV = 0.95e18;
+
+    /// @dev `minGCRED` is the minimum GCRED value for an Agent to be eligible for borrowing
+    uint256 public minGCRED = 40;
 
     /// @dev `rateLookup` is a memoized GCRED => rateMultiplier lookup table. It sets the interest curve
-    uint256[100] private rateLookup;
+    uint256[100] public rateLookup;
 
     /// @dev `credParser` is the cached cred parser
     address public credParser;
@@ -52,48 +55,41 @@ contract RateModule is IRateModule, Operatable {
         Account memory account,
         VerifiableCredential memory vc
     ) public view returns (uint256) {
-      return (vc.getBaseRate(credParser) * rateLookup[vc.getGCRED(credParser)]) / WAD;
+        return _getRate(vc.getBaseRate(credParser), vc.getGCRED(credParser));
     }
 
     /**
-     * @notice isOverLeveraged returns true if the Agent is over leveraged
-     * In this version, an Agent can be over-leveraged in either of two cases:
-     * 1. The Agent's principal is more than the equity weighted `agentTotalValue`
-     * 2. The Agent's expected daily payment is more than `dtiWeight` of their income
+     * @notice isApproved returns false if the Agent is in a bad state (over leveraged, not on whitelist..etc)
+     * The bulk of this check is around:
+     * 1. Minimum GCRED score
+     * 2. Maximum loan-to-value ratio, where the loan is the total agent's principal, and the value is the total Agent's locked funds in pledge collateral + vesting rewards on filecoin
+     * 3. Maximum debt-to-income ratio, where the debt is the total agent's interest payments, and the income is the weighted agent's expected daily rewards
      */
-    function isOverLeveraged(
+    function isApproved(
         Account memory account,
         VerifiableCredential memory vc
     ) external view returns (bool) {
-        // equity percentage
+        // if you have nothing borrowed, you're good no matter what
         uint256 totalPrincipal = vc.getPrincipal(credParser);
-        // the pool's record of what the agent borrowed from the pool
-        uint256 accountPrincipal = account.principal;
-        // compute our pool's percentage of the agent's assets, in WAD math
-        uint256 equityPercentage = (accountPrincipal * WAD) / totalPrincipal;
-        // If this pool has no equity in the agent, they are not over leveraged
-        if(equityPercentage == 0) return false;
-        // available balance + locked funds + vesting funds
-        uint256 agentTotalValue = vc.getAgentValue(credParser);
-        // compute value used in LTV calculation
-        // We leave the e18 in here so we don't have to add it back in when calculating LTV
-        // If the agent's principal is greater than the value of their assets, they are over leveraged
-        if(accountPrincipal > agentTotalValue) return true;
-        // compute the amount of agent equity that this pool can count on
-        uint256 poolShareOfValue = (equityPercentage * (agentTotalValue - accountPrincipal)) / WAD;
-        // if (poolShareOfValue < accountPrincipal) return true;
-        // compute LTV (also wrong bc %)
-        uint256 ltv = accountPrincipal * WAD / poolShareOfValue;
-        // if LTV is greater than `maxLTV` (e18 denominated), we are over leveraged (can't mortgage more than the value of your home)
-        if (ltv > WAD) return true;
-        // compute the rate based on the gcred
-        uint256 rate = getRate(account, vc);
-        // compute expected daily payments to align with expected daily reward
-        uint256 dailyRate = (rate * EPOCHS_IN_DAY * accountPrincipal) / WAD;
-        // compute DTI
-        uint256 dti = dailyRate * WAD / vc.getExpectedDailyRewards(credParser);
+        if (totalPrincipal == 0) return true;
+        // if you have bad GCRED, you're not approved
+        uint256 gcred = vc.getGCRED(credParser);
+        if (gcred < minGCRED) return false;
+        // if you have no collateral, it's an automatic no
+        uint256 totalLockedFunds = vc.getLockedFunds(credParser);
+        if (totalLockedFunds == 0) return false;
 
-        return dti > maxDTI;
+        // if LTV is greater than `maxLTV` (e18 denominated), we are over leveraged (can't mortgage more than the value of your home)
+        if (_computeLTV(totalPrincipal, totalLockedFunds) > maxLTV) {
+            return false;
+        }
+
+        return _computeDTI(
+            vc.getExpectedDailyRewards(credParser),
+            _getRate(vc.getBaseRate(credParser), gcred),
+            account.principal,
+            totalPrincipal
+        ) <= maxDTI;
     }
 
     function setMaxDTI(uint256 _maxDTI) external onlyOwnerOperator {
@@ -104,11 +100,47 @@ contract RateModule is IRateModule, Operatable {
         maxLTV = _maxLTV;
     }
 
+    function setMinGCRED(uint256 _minGCRED) external onlyOwnerOperator {
+        minGCRED = _minGCRED;
+    }
+
     function setRateLookup(uint256[100] memory _rateLookup) external onlyOwnerOperator {
         rateLookup = _rateLookup;
     }
 
     function updateCredParser() external onlyOwnerOperator {
         credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
+    }
+
+    /// @dev compute the loan to value, where value is locked funds
+    function _computeLTV(
+        uint256 totalPrincipal,
+        uint256 totalLockedFunds
+    ) internal view returns (uint256) {
+        // compute the loan to value
+        return totalPrincipal * WAD / totalLockedFunds;
+    }
+
+    /// @dev compute the DTI
+    function _computeDTI(
+        uint256 expectedDailyRewards,
+        uint256 rate,
+        uint256 accountPrincipal,
+        uint256 totalPrincipal
+    ) internal view returns (uint256) {
+        uint256 equityPercentage = (accountPrincipal * WAD) / totalPrincipal;
+        // compute the % of EDR this pool can rely on
+        uint256 weightedEDR = (equityPercentage * expectedDailyRewards) / WAD;
+        // if the EDR is too low, we return the highest DTI
+        if (weightedEDR == 0) return type(uint256).max;
+
+        // compute expected daily payments to align with expected daily reward
+        uint256 dailyRate = rate * EPOCHS_IN_DAY * accountPrincipal;
+        // compute DTI
+        return dailyRate / weightedEDR;
+    }
+
+    function _getRate(uint256 baseRate, uint256 gcred) internal view returns (uint256) {
+        return (baseRate * rateLookup[gcred]) / WAD;
     }
 }
