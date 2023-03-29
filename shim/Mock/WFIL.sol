@@ -14,7 +14,7 @@ contract WFIL is ERC20("Wrapped Filecoin", "WFIL", 18) {
     event Withdrawal(address indexed to, uint256 amount);
 
     // constructor takes an owner address to match fevmate wfil
-    constructor(address) {}
+    constructor(address _owner) {}
 
     function deposit() public payable {
       _mint(msg.sender, msg.value);
