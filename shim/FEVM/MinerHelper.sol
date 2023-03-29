@@ -58,8 +58,13 @@ library MinerHelper {
    * @dev beneficiaries: https://github.com/filecoin-project/builtin-actors/blob/6e09044f2514e1dfd92f41cc604812843eed2976/actors/miner/src/beneficiary.rs#L36
    * available to withdraw by beneficiary:
    * 0 when `expired`
-   * 0 when the usedQuota >= Quota
    * otherwise beneficiary can withdraw, is not configuredForTakeover
+   *
+   * Note we do not check any quota here for a few reasons:
+   * 1. Quota can overflow max uint256
+   * 2. If you have an unexpired beneficiary address and have a quota, you should be rejected
+   * 3. If you have an unexpired beneficiary address and have no quota left, you should be accepted. However, this call will still reject you because you have an unexpired beneficiary address. Once the quota is used up on the Miner Actor, even with an unexpired beneficiary, the miner's owner can reset the beneficiary address, essentially expiring it. This allows us to avoid the potential overflows on quota and not read them, also saves gas and code size
+   *
    */
   function configuredForTakeover(uint64 target) internal returns (bool) {
     CommonTypes.FilActorId minerId = _getMinerId(target);
@@ -73,8 +78,6 @@ library MinerHelper {
     // if the beneficiary address is expired, then Agent will be ok to take ownership
     MinerTypes.BeneficiaryTerm memory term = ret.active.term;
     if (term.expiration.getChainEpochSize() < block.timestamp) return true;
-
-    if (_toUint256(term.quota) <= _toUint256(term.used_quota)) return true;
 
     return false;
   }
