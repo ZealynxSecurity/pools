@@ -21,6 +21,7 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
+import {AgentBeneficiary, BeneficiaryHelpers} from "src/Types/Structs/Beneficiary.sol";
 import {ROUTE_AGENT_FACTORY_ADMIN, ROUTE_MINER_REGISTRY} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 import {Roles} from "src/Constants/Roles.sol";
@@ -1226,3 +1227,193 @@ contract AgentPoliceTest is BaseTest {
 //         vm.stopPrank();
 //     }
 // }
+
+contract AgentBeneficiaryTest is BaseTest {
+  address ownerAddr = makeAddr("OWNER");
+  IAgent agent;
+
+  function setUp() public {
+    (agent, ) = configureAgent(ownerAddr);
+  }
+
+  function testChangeBeneficiary(
+    address beneficiary,
+    uint256 quota,
+    uint256 expiration
+  ) public {
+    changeBeneficiary(beneficiary, quota, expiration);
+  }
+
+  function testAcceptBeneficiary(
+    address beneficiary,
+    uint256 expiration,
+    uint256 quota
+  ) public {
+    configureBeneficiary(beneficiary, expiration, quota);
+  }
+
+  function testWithdrawalBadSender(
+    string calldata receipientSeed,
+    uint256 withdrawAmount,
+    uint256 balance
+  ) public {
+    balance = bound(balance, withdrawAmount, type(uint256).max);
+    uint256 balanceBefore = address(ownerAddr).balance;
+    address recipient = makeAddr(receipientSeed);
+    vm.deal(address(agent), balance);
+    vm.assume(recipient != ownerAddr);
+    vm.startPrank(recipient);
+    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount);
+    vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
+    agent.withdraw(recipient, sc);
+  }
+
+  function testBeneficiaryWithdrawal(
+    string calldata beneficiarySeed,
+    string calldata receipientSeed,
+    uint256 expiration,
+    uint256 quota,
+    uint256 withdrawAmount,
+    uint256 balance
+  ) public {
+    // make sure the beneficiary is active
+    expiration = bound(expiration, block.number + 100, type(uint256).max);
+    quota = bound(quota, DUST, type(uint256).max);
+    address beneficiary = makeAddr(beneficiarySeed);
+    address recipient = makeAddr(receipientSeed);
+    configureBeneficiary(beneficiary, expiration, quota);
+
+    balance = bound(balance, withdrawAmount, type(uint256).max);
+
+    vm.assume(beneficiary != address(0));
+    vm.deal(address(agent), balance);
+
+    vm.startPrank(beneficiary);
+    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount);
+    agent.withdraw(recipient, sc);
+    vm.stopPrank();
+
+    uint256 withdrawnAmount = withdrawAmount > quota ? quota : withdrawAmount;
+    assertEq(address(recipient).balance, withdrawnAmount);
+    assertEq(balance - address(agent).balance, withdrawnAmount);
+    assertEq(agent.beneficiary().active.usedQuota, withdrawnAmount);
+    // If there is balance left after the beneficiary withdraws, the owner should be able to withdraw it
+    if(withdrawAmount > quota) {
+      vm.startPrank(ownerAddr);
+      uint256 ownerWithdraw = withdrawAmount - quota;
+      sc = issueWithdrawCred(agent.id(), ownerWithdraw);
+      agent.withdraw(recipient, sc);
+      assertEq(agent.beneficiary().active.usedQuota, quota, "used quota");
+    }
+    // Once the owner and beneficiary have withdrawn as much as they both can all of the withdrawAmountshould be accounted for
+    assertEq(address(recipient).balance, withdrawAmount, "beneficiary balance");
+    assertEq(balance - address(agent).balance, withdrawAmount, "agent balance");
+  }
+
+  function testOwnerWithdrawal(
+    string calldata receipientSeed,
+    uint256 withdrawAmount,
+    uint256 balance
+  ) public {
+    balance = bound(balance, withdrawAmount, type(uint256).max);
+    uint256 balanceBefore = address(ownerAddr).balance;
+    address recipient = makeAddr(receipientSeed);
+    vm.deal(address(agent), balance);
+
+    vm.startPrank(ownerAddr);
+    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount);
+    agent.withdraw(recipient, sc);
+
+    assertEq(address(recipient).balance - balanceBefore, withdrawAmount);
+    assertEq(balance - address(agent).balance, withdrawAmount);
+  }
+
+  function testOwnerWithdrawalWhileBeneficiary(
+    string calldata beneficiarySeed,
+    string calldata receipientSeed,
+    uint256 expiration,
+    uint256 quota,
+    uint256 withdrawAmount,
+    uint256 balance
+  ) public {
+    // make sure the beneficiary is active
+    expiration = bound(expiration, block.number + 100, type(uint256).max);
+    quota = bound(quota, DUST, type(uint256).max);
+    address beneficiary = makeAddr(beneficiarySeed);
+    address recipient = makeAddr(receipientSeed);
+    vm.assume(beneficiary != recipient);
+    configureBeneficiary(beneficiary, expiration, quota);
+    balance = bound(balance, withdrawAmount, type(uint256).max);
+    uint256 balanceBefore = address(beneficiary).balance;
+    vm.deal(address(agent), balance);
+
+    vm.startPrank(ownerAddr);
+    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount);
+    vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
+    agent.withdraw(recipient, sc);
+    agent.withdraw(beneficiary, sc);
+
+    uint256 withdrawnAmount = withdrawAmount > quota ? quota : withdrawAmount;
+    assertEq(address(beneficiary).balance - balanceBefore, withdrawnAmount);
+    assertEq(balance - address(agent).balance, withdrawnAmount);
+  }
+
+
+  function configureBeneficiary(
+    address beneficiary,
+    uint256 expiration,
+    uint256 quota
+  ) internal {
+    changeBeneficiary(beneficiary, expiration, quota);
+    address prankster = makeAddr("PRANKSTER");
+    vm.startPrank(prankster);
+    try GetRoute.agentPolice(router).approveAgentBeneficiary(agent.id()) {
+      assertTrue(false, "Should not be able to approve beneficiary without permission");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), BeneficiaryHelpers.Unauthorized.selector);
+    }
+    vm.stopPrank();
+
+    vm.startPrank(beneficiary);
+    GetRoute.agentPolice(router).approveAgentBeneficiary(agent.id());
+    vm.stopPrank();
+
+    AgentBeneficiary memory ab = agent.beneficiary();
+
+    assertEq(ab.proposed.beneficiary, address(0));
+    assertEq(ab.proposed.expiration, 0);
+    assertEq(ab.proposed.quota, 0);
+
+    assertEq(ab.active.beneficiary, beneficiary);
+    assertEq(ab.active.expiration, expiration);
+    assertEq(ab.active.quota, quota);
+  }
+
+  function changeBeneficiary(
+    address beneficiary,
+    uint256 expiration,
+    uint256 quota
+  ) internal {
+    address prankster = makeAddr("PRANKSTER");
+    vm.startPrank(prankster);
+    try agent.changeBeneficiary(beneficiary, expiration, quota) {
+      assertTrue(false, "Should not be able to change beneficiary without permission");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), Agent.Unauthorized.selector);
+    }
+    vm.stopPrank();
+    vm.startPrank(ownerAddr);
+    agent.changeBeneficiary(beneficiary, expiration, quota);
+    vm.stopPrank();
+
+    AgentBeneficiary memory ab = agent.beneficiary();
+
+    assertEq(ab.proposed.beneficiary, beneficiary);
+    assertEq(ab.proposed.expiration, expiration);
+    assertEq(ab.proposed.quota, quota);
+
+    assertEq(ab.active.beneficiary, address(0));
+    assertEq(ab.active.expiration, 0);
+    assertEq(ab.active.quota, 0);
+  }
+}

@@ -91,8 +91,8 @@
 //     assertEq(funcSig, AGENT_BURN_POWER_SELECTOR);
 //   }
 
-//   function testWithdrawBalanceWithCred() public {
-//     bytes4 funcSig = tester.withdrawBalance(
+//   function testwithdrawWithCred() public {
+//     bytes4 funcSig = tester.withdraw(
 //       address(0),
 //       0,
 //       sc

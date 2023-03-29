@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.17;
 
-import {IMockMiner} from "test/helpers/IMockMiner.sol";
+import "test/helpers/MockMiner.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
-import "src/Types/Structs/Filecoin.sol";
 
 library MinerHelper {
   // the ID store gets deployed at the same address every time in a test env

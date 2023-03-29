@@ -62,7 +62,7 @@
 //   /*//////////////////////////////////////////////
 //                 FINANCIAL FUNCTIONS
 //   //////////////////////////////////////////////*/
-//   function withdrawBalance(address,uint256,SignedCredential memory) external pure returns (bytes4) {
+//   function withdraw(address,uint256,SignedCredential memory) external pure returns (bytes4) {
 //     return msg.sig;
 //   }
 

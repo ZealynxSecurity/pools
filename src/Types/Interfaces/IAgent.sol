@@ -2,7 +2,7 @@
 pragma solidity 0.8.17;
 
 import {SignedCredential} from "src/Types/Structs/Credentials.sol";
-import "src/Types/Structs/Filecoin.sol";
+import {AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
 
 interface IAgent {
 
@@ -36,6 +36,8 @@ interface IAgent {
 
   function liquidAssets() external view returns (uint256);
 
+  function beneficiary() external view returns (AgentBeneficiary memory);
+
   /*//////////////////////////////////////////////////
         MINER OWNERSHIP/WORKER/OPERATOR CHANGES
   //////////////////////////////////////////////////*/
@@ -55,6 +57,12 @@ interface IAgent {
     uint64 miner,
     uint64 worker,
     uint64[] calldata controlAddresses
+  ) external;
+
+  function changeBeneficiary(
+    address newBeneficiary,
+    uint256 expiration,
+    uint256 quota
   ) external;
 
   function decommissionAgent(address newAgent) external;

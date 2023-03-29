@@ -15,6 +15,7 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {SignedCredential, VerifiableCredential, Credentials} from "src/Types/Structs/Credentials.sol";
+import {AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
 import {
   ROUTE_AGENT_POLICE
 } from "src/Constants/Routes.sol";
@@ -130,6 +131,10 @@ contract Agent is IAgent, Operatable {
     return address(this).balance + GetRoute.wFIL(router).balanceOf(address(this));
   }
 
+  function beneficiary() external view returns (AgentBeneficiary memory) {
+    return GetRoute.agentPolice(router).agentBeneficiary(id);
+  }
+
   /*//////////////////////////////////////////////
             PAYABLE / FALLBACK FUNCTIONS
   //////////////////////////////////////////////*/
@@ -234,7 +239,6 @@ contract Agent is IAgent, Operatable {
    */
   function prepareMinerForLiquidation(uint64 miner, address liquidator) external onlyAgentPolice {
   if (!defaulted) revert Unauthorized();
-
     miner.changeOwnerAddress(liquidator);
   }
 
@@ -257,6 +261,20 @@ contract Agent is IAgent, Operatable {
 
     miner.changeWorkerAddress(worker, controlAddresses);
     emit ChangeMinerWorker(miner, worker, controlAddresses);
+  }
+
+  function changeBeneficiary(
+    address beneficiary,
+    uint256 expiration,
+    uint256 quota
+  ) external onlyOwner {
+    GetRoute.agentPolice(router).changeAgentBeneficiary(
+      // the beneficiary address gets normalized in agent police to save on code size
+      beneficiary,
+      id,
+      expiration,
+      quota
+    );
   }
 
   /**
@@ -292,20 +310,31 @@ contract Agent is IAgent, Operatable {
     address receiver,
     SignedCredential memory sc
   ) external
-    onlyOwner
     notInDefault
     notOnAdministration
     validateAndBurnCred(sc)
   {
-    receiver = receiver.normalize();
-    _poolFundsInFIL(sc.vc.value);
+    IAgentPolice agentPolice = GetRoute.agentPolice(router);
+    uint256 sendAmount = sc.vc.value;
+    // Regardless of sender if the agent is overleveraged they cannot withdraw
+    agentPolice.agentApproved(sc.vc);
+    if (
+      agentPolice.isBeneficiaryActive(id) 
+    ) {
+      // This call will revert if the sender is not owner/beneficiary
+      // Otherwise it will return up the lesser of beneficiary quota or the credentialed amount
+      sendAmount = agentPolice.beneficiaryWithdrawable(receiver, msg.sender, id, sendAmount);
+    }
+    else if (msg.sender != owner()) {
+      revert Unauthorized();
+    }
 
-    // revert the transaction if any of the pools reject the removal
-    GetRoute.agentPolice(router).agentApproved(sc.vc);
+    // unwrap any wfil needed to withdraw
+    _poolFundsInFIL(sendAmount);
+    // transfer funds
+    payable(receiver).sendValue(sendAmount);
 
-    payable(receiver).sendValue(sc.vc.value);
-
-    emit Withdraw(receiver, sc.vc.value);
+    emit Withdraw(receiver, sendAmount);
   }
 
   /**

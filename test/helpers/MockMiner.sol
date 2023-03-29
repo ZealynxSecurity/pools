@@ -1,9 +1,45 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.17;
-import "forge-std/Test.sol";
+
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
-import {IMockMiner} from "test/helpers/IMockMiner.sol";
-import "src/Types/Structs/Filecoin.sol";
+
+struct GetBeneficiaryReturn {
+  ActiveBeneficiary active;
+  PendingBeneficiaryChange proposed;
+}
+
+struct BeneficiaryTerm {
+  uint256 quota;
+  uint256 used_quota;
+  uint64 expiration;
+}
+
+struct ActiveBeneficiary {
+  uint64 beneficiary;
+  BeneficiaryTerm term;
+}
+
+struct PendingBeneficiaryChange {
+  uint64 new_beneficiary;
+  uint256 new_quota;
+  uint64 new_expiration;
+  bool approved_by_beneficiary;
+  bool approved_by_nominee;
+}
+
+// note this interface is like halfway to the filecoin.sol library
+// the methods take the miner address as the first param like the library does
+// but we call these methods off a MockMiner contract so it can hold state for testing
+interface IMockMiner {
+  function owner() external returns (address);
+  function proposed() external returns (address);
+  function id() external returns (uint64);
+
+  function changeOwnerAddress(address newOwner) external;
+  function getBeneficiary() external view returns (GetBeneficiaryReturn memory);
+  function changeWorkerAddress(uint64, uint64[] memory) external;
+  function withdrawBalance(uint256 amount) external returns (uint256 amountWithdrawn);
+}
 
 contract MockMiner is IMockMiner {
   address public owner;

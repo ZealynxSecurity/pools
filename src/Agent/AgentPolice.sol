@@ -10,6 +10,7 @@ import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
@@ -18,6 +19,7 @@ import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {Account} from "src/Types/Structs/Account.sol";
+import {BeneficiaryHelpers, AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
@@ -27,6 +29,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using FixedPointMathLib for uint256;
   using Credentials for VerifiableCredential;
   using FilAddress for address;
+  using BeneficiaryHelpers for AgentBeneficiary;
 
   error AgentStateRejected();
   error Unauthorized();
@@ -45,6 +48,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   /// @notice `_credentialUseBlock` maps signature bytes to when a credential was used
   mapping(bytes32 => uint256) private _credentialUseBlock;
+
+  /// @notice `_agentBeneficiaries` maps an Agent ID to its Beneficiary struct
+  mapping(uint256 => AgentBeneficiary) private _agentBeneficiaries;
 
   constructor(
     string memory _name,
@@ -97,18 +103,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function agentApproved(
     VerifiableCredential memory vc
   ) external view {
-    uint256[] memory pools = _poolIDs[vc.subject];
-
-    for (uint256 i = 0; i < pools.length; ++i) {
-      uint256 poolID = pools[i];
-      IPool pool = GetRoute.pool(router, poolID);
-      if (!pool.isApproved(
-        AccountHelpers.getAccount(router, vc.subject, poolID),
-        vc
-      )) {
-        revert AgentStateRejected();
-      }
-    }
+    _agentApproved(vc);
   }
 
   /**
@@ -225,6 +220,58 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /*//////////////////////////////////////////////
+                  BENEFICIARIES
+  //////////////////////////////////////////////*/
+
+  function isBeneficiaryActive(uint256 agentID) external view returns (bool) {
+    return _agentBeneficiaries[agentID].isActive();
+  }
+
+  function agentBeneficiary(uint256 agentID) external view returns (AgentBeneficiary memory) {
+    return _agentBeneficiaries[agentID];
+  }
+
+  function changeAgentBeneficiary(
+    address beneficiary,
+    uint256 agentID,
+    uint256 expiration,
+    uint256 quota
+  ) external onlyAgent {
+    AgentBeneficiary memory benny = _agentBeneficiaries[agentID];
+
+    if (benny.isActive()) revert Unauthorized();
+    // as long as we do not have an existing, active beneficiary, propose a new one
+    _agentBeneficiaries[agentID] = benny.propose(beneficiary.normalize(), quota, expiration);
+  }
+
+  function approveAgentBeneficiary(uint256 agentID) external {
+    _agentBeneficiaries[agentID] = _agentBeneficiaries[agentID].approve(msg.sender);
+  }
+
+  function beneficiaryWithdrawable(
+    address recipient,
+    address sender,
+    uint256 agentID,
+    uint256 proposedAmount
+  ) external returns (
+    uint256 amount
+  ) {
+    AgentBeneficiary memory beneficiary = _agentBeneficiaries[agentID];
+    address benneficiaryAddress = beneficiary.active.beneficiary;
+    // If the sender is not the owner of the Agent or the beneficiary, revert
+    if(
+      !(benneficiaryAddress == sender || (IAuth(msg.sender).owner() == sender && recipient == benneficiaryAddress) )) {
+        revert Unauthorized();
+      }
+    (
+      beneficiary,
+      amount
+    ) = beneficiary.withdraw(proposedAmount);
+    // update the beneficiary in storage
+    _agentBeneficiaries[agentID] = beneficiary;
+  }
+
+  /*//////////////////////////////////////////////
                   ADMIN CONTROLS
   //////////////////////////////////////////////*/
 
@@ -295,6 +342,21 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     }
 
     return false;
+  }
+
+  function _agentApproved(VerifiableCredential memory vc) internal view {
+    uint256[] memory pools = _poolIDs[vc.subject];
+
+    for (uint256 i = 0; i < pools.length; ++i) {
+      uint256 poolID = pools[i];
+      IPool pool = GetRoute.pool(router, poolID);
+      if (!pool.isApproved(
+        AccountHelpers.getAccount(router, vc.subject, poolID),
+        vc
+      )) {
+        revert AgentStateRejected();
+      }
+    }
   }
 
   function createKey(string memory partitionKey, uint256 agentID) internal pure returns (bytes32) {
