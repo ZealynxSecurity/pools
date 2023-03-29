@@ -33,7 +33,7 @@ abstract contract VCVerifier is IVCVerifier, EIP712 {
       vc.value,
       vc.action,
       vc.target,
-      vc.claim
+      keccak256(abi.encodePacked(vc.claim))
     ));
   }
 
