@@ -761,7 +761,7 @@ contract AgentPoliceTest is BaseTest {
       );
     }
 
-    function testDistributeLiquidatedFunds(
+    function testDistributeLiquidatedFundsEvenSplit(
       uint256 rollFwdPeriod,
       uint256 borrowAmount,
       uint256 numPools,
@@ -813,6 +813,71 @@ contract AgentPoliceTest is BaseTest {
 
       // ensure the write down amount is correct:
       assertEq(balanceAfter - balanceBefore, recoveredFunds / numPools, "Pool should have received the correct amount of funds");
+    }
+
+
+    function testDistributeLiquidatedFundsThreePools(
+      uint256 rollFwdPeriod,
+      uint256 borrowAmount,
+      uint256 recoveredFunds,
+      uint256 poolOnePercent,
+      uint256 poolTwoPercent,
+      uint256 poolThreePercent
+    ) public {
+      address policeOwner = IAuth(address(police)).owner();
+      uint256 numPools = 3;
+      uint256 balanceAfter;
+      poolOnePercent = bound(poolOnePercent, 1, WAD);
+      poolTwoPercent = bound(poolTwoPercent, 1, WAD - poolOnePercent);
+      poolThreePercent = WAD - poolOnePercent - poolTwoPercent;
+      IPool[] memory poolArray = new IPool[](numPools);
+      uint256[] memory percentArray = new uint256[](numPools);
+      uint256[] memory balanceArray = new uint256[](numPools);
+      percentArray[0] = poolOnePercent;
+      percentArray[1] = poolTwoPercent;
+      percentArray[2] = poolThreePercent;
+      rollFwdPeriod = bound(
+        rollFwdPeriod,
+        police.defaultWindow() + 1,
+        police.defaultWindow() * 10
+      );
+      // borrow and stake amounts are split evenly among the pools
+
+      borrowAmount = bound(borrowAmount, WAD * numPools, stakeAmount);
+
+      recoveredFunds = bound(recoveredFunds, 1000, borrowAmount);
+
+      for (uint8 i = 0; i < numPools; i++) {
+        // create a pool and fund it with the proportionate stake amount
+        poolArray[i] = createAndFundPool(stakeAmount, investor1);
+
+        // borrow from the pool
+        uint256 _borrowAmount = borrowAmount * percentArray[i] / WAD;
+        vm.assume(_borrowAmount > WAD);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), _borrowAmount);
+        agentBorrow(agent, poolArray[i].id(), borrowCred);
+        balanceArray[i] = wFIL.balanceOf(address(poolArray[i]));
+      }
+      // roll forward to the default window
+      vm.roll(block.number + rollFwdPeriod);
+      vm.startPrank(policeOwner);
+      // set the agent in default
+      police.setAgentDefaulted(address(agent));
+      // liquidate the agent
+      police.liquidatedAgent(address(agent));
+      vm.stopPrank();
+      vm.deal(policeOwner, recoveredFunds);
+      vm.startPrank(policeOwner);
+      wFIL.deposit{value: recoveredFunds}();
+      wFIL.approve(address(police), recoveredFunds);
+      vm.assume(recoveredFunds > WAD);
+      // distribute the recovered funds
+      police.distributeLiquidatedFunds(agent.id(), recoveredFunds);
+      for (uint8 i = 0; i < numPools; i++) {
+        balanceAfter = wFIL.balanceOf(address(poolArray[i]));
+        // ensure the write down amount is correct:
+        assertApproxEqAbs(balanceAfter - balanceArray[i], recoveredFunds * percentArray[i] / WAD, 5,  "Pool should have received the correct amount of funds");
+      }
     }
 }
 
