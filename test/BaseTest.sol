@@ -368,7 +368,8 @@ contract BaseTest is Test {
       address(new RateModule(systemAdmin, systemAdmin, router, rateArray)),
       // no min liquidity for test pool
       address(liquidStakingToken),
-      0
+      0,
+      GetRoute.poolFactory(router).allPoolsLength()
     ));
     vm.prank(systemAdmin);
     liquidStakingToken.setMinter(address(pool));

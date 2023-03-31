@@ -138,14 +138,15 @@ contract GenesisPool is IPool, Operatable {
         address _asset,
         address _rateModule,
         address _liquidStakingToken,
-        uint256 _minimumLiquidity
+        uint256 _minimumLiquidity,
+        uint256 _id
     ) Operatable(_owner, _operator) {
         router = _router;
         asset = IERC20(_asset);
         rateModule = IRateModule(_rateModule);
         minimumLiquidity = _minimumLiquidity;
         // set the ID
-        id = GetRoute.poolFactory(router).allPoolsLength();
+        id = _id;
         // deploy a new liquid staking token for the pool
         liquidStakingToken = IPoolToken(_liquidStakingToken);
     }
