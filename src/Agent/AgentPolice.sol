@@ -22,7 +22,7 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {BeneficiaryHelpers, AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
-
+uint256 constant wad = 1e18;
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   using AccountHelpers for Account;

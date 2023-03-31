@@ -385,6 +385,28 @@ contract BaseTest is Test {
     depositFundsIntoPool(pool, amount, investor);
   }
 
+  function PoolBasicSetup(
+    uint256 stakeAmount,
+    uint256 borrowAmount,
+    address investor1,
+    address minerOwner
+  ) internal returns (
+    IPool pool,
+    Agent agent,
+    uint64 miner,
+    SignedCredential memory borrowCredBasic,
+    VerifiableCredential memory vcBasic,
+    uint256 gCredBasic,
+    uint256 baseRate)
+  {
+    pool = createAndFundPool(stakeAmount, investor1);
+    (agent, miner) = configureAgent(minerOwner);
+    borrowCredBasic = issueGenericBorrowCred(agent.id(), borrowAmount);
+    vcBasic = borrowCredBasic.vc;
+    gCredBasic = vcBasic.getGCRED(credParser);
+    baseRate = vcBasic.getBaseRate(credParser);
+  }
+
   function createAccount(uint256 amount) internal returns(Account memory account) {
     uint256 currentBlock = block.number;
     account = Account(currentBlock, amount, currentBlock, false);

@@ -182,10 +182,6 @@ contract OffRamp is IOffRamp, Ownable {
         updateAccount(msg.sender)
         checkIfNewUser()
     {
-        // requires approval of iouToken first
-        address sender = msg.sender;
-        //require tokens transferred in;
-        IPoolToken(iouToken).transferFrom(sender, address(this), amount);
         totalIOUStaked = totalIOUStaked + (amount);
         iouTokensStaked[recipient] = iouTokensStaked[recipient] + (amount);
     }

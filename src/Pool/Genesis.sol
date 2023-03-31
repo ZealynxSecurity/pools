@@ -40,6 +40,7 @@ contract GenesisPool is IPool, Operatable {
     error AccountDNE();
     error Unauthorized();
     error InvalidParams();
+    error InvalidState();
     error PoolShuttingDown();
     error AlreadyDefaulted();
 
@@ -77,7 +78,7 @@ contract GenesisPool is IPool, Operatable {
 
     /// @dev `isShuttingDown` is a boolean that, when true, halts deposits and borrows. Once set, it cannot be unset.
     bool public isShuttingDown = false;
-
+    
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
     //////////////////////////////////////////////////////////////*/
@@ -236,7 +237,7 @@ contract GenesisPool is IPool, Operatable {
 
         uint256 owed = account.principal;
 
-        if (recoveredDebt > owed) recoveredDebt = owed;
+        if (recoveredDebt >= owed) recoveredDebt = owed;
 
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), recoveredDebt);
@@ -392,7 +393,7 @@ contract GenesisPool is IPool, Operatable {
      * @return assets Number of assets deposited
      */
     function mint(uint256 shares, address receiver) public isOpen returns (uint256 assets) {
-        require(shares > 0, "Pool: cannot mint 0 shares");
+        if(shares == 0) revert InvalidParams();
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
         asset.transferFrom(msg.sender, address(this), assets);
@@ -429,7 +430,7 @@ contract GenesisPool is IPool, Operatable {
         address receiver,
         address owner
     ) public requiresRamp returns (uint256 assets) {
-        assets = ramp.redeem(assets, receiver, owner, totalAssets());
+        assets = ramp.redeem(shares, receiver, owner, totalAssets());
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
@@ -544,7 +545,7 @@ contract GenesisPool is IPool, Operatable {
             ramp.distribute(address(this), toDistribute);
         }
     }
-
+ 
     /**
      * @dev Distributes funds to the offramp when the liquid assets are below the liquidity threshold
      *
@@ -576,7 +577,9 @@ contract GenesisPool is IPool, Operatable {
     }
 
     function jumpStartTotalBorrowed(uint256 amount) public onlyPoolFactory {
-        require(totalBorrowed == 0, "POOL: Total borrowed must be 0");
+        if(totalBorrowed != 0) {
+            revert InvalidState();
+        }
         totalBorrowed = amount;
     }
 
@@ -592,13 +595,10 @@ contract GenesisPool is IPool, Operatable {
         rateModule = _rateModule;
     }
 
+
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-
-    function _addressToID(address agent) internal view returns (uint256) {
-        return IAgent(agent).id();
-    }
 
     function _getAccount(uint256 agent) internal view returns (Account memory) {
         return AccountHelpers.getAccount(router, agent, id);
@@ -620,7 +620,9 @@ contract GenesisPool is IPool, Operatable {
     }
 
     function _deposit(uint256 assets, address receiver) internal returns (uint256 shares) {
-        require(assets > 0, "Pool: cannot deposit 0 assets");
+        if(assets == 0) {
+            revert InvalidParams();
+        }
         shares = previewDeposit(assets);
         asset.transferFrom(msg.sender, address(this), assets);
         liquidStakingToken.mint(receiver, shares);
@@ -629,24 +631,19 @@ contract GenesisPool is IPool, Operatable {
     }
 
     function _depositFIL(address receiver) internal returns (uint256 shares) {
+        if(msg.value == 0) {
+            revert InvalidParams();
+        }
         IWFIL wFIL = GetRoute.wFIL(router);
 
         // handle FIL deposit
         wFIL.deposit{value: msg.value}();
         wFIL.transfer(address(this), msg.value);
-        require(msg.value > 0, "Pool: cannot deposit 0 assets");
 
         shares = previewDeposit(msg.value);
         liquidStakingToken.mint(receiver, shares);
         emit Deposit(msg.sender, receiver.normalize(),  convertToAssets(shares), shares);
     }
 
-    function _computeFeePerPmt(uint256 pmt) internal view returns (uint256 fee) {
-        // protocol fee % * pmt
-        fee = GetRoute
-            .poolFactory(router)
-            .treasuryFeeRate()
-            * pmt / WAD;
-    }
 }
 

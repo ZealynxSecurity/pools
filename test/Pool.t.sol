@@ -1,15 +1,101 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 import "./BaseTest.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
-import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
+
+import {IAuth} from "src/Types/Interfaces/IAuth.sol";
+import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
+
+contract PoolTestState is BaseTest {
+  error InvalidParams();
+  error InvalidState();
+
+  using Credentials for VerifiableCredential;
+  IPool pool;
+  IPoolFactory poolFactory;
+  uint256 borrowAmount = WAD;
+  uint256 stakeAmount = 1000e18;
+  uint256 expectedRateBasic = 15e18;
+  uint256 goodEDR = .01e18;
+  address investor1 = makeAddr("INVESTOR_1");
+  address minerOwner = makeAddr("MINER_OWNER");
+  uint256 gCredBasic;
+  SignedCredential borrowCredBasic;
+  VerifiableCredential vcBasic;
+  IAgent agent;
+  uint64 miner;
+  uint256 baseRate;
+  IPoolToken public liquidStakingToken;
+  IERC20 public asset;
+  uint256 agentID;
+  uint256 poolID;
+  IOffRamp ramp;
+  IPoolToken iou;
+
+  function setUp() public virtual {
+    (pool, agent, miner, borrowCredBasic, vcBasic, gCredBasic, baseRate) = PoolBasicSetup(
+      stakeAmount,
+      borrowAmount,
+      investor1,
+      minerOwner
+    );
+    poolFactory = GetRoute.poolFactory(router);
+    asset = pool.asset();
+    liquidStakingToken = pool.liquidStakingToken();
+    agentID = agent.id();
+    poolID = pool.id();
+  }
+
+  function loadWFIL(uint256 amount, address investor) internal {
+    vm.deal(investor, amount);
+    vm.prank(investor);
+    wFIL.deposit{value: amount}();
+  }
+
+  function loadApproveWFIL(uint256 amount, address investor) internal {
+    loadWFIL(amount, investor);
+    vm.prank(investor);
+    wFIL.approve(address(pool), amount);
+  }
+
+  function _setupRamp() internal {
+    ramp = _configureOffRamp(pool);
+    // Confirm there's no balance on the ramp to begin with
+    assertEq(asset.balanceOf(address(ramp)), 0);
+    vm.prank(systemAdmin);
+    pool.setRamp(IOffRamp(ramp));
+    iou = IPoolToken(ramp.iouToken());
+  }
+
+
+  function _mintApproveIOU(uint256 amount, address target, address spender) internal {
+    vm.prank(address(ramp));
+    iou.mint(target, amount);
+    vm.prank(target);
+    iou.approve(address(spender), amount);
+  }
+
+  function _mintApproveLST(uint256 amount, address target, address spender) internal {
+    vm.prank(address(pool));
+    liquidStakingToken.mint(target, amount);
+    vm.prank(target);
+    liquidStakingToken.approve(address(spender), amount);
+  }
+
+  function _stakeToRamp(uint256 amount, address staker) internal {
+    vm.startPrank(investor1);
+    // Finally, we can stake & harvest after setup
+    ramp.stake(amount);
+  }
+
+}
 
 contract PoolBasicSetupTest is BaseTest {
   using Credentials for VerifiableCredential;
 
   IPool pool;
-  uint256 borrowAmount = 1e18;
+  uint256 borrowAmount = WAD;
   uint256 stakeAmount = 1000e18;
   uint256 expectedRateBasic = 15e18;
   uint256 goodEDR = .01e18;
@@ -22,30 +108,80 @@ contract PoolBasicSetupTest is BaseTest {
   uint64 miner;
   uint256 baseRate;
 
-  function setUp() public {
-    pool = createAndFundPool(stakeAmount, investor1);
-    (agent, miner) = configureAgent(minerOwner);
-    borrowCredBasic = issueGenericBorrowCred(agent.id(), borrowAmount);
-    vcBasic = borrowCredBasic.vc;
-    gCredBasic = vcBasic.getGCRED(credParser);
-    baseRate = vcBasic.getBaseRate(credParser);
+  function testCreatePool() public {
+    IPoolFactory poolFactory = GetRoute.poolFactory(router);
+    PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin, systemAdmin);
+    uint256 id = poolFactory.allPoolsLength();
+    address rateModule = address(new RateModule(systemAdmin, systemAdmin, router, rateArray));
+    pool = IPool(new GenesisPool(
+      systemAdmin,
+      systemAdmin,
+      router,
+      address(wFIL),
+      //
+      rateModule,
+      // no min liquidity for test pool
+      address(liquidStakingToken),
+      0
+    ));
+    assertEq(pool.id(), id, "pool id not set");
+    assertEq(address(pool.asset()), address(wFIL), "pool asset not set");
+    assertEq(IAuth(address(pool)).owner(), systemAdmin, "pool owner not set");
+    assertEq(address(pool.rateModule()), rateModule, "pool rate module not set");
+    assertEq(address(pool.liquidStakingToken()), address(liquidStakingToken), "pool liquid staking token not set");
+    assertEq(pool.minimumLiquidity(), 0, "pool min liquidity not set");
+    vm.prank(systemAdmin);
+    liquidStakingToken.setMinter(address(pool));
+    vm.startPrank(systemAdmin);
+    // After the pool has been attached to the factory the count should change
+    poolFactory.attachPool(pool);
+    assertEq(poolFactory.allPoolsLength(), id + 1, "pool not added to allPools");
+    vm.stopPrank();
+  }
+}
+
+contract PoolDepositTest is PoolTestState {
+  function testDepositBasic() public {
+    uint256 amount = WAD;
+    uint256 balanceBefore = wFIL.balanceOf(address(pool));
+    uint256 lstBalanceBefore = pool.liquidStakingToken().balanceOf(address(investor1));
+    uint256 predictedLST = pool.previewDeposit(amount);
+    loadApproveWFIL(amount, investor1);
+    vm.prank(investor1);
+    pool.deposit(amount, investor1);
+    uint256 balanceAfter = wFIL.balanceOf(address(pool));
+    assertEq(balanceAfter, balanceBefore + amount, "deposit failed - wrong WFIL balance");
+    uint256 lstBalanceAfter = pool.liquidStakingToken().balanceOf(address(investor1));
+    assertEq(lstBalanceAfter, lstBalanceBefore + predictedLST, "deposit failed -  wrong LST balance");
   }
 
-  function testGetBaseRate() public {
-    // We could denominate this differently but this reads nicely; 15% representation in 1e18 denomination
-    assertEq(baseRate, expectedRateBasic);
+  function testDepositFuzz(uint256 amount) public {
+    amount = bound(amount, WAD, 1e21);
+    uint256 balanceBefore = wFIL.balanceOf(address(pool));
+    uint256 lstBalanceBefore = pool.liquidStakingToken().balanceOf(address(investor1));
+    uint256 predictedLST = pool.previewDeposit(amount);
+    loadApproveWFIL(amount, investor1);
+    vm.prank(investor1);
+    pool.deposit(amount, investor1);
+    uint256 balanceAfter = wFIL.balanceOf(address(pool));
+    assertEq(balanceAfter, balanceBefore + amount, "deposit failed - wrong WFIL balance");
+    uint256 lstBalanceAfter = pool.liquidStakingToken().balanceOf(address(investor1));
+    assertEq(lstBalanceAfter, lstBalanceBefore + predictedLST, "deposit failed -  wrong LST balance");
   }
+}
+
+contract PoolGetRateTest is PoolTestState {
 
   function testGetRateBasic() public {
     uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
-    uint256 expectedRate = baseRate * rateArray[gCredBasic] / 1e18;
+    uint256 expectedRate = baseRate * rateArray[gCredBasic] / WAD;
     assertEq(rate, expectedRate);
   }
 
   function testGetRateFuzz(uint256 gCRED) public {
     gCRED = bound(gCRED, 0, 99);
     AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount
+      // collateral value => 2x the borrowAmount
       borrowAmount * 2,
       // good gcred score
       gCRED,
@@ -59,58 +195,350 @@ contract PoolBasicSetupTest is BaseTest {
     vcBasic.claim = abi.encode(agentData);
     pool.getRate(Account(0,0,0, true), vcBasic);
     uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
-    uint256 expectedRate = baseRate * rateArray[gCRED] / 1e18;
+    uint256 expectedRate = baseRate * rateArray[gCRED] / WAD;
     assertEq(rate, expectedRate);
   }
+}
 
-  function testIsApprovedBasic() public {
-    bool approved = pool.isApproved(createAccount(borrowAmount), vcBasic);
-    assertTrue(approved, "Should be approved");
+contract PoolIsOverLeveragedTest is PoolTestState {
+    function testIsOverLeveragedBasic() public {
+    bool isApproved = pool.isApproved(createAccount(borrowAmount), vcBasic);
+    assertTrue(isApproved);
   }
 
-  function testIsApprovedLTVError(uint256 principal, uint256 lockedFunds) public {
-    principal = bound(principal, 1e18, 1e40);
-    // Even for very low values of agentValue there shouldn't be issues
-    // If the agent value is less than 2x the borrow amount, we should be over leveraged
-    lockedFunds = bound(lockedFunds, 0, principal);
-
+  function testIsOverLeveragedLTVErrorBasic() public {
+    // For the most basic path, the equity is 100%
+    // This means the pool share of value is just total value less principal
+    // With the current logic that means that whenever the agent value
+    // is less than double the principle we should be over leveraged
     AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount less dust
-      lockedFunds,
-      GCRED,
+      // collateral value => 2x the borrowAmount less dust
+      (borrowAmount * 2) - 1000,
+      gCredBasic,
       goodEDR,
       // principal = borrowAmount
-      principal,
+      borrowAmount,
       // no account yet (startEpoch)
       0
     );
     vcBasic.claim = abi.encode(agentData);
-    bool approved = pool.isApproved(createAccount(borrowAmount), vcBasic);
-    assertFalse(approved, "Should not be approved");
+    bool isApproved = pool.isApproved(createAccount(borrowAmount), vcBasic);
+    assertFalse(isApproved);
   }
 
-  function testIsApprovedDTIError(uint256 principal, uint256 lockedFunds, uint256 edr) public {
-    lockedFunds = bound(lockedFunds, 1e18, 1e40);
-    principal = bound(principal, 1e18, lockedFunds);
-
-    uint256 adjustedRate = _getAdjustedRate(GCRED);
-    uint256 expectedDailyPayment = (principal * adjustedRate * EPOCHS_IN_DAY) / 1e18;
-
-    edr = bound(edr, 1, expectedDailyPayment - 1);
-
+  function testIsOverLeveragedLTVErrorFuzz(uint256 borrowAmount, uint256 agentValue) public {
+    borrowAmount = bound(borrowAmount, WAD, 1e22);
+    // Even for very low values of agentValue there shouldn't be issues
+    // If the agent value is less than 2x the borrow amount, we should be over leveraged
+    agentValue = bound(agentValue, 0, (borrowAmount * 2) - 1000);
     AgentData memory agentData = createAgentData(
-      lockedFunds,
-      GCRED,
-      // edr < expectedDailyPayment
-      edr,
-      principal,
+      // agentValue => 2x the borrowAmount less dust
+      agentValue,
+      gCredBasic,
+      goodEDR,
+      // principal = borrowAmount
+      borrowAmount,
       // no account yet (startEpoch)
       0
     );
     vcBasic.claim = abi.encode(agentData);
-    bool approved = pool.isApproved(createAccount(principal), vcBasic);
-    assertFalse(approved, "Should not be approved");
+    bool isApproved = pool.isApproved(createAccount(borrowAmount), vcBasic);
+    assertFalse(isApproved);
   }
+
+  function testIsOverLeveragedDTIErrorBasic() public {
+    uint256 amount = WAD;
+    uint256 principle = amount * 2;
+    uint256 gCred = 80;
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      principle,
+      // good gcred score
+      gCred,
+      // bad EDR
+      (rateArray[gCred] * EPOCHS_IN_DAY * amount / 2) / WAD,
+      // principal = borrowAmount
+      amount,
+      // no account yet (startEpoch)
+      0
+    );
+    vcBasic.claim = abi.encode(agentData);
+    bool isApproved = pool.isApproved(createAccount(borrowAmount), vcBasic);
+    assertFalse(isApproved);
+  }
+
+  function testIsOverLeveragedDTIErrorFuzz(uint256 borrowAmount, uint256 agentValue, uint256 badEDR) public {
+    uint256 gCred = 80;
+
+    borrowAmount = bound(borrowAmount, WAD, 1e22);
+    agentValue = bound(agentValue, borrowAmount * 2, 1e30);
+    uint256 badEDRUpper = ((rateArray[gCred] * EPOCHS_IN_DAY * borrowAmount) / WAD) -  DUST;
+    badEDR = bound(badEDR, DUST, badEDRUpper);
+    AgentData memory agentData = createAgentData(
+      // agentValue => 2x the borrowAmount
+      agentValue,
+      // good gcred score
+      gCred,
+      // good EDR
+      badEDR,
+      // principal = borrowAmount
+      borrowAmount,
+      // no account yet (startEpoch)
+      0
+    );
+
+    vcBasic.claim = abi.encode(agentData);
+    bool isApproved = pool.isApproved(createAccount(borrowAmount), vcBasic);
+    assertFalse(isApproved);
+  }
+}
+
+contract PoolFeeTests is PoolTestState {
+  function testHarvestToRamp() public {
+    // Test setup
+    uint256 amount = WAD;
+    _setupRamp();
+    _mintApproveIOU(amount, investor1, address(ramp));
+    _stakeToRamp(amount, investor1);
+    // Main test call
+    pool.harvestToRamp();
+    // The balance on the ramp is has been updated from the harvest
+    assertEq(asset.balanceOf(address(ramp)), amount);
+  }
+
+  function testHarvestToRampNoDemand() public {
+    _setupRamp();
+    loadWFIL(WAD, address(ramp));
+    uint256 exitDemand = ramp.totalIOUStaked();
+    uint256 balanceBefore = asset.balanceOf(address(ramp));
+    assertEq(balanceBefore, WAD, "Ramp should have WAD balance");
+    assertEq(exitDemand, 0);
+    // Main test call
+    pool.harvestToRamp();
+    assertEq(balanceBefore, asset.balanceOf(address(ramp)));
+  }
+
+  function testHarvestFees() public {
+    uint256 amount = WAD;
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, borrowAmount));
+    // Roll foward enough that all payment is interest
+    // Once the math in Pay is fixed this should be posible to lower
+    vm.roll(block.number + 1000000000);
+    agentPay(agent, pool, issueGenericPayCred(agentID, amount));
+    // Some of these numbers are inconsistent - we should calculate this value
+    // instead of getting it from the contract once the calculations are stable
+    uint256 feesCollected = pool.feesCollected();
+    console.log("Fees Collected: %s", feesCollected);
+    pool.harvestFees(feesCollected);
+    assertEq(asset.balanceOf(treasury), feesCollected);
+  }
+}
+
+contract Pool4626Tests is PoolTestState {
+
+  function setUp () public override{
+    super.setUp();
+    _setupRamp();
+  }
+
+  function testPoolDepositAsset() public {
+    uint256 amount = WAD;
+    loadApproveWFIL(amount, investor1);
+    uint256 balanceBefore = asset.balanceOf(address(pool));
+    vm.prank(investor1);
+    pool.deposit(amount, investor1);
+    uint256 balanceAfter = asset.balanceOf(address(pool));
+    assertEq(balanceAfter - balanceBefore, amount);
+  }
+
+  function testPoolDepositFil() public {
+    uint256 amount = WAD;
+    vm.deal(investor1, amount);
+    uint256 balanceBefore = asset.balanceOf(address(pool));
+    pool.deposit{value: amount}(investor1);
+    uint256 balanceAfter = asset.balanceOf(address(pool));
+    assertEq(balanceAfter - balanceBefore, amount);
+  }
+
+  function testPoolReceiveFil() public {
+    uint256 amount = WAD;
+    vm.deal(investor1, amount);
+    uint256 balanceBefore = asset.balanceOf(address(pool));
+    vm.prank(investor1);
+    address(pool).call{value: amount}("");
+    uint256 balanceAfter = asset.balanceOf(address(pool));
+    assertEq(balanceAfter - balanceBefore, amount);
+  }
+
+  function testPoolFallbackFil() public {
+    uint256 amount = WAD;
+    vm.deal(investor1, amount);
+    uint256 balanceBefore = asset.balanceOf(address(pool));
+    vm.prank(investor1);
+    address(pool).call{value: amount}(abi.encodeWithSignature("fakeFunction(uint256, uint256)", 1, 2));
+    uint256 balanceAfter = asset.balanceOf(address(pool));
+    assertEq(balanceAfter - balanceBefore, amount);
+  }
+
+  function testPoolMint() public {
+    uint256 assets = WAD;
+    uint256 shares = pool.convertToShares(WAD);
+    loadApproveWFIL(assets, investor1);
+    uint256 balanceBefore = asset.balanceOf(address(pool));
+    vm.prank(investor1);
+    pool.mint(shares, investor1);
+    uint256 balanceAfter = asset.balanceOf(address(pool));
+    assertEq(balanceAfter - balanceBefore, assets);
+  }
+
+  function testPoolWithdraw(uint256 amount) public {
+    uint256 upperBound = pool.previewWithdraw(liquidStakingToken.balanceOf(address(investor1)));
+    assertEq(upperBound, pool.maxWithdraw(investor1), "Expected withdraw should be equal to amount");
+    amount = bound(amount, 1, upperBound);
+    uint256 expectedWithdraw = pool.previewWithdraw(amount);
+    uint256 balanceBeforeIOU = iou.balanceOf(address(ramp));
+    uint256 balanceBeforeLST = liquidStakingToken.balanceOf(address(investor1));
+    vm.prank(address(investor1));
+    pool.withdraw(amount, investor1, investor1);
+    uint256 balanceAfterIOU = iou.balanceOf(address(ramp));
+    uint256 balanceAfterLST = liquidStakingToken.balanceOf(address(investor1));
+    assertEq(balanceAfterIOU - balanceBeforeIOU, amount, "IOU balance should be updated");
+    assertEq(balanceBeforeLST - balanceAfterLST, expectedWithdraw, "LST balance should be updated");
+
+   }
+
+  function testPoolRedeem(uint256 shares) public {
+    uint256 assets = liquidStakingToken.balanceOf(address(investor1));
+    uint256 upperBound = pool.convertToShares(assets);
+    assertEq(upperBound, pool.maxRedeem(investor1), "Expected withdraw should be equal to amount");
+    shares = bound(shares, 1, upperBound);
+    uint256 expectedRedeem = pool.previewRedeem(shares);
+    uint256 balanceBeforeIOU = iou.balanceOf(address(ramp));
+    uint256 balanceBeforeLST = liquidStakingToken.balanceOf(address(investor1));
+    vm.prank(address(investor1));
+    pool.redeem(shares, investor1, investor1);
+    uint256 balanceAfter = iou.balanceOf(address(ramp));
+    uint256 balanceAfterIOU = iou.balanceOf(address(ramp));
+    uint256 balanceAfterLST = liquidStakingToken.balanceOf(address(investor1));
+    assertEq(balanceAfterIOU - balanceBeforeIOU, expectedRedeem, "IOU balance should be updated");
+    assertEq(balanceBeforeLST - balanceAfterLST, shares, "LST balance should be updated");
+  }
+
+  function testMaxDeposit() public {
+    // No limits on deposits
+    assertEq(pool.maxDeposit(investor1), type(uint256).max);
+  }
+
+  function testMaxMint() public {
+    // No limits on mints
+    assertEq(pool.maxMint(investor1), type(uint256).max);
+  }
+
+  function testDepositZeroFail() public {
+    vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
+    vm.prank(address(investor1));
+    pool.deposit(0, investor1);
+  }
+
+  function testSendZeroFail() public {
+    vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
+    vm.prank(address(investor1));
+    pool.deposit(investor1);
+  }
+
+}
+
+
+contract PoolAdminTests is PoolTestState {
+
+  function testSetRamp() public {
+    IOffRamp newRamp = IOffRamp(address(0x1));
+    vm.prank(address(systemAdmin));
+    pool.setRamp(newRamp);
+    assertEq(address(pool.ramp()), address(newRamp));
+  }
+
+  function testJumpStartTotalBorrowed() public {
+    uint256 amount = WAD;
+    vm.prank(address(poolFactory));
+    pool.jumpStartTotalBorrowed(amount);
+    assertEq(pool.totalBorrowed(), amount);
+  }
+
+  function testJumpStartTotalBorrowedBadState() public {
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, WAD));
+    vm.prank(address(poolFactory));
+    vm.expectRevert(abi.encodeWithSelector(InvalidState.selector));
+    pool.jumpStartTotalBorrowed(WAD);
+  }
+
+  function testSetMinimumLiquidity() public {
+    uint256 amount = WAD;
+    vm.prank(address(systemAdmin));
+    pool.setMinimumLiquidity(amount);
+    assertEq(pool.minimumLiquidity(), amount);
+  }
+  function testSetRateModule() public {
+    IRateModule newRateModule = IRateModule(address(0x1));
+    vm.prank(address(systemAdmin));
+    pool.setRateModule(newRateModule);
+    assertEq(address(pool.rateModule()), address(newRateModule));
+  }
+
+  function testDecommissionPool() public {
+    IPool newPool = createAndFundPool(stakeAmount, investor1);
+    assertEq(stakeAmount, asset.balanceOf(address(pool)));
+    vm.prank(address(systemAdmin));
+    pool.shutDown();
+    assertTrue(pool.isShuttingDown(), "Pool should be shut down");
+    vm.prank(address(poolFactory));
+    // NOTE: can't decomission pool due to #361
+    // pool.decommissionPool(newPool);
+
+    // Need to make payments to test fee assertions
+
+  }
+
+}
+
+contract PoolErrorBranches is PoolTestState {
+  function testTotalBorrowableZero(uint256 borrowAmount) public {
+    uint256 balance = asset.balanceOf(address(pool));
+    uint256 minLiquidity = pool.getAbsMinLiquidity();
+    borrowAmount = bound(borrowAmount, balance - minLiquidity , balance);
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, borrowAmount));
+    assertEq(pool.totalBorrowableAssets(), 0, "Total borrowable should be zero");
+  }
+
+  function testLiquidAssetsOnShutdown() public {
+    assertGt(pool.getLiquidAssets(), 0, "Liquid assets should be greater than zero before pool is shut down");
+    vm.prank(address(systemAdmin));
+    pool.shutDown();
+    assertTrue(pool.isShuttingDown(), "Pool should be shut down");
+    assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when pool is shutting down");
+  }
+
+  function testLiquidAssetsLessThanFees(uint256 borrowAmount, uint256 paymentAmount) public {
+    uint256 paymentAmount = bound(paymentAmount, WAD, pool.totalBorrowableAssets());
+    assertGt(pool.getLiquidAssets(), 0, "Liquid assets should be greater than zero before pool is shut down");
+    // Our first borrow is based on the payment amount to generate fees
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, paymentAmount));
+    // Roll foward enough that all payment is interest
+    // Once the math in Pay is fixed this should be posible to lower
+    vm.roll(block.number + 1000000000);
+    agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmount));
+    uint256 feesCollected = pool.feesCollected();
+    uint256 balance = asset.balanceOf(address(pool));
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
+    assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when pool is shutting down");
+  }
+
+  function testMintZeroShares() public {
+    vm.prank(address(investor1));
+    vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
+    pool.mint(0, investor1);
+  }
+
 }
 
 // // a value we use to test approximation of the cursor according to a window start/close
@@ -180,18 +608,18 @@ contract PoolBasicSetupTest is BaseTest {
 //     address tester = makeAddr("TESTER");
 //     // first check to make sure a pool can mint
 //     vm.startPrank(address(pool));
-//     pool.share().mint(tester, 1e18);
+//     pool.share().mint(tester, WAD);
 //     vm.stopPrank();
-//     assertEq(pool.share().balanceOf(tester), 1e18);
+//     assertEq(pool.share().balanceOf(tester), WAD);
 
 //     tester = makeAddr("TESTER2");
 //     vm.startPrank(tester);
-//     pool.share().mint(tester, 1e18);
+//     pool.share().mint(tester, WAD);
 //     vm.stopPrank();
 //   }
 
 //   function testSingleDepositWithdraw() public {
-//     uint256 investor1UnderlyingAmount = 1e18;
+//     uint256 investor1UnderlyingAmount = WAD;
 
 //     vm.startPrank(investor1);
 //     wFIL.approve(address(pool), investor1UnderlyingAmount);
@@ -224,7 +652,7 @@ contract PoolBasicSetupTest is BaseTest {
 //   }
 
 //   function testDepositFil() public {
-//     uint256 investor1UnderlyingAmount = 1e18;
+//     uint256 investor1UnderlyingAmount = WAD;
 //     vm.deal(investor1, investor1UnderlyingAmount);
 //     vm.startPrank(investor1);
 //     uint256 investor1ShareAmount = pool.deposit{value: investor1UnderlyingAmount}(investor1);
@@ -240,7 +668,7 @@ contract PoolBasicSetupTest is BaseTest {
 //   }
 
 //   function testSendFilIntoPool() public {
-//     uint256 investor1UnderlyingAmount = 1e18;
+//     uint256 investor1UnderlyingAmount = WAD;
 //     vm.deal(investor1, investor1UnderlyingAmount);
 //     vm.startPrank(investor1);
 //     address(pool).call{value: investor1UnderlyingAmount}("");
@@ -257,7 +685,7 @@ contract PoolBasicSetupTest is BaseTest {
 //   }
 
 //   function testSingleMintRedeem() public {
-//     uint256 investor1ShareAmount = 1e18;
+//     uint256 investor1ShareAmount = WAD;
 
 //     vm.startPrank(investor1);
 //     wFIL.approve(address(pool), investor1ShareAmount);
@@ -292,11 +720,11 @@ contract PoolBasicSetupTest is BaseTest {
 //         wFIL.approve(address(pool), 0.5e18);
 //         assertEq(wFIL.allowance(address(this), address(pool)), 0.5e18);
 
-//         pool.deposit(1e18, address(this));
+//         pool.deposit(WAD, address(this));
 //     }
 
 //   function testMintForReceiver() public {
-//     uint256 investor1ShareAmount = 1e18;
+//     uint256 investor1ShareAmount = WAD;
 
 //     vm.startPrank(investor1);
 //     wFIL.approve(address(pool), investor1ShareAmount);
@@ -319,7 +747,7 @@ contract PoolBasicSetupTest is BaseTest {
 //   }
 
 //   function testDepositForReceiver() public {
-//     uint256 investor1UnderlyingAmount = 1e18;
+//     uint256 investor1UnderlyingAmount = WAD;
 //     uint256 investor1ShareAmount = pool.previewDeposit(investor1UnderlyingAmount);
 
 //     vm.startPrank(investor1);
@@ -348,7 +776,7 @@ contract PoolBasicSetupTest is BaseTest {
 
 //         pool.deposit(0.5e18, address(this));
 
-//         pool.withdraw(1e18, address(this), address(this));
+//         pool.withdraw(WAD, address(this), address(this));
 //     }
 
 //     function testFailRedeemWithNotEnoughShareAmount() public {
@@ -357,24 +785,24 @@ contract PoolBasicSetupTest is BaseTest {
 
 //         pool.deposit(0.5e18, address(this));
 
-//         pool.redeem(1e18, address(this), address(this));
+//         pool.redeem(WAD, address(this), address(this));
 //     }
 
 //     function testFailWithdrawWithNoUnderlyingAmount() public {
-//         pool.withdraw(1e18, address(this), address(this));
+//         pool.withdraw(WAD, address(this), address(this));
 //     }
 
 //     function testFailRedeemWithNoShareAmount() public {
-//         pool.redeem(1e18, address(this), address(this));
+//         pool.redeem(WAD, address(this), address(this));
 //     }
 
 //     function testFailDepositWithNoApproval() public {
-//         pool.deposit(1e18, address(this));
+//         pool.deposit(WAD, address(this));
 //     }
 
 //     function testFailMintWithNoApproval() public {
 //       vm.prank(investor1);
-//       pool.mint(1e18, address(this));
+//       pool.mint(WAD, address(this));
 //       vm.stopPrank();
 //     }
 
@@ -417,7 +845,7 @@ contract PoolBasicSetupTest is BaseTest {
 //   SignedCredential signedCred;
 
 //   uint256 borrowAmount = 0.5e18;
-//   uint256 investor1UnderlyingAmount = 1e18;
+//   uint256 investor1UnderlyingAmount = WAD;
 //   address investor1 = makeAddr("INVESTOR1");
 //   address minerOwner = makeAddr("MINER_OWNER");
 //   address poolOperator = makeAddr("POOL_OPERATOR");
@@ -455,7 +883,7 @@ contract PoolBasicSetupTest is BaseTest {
 //     vm.stopPrank();
 //     uint256 prevMinerBal = wFIL.balanceOf(address(agent));
 
-//     uint256 powerAmtStake = 1e18;
+//     uint256 powerAmtStake = WAD;
 //     vm.startPrank(_agentOperator(agent));
 //     agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), issueGenericSC(address(agent)));
 //     vm.stopPrank();
@@ -528,7 +956,7 @@ contract PoolBasicSetupTest is BaseTest {
 //     vm.stopPrank();
 //     uint256 prevMinerBal = wFIL.balanceOf(address(agent));
 
-//     uint256 powerAmtStake = 1e18;
+//     uint256 powerAmtStake = WAD;
 //     vm.startPrank(_agentOperator(agent));
 //     agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
 //     vm.stopPrank();
@@ -560,7 +988,7 @@ contract PoolBasicSetupTest is BaseTest {
 //   SignedCredential signedCred;
 
 //   uint256 borrowAmount = 0.5e18;
-//   uint256 investor1UnderlyingAmount = 1e18;
+//   uint256 investor1UnderlyingAmount = WAD;
 //   address investor1 = makeAddr("INVESTOR1");
 //   address minerOwner = makeAddr("MINER_OWNER");
 //   address poolOperator = makeAddr("POOL_OPERATOR");
@@ -596,7 +1024,7 @@ contract PoolBasicSetupTest is BaseTest {
 //     pool.deposit(investor1UnderlyingAmount, investor1);
 //     vm.stopPrank();
 
-//     uint256 powerAmtStake = 1e18;
+//     uint256 powerAmtStake = WAD;
 //     vm.startPrank(_agentOperator(agent));
 //     agent.mintPower(signedCred.vc.getQAPower(IRouter(router).getRoute(ROUTE_CRED_PARSER)), signedCred);
 //     vm.stopPrank();
@@ -656,8 +1084,8 @@ contract PoolBasicSetupTest is BaseTest {
 //   SignedCredential signedCred;
 
 //   uint256 borrowAmount = 0.5e18;
-//   uint256 powerAmtStake = 1e18;
-//   uint256 investor1UnderlyingAmount = 1e18;
+//   uint256 powerAmtStake = WAD;
+//   uint256 investor1UnderlyingAmount = WAD;
 //   address investor1 = makeAddr("INVESTOR1");
 //   address minerOwner = makeAddr("MINER_OWNER");
 //   address poolOperator = makeAddr("POOL_OPERATOR");
@@ -925,8 +1353,8 @@ contract PoolBasicSetupTest is BaseTest {
 //   SignedCredential signedCred;
 
 //   uint256 borrowAmount = 0.5e18;
-//   uint256 powerAmtStake = 1e18;
-//   uint256 investor1UnderlyingAmount = 1e18;
+//   uint256 powerAmtStake = WAD;
+//   uint256 investor1UnderlyingAmount = WAD;
 //   address investor1 = makeAddr("INVESTOR1");
 //   address minerOwner = makeAddr("MINER_OWNER");
 //   address poolOperator = makeAddr("POOL_OPERATOR");
@@ -1088,8 +1516,8 @@ contract PoolBasicSetupTest is BaseTest {
 //   SignedCredential signedCred;
 
 //   uint256 borrowAmount = 0.5e18;
-//   uint256 powerAmtStake = 1e18;
-//   uint256 investor1UnderlyingAmount = 1e18;
+//   uint256 powerAmtStake = WAD;
+//   uint256 investor1UnderlyingAmount = WAD;
 //   address investor1 = makeAddr("INVESTOR1");
 //   address minerOwner = makeAddr("MINER_OWNER");
 //   address poolOperator = makeAddr("POOL_OPERATOR");
@@ -1136,11 +1564,11 @@ contract PoolBasicSetupTest is BaseTest {
 
 //   function testTreasuryFees() public {
 //     vm.startPrank(investor1);
-//     wFIL.approve(address(pool), 1e18);
-//     pool.makePayment(address(agent), 1e18);
+//     wFIL.approve(address(pool), WAD);
+//     pool.makePayment(address(agent), WAD);
 //     vm.stopPrank();
 //     uint256 treasuryBalance = wFIL.balanceOf(treasury);
-//     assertEq(treasuryBalance, (1e18 * .10), "Treasury should have received 10% fees");
+//     assertEq(treasuryBalance, (WAD * .10), "Treasury should have received 10% fees");
 //   }
 // }
 
@@ -1160,7 +1588,7 @@ contract PoolBasicSetupTest is BaseTest {
 //   SignedCredential signedCred;
 
 //   uint256 borrowAmount = 5e18;
-//   uint256 powerAmtStake = 1e18;
+//   uint256 powerAmtStake = WAD;
 //   uint256 investor1UnderlyingAmount = 10e18;
 //   address investor1 = makeAddr("INVESTOR1");
 //   address minerOwner = makeAddr("MINER_OWNER");

@@ -72,6 +72,8 @@ interface IPool {
 
     function getLiquidAssets() external view returns (uint256);
 
+    function feesCollected() external view returns (uint256);
+
     function getRate(
         Account memory account,
         VerifiableCredential memory vc
@@ -162,6 +164,8 @@ interface IPool {
     function setRamp(IOffRamp newRamp) external;
 
     function setMinimumLiquidity(uint256 minLiquidity) external;
+
+    function setRateModule(IRateModule newRateModule) external;
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 }
