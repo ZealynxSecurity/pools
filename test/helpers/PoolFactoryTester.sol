@@ -4,7 +4,7 @@
 // import {SignedCredential} from "src/Types/Structs/Credentials.sol";
 // import "src/Types/Structs/Filecoin.sol";
 
-// contract PoolFactorySigTester {
+// contract PoolRegistrySigTester {
 //   function approveImplementation(address) external pure returns (bytes4) {
 //     return msg.sig;
 //   }

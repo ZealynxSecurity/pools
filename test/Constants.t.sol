@@ -6,7 +6,7 @@
 // import "src/Types/Structs/Filecoin.sol";
 // import {VerifiableCredential, AgentData, SignedCredential} from "src/VCVerifier/VCVerifier.sol";
 // import {AgentSigTester} from "./helpers/AgentTester.sol";
-// import {PoolFactorySigTester} from "./helpers/PoolFactoryTester.sol";
+// import {PoolRegistrySigTester} from "./helpers/PoolRegistryTester.sol";
 
 // contract AgentConstantsTest is Test {
 //   SignedCredential sc;
@@ -153,10 +153,10 @@
 
 // }
 
-// contract PoolFactoryConstantsTest is Test {
-//   PoolFactorySigTester tester;
+// contract PoolRegistryConstantsTest is Test {
+//   PoolRegistrySigTester tester;
 //   function setUp() public {
-//     tester = new PoolFactorySigTester();
+//     tester = new PoolRegistrySigTester();
 //   }
 
 //   function testApproveImplementation() public {

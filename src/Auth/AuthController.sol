@@ -24,13 +24,13 @@ library AuthController {
 
   function onlyPoolAccounting(address router, address poolAccounting) internal view {
     require(
-      GetRoute.poolFactory(router).isPool(poolAccounting),
+      GetRoute.poolRegistry(router).isPool(poolAccounting),
       "onlyPoolAccounting: Not authorized"
     );
   }
 
-  function onlyPoolFactory(address router, address poolFactory) internal view {
-    if (address(GetRoute.poolFactory(router)) != poolFactory) {
+  function onlyPoolRegistry(address router, address poolRegistry) internal view {
+    if (address(GetRoute.poolRegistry(router)) != poolRegistry) {
       revert Unauthorized();
     }
   }

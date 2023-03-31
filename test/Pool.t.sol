@@ -13,7 +13,7 @@ contract PoolTestState is BaseTest {
 
   using Credentials for VerifiableCredential;
   IPool pool;
-  IPoolFactory poolFactory;
+  IPoolRegistry poolRegistry;
   uint256 borrowAmount = WAD;
   uint256 stakeAmount = 1000e18;
   uint256 expectedRateBasic = 15e18;
@@ -40,7 +40,7 @@ contract PoolTestState is BaseTest {
       investor1,
       minerOwner
     );
-    poolFactory = GetRoute.poolFactory(router);
+    poolRegistry = GetRoute.poolRegistry(router);
     asset = pool.asset();
     liquidStakingToken = pool.liquidStakingToken();
     agentID = agent.id();
@@ -109,9 +109,9 @@ contract PoolBasicSetupTest is BaseTest {
   uint256 baseRate;
 
   function testCreatePool() public {
-    IPoolFactory poolFactory = GetRoute.poolFactory(router);
+    IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
     PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin, systemAdmin);
-    uint256 id = poolFactory.allPoolsLength();
+    uint256 id = poolRegistry.allPoolsLength();
     address rateModule = address(new RateModule(systemAdmin, systemAdmin, router, rateArray));
     pool = IPool(new GenesisPool(
       systemAdmin,
@@ -135,8 +135,8 @@ contract PoolBasicSetupTest is BaseTest {
     liquidStakingToken.setMinter(address(pool));
     vm.startPrank(systemAdmin);
     // After the pool has been attached to the factory the count should change
-    poolFactory.attachPool(pool);
-    assertEq(poolFactory.allPoolsLength(), id + 1, "pool not added to allPools");
+    poolRegistry.attachPool(pool);
+    assertEq(poolRegistry.allPoolsLength(), id + 1, "pool not added to allPools");
     vm.stopPrank();
   }
 }
@@ -461,14 +461,14 @@ contract PoolAdminTests is PoolTestState {
 
   function testJumpStartTotalBorrowed() public {
     uint256 amount = WAD;
-    vm.prank(address(poolFactory));
+    vm.prank(address(poolRegistry));
     pool.jumpStartTotalBorrowed(amount);
     assertEq(pool.totalBorrowed(), amount);
   }
 
   function testJumpStartTotalBorrowedBadState() public {
     agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, WAD));
-    vm.prank(address(poolFactory));
+    vm.prank(address(poolRegistry));
     vm.expectRevert(abi.encodeWithSelector(InvalidState.selector));
     pool.jumpStartTotalBorrowed(WAD);
   }
@@ -492,7 +492,7 @@ contract PoolAdminTests is PoolTestState {
     vm.prank(address(systemAdmin));
     pool.shutDown();
     assertTrue(pool.isShuttingDown(), "Pool should be shut down");
-    vm.prank(address(poolFactory));
+    vm.prank(address(poolRegistry));
     // NOTE: can't decomission pool due to #361
     // pool.decommissionPool(newPool);
 
@@ -550,7 +550,7 @@ contract PoolErrorBranches is PoolTestState {
 //   using Credentials for VerifiableCredential;
 //   IAgent agent;
 
-//   IPoolFactory poolFactory;
+//   IPoolRegistry poolRegistry;
 //   IPowerToken powerToken;
 //   IPool pool;
 //   IERC20 pool20;
@@ -568,7 +568,7 @@ contract PoolErrorBranches is PoolTestState {
 //   string poolSymbol = "POOL1";
 
 //   function setUp() public {
-//     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
@@ -838,7 +838,7 @@ contract PoolErrorBranches is PoolTestState {
 
 //   IAgent agent;
 
-//   IPoolFactory poolFactory;
+//   IPoolRegistry poolRegistry;
 //   IPowerToken powerToken;
 //   IPool pool;
 //   IERC20 pool20;
@@ -855,7 +855,7 @@ contract PoolErrorBranches is PoolTestState {
 //   string poolSymbol = "POOL1";
 
 //   function setUp() public {
-//     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
@@ -980,7 +980,7 @@ contract PoolErrorBranches is PoolTestState {
 
 //   IAgent agent;
 
-//   IPoolFactory poolFactory;
+//   IPoolRegistry poolRegistry;
 //   IPowerToken powerToken;
 //   // this isn't ideal but it also prepares us better to separate the pool token from the pool
 //   IPool pool;
@@ -1000,7 +1000,7 @@ contract PoolErrorBranches is PoolTestState {
 //   uint256 borrowBlock;
 
 //   function setUp() public {
-//     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
@@ -1076,7 +1076,7 @@ contract PoolErrorBranches is PoolTestState {
 //   IAgentPolice police;
 
 
-//   IPoolFactory poolFactory;
+//   IPoolRegistry poolRegistry;
 //   IPowerToken powerToken;
 //   // this isn't ideal but it also prepares us better to separate the pool token from the pool
 //   IPool pool;
@@ -1097,7 +1097,7 @@ contract PoolErrorBranches is PoolTestState {
 //   uint256 borrowBlock;
 
 //   function setUp() public {
-//     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
@@ -1345,7 +1345,7 @@ contract PoolErrorBranches is PoolTestState {
 //   IAgentPolice police;
 
 
-//   IPoolFactory poolFactory;
+//   IPoolRegistry poolRegistry;
 //   IPowerToken powerToken;
 //   // this isn't ideal but it also prepares us better to separate the pool token from the pool
 //   IPool pool;
@@ -1366,7 +1366,7 @@ contract PoolErrorBranches is PoolTestState {
 //   uint256 borrowBlock;
 
 //   function setUp() public {
-//     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
@@ -1508,7 +1508,7 @@ contract PoolErrorBranches is PoolTestState {
 //   IAgentPolice police;
 
 
-//   IPoolFactory poolFactory;
+//   IPoolRegistry poolRegistry;
 //   IPowerToken powerToken;
 //   // this isn't ideal but it also prepares us better to separate the pool token from the pool
 //   IPool pool;
@@ -1529,7 +1529,7 @@ contract PoolErrorBranches is PoolTestState {
 //   uint256 borrowBlock;
 
 //   function setUp() public {
-//     poolFactory = GetRoute.poolFactory(router);
+//     poolRegistry = GetRoute.poolRegistry(router);
 //     powerToken = GetRoute.powerToken(router);
 //     treasury = GetRoute.treasury(router);
 //     police = GetRoute.agentPolice(router);
@@ -1580,7 +1580,7 @@ contract PoolErrorBranches is PoolTestState {
 //   IAgent agent;
 //   IAgentPolice police;
 
-//   IPoolFactory poolFactory;
+//   IPoolRegistry poolRegistry;
 //   IPowerToken powerToken;
 //   // this isn't ideal but it also prepares us better to separate the pool token from the pool
 //   IPool pool;
@@ -1599,7 +1599,7 @@ contract PoolErrorBranches is PoolTestState {
 //   string poolSymbol = "POOL1";
 
 //   function setUp() public {
-//     poolFactory = GetRoute.poolFactory(router);
+//     poolRegistry = GetRoute.poolRegistry(router);
 //     powerToken = GetRoute.powerToken(router);
 //     treasury = GetRoute.treasury(router);
 //     police = GetRoute.agentPolice(router);
@@ -1676,8 +1676,8 @@ contract PoolErrorBranches is PoolTestState {
 //     pool.setImplementation(IPoolImplementation(newImplementation));
 
 //     // approve the Implementation
-//     vm.prank(IAuth(address(poolFactory)).owner());
-//     poolFactory.approveImplementation(newImplementation);
+//     vm.prank(IAuth(address(poolRegistry)).owner());
+//     poolRegistry.approveImplementation(newImplementation);
 
 //     // now this should work
 //     vm.prank(poolOperator);
@@ -1706,7 +1706,7 @@ contract PoolErrorBranches is PoolTestState {
 //     pool.shutDown();
 //     // then upgrade it
 //     vm.startPrank(IAuth(address(pool)).owner());
-//     pool = poolFactory.upgradePool(pool.id());
+//     pool = poolRegistry.upgradePool(pool.id());
 //     vm.stopPrank();
 
 //     uint256 investorPoolSharesNew = pool.share().balanceOf(investor1);

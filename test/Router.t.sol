@@ -14,7 +14,7 @@
 //   address treasury;
 //   address wFIL;
 //   address minerRegistry;
-//   address agentFactory;
+//   address poolRegistryy;
 //   address poolFactory;
 //   address powerToken;
 //   address vcIssuer;
@@ -67,8 +67,8 @@
 //     assertEq(routerInstance.getRoute(ROUTE_AGENT_FACTORY), contractRoutes.agentFactory);
 //   }
 
-//   function testGetPoolFactory() public {
-//     assertEq(routerInstance.getRoute(ROUTE_POOL_FACTORY), contractRoutes.poolFactory);
+//   function testGetPoolRegistry() public {
+//     assertEq(routerInstance.getRoute(ROUTE_POOL_FACTORY), contractRoutes.poolRegistry);
 //   }
 
 //   function testGetMinerRegistry() public {

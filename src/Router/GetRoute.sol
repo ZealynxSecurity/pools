@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgentDeployer} from "src/Types/Interfaces/IAgentDeployer.sol";
-import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -22,8 +22,8 @@ library GetRoute {
     return IAgentDeployer(IRouter(router).getRoute(ROUTE_AGENT_DEPLOYER));
   }
 
-  function poolFactory(address router) internal view returns (IPoolFactory) {
-    return IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+  function poolRegistry(address router) internal view returns (IPoolRegistry) {
+    return IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
   }
 
   function wFIL(address router) internal view returns (IWFIL) {
@@ -44,9 +44,9 @@ library GetRoute {
   }
 
   function pool(address router, uint256 poolID) internal view returns (IPool) {
-    IPoolFactory _poolFactory = poolFactory(router);
-    require(poolID <= _poolFactory.allPoolsLength(), "Invalid pool ID");
-    return IPool(_poolFactory.allPools(poolID));
+    IPoolRegistry _poolRegistry = poolRegistry(router);
+    require(poolID <= _poolRegistry.allPoolsLength(), "Invalid pool ID");
+    return IPool(_poolRegistry.allPools(poolID));
   }
 
   function treasury(address router) internal view returns (address) {

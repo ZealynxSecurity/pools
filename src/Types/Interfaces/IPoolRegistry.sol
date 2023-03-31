@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 
-interface IPoolFactory {
+interface IPoolRegistry {
   function treasuryFeeRate() external view returns (uint256);
   function feeThreshold() external view returns (uint256);
   function allPools(uint256 poolID) external view returns (address);

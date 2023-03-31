@@ -2,11 +2,11 @@
 // pragma solidity 0.8.17;
 
 // import {RouterAware} from "src/Router/RouterAware.sol";
-// import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
+// import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 // import {IPool} from "src/Types/Interfaces/IPool.sol";
 // import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
-// contract PoolFactory is IPoolFactory, RouterAware {
+// contract PoolRegistry is IPoolRegistry, RouterAware {
 //   uint256 public constant MAX_TREASURY_FEE = 1e17;
 //   uint256 public treasuryFeeRate;
 //   uint256 public feeThreshold;

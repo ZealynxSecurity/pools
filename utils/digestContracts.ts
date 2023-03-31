@@ -103,12 +103,12 @@ async function main() {
       contractAddress: additionalContracts[0].address,
     }));
 
-  // add in calls to the `create` method on the PoolFactory
+  // add in calls to the `create` method on the PoolRegistry
   const createPoolTxs = json.transactions
     .filter(({ transactionType, contractName, function: invoked }) => {
       return (
         transactionType === "CREATE" &&
-        contractName === "PoolFactory" &&
+        contractName === "PoolRegistry" &&
         invoked?.includes("createSimpleInterestPool(")
       );
     })

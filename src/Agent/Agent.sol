@@ -10,7 +10,6 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
-import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";

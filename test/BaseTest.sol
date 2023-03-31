@@ -16,7 +16,7 @@ import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {WFIL} from "shim/WFIL.sol";
-import {PoolFactory} from "src/Pool/PoolFactory.sol";
+import {PoolRegistry} from "src/Pool/PoolRegistry.sol";
 import {Router} from "src/Router/Router.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {RateModule} from "src/Pool/RateModule.sol";
@@ -27,7 +27,7 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
-import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
@@ -94,7 +94,7 @@ contract BaseTest is Test {
       address(new AgentFactory(router)),
       address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router)),
       // 1e17 = 10% treasury fee on yield
-      address(new PoolFactory(IERC20(address(wFIL)), 1e17, 0, systemAdmin, systemAdmin, router)),
+      address(new PoolRegistry(IERC20(address(wFIL)), 1e17, 0, systemAdmin, systemAdmin, router)),
       vcIssuer,
       credParser,
       address(new AgentDeployer())
@@ -357,7 +357,7 @@ contract BaseTest is Test {
   }
 
   function createPool() internal returns (IPool pool) {
-    IPoolFactory poolFactory = GetRoute.poolFactory(router);
+    IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
     PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin, systemAdmin);
     pool = IPool(new GenesisPool(
       systemAdmin,
@@ -369,12 +369,12 @@ contract BaseTest is Test {
       // no min liquidity for test pool
       address(liquidStakingToken),
       0,
-      GetRoute.poolFactory(router).allPoolsLength()
+      GetRoute.poolRegistry(router).allPoolsLength()
     ));
     vm.prank(systemAdmin);
     liquidStakingToken.setMinter(address(pool));
     vm.startPrank(systemAdmin);
-    poolFactory.attachPool(pool);
+    poolRegistry.attachPool(pool);
     vm.stopPrank();
   }
 

@@ -7,16 +7,17 @@ import {IPoolDeployer} from "src/Types/Interfaces/IPoolDeployer.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
-import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
-contract PoolFactory is IPoolFactory, Operatable {
+contract PoolRegistry is IPoolRegistry, Operatable {
+
   error InvalidState();
 
   /**
-   * @notice The PoolFactoryAdmin can change the treasury fee up to the MAX_TREASURY_FEE
+   * @notice The PoolRegistryAdmin can change the treasury fee up to the MAX_TREASURY_FEE
    * @dev treasury fee is denominated by 1e18, in other words, 1e17 is 10% fee
    */
   uint256 public constant MAX_TREASURY_FEE = 1e17;

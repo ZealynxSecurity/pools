@@ -14,7 +14,7 @@
 //   using Credentials for VerifiableCredential;
 //   IAgent agent;
 
-//   IPoolFactory poolFactory;
+//   IPoolRegistry poolRegistry;
 //   IPowerToken powerToken;
 //   IPool pool;
 //   IERC20 pool20;
@@ -34,7 +34,7 @@
 //   string poolSymbol = "POOL1";
 
 //   function setUp() public {
-//     poolFactory = IPoolFactory(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(poolName, poolSymbol, poolOperator, 20e18);

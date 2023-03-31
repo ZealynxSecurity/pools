@@ -19,7 +19,7 @@ import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
-import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {Account} from "src/Types/Structs/Account.sol";
@@ -104,8 +104,8 @@ contract GenesisPool is IPool, Operatable {
         _;
     }
 
-    modifier onlyPoolFactory() {
-        AuthController.onlyPoolFactory(router, msg.sender);
+    modifier onlyPoolRegistry() {
+        AuthController.onlyPoolRegistry(router, msg.sender);
         _;
     }
 
@@ -350,7 +350,7 @@ contract GenesisPool is IPool, Operatable {
         account.save(router, vc.subject, id);
         // take fee
         feesCollected += GetRoute
-            .poolFactory(router)
+            .poolRegistry(router)
             .treasuryFeeRate()
              * feeBasis / WAD;
 
@@ -566,7 +566,7 @@ contract GenesisPool is IPool, Operatable {
 
     function decommissionPool(
         IPool newPool
-    ) public onlyPoolFactory returns(uint256 borrowedAmount) {
+    ) public onlyPoolRegistry returns(uint256 borrowedAmount) {
         require(isShuttingDown, "POOL: Must be shutting down");
         require(newPool.id() == id, "POOL: New pool must have same ID");
         harvestFees(feesCollected);
@@ -575,7 +575,7 @@ contract GenesisPool is IPool, Operatable {
         borrowedAmount = totalBorrowed;
     }
 
-    function jumpStartTotalBorrowed(uint256 amount) public onlyPoolFactory {
+    function jumpStartTotalBorrowed(uint256 amount) public onlyPoolRegistry {
         if(totalBorrowed != 0) {
             revert InvalidState();
         }
@@ -643,6 +643,5 @@ contract GenesisPool is IPool, Operatable {
         liquidStakingToken.mint(receiver, shares);
         emit Deposit(msg.sender, receiver.normalize(),  convertToAssets(shares), shares);
     }
-
 }
 

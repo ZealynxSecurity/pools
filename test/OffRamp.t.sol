@@ -17,7 +17,7 @@ contract OffRampTest is BaseTest {
   IOffRamp ramp;
   PoolToken iou;
   IPool pool;
-  address poolFactory = makeAddr("POOLFACTORY");
+  address poolRegistry = makeAddr("POOLREGISTRY");
 
   address investor1 = makeAddr("INVESTOR1");
   address investor2 = makeAddr("INVESTOR2");

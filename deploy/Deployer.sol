@@ -17,7 +17,7 @@ library Deployer {
     address minerRegistry,
     address agentFactory,
     address agentPolice,
-    address poolFactory,
+    address poolRegistry,
     address vcIssuer,
     address credParser,
     address agentDeployer
@@ -40,7 +40,7 @@ library Deployer {
     routeAddrs[3] = agentFactory;
     // Add pool factory route
     routeIDs[4] = ROUTE_POOL_FACTORY;
-    routeAddrs[4] = poolFactory;
+    routeAddrs[4] = poolRegistry;
     // Add vc issuer route
     routeIDs[5] = ROUTE_VC_ISSUER;
     routeAddrs[5] = vcIssuer;

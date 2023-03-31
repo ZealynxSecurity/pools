@@ -9,7 +9,7 @@ import {Router} from "src/Router/Router.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
-import {PoolFactory} from "src/Pool/PoolFactory.sol";
+import {PoolRegistry} from "src/Pool/PoolRegistry.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
@@ -44,8 +44,8 @@ contract Deploy is Script {
         address agentPolice = address(
             new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router)
         );
-        address poolFactory = address(
-            new PoolFactory(IERC20(wFIL), 1e17, 0, deployerAddr, deployerAddr, router)
+        address poolRegistry = address(
+            new PoolRegistry(IERC20(wFIL), 1e17, 0, deployerAddr, deployerAddr, router)
         );
         address credParser = address(new CredParser());
         address agentDeployer = address(new AgentDeployer());
@@ -59,7 +59,7 @@ contract Deploy is Script {
             minerRegistry,
             agentFactory,
             agentPolice,
-            poolFactory,
+            poolRegistry,
             vcIssuer,
             credParser,
             agentDeployer
