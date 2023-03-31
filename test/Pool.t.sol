@@ -122,7 +122,8 @@ contract PoolBasicSetupTest is BaseTest {
       rateModule,
       // no min liquidity for test pool
       address(liquidStakingToken),
-      0
+      0,
+      id
     ));
     assertEq(pool.id(), id, "pool id not set");
     assertEq(address(pool.asset()), address(wFIL), "pool asset not set");

@@ -5,7 +5,8 @@ interface IMinerRegistry {
   event AddMiner(address indexed agent, uint64 indexed miner);
   event RemoveMiner(address indexed agent, uint64 indexed miner);
 
-  function addMiner(uint64 miner) external;
-  function removeMiner(uint64 miner) external;
+  function addMiner(uint256 agentId, uint64 miner) external;
+  function removeMiner(uint256 agentId, uint64 miner) external;
   function minerRegistered(uint256 agentID, uint64 miner) external view returns (bool);
+  function minersCount(uint256 agentID) external view returns (uint256);
 }

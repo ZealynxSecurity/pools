@@ -25,17 +25,18 @@ contract MinerRegistryTest is BaseTest {
     uint64 miner2 = configureMiner(address(agent), agentOwner);
 
     address newOwner = makeAddr("NEW_OWNER");
-
+    uint256 minerCount = registry.minersCount(agent.id());
     SignedCredential memory rmMinerCred = issueRemoveMinerCred(agent.id(), miner2);
     vm.startPrank(agentOwner);
     agent.removeMiner(newOwner, rmMinerCred);
     vm.stopPrank();
     assertTrue(registry.minerRegistered(agent.id(), miner1), "Miner 1 not removed");
     assertTrue(!registry.minerRegistered(agent.id(), miner2), "Miner 2 wrongly removed");
+    assertEq(minerCount - registry.minersCount(agent.id()), 1, "Miner count not updated");
   }
 
   function testNonAgentAddMiner() public {
-    try registry.addMiner(10) {
+    try registry.addMiner(0, 10) {
       assertTrue(false, "Should have reverted");
     } catch (bytes memory e) {
       assertEq(errorSelector(e), AuthController.Unauthorized.selector, "Wrong error selector, expected unauthorized");
@@ -43,7 +44,7 @@ contract MinerRegistryTest is BaseTest {
   }
 
   function testNonAgentRmMiner() public {
-    try registry.addMiner(1) {
+    try registry.addMiner(0, 1) {
       assertTrue(false, "Should have reverted");
     } catch (bytes memory e) {
       assertEq(errorSelector(e), AuthController.Unauthorized.selector, "Wrong error selector, expected unauthorized");

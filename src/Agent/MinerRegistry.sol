@@ -17,6 +17,8 @@ contract MinerRegistry is IMinerRegistry {
   // maps keccak256(agentID, minerAddr) => registered status
   mapping(bytes32 => bool) private _minerRegistered;
 
+  mapping(uint256 => uint64[]) private _minersByAgent;
+
   constructor(address _router) {
     router = _router;
   }
@@ -29,6 +31,9 @@ contract MinerRegistry is IMinerRegistry {
     return _minerRegistered[_createMapKey(agentID, miner)];
   }
 
+  function minersCount(uint256 agentID) external view returns (uint256) {
+    return _minersByAgent[agentID].length;
+  }
   /*///////////////////////////////////////////////////////////////
                             MODIFIERS
   //////////////////////////////////////////////////////////////*/
@@ -42,21 +47,21 @@ contract MinerRegistry is IMinerRegistry {
                     REGISTRY STATE MUTATING FUNCS
   //////////////////////////////////////////////////////////////*/
 
-  function addMiner(uint64 miner) external onlyAgent {
-    bytes32 key = _createMapKey(_getIDFromAgent(msg.sender), miner);
+  function addMiner(uint256 agentID, uint64 miner) external onlyAgent {
+    bytes32 key = _createMapKey(agentID, miner);
 
     if (_minerRegistered[key]) revert InvalidParams();
-
+    _minersByAgent[agentID].push(miner);
     _minerRegistered[key] = true;
 
     emit AddMiner(msg.sender, miner);
   }
 
-  function removeMiner(uint64 miner) external onlyAgent {
-    bytes32 key = _createMapKey(_getIDFromAgent(msg.sender), miner);
+  function removeMiner(uint256 agentID, uint64 miner) external onlyAgent {
+    bytes32 key = _createMapKey(agentID, miner);
 
     if (!_minerRegistered[key]) revert InvalidParams();
-
+    _popMinerFromList(miner, _minersByAgent[agentID]);
     _minerRegistered[key] = false;
 
     emit RemoveMiner(msg.sender, miner);
@@ -66,11 +71,17 @@ contract MinerRegistry is IMinerRegistry {
                           INTERNAL FUNCS
   //////////////////////////////////////////////////////////////*/
 
-  function _getIDFromAgent(address agent) internal view returns (uint256) {
-    return IAgent(agent).id();
-  }
-
   function _createMapKey(uint256 agent, uint64 miner) internal pure returns (bytes32) {
     return keccak256(abi.encodePacked(agent, miner));
+  }
+
+  function _popMinerFromList(uint64 miner, uint64[] storage miners) internal{
+    for (uint256 i = 0; i < miners.length; i++) {
+      if (miners[i] == miner) {
+        miners[i] = miners[miners.length - 1];
+        miners.pop();
+        break;
+      }
+    }
   }
 }

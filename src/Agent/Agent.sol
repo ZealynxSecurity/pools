@@ -103,13 +103,6 @@ contract Agent is IAgent, Operatable {
   //////////////////////////////////////////////////*/
 
   /**
-   * @notice Returns the total number of miners pledged to this Agent
-   */
-  function minersCount() external view returns (uint256) {
-    return miners.length;
-  }
-
-  /**
    * @notice Get the number of pools that an Agent is actively borrowing from
    * @return count Returns the number of pools that an Agent has staked power tokens in
    *
@@ -165,9 +158,7 @@ contract Agent is IAgent, Operatable {
     // change the owner address
     sc.vc.target.changeOwnerAddress(address(this));
     // add the miner to the central registry, this call will fail if the miner is already registered
-    GetRoute.minerRegistry(router).addMiner(sc.vc.target);
-    // push the miner to the Agent's list of miners
-    miners.push(sc.vc.target);
+    GetRoute.minerRegistry(router).addMiner(id, sc.vc.target);
   }
 
   /**
@@ -186,9 +177,7 @@ contract Agent is IAgent, Operatable {
     validateAndBurnCred(sc)
   {
     // Remove the miner from the central registry
-    GetRoute.minerRegistry(router).removeMiner(sc.vc.target);
-    // remove this miner from the Agent's list of miners
-    _popMinerFromList(sc.vc.target);
+    GetRoute.minerRegistry(router).removeMiner(id, sc.vc.target);
     // revert the transaction if any of the pools reject the removal
     GetRoute.agentPolice(router).agentApproved(sc.vc);
     // change the owner address of the miner to the new miner owner
@@ -319,7 +308,7 @@ contract Agent is IAgent, Operatable {
     // Regardless of sender if the agent is overleveraged they cannot withdraw
     agentPolice.agentApproved(sc.vc);
     if (
-      agentPolice.isBeneficiaryActive(id) 
+      agentPolice.isBeneficiaryActive(id)
     ) {
       // This call will revert if the sender is not owner/beneficiary
       // Otherwise it will return up the lesser of beneficiary quota or the credentialed amount
@@ -517,13 +506,4 @@ contract Agent is IAgent, Operatable {
     ) revert Unauthorized();
   }
 
-  function _popMinerFromList(uint64 miner) internal {
-    for (uint256 i = 0; i < miners.length; i++) {
-      if (miners[i] == miner) {
-        miners[i] = miners[miners.length - 1];
-        miners.pop();
-        break;
-      }
-    }
-  }
 }
