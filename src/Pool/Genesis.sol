@@ -38,8 +38,6 @@ contract GenesisPool is IPool, Operatable {
 
     error InsufficientLiquidity();
     error AccountDNE();
-    error Unauthorized();
-    error InvalidParams();
     error InvalidState();
     error PoolShuttingDown();
     error AlreadyDefaulted();
@@ -78,7 +76,7 @@ contract GenesisPool is IPool, Operatable {
 
     /// @dev `isShuttingDown` is a boolean that, when true, halts deposits and borrows. Once set, it cannot be unset.
     bool public isShuttingDown = false;
-    
+
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
     //////////////////////////////////////////////////////////////*/
@@ -546,7 +544,7 @@ contract GenesisPool is IPool, Operatable {
             ramp.distribute(address(this), toDistribute);
         }
     }
- 
+
     /**
      * @dev Distributes funds to the offramp when the liquid assets are below the liquidity threshold
      *

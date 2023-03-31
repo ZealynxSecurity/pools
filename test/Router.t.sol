@@ -9,7 +9,6 @@
 // import {IPool} from "src/Types/Interfaces/IPool.sol";
 // import {Deployer} from "deploy/Deployer.sol";
 // import {BaseTest} from "./BaseTest.sol";
-// import {Unauthorized} from "src/Errors.sol";
 
 // struct ContractRoutes {
 //   address treasury;
@@ -24,6 +23,7 @@
 // }
 
 // contract RouterTest is BaseTest {
+//   error Unauthorized();
 //   Router routerInstance;
 //   address routerAdmin;
 //   ContractRoutes public contractRoutes;

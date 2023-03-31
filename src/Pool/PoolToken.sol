@@ -9,8 +9,6 @@ contract PoolToken is IPoolTokenPlus, ERC20, Operatable {
     address public minter;
     address public burner;
 
-    error Unauthorized();
-
     /*//////////////////////////////////////////////////////////////
                                 MODIFIERS
     //////////////////////////////////////////////////////////////*/

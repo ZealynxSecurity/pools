@@ -29,7 +29,6 @@ contract Agent is IAgent, Operatable {
   using FilAddress for address;
   using FilAddress for address payable;
 
-  error Unauthorized();
   error InsufficientFunds();
   error InsufficientCollateral();
   error Internal();

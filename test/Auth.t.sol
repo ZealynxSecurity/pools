@@ -4,8 +4,8 @@ pragma solidity 0.8.17;
 import "forge-std/Test.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
-import {Unauthorized} from "src/Errors.sol";
 import {errorSelector} from "test/helpers/Utils.sol";
+error Unauthorized();
 
 contract OwnableMock is Ownable {
   uint256 public protectedCounter = 0;

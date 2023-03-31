@@ -4,7 +4,6 @@
 pragma solidity 0.8.17;
 
 import {FilAddress} from "shim/FilAddress.sol";
-import {Unauthorized, InvalidParams} from "src/Errors.sol";
 
 /**
  * @dev Contract module which provides a basic access control mechanism, where
@@ -18,6 +17,8 @@ import {Unauthorized, InvalidParams} from "src/Errors.sol";
  * from parent (Ownable).
  */
 abstract contract Ownable {
+    error Unauthorized();
+    error InvalidParams();
     using FilAddress for address;
 
     address private _owner;

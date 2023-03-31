@@ -5,7 +5,6 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
-import {Unauthorized} from "src/Errors.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 
 address constant ADDRESS_ZERO = address(0);

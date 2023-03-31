@@ -26,21 +26,18 @@ import {ROUTE_AGENT_FACTORY_ADMIN, ROUTE_MINER_REGISTRY} from "src/Constants/Rou
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {errorSelector} from "test/helpers/Utils.sol";
-import {Decode, InvalidCredential, OverPowered} from "src/Errors.sol";
-import {
-  Unauthorized,
-  InvalidPower,
-  InsufficientFunds,
-  InsufficientCollateral,
-  InvalidParams,
-  Internal,
-  BadAgentState
-} from "src/Agent/Errors.sol";
 import "src/Constants/FuncSigs.sol";
 
 import "./BaseTest.sol";
-
+error Unauthorized();
+error InvalidParams();
+error InsufficientLiquidity();
+error InsufficientCollateral();
+error InvalidCredential();
 contract AgentBasicTest is BaseTest {
+    error InvalidCredential();
+    error InvalidParams();
+    error InsufficientCollateral();
     using Credentials for VerifiableCredential;
     using MinerHelper for uint64;
 
@@ -69,7 +66,7 @@ contract AgentBasicTest is BaseTest {
       try agent.addMiner(addMinerCred) {
         assertTrue(false, "should have failed - unauthorized");
       } catch (bytes memory e) {
-        assertEq(errorSelector(e), Agent.Unauthorized.selector);
+        assertEq(errorSelector(e), Unauthorized.selector);
       }
     }
 
@@ -335,7 +332,7 @@ contract AgentBorrowingTest is BaseTest {
       try agent.borrow(pool.id(), borrowCred) {
         assertTrue(false, "should not be able to borrow more than liquid");
       } catch (bytes memory b) {
-        assertEq(errorSelector(b), GenesisPool.InsufficientLiquidity.selector);
+        assertEq(errorSelector(b), InsufficientLiquidity.selector);
       }
 
       vm.stopPrank();
@@ -348,7 +345,7 @@ contract AgentBorrowingTest is BaseTest {
       try agent.borrow(pool.id(), borrowCred) {
         assertTrue(false, "should not be able to borrow 0");
       } catch (bytes memory b) {
-        assertEq(errorSelector(b), GenesisPool.InvalidParams.selector);
+        assertEq(errorSelector(b), InvalidParams.selector);
       }
 
       vm.stopPrank();
@@ -361,7 +358,7 @@ contract AgentBorrowingTest is BaseTest {
       try agent.borrow(pool.id(), borrowCred) {
         assertTrue(false, "should not be able to borrow more than liquid");
       } catch (bytes memory b) {
-        assertEq(errorSelector(b), Agent.Unauthorized.selector);
+        assertEq(errorSelector(b), Unauthorized.selector);
       }
 
       vm.stopPrank();
@@ -374,7 +371,7 @@ contract AgentBorrowingTest is BaseTest {
       try agent.borrow(pool.id(), nonBorrowCred) {
         assertTrue(false, "should not be able to borrow more than liquid");
       } catch (bytes memory b) {
-        assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
+        assertEq(errorSelector(b), InvalidCredential.selector);
       }
 
       vm.stopPrank();
@@ -590,7 +587,7 @@ contract AgentPoliceTest is BaseTest {
       try police.putAgentOnAdministration(address(agent), administration) {
         assertTrue(false, "Agent should not be eligible for administration");
       } catch (bytes memory e) {
-        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+        assertEq(errorSelector(e), Unauthorized.selector);
       }
     }
 
@@ -605,7 +602,7 @@ contract AgentPoliceTest is BaseTest {
       try police.putAgentOnAdministration(address(agent), administration) {
         assertTrue(false, "Agent should not be eligible for administration");
       } catch (bytes memory e) {
-        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+        assertEq(errorSelector(e), Unauthorized.selector);
       }
     }
 
@@ -672,13 +669,13 @@ contract AgentPoliceTest is BaseTest {
       try police.putAgentOnAdministration(address(agent), administration) {
         assertTrue(false, "only agent police owner should be able to call putAgentOnAdministration");
       } catch (bytes memory e) {
-        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+        assertEq(errorSelector(e), Unauthorized.selector);
       }
 
       try agent.setAdministration(administration) {
         assertTrue(false, "only agent police should be able to put the agent on adminstration");
       } catch (bytes memory e) {
-        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+        assertEq(errorSelector(e), Unauthorized.selector);
       }
     }
 
@@ -707,7 +704,7 @@ contract AgentPoliceTest is BaseTest {
       try police.rmAgentFromAdministration(address(agent)) {
         assertTrue(false, "only agent police owner operator should be able to call rmAgentFromAdministration");
       } catch (bytes memory e) {
-        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+        assertEq(errorSelector(e), Unauthorized.selector);
       }
     }
 
@@ -727,13 +724,13 @@ contract AgentPoliceTest is BaseTest {
       try police.setAgentDefaulted(address(agent)) {
         assertTrue(false, "only agent police owner operator should be able to call setAgentInDefault");
       } catch (bytes memory e) {
-        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+        assertEq(errorSelector(e), Unauthorized.selector);
       }
 
       try agent.setInDefault() {
         assertTrue(false, "only agent police should be able to call setAgentInDefault on the agent");
       } catch (bytes memory e) {
-        assertEq(errorSelector(e), AgentPolice.Unauthorized.selector);
+        assertEq(errorSelector(e), Unauthorized.selector);
       }
     }
 
@@ -1399,7 +1396,7 @@ contract AgentBeneficiaryTest is BaseTest {
     try agent.changeBeneficiary(beneficiary, expiration, quota) {
       assertTrue(false, "Should not be able to change beneficiary without permission");
     } catch (bytes memory e) {
-      assertEq(errorSelector(e), Agent.Unauthorized.selector);
+      assertEq(errorSelector(e), Unauthorized.selector);
     }
     vm.stopPrank();
     vm.startPrank(ownerAddr);

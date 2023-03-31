@@ -11,9 +11,10 @@ import {IPoolFactory} from "src/Types/Interfaces/IPoolFactory.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-import {InvalidParams, InvalidState, Unauthorized} from "src/Errors.sol";
 
 contract PoolFactory is IPoolFactory, Operatable {
+  error InvalidState();
+
   /**
    * @notice The PoolFactoryAdmin can change the treasury fee up to the MAX_TREASURY_FEE
    * @dev treasury fee is denominated by 1e18, in other words, 1e17 is 10% fee

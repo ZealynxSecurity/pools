@@ -32,7 +32,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using BeneficiaryHelpers for AgentBeneficiary;
 
   error AgentStateRejected();
-  error Unauthorized();
 
   /// @notice `defaultLookback` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
   uint256 public defaultWindow;
