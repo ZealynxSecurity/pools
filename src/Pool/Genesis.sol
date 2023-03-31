@@ -288,7 +288,7 @@ contract GenesisPool is IPool, Operatable {
 
     function pay(
         VerifiableCredential memory vc
-    ) external returns (
+    ) external subjectIsAgentCaller(vc) returns (
         uint256 rate,
         uint256 epochsPaid,
         uint256 principalPaid,

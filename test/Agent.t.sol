@@ -395,6 +395,39 @@ contract AgentPayTest is BaseTest {
       (agent, miner) = configureAgent(minerOwner);
     }
 
+    function testNonAgentCannotPay(string memory payerSeed) public {
+      // Establish Static Params
+      uint256 borrowAmount = 10e18;
+      uint256 poolId = pool.id();
+      uint256 agentId = agent.id();
+      uint256 rollFwdAmt = GetRoute.agentPolice(router).defaultWindow() / 2;
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agentId, borrowAmount);
+
+      // We're just going to use the full amount of interest owed as our pay amount
+      (uint256 payAmount,) = calculateInterestOwed(agent, pool, borrowCred.vc, borrowAmount, rollFwdAmt);
+      // Set fuzzed values to logical test limits - in this case anyone but the agent should be unauthorized
+      address payer = makeAddr(payerSeed);
+      vm.assume(payer != address(agent));
+      // Set up the test state
+
+      // Borrow funds and roll forward to generate interest
+      agentBorrow(agent, poolId, borrowCred);
+      vm.roll(block.number + rollFwdAmt);
+      
+      // Load the payer with sufficient funds to make the payment
+      vm.startPrank(payer);
+      vm.deal(payer, payAmount);
+      wFIL.deposit{value: payAmount}();
+      wFIL.approve(address(pool), payAmount);
+
+      // Attempt to pay the interest - we should revert as unauthorized since the payer is not the agent
+      SignedCredential memory payCred = issueGenericPayCred(agentId, payAmount);
+      vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
+      agent.pay(poolId, payCred);
+      vm.stopPrank();
+
+    }
+
     function testPayInterestOnly(uint256 borrowAmount, uint256 payAmount, uint256 rollFwdAmt) public {
       rollFwdAmt = bound(rollFwdAmt, 1, GetRoute.agentPolice(router).defaultWindow() - 1);
       borrowAmount = bound(borrowAmount, 1e18, stakeAmount);
