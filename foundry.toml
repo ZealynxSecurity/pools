@@ -35,6 +35,7 @@ remappings = [
   "deploy/=deploy/",
   "shim/=shim/FEVM/",
   "fevmate/=lib/fevmate/contracts/",
+  "glifmate/=lib/glifmate/src/",
   "@zondax/solidity-bignumber/=lib/filecoin-solidity/lib/solidity-bignumber/"
 ]
 optimizer_details.yul = false

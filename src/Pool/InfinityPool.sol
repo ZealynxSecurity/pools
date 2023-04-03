@@ -9,7 +9,7 @@ import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {Operatable} from "src/Auth/Operatable.sol";
+import {Ownable} from "src/Auth/Ownable.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
@@ -31,7 +31,7 @@ import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
-contract GenesisPool is IPool, Operatable {
+contract InfinityPool is IPool, Ownable {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
     using FilAddress for address;
@@ -131,14 +131,13 @@ contract GenesisPool is IPool, Operatable {
     // Everything else is accesible through the router (power token for example)
     constructor(
         address _owner,
-        address _operator,
         address _router,
         address _asset,
         address _rateModule,
         address _liquidStakingToken,
         uint256 _minimumLiquidity,
         uint256 _id
-    ) Operatable(_owner, _operator) {
+    ) Ownable(_owner) {
         router = _router;
         asset = IERC20(_asset);
         rateModule = IRateModule(_rateModule);
@@ -560,13 +559,13 @@ contract GenesisPool is IPool, Operatable {
                             ADMIN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function setRamp(IOffRamp _ramp) external onlyOwnerOperator {
+    function setRamp(IOffRamp _ramp) external onlyOwner {
         ramp = _ramp;
     }
 
     function decommissionPool(
         IPool newPool
-    ) public onlyPoolRegistry returns(uint256 borrowedAmount) {
+    ) external onlyPoolRegistry returns(uint256 borrowedAmount) {
         require(isShuttingDown, "POOL: Must be shutting down");
         require(newPool.id() == id, "POOL: New pool must have same ID");
         harvestFees(feesCollected);
@@ -575,25 +574,33 @@ contract GenesisPool is IPool, Operatable {
         borrowedAmount = totalBorrowed;
     }
 
-    function jumpStartTotalBorrowed(uint256 amount) public onlyPoolRegistry {
+    function jumpStartTotalBorrowed(uint256 amount) external onlyPoolRegistry {
         if(totalBorrowed != 0) {
             revert InvalidState();
         }
         totalBorrowed = amount;
     }
 
-    function setMinimumLiquidity(uint256 _minimumLiquidity) public onlyOwnerOperator {
+    function setMinimumLiquidity(uint256 _minimumLiquidity) external onlyOwner {
         minimumLiquidity = _minimumLiquidity;
     }
 
-    function shutDown() public onlyOwnerOperator {
+    function shutDown() external onlyOwner {
         isShuttingDown = true;
     }
 
-    function setRateModule(IRateModule _rateModule) public onlyOwnerOperator {
+    function setRateModule(IRateModule _rateModule) external onlyOwner {
         rateModule = _rateModule;
     }
 
+    /**
+     * @notice Transfers assets from the pre-stake contract to the pool, without minting new iFIL
+     * @param _preStake The address of the pre-stake contract
+     * @param _amount The amount of WFIL to transfer
+     */
+    function transferFromPreStake(address _preStake, uint256 _amount) external onlyOwner {
+        asset.transferFrom(_preStake, address(this), _amount);
+    }
 
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS

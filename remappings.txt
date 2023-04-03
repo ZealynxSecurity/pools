@@ -5,6 +5,7 @@ solmate/=lib/solmate/src/
 bytes-utils/=lib/solidity-bytes-utils/contracts/
 filecoin-solidity/=lib/filecoin-solidity/contracts/v0.8/
 fevmate/=lib/fevmate/contracts/
+glifmate/=lib/glifmate/src/
 src/=src/
 deploy/=deploy
 shim/=shim/Mock/

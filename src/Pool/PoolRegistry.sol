@@ -5,14 +5,14 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {IPoolDeployer} from "src/Types/Interfaces/IPoolDeployer.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
-import {Operatable} from "src/Auth/Operatable.sol";
+import {Ownable} from "src/Auth/Ownable.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
-contract PoolRegistry is IPoolRegistry, Operatable {
+contract PoolRegistry is IPoolRegistry, Ownable {
 
   error InvalidState();
 
@@ -38,9 +38,8 @@ contract PoolRegistry is IPoolRegistry, Operatable {
     uint256 _treasuryFeeRate,
     uint256 _feeThreshold,
     address _owner,
-    address _operator,
     address _router
-  ) Operatable(_owner, _operator) {
+  ) Ownable(_owner) {
     asset = _asset;
     treasuryFeeRate = _treasuryFeeRate;
     feeThreshold = _feeThreshold;
@@ -57,7 +56,7 @@ contract PoolRegistry is IPoolRegistry, Operatable {
    */
   function attachPool(
     IPool pool
-  ) external onlyOwnerOperator {
+  ) external onlyOwner {
     // add the pool to the list of all pools
     allPools.push(address(pool));
     // cache the new pool in storage
@@ -72,7 +71,7 @@ contract PoolRegistry is IPoolRegistry, Operatable {
    */
   function upgradePool(
     IPool newPool
-  ) external onlyOwnerOperator {
+  ) external onlyOwner {
     uint256 poolID = newPool.id();
     IPool oldPool = IPool(allPools[poolID]);
 
@@ -101,7 +100,7 @@ contract PoolRegistry is IPoolRegistry, Operatable {
   /**
    * @dev Sets the treasury fee rate
    */
-  function setTreasuryFeeRate(uint256 newFeeRate) external onlyOwnerOperator {
+  function setTreasuryFeeRate(uint256 newFeeRate) external onlyOwner {
     require(newFeeRate <= MAX_TREASURY_FEE, "Pool: Fee too high");
     treasuryFeeRate = newFeeRate;
   }
@@ -110,7 +109,7 @@ contract PoolRegistry is IPoolRegistry, Operatable {
    * @dev Sets the treasury fee threshold
    * The fee threshold is the amount of assets to accure in a Pool until transferring the fee to the treasury
    */
-  function setFeeThreshold(uint256 newThreshold) external onlyOwnerOperator {
+  function setFeeThreshold(uint256 newThreshold) external onlyOwner {
     feeThreshold = newThreshold;
   }
 

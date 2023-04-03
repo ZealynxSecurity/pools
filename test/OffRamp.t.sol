@@ -6,7 +6,7 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
-import {PoolToken} from "src/Pool/PoolToken.sol";
+import {PoolToken} from "shim/PoolToken.sol";
 import {console} from "forge-std/console.sol";
 import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 import {ROUTE_POOL_FACTORY} from "src/Constants/Routes.sol";

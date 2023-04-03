@@ -42,10 +42,10 @@ contract Deploy is Script {
         address minerRegistry = address(new MinerRegistry(router));
         address agentFactory = address(new AgentFactory(router));
         address agentPolice = address(
-            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router)
+            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, router)
         );
         address poolRegistry = address(
-            new PoolRegistry(IERC20(wFIL), 1e17, 0, deployerAddr, deployerAddr, router)
+            new PoolRegistry(IERC20(wFIL), 1e17, 0, deployerAddr, router)
         );
         address credParser = address(new CredParser());
         address agentDeployer = address(new AgentDeployer());

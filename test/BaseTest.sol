@@ -3,8 +3,9 @@ pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
 import "test/helpers/MockMiner.sol";
-import {GenesisPool} from "src/Pool/Genesis.sol";
-import {PoolToken} from "src/Pool/PoolToken.sol";
+import {PoolToken} from "shim/PoolToken.sol";
+import {WFIL} from "shim/WFIL.sol";
+import {InfinityPool} from "src/Pool/InfinityPool.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
@@ -15,7 +16,6 @@ import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {WFIL} from "shim/WFIL.sol";
 import {PoolRegistry} from "src/Pool/PoolRegistry.sol";
 import {Router} from "src/Router/Router.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
@@ -92,9 +92,9 @@ contract BaseTest is Test {
       address(wFIL),
       address(new MinerRegistry(router)),
       address(new AgentFactory(router)),
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router)),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, router)),
       // 1e17 = 10% treasury fee on yield
-      address(new PoolRegistry(IERC20(address(wFIL)), 1e17, 0, systemAdmin, systemAdmin, router)),
+      address(new PoolRegistry(IERC20(address(wFIL)), 1e17, 0, systemAdmin, router)),
       vcIssuer,
       credParser,
       address(new AgentDeployer())
@@ -358,14 +358,13 @@ contract BaseTest is Test {
 
   function createPool() internal returns (IPool pool) {
     IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
-    PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin, systemAdmin);
-    pool = IPool(new GenesisPool(
-      systemAdmin,
+    PoolToken liquidStakingToken = new PoolToken("Infinity Pool Staked FIL", "iFIL", systemAdmin);
+    pool = IPool(new InfinityPool(
       systemAdmin,
       router,
       address(wFIL),
       //
-      address(new RateModule(systemAdmin, systemAdmin, router, rateArray)),
+      address(new RateModule(systemAdmin, router, rateArray)),
       // no min liquidity for test pool
       address(liquidStakingToken),
       0,
@@ -579,7 +578,7 @@ contract BaseTest is Test {
 
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
     IPoolToken liquidStakingToken = pool.liquidStakingToken();
-    PoolToken iou = new PoolToken("IOU", "IOU",systemAdmin, systemAdmin);
+    PoolToken iou = new PoolToken("IOU", "IOU",systemAdmin);
     ramp = IOffRamp(new OffRamp(
       router,
       address(iou),

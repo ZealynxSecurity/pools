@@ -24,3 +24,6 @@
 [submodule "lib/fevmate"]
 	path = lib/fevmate
 	url = https://github.com/wadealexc/fevmate
+[submodule "lib/glifmate"]
+	path = lib/glifmate
+	url = https://github.com/glifio/glifmate

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity 0.8.17;
 
-import {Operatable} from "src/Auth/Operatable.sol";
+import {Ownable} from "src/Auth/Ownable.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {Account} from "src/Types/Structs/Account.sol";
@@ -9,7 +9,7 @@ import {Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.s
 import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
-contract RateModule is IRateModule, Operatable {
+contract RateModule is IRateModule, Ownable {
 
     using Credentials for VerifiableCredential;
 
@@ -34,10 +34,9 @@ contract RateModule is IRateModule, Operatable {
 
     constructor(
         address _owner,
-        address _operator,
         address _router,
         uint256[100] memory _rateLookup
-    ) Operatable(_owner, _operator) {
+    ) Ownable(_owner) {
         router = _router;
         credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
         rateLookup = _rateLookup;
@@ -92,23 +91,23 @@ contract RateModule is IRateModule, Operatable {
         ) <= maxDTI;
     }
 
-    function setMaxDTI(uint256 _maxDTI) external onlyOwnerOperator {
+    function setMaxDTI(uint256 _maxDTI) external onlyOwner {
         maxDTI = _maxDTI;
     }
 
-    function setMaxLTV(uint256 _maxLTV) external onlyOwnerOperator {
+    function setMaxLTV(uint256 _maxLTV) external onlyOwner {
         maxLTV = _maxLTV;
     }
 
-    function setMinGCRED(uint256 _minGCRED) external onlyOwnerOperator {
+    function setMinGCRED(uint256 _minGCRED) external onlyOwner {
         minGCRED = _minGCRED;
     }
 
-    function setRateLookup(uint256[100] memory _rateLookup) external onlyOwnerOperator {
+    function setRateLookup(uint256[100] memory _rateLookup) external onlyOwner {
         rateLookup = _rateLookup;
     }
 
-    function updateCredParser() external onlyOwnerOperator {
+    function updateCredParser() external onlyOwner {
         credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
     }
 

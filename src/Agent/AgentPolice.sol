@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {Operatable} from "src/Auth/Operatable.sol";
+import {Ownable} from "src/Auth/Ownable.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
@@ -23,7 +23,7 @@ import {BeneficiaryHelpers, AgentBeneficiary} from "src/Types/Structs/Beneficiar
 import {Roles} from "src/Constants/Roles.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 uint256 constant wad = 1e18;
-contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
+contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
 
   using AccountHelpers for Account;
   using FixedPointMathLib for uint256;
@@ -56,9 +56,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     string memory _version,
     uint256 _defaultWindow,
     address _owner,
-    address _operator,
     address _router
-  ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
+  ) VCVerifier(_name, _version, _router) Ownable(_owner) {
     defaultWindow = _defaultWindow;
     maxPoolsPerAgent = 10;
   }
@@ -109,7 +108,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `setAgentDefaulted` puts the agent in default permanently
    * @param agent The address of the agent to put in default
    */
-  function setAgentDefaulted(address agent) external onlyOwnerOperator onlyWhenBehindTargetEpoch(agent) {
+  function setAgentDefaulted(address agent) external onlyOwner onlyWhenBehindTargetEpoch(agent) {
     IAgent(agent).setInDefault();
     emit Defaulted(agent);
   }
@@ -121,7 +120,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function putAgentOnAdministration(
     address agent, address administration
   ) external
-    onlyOwnerOperator
+    onlyOwner
     onlyWhenBehindTargetEpoch(agent)
   {
     IAgent(agent).setAdministration(administration.normalize());
@@ -132,14 +131,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `rmAgentFromAdministration` removes the agent from administration
    * @param agent The address of the agent to remove from administration
    */
-  function rmAgentFromAdministration(address agent) external onlyOwnerOperator {
+  function rmAgentFromAdministration(address agent) external onlyOwner {
     if (_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) revert Unauthorized();
 
     IAgent(agent).setAdministration(address(0));
     emit OffAdministration(agent);
   }
 
-  function prepareMinerForLiquidation(address agent, address liquidator, uint64 miner) external onlyOwnerOperator {
+  function prepareMinerForLiquidation(address agent, address liquidator, uint64 miner) external onlyOwner {
     IAgent(agent).prepareMinerForLiquidation(miner, liquidator.normalize());
   }
 
@@ -151,7 +150,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     _writeOffPools(agentID, amount);
   }
 
-  function liquidatedAgent(address agent) external onlyOwnerOperator {
+  function liquidatedAgent(address agent) external onlyOwner {
     if (!IAgent(agent).defaulted()) revert Unauthorized();
 
     liquidated[IAgent(agent).id()] = true;
@@ -277,14 +276,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /**
    * @notice `setDefaultWindow` changes the default window epochs
    */
-  function setDefaultWindow(uint256 _defaultWindow) external onlyOwnerOperator {
+  function setDefaultWindow(uint256 _defaultWindow) external onlyOwner {
     defaultWindow = _defaultWindow;
   }
 
   /**
    * @notice `setMaxPoolsPerAgent` changes the maximum number of pools an agent can borrow from
    */
-  function setMaxPoolsPerAgent(uint256 _maxPoolsPerAgent) external onlyOwnerOperator {
+  function setMaxPoolsPerAgent(uint256 _maxPoolsPerAgent) external onlyOwner {
     maxPoolsPerAgent = _maxPoolsPerAgent;
   }
 

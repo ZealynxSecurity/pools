@@ -3,6 +3,7 @@ pragma solidity ^0.8.17;
 
 import "./BaseTest.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IInfinityPool} from "src/Types/Interfaces/IInfinityPool.sol";
 
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
@@ -110,11 +111,10 @@ contract PoolBasicSetupTest is BaseTest {
 
   function testCreatePool() public {
     IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
-    PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin, systemAdmin);
+    PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin);
     uint256 id = poolRegistry.allPoolsLength();
-    address rateModule = address(new RateModule(systemAdmin, systemAdmin, router, rateArray));
-    pool = IPool(new GenesisPool(
-      systemAdmin,
+    address rateModule = address(new RateModule(systemAdmin, router, rateArray));
+    pool = IPool(new InfinityPool(
       systemAdmin,
       router,
       address(wFIL),
@@ -539,7 +539,35 @@ contract PoolErrorBranches is PoolTestState {
     vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
     pool.mint(0, investor1);
   }
+}
 
+contract PoolPreStakeIntegrationTest is BaseTest {
+  address preStake = makeAddr("PRE_STAKE");
+
+  IInfinityPool pool;
+
+  function setUp() public {
+    pool = IInfinityPool(address(createPool()));
+  }
+
+  function testTransferFromPreStake(uint256 preStakeBal, uint256 transferFromAmt) public {
+    vm.assume(transferFromAmt < preStakeBal);
+    vm.deal(address(preStake), preStakeBal);
+
+    vm.startPrank(address(preStake));
+    wFIL.deposit{value: preStakeBal}();
+    wFIL.approve(address(pool), preStakeBal);
+    vm.stopPrank();
+
+    uint256 wFILPoolBal = wFIL.balanceOf(address(pool));
+    uint256 poolSharesIssued = pool.liquidStakingToken().totalSupply();
+
+    vm.startPrank(IAuth(address(pool)).owner());
+    pool.transferFromPreStake(preStake, transferFromAmt);
+
+    assertEq(wFIL.balanceOf(address(pool)), wFILPoolBal + transferFromAmt);
+    assertEq(pool.liquidStakingToken().totalSupply(), poolSharesIssued);
+  }
 }
 
 // // a value we use to test approximation of the cursor according to a window start/close
