@@ -33,6 +33,7 @@ import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {Account} from "src/Types/Structs/Account.sol";
+import {AgentBeneficiary, BeneficiaryHelpers} from "src/Types/Structs/Beneficiary.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
@@ -40,6 +41,7 @@ import {MinerHelper} from "shim/MinerHelper.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {EPOCHS_IN_WEEK, EPOCHS_IN_DAY,  EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
+import {errorSelector} from "./helpers/Utils.sol";
 
 import "src/Constants/Routes.sol";
 
@@ -50,6 +52,12 @@ struct StateSnapshot {
     uint256 agentPoolBorrowCount;
     uint256 accountEpochsPaid;
 }
+
+error Unauthorized();
+error InvalidParams();
+error InsufficientLiquidity();
+error InsufficientCollateral();
+error InvalidCredential();
 
 contract BaseTest is Test {
   using MinerHelper for uint64;
@@ -76,6 +84,7 @@ contract BaseTest is Test {
 
   string constant public VERIFIED_NAME = "glif.io";
   string constant public VERIFIED_VERSION = "1";
+  uint256 MAX_UINT256 = type(uint256).max;
 
   WFIL wFIL = new WFIL(systemAdmin);
   MockIDAddrStore idStore;
@@ -179,7 +188,7 @@ contract BaseTest is Test {
     return signCred(vc);
   }
 
-  function issueWithdrawCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
+  function issueWithdrawCred(uint256 agent, uint256 amount, AgentData memory agentData) internal returns (SignedCredential memory) {
     // roll forward so we don't get an identical credential that's already been used
     vm.roll(block.number + 1);
 
@@ -192,14 +201,17 @@ contract BaseTest is Test {
       Agent.withdraw.selector,
       // miner data irrelevant for a withdraw cred
       0,
-      //TODO: future PR
-      bytes("")
+      abi.encode(agentData)
     );
 
     return signCred(vc);
   }
 
-  function issueRemoveMinerCred(uint256 agent, uint64 miner) internal returns (SignedCredential memory) {
+  function issueRemoveMinerCred(
+    uint256 agent,
+    uint64 miner,
+    AgentData memory agentData
+  ) internal returns (SignedCredential memory) {
     // roll forward so we don't get an identical credential that's already been used
     vm.roll(block.number + 1);
 
@@ -208,11 +220,11 @@ contract BaseTest is Test {
       agent,
       block.number,
       block.number + 100,
-      1000,
+      0,
       Agent.removeMiner.selector,
       miner,
       // agent data irrelevant for an remove miner cred
-      bytes("")
+      abi.encode(agentData)
     );
 
     return signCred(vc);
@@ -261,7 +273,7 @@ contract BaseTest is Test {
     vm.roll(block.number + 1);
 
     AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount
+      // collateralValue => 2x the borrowAmount
       amount * 2,
       // good gcred score
       GCRED,
@@ -295,7 +307,7 @@ contract BaseTest is Test {
     // NOTE: since we don't pull this off the pool it could be out of sync - careful
     uint256 adjustedRate = _getAdjustedRate(GCRED);
     AgentData memory agentData = createAgentData(
-      // lockedFunds => 2x the borrowAmount
+      // collateralValue => 2x the borrowAmount
       amount * 2,
       // good gcred score
       GCRED,
@@ -323,17 +335,20 @@ contract BaseTest is Test {
   }
 
   function createAgentData(
-    uint256 lockedFunds,
+    uint256 collateralValue,
     uint256 gcred,
     uint256 expectedDailyRewards,
     uint256 principal,
     uint256 startEpoch
   ) internal pure returns (AgentData memory) {
+    // lockedFunds = collateralValue * 1.67 (such that CV = 60% of locked funds)
+    uint256 lockedFunds = collateralValue * 167 / 100;
+    // agent value = lockedFunds * 1.2 (such that locked funds = 83% of locked funds)
+    uint256 agentValue = lockedFunds * 120 / 100;
     return AgentData(
-      lockedFunds * 120 / 100,
+      agentValue,
       DEFAULT_BASE_RATE,
-      // collateralValue is 60% of lockedFunds
-      lockedFunds * 60 / 100,
+      collateralValue,
       // expectedDailyFaultPenalties
       0,
       expectedDailyRewards,
@@ -343,6 +358,21 @@ contract BaseTest is Test {
       10e18,
       principal,
       startEpoch
+    );
+  }
+
+  function emptyAgentData() internal pure returns (AgentData memory) {
+    return AgentData(
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
     );
   }
 
@@ -363,8 +393,7 @@ contract BaseTest is Test {
       systemAdmin,
       router,
       address(wFIL),
-      //
-      address(new RateModule(systemAdmin, router, rateArray)),
+      address(new RateModule(systemAdmin, router, rateArray, levels)),
       // no min liquidity for test pool
       address(liquidStakingToken),
       0,
@@ -576,6 +605,66 @@ contract BaseTest is Test {
     assertTrue(police.liquidated(agent.id()), "Agent should be liquidated");
   }
 
+  function configureBeneficiary(
+    IAgent agent,
+    address beneficiary,
+    uint256 expiration,
+    uint256 quota
+  ) internal {
+    changeBeneficiary(agent, beneficiary, expiration, quota);
+    address prankster = makeAddr("PRANKSTER");
+    vm.startPrank(prankster);
+    try GetRoute.agentPolice(router).approveAgentBeneficiary(agent.id()) {
+      assertTrue(false, "Should not be able to approve beneficiary without permission");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), BeneficiaryHelpers.Unauthorized.selector);
+    }
+    vm.stopPrank();
+
+    vm.startPrank(beneficiary);
+    GetRoute.agentPolice(router).approveAgentBeneficiary(agent.id());
+    vm.stopPrank();
+
+    AgentBeneficiary memory ab = agent.beneficiary();
+
+    assertEq(ab.proposed.beneficiary, address(0));
+    assertEq(ab.proposed.expiration, 0);
+    assertEq(ab.proposed.quota, 0);
+
+    assertEq(ab.active.beneficiary, beneficiary);
+    assertEq(ab.active.expiration, expiration);
+    assertEq(ab.active.quota, quota);
+  }
+
+  function changeBeneficiary(
+    IAgent agent,
+    address beneficiary,
+    uint256 expiration,
+    uint256 quota
+  ) internal {
+    address prankster = makeAddr("PRANKSTER");
+    vm.startPrank(prankster);
+    try agent.changeBeneficiary(beneficiary, expiration, quota) {
+      assertTrue(false, "Should not be able to change beneficiary without permission");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), Unauthorized.selector);
+    }
+    vm.stopPrank();
+    vm.startPrank(_agentOwner(agent));
+    agent.changeBeneficiary(beneficiary, expiration, quota);
+    vm.stopPrank();
+
+    AgentBeneficiary memory ab = agent.beneficiary();
+
+    assertEq(ab.proposed.beneficiary, beneficiary);
+    assertEq(ab.proposed.expiration, expiration);
+    assertEq(ab.proposed.quota, quota);
+
+    assertEq(ab.active.beneficiary, address(0));
+    assertEq(ab.active.expiration, 0);
+    assertEq(ab.active.quota, 0);
+  }
+
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
     IPoolToken liquidStakingToken = pool.liquidStakingToken();
     PoolToken iou = new PoolToken("IOU", "IOU",systemAdmin);
@@ -719,5 +808,20 @@ contract BaseTest is Test {
     1030454533953520000 / EPOCHS_IN_YEAR,
     1015113064615720000 / EPOCHS_IN_YEAR,
     1000000000000000000 / EPOCHS_IN_YEAR
+  ];
+
+  // used in the rate module
+  uint256[10] levels = [
+    // in prod, we don't set the 0th level to be max_uint, but we do this in testing to by default allow agents to borrow the max amount
+    MAX_UINT256,
+    MAX_UINT256 / 9,
+    MAX_UINT256 / 8,
+    MAX_UINT256 / 7,
+    MAX_UINT256 / 6,
+    MAX_UINT256 / 5,
+    MAX_UINT256 / 4,
+    MAX_UINT256 / 3,
+    MAX_UINT256 / 2,
+    MAX_UINT256
   ];
 }

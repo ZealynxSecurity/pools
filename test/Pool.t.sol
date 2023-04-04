@@ -113,7 +113,7 @@ contract PoolBasicSetupTest is BaseTest {
     IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
     PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin);
     uint256 id = poolRegistry.allPoolsLength();
-    address rateModule = address(new RateModule(systemAdmin, router, rateArray));
+    address rateModule = address(new RateModule(systemAdmin, router, rateArray, levels));
     pool = IPool(new InfinityPool(
       systemAdmin,
       router,
@@ -202,7 +202,7 @@ contract PoolGetRateTest is PoolTestState {
 }
 
 contract PoolIsOverLeveragedTest is PoolTestState {
-    function testIsOverLeveragedBasic() public {
+  function testIsOverLeveragedBasic() public {
     bool isApproved = pool.isApproved(createAccount(borrowAmount), vcBasic);
     assertTrue(isApproved);
   }
@@ -227,14 +227,14 @@ contract PoolIsOverLeveragedTest is PoolTestState {
     assertFalse(isApproved);
   }
 
-  function testIsOverLeveragedLTVErrorFuzz(uint256 borrowAmount, uint256 agentValue) public {
+  function testIsOverLeveragedLTVErrorFuzz(uint256 borrowAmount, uint256 collateralValue) public {
     borrowAmount = bound(borrowAmount, WAD, 1e22);
-    // Even for very low values of agentValue there shouldn't be issues
+    // Even for very low values of collateralValue there shouldn't be issues
     // If the agent value is less than 2x the borrow amount, we should be over leveraged
-    agentValue = bound(agentValue, 0, (borrowAmount * 2) - 1000);
+    collateralValue = bound(collateralValue, 0, (borrowAmount * 2) - 1000);
     AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount less dust
-      agentValue,
+      // collateralValue => 2x the borrowAmount less dust
+      collateralValue,
       gCredBasic,
       goodEDR,
       // principal = borrowAmount
@@ -247,19 +247,19 @@ contract PoolIsOverLeveragedTest is PoolTestState {
     assertFalse(isApproved);
   }
 
-  function testIsOverLeveragedDTIErrorBasic() public {
-    uint256 amount = WAD;
-    uint256 principle = amount * 2;
-    uint256 gCred = 80;
+  function testIsApprovedLTVError(uint256 principal, uint256 collateralValue) public {
+    principal = bound(principal, 1e18, 1e40);
+    // Even for very low values of agentValue there shouldn't be issues
+    // If the agent value is less than 2x the borrow amount, we should be over leveraged
+    collateralValue = bound(collateralValue, 0, principal);
+
     AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount
-      principle,
-      // good gcred score
-      gCred,
-      // bad EDR
-      (rateArray[gCred] * EPOCHS_IN_DAY * amount / 2) / WAD,
+      // collateralValue => 2x the borrowAmount less dust
+      collateralValue,
+      GCRED,
+      goodEDR,
       // principal = borrowAmount
-      amount,
+      borrowAmount,
       // no account yet (startEpoch)
       0
     );
@@ -268,19 +268,25 @@ contract PoolIsOverLeveragedTest is PoolTestState {
     assertFalse(isApproved);
   }
 
-  function testIsOverLeveragedDTIErrorFuzz(uint256 borrowAmount, uint256 agentValue, uint256 badEDR) public {
+  function testIsApprovedDTIError(uint256 principal, uint256 collateralValue, uint256 edr) public {
+    collateralValue = bound(collateralValue, 1e18, 1e40);
+    principal = bound(principal, 1e18, collateralValue);
+
+    uint256 adjustedRate = _getAdjustedRate(GCRED);
+    uint256 expectedDailyPayment = (principal * adjustedRate * EPOCHS_IN_DAY) / 1e18;
+  }
+
+  function testIsOverLeveragedDTIErrorFuzz(uint256 borrowAmount, uint256 collateralValue, uint256 badEDR) public {
     uint256 gCred = 80;
 
     borrowAmount = bound(borrowAmount, WAD, 1e22);
-    agentValue = bound(agentValue, borrowAmount * 2, 1e30);
+    collateralValue = bound(collateralValue, borrowAmount * 2, 1e30);
     uint256 badEDRUpper = ((rateArray[gCred] * EPOCHS_IN_DAY * borrowAmount) / WAD) -  DUST;
     badEDR = bound(badEDR, DUST, badEDRUpper);
     AgentData memory agentData = createAgentData(
-      // agentValue => 2x the borrowAmount
-      agentValue,
-      // good gcred score
-      gCred,
-      // good EDR
+      collateralValue,
+      GCRED,
+      // edr < expectedDailyPayment
       badEDR,
       // principal = borrowAmount
       borrowAmount,
@@ -329,7 +335,6 @@ contract PoolFeeTests is PoolTestState {
     // Some of these numbers are inconsistent - we should calculate this value
     // instead of getting it from the contract once the calculations are stable
     uint256 feesCollected = pool.feesCollected();
-    console.log("Fees Collected: %s", feesCollected);
     pool.harvestFees(feesCollected);
     assertEq(asset.balanceOf(treasury), feesCollected);
   }
@@ -446,7 +451,6 @@ contract Pool4626Tests is PoolTestState {
     vm.prank(address(investor1));
     pool.deposit(investor1);
   }
-
 }
 
 
@@ -479,6 +483,7 @@ contract PoolAdminTests is PoolTestState {
     pool.setMinimumLiquidity(amount);
     assertEq(pool.minimumLiquidity(), amount);
   }
+
   function testSetRateModule() public {
     IRateModule newRateModule = IRateModule(address(0x1));
     vm.prank(address(systemAdmin));
@@ -499,7 +504,6 @@ contract PoolAdminTests is PoolTestState {
     // Need to make payments to test fee assertions
 
   }
-
 }
 
 contract PoolErrorBranches is PoolTestState {
@@ -519,17 +523,20 @@ contract PoolErrorBranches is PoolTestState {
     assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when pool is shutting down");
   }
 
-  function testLiquidAssetsLessThanFees(uint256 borrowAmount, uint256 paymentAmount) public {
-    uint256 paymentAmount = bound(paymentAmount, WAD, pool.totalBorrowableAssets());
+  function testLiquidAssetsLessThanFees(
+    uint256 borrowAmount,
+    uint256 initialBorrow,
+    uint256 paymentAmt
+  ) public {
+    initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
+    paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
     assertGt(pool.getLiquidAssets(), 0, "Liquid assets should be greater than zero before pool is shut down");
     // Our first borrow is based on the payment amount to generate fees
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, paymentAmount));
-    // Roll foward enough that all payment is interest
-    // Once the math in Pay is fixed this should be posible to lower
-    vm.roll(block.number + 1000000000);
-    agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmount));
-    uint256 feesCollected = pool.feesCollected();
-    uint256 balance = asset.balanceOf(address(pool));
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, initialBorrow));
+    // Roll foward enough that at least _some_ payment is interest
+    vm.roll(block.number + GetRoute.agentPolice(router).defaultWindow() - 1);
+    agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmt));
+    // borrow the rest of the assets
     agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
     assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when pool is shutting down");
   }

@@ -2,11 +2,11 @@
 pragma solidity 0.8.17;
 
 import {Ownable} from "src/Auth/Ownable.sol";
+import {GetRoute} from "src/Router/GetRoute.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
 contract RateModule is IRateModule, Ownable {
@@ -15,17 +15,26 @@ contract RateModule is IRateModule, Ownable {
 
     uint256 constant WAD = 1e18;
 
-    /// @dev `maxDTI` is the maximum ratio of expected daily interest payments to expected daily rewards (1)
+    /// @dev `maxDTI` is the maximum ratio of expected daily interest payments to expected daily rewards
     uint256 public maxDTI = 0.5e18;
 
+    /// @dev `maxDTE` is the maximum ratio of principal to equity (principal / (agentValue - principal))
+    uint256 private maxDTE = 3e18;
+
     /// @dev `maxLTV` is the maximum ratio of principal to collateral
-    uint256 public maxLTV = 0.95e18;
+    uint256 public maxLTV = 1e18;
 
     /// @dev `minGCRED` is the minimum GCRED value for an Agent to be eligible for borrowing
     uint256 public minGCRED = 40;
 
     /// @dev `rateLookup` is a memoized GCRED => rateMultiplier lookup table. It sets the interest curve
     uint256[100] public rateLookup;
+
+    /// @dev `levels` is a leveling system that sets maximum borrow amounts on accounts
+    uint256[10] public levels;
+
+    /// @dev `accountLevel` is a mapping of agentID to level
+    mapping(uint256 => uint256) public accountLevel;
 
     /// @dev `credParser` is the cached cred parser
     address public credParser;
@@ -35,11 +44,13 @@ contract RateModule is IRateModule, Ownable {
     constructor(
         address _owner,
         address _router,
-        uint256[100] memory _rateLookup
+        uint256[100] memory _rateLookup,
+        uint256[10] memory _levels
     ) Ownable(_owner) {
         router = _router;
-        credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
+        credParser = address(GetRoute.credParser(router));
         rateLookup = _rateLookup;
+        levels = _levels;
     }
 
     function lookupRate(uint256 gcred) external view returns (uint256) {
@@ -68,18 +79,32 @@ contract RateModule is IRateModule, Ownable {
         Account memory account,
         VerifiableCredential memory vc
     ) external view returns (bool) {
-        // if you have nothing borrowed, you're good no matter what
+        // if you're behind on your payments, you're not approved
+        if (account.epochsPaid < block.number - GetRoute.agentPolice(router).defaultWindow()) {
+            return false;
+        }
+
+        // if you're attempting to borrow above your level limit, you're not approved
+        if (account.principal > levels[accountLevel[vc.subject]]) {
+            return false;
+        }
+
         uint256 totalPrincipal = vc.getPrincipal(credParser);
+        // if you have nothing borrowed, you're good no matter what
         if (totalPrincipal == 0) return true;
         // if you have bad GCRED, you're not approved
         uint256 gcred = vc.getGCRED(credParser);
         if (gcred < minGCRED) return false;
         // if you have no collateral, it's an automatic no
-        uint256 totalLockedFunds = vc.getLockedFunds(credParser);
-        if (totalLockedFunds == 0) return false;
+        uint256 collateralValue = vc.getCollateralValue(credParser);
+        if (collateralValue == 0) return false;
 
         // if LTV is greater than `maxLTV` (e18 denominated), we are over leveraged (can't mortgage more than the value of your home)
-        if (_computeLTV(totalPrincipal, totalLockedFunds) > maxLTV) {
+        if (_computeLTV(totalPrincipal, collateralValue) > maxLTV) {
+            return false;
+        }
+
+        if (_computeDTE(totalPrincipal, vc.getAgentValue(credParser)) > maxDTE) {
             return false;
         }
 
@@ -95,6 +120,10 @@ contract RateModule is IRateModule, Ownable {
         maxDTI = _maxDTI;
     }
 
+    function setMaxDTE(uint256 _maxDTE) external onlyOwner {
+        maxDTE = _maxDTE;
+    }
+
     function setMaxLTV(uint256 _maxLTV) external onlyOwner {
         maxLTV = _maxLTV;
     }
@@ -103,21 +132,33 @@ contract RateModule is IRateModule, Ownable {
         minGCRED = _minGCRED;
     }
 
-    function setRateLookup(uint256[100] memory _rateLookup) external onlyOwner {
+    function setRateLookup(uint256[100] calldata _rateLookup) external onlyOwner {
         rateLookup = _rateLookup;
     }
 
     function updateCredParser() external onlyOwner {
-        credParser = IRouter(router).getRoute(ROUTE_CRED_PARSER);
+        credParser = address(GetRoute.credParser(router));
+    }
+
+    function setLevels(uint256[10] calldata _levels) external onlyOwner {
+        levels = _levels;
+    }
+
+    function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external onlyOwner {
+        if (agentIDs.length != level.length) revert InvalidParams();
+        uint256 i = 0;
+        for (; i < agentIDs.length; i++) {
+          accountLevel[agentIDs[i]] = level[i];
+        }
     }
 
     /// @dev compute the loan to value, where value is locked funds
     function _computeLTV(
         uint256 totalPrincipal,
-        uint256 totalLockedFunds
-    ) internal view returns (uint256) {
+        uint256 collateralValue
+    ) internal pure returns (uint256) {
         // compute the loan to value
-        return totalPrincipal * WAD / totalLockedFunds;
+        return totalPrincipal * WAD / collateralValue;
     }
 
     /// @dev compute the DTI
@@ -126,7 +167,7 @@ contract RateModule is IRateModule, Ownable {
         uint256 rate,
         uint256 accountPrincipal,
         uint256 totalPrincipal
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         uint256 equityPercentage = (accountPrincipal * WAD) / totalPrincipal;
         // compute the % of EDR this pool can rely on
         uint256 weightedEDR = (equityPercentage * expectedDailyRewards) / WAD;
@@ -137,6 +178,20 @@ contract RateModule is IRateModule, Ownable {
         uint256 dailyRate = rate * EPOCHS_IN_DAY * accountPrincipal;
         // compute DTI
         return dailyRate / weightedEDR;
+    }
+
+    /// @dev compute the DTE
+    function _computeDTE(
+        uint256 principal,
+        uint256 agentTotalValue
+    ) internal pure returns (uint256) {
+        // since agentTotalValue includes borrowed funds (principal),
+        // agentTotalValue should always be greater than principal
+        // however, this could happen if the agent is severely slashed over long durations
+        // in this case, they're definitely over the maxDTE, regardless of what it's set to
+        if (agentTotalValue <= principal) return type(uint256).max;
+        // return DTE
+        return (principal * WAD) / (agentTotalValue - principal);
     }
 
     function _getRate(uint256 baseRate, uint256 gcred) internal view returns (uint256) {

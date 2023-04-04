@@ -26,9 +26,9 @@ contract MinerRegistryTest is BaseTest {
 
     address newOwner = makeAddr("NEW_OWNER");
     uint256 minerCount = registry.minersCount(agent.id());
-    SignedCredential memory rmMinerCred = issueRemoveMinerCred(agent.id(), miner2);
-    vm.startPrank(agentOwner);
-    agent.removeMiner(newOwner, rmMinerCred);
+    SignedCredential memory rmMinerCred = issueRemoveMinerCred(agent.id(), miner2, emptyAgentData());
+    vm.startPrank(address(agent));
+    registry.removeMiner(agent.id(), miner2);
     vm.stopPrank();
     assertTrue(registry.minerRegistered(agent.id(), miner1), "Miner 1 not removed");
     assertTrue(!registry.minerRegistered(agent.id(), miner2), "Miner 2 wrongly removed");

@@ -6,6 +6,7 @@ import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgentDeployer} from "src/Types/Interfaces/IAgentDeployer.sol";
 import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
@@ -24,6 +25,10 @@ library GetRoute {
 
   function poolRegistry(address router) internal view returns (IPoolRegistry) {
     return IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+  }
+
+  function credParser(address router) internal view returns (ICredentials) {
+    return ICredentials(IRouter(router).getRoute(ROUTE_CRED_PARSER));
   }
 
   function wFIL(address router) internal view returns (IWFIL) {

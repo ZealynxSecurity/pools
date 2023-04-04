@@ -83,6 +83,11 @@ contract Agent is IAgent, Operatable {
     _;
   }
 
+  modifier notPaused() {
+    if (GetRoute.agentPolice(router).paused()) revert Unauthorized();
+    _;
+  }
+
   constructor(
     address _router,
     uint256 _agentID,
@@ -167,14 +172,25 @@ contract Agent is IAgent, Operatable {
   )
     external
     onlyOwner
+    notPaused
     notOnAdministration
     notInDefault
     validateAndBurnCred(sc)
   {
+    IAgentPolice agentPolice = GetRoute.agentPolice(router);
+
+    uint256 additionalLiability = 0;
+
+    if (
+      agentPolice.isBeneficiaryActive(id)
+    ) {
+      AgentBeneficiary memory beneficiary = agentPolice.agentBeneficiary(id);
+      additionalLiability = beneficiary.active.quota - beneficiary.active.usedQuota;
+    }
+
+    agentPolice.confirmRmEquity(sc.vc, additionalLiability);
     // Remove the miner from the central registry
     GetRoute.minerRegistry(router).removeMiner(id, sc.vc.target);
-    // revert the transaction if any of the pools reject the removal
-    GetRoute.agentPolice(router).agentApproved(sc.vc);
     // change the owner address of the miner to the new miner owner
     sc.vc.target.changeOwnerAddress(newMinerOwner);
   }
@@ -253,7 +269,7 @@ contract Agent is IAgent, Operatable {
     address beneficiary,
     uint256 expiration,
     uint256 quota
-  ) external onlyOwner {
+  ) external onlyOwner notPaused {
     GetRoute.agentPolice(router).changeAgentBeneficiary(
       // the beneficiary address gets normalized in agent police to save on code size
       beneficiary,
@@ -296,6 +312,7 @@ contract Agent is IAgent, Operatable {
     address receiver,
     SignedCredential memory sc
   ) external
+    notPaused
     notInDefault
     notOnAdministration
     validateAndBurnCred(sc)
@@ -303,7 +320,7 @@ contract Agent is IAgent, Operatable {
     IAgentPolice agentPolice = GetRoute.agentPolice(router);
     uint256 sendAmount = sc.vc.value;
     // Regardless of sender if the agent is overleveraged they cannot withdraw
-    agentPolice.agentApproved(sc.vc);
+    agentPolice.confirmRmEquity(sc.vc, 0);
     if (
       agentPolice.isBeneficiaryActive(id)
     ) {
@@ -350,6 +367,7 @@ contract Agent is IAgent, Operatable {
   function pushFunds(SignedCredential memory sc)
     external
     onlyOwnerOperator
+    notPaused
     notOnAdministration
     notInDefault
     validateAndBurnCred(sc)
@@ -374,6 +392,7 @@ contract Agent is IAgent, Operatable {
     SignedCredential memory sc
   ) external
     onlyOwnerOperator
+    notPaused
     notInDefault
     validateAndBurnCred(sc)
   {

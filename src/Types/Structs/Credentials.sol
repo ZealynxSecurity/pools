@@ -97,6 +97,13 @@ library Credentials {
     return ICredentials(credParser).getAgentValue(vc.claim);
   }
 
+  function getCollateralValue(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return ICredentials(credParser).getCollateralValue(vc.claim);
+  }
+
   function getGCRED(
     VerifiableCredential memory vc,
     address credParser

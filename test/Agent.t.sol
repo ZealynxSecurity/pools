@@ -31,11 +31,7 @@ import {errorSelector} from "test/helpers/Utils.sol";
 import "src/Constants/FuncSigs.sol";
 
 import "./BaseTest.sol";
-error Unauthorized();
-error InvalidParams();
-error InsufficientLiquidity();
-error InsufficientCollateral();
-error InvalidCredential();
+
 contract AgentBasicTest is BaseTest {
     error InvalidCredential();
     error InvalidParams();
@@ -245,26 +241,491 @@ contract AgentPushPullFundsTest is BaseTest {
     }
 }
 
-contract AgentWithdrawTest is BaseTest {
-  function testWithdrawWithNoLoans(uint256 withdrawAmount) internal {}
+contract AgentRmEquityTest is BaseTest {
 
-  function testWithdrawWithLoans(uint256 withdrawAmount) internal {}
+    using Credentials for VerifiableCredential;
+    using AccountHelpers for Account;
 
-  function testWithdrawIntoUnapprovedLTV(uint256 withdrawAmount) internal {}
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner = makeAddr("MINER_OWNER");
+    uint256 stakeAmount = 1000e18;
 
-  function testWithdrawIntoUnapprovedDTI(uint256 withdrawAmount) internal {}
+    IAgent agent;
+    uint64 miner;
+    IPool pool;
 
-  function testWithdrawMoreThanLiquid(uint256 withdrawAmount) internal {}
-}
+    function setUp() public {
+      pool = createAndFundPool(stakeAmount, investor1);
+      (agent, miner) = configureAgent(minerOwner);
+    }
 
-contract AgentRmMinerTest is BaseTest {
-  function testRmMinerWithNoLoans() internal {}
+    // no matter what statistics come in the credential, if no loans, can withdraw
+    function testWithdrawWithNoLoans(
+      uint256 bal,
+      uint256 withdrawAmount
+    ) public {
+      vm.assume(bal >= withdrawAmount);
 
-  function testRmMinerWithLoans() internal {}
+      vm.deal(address(agent), withdrawAmount);
 
-  function testRmMinerIntoUnapprovedLTV() internal {}
+      (
+        address receiver,
+        SignedCredential memory withdrawCred
+      ) = customWithdrawCred(
+        // balance doesn't matter in this test
+        bal,
+        // withdraw amount doesn't matter in this test
+        withdrawAmount,
+        // principal has to be 0 for this test (no loans)
+        0,
+        // agent value
+        bal,
+        // collateral value
+        bal,
+        // EDR does not matter for this test
+        0
+      );
 
-  function testRmMinerIntoUnapprovedDTI() internal {}
+      withdrawAndAssertSuccess(
+        receiver,
+        withdrawAmount,
+        withdrawCred
+      );
+    }
+
+    /// @dev this test only checks against the AgentPolice DTE check, it does not check against the pool's checks
+    function testWithdrawWithOutstandingPrincipal(
+      uint256 bal,
+      uint256 withdrawAmount,
+      uint256 principal,
+      uint256 agentValue
+    ) public {
+      bal = bound(bal, DUST, MAX_FIL);
+      withdrawAmount = bound(withdrawAmount, 0, bal - DUST);
+      principal = bound(principal, WAD, MAX_FIL);
+      // agentValue includes principal, so it should never be less than principal
+      agentValue = bound(agentValue, principal, MAX_FIL);
+
+      (
+        address receiver,
+        SignedCredential memory withdrawCred
+      ) = customWithdrawCred(
+        bal,
+        withdrawAmount,
+        principal,
+        agentValue,
+        agentValue / 10,
+        // EDR does not matter for this test
+        WAD
+      );
+
+      uint256 preAgentBalance = address(agent).balance;
+
+      uint256 equity = agentValue - principal;
+
+      uint256 maxPoliceDTE = GetRoute.agentPolice(router).maxDTE();
+
+      if (principal > (equity * maxPoliceDTE / WAD)) {
+        // DTE > 1 -> no go
+        withdrawAndAssertRevert(
+          receiver,
+          withdrawCred,
+          AgentPolice.AgentStateRejected.selector
+        );
+      } else {
+        // DTE <= 1
+        withdrawAndAssertSuccess(
+          receiver,
+          withdrawAmount,
+          withdrawCred
+        );
+      }
+    }
+
+    function testWithdrawIntoUnapprovedLTV(uint256 principal, uint256 collateralValue) public {
+      collateralValue = bound(collateralValue, WAD, MAX_FIL);
+      principal = bound(principal, collateralValue + DUST, MAX_FIL);
+
+      // create an account to act as if a pool was created and the agent borrowed
+      Account memory account = createAccount(principal);
+
+      // set the account on the router and on the agent police
+      vm.startPrank(address(pool));
+      IRouter(router).setAccount(agent.id(), pool.id(), account);
+      GetRoute.agentPolice(router).addPoolToList(agent.id(), pool.id());
+      vm.stopPrank();
+
+      // create a withdraw credential
+      (
+        address receiver,
+        SignedCredential memory withdrawCred
+      ) = customWithdrawCred(
+        // balance doesn't matter in this test
+        100e18,
+        // withdraw amount doesn't matter in this test
+        1e18,
+        principal,
+        collateralValue * 2,
+        collateralValue,
+        // EDR does not matter for this test
+        WAD
+      );
+
+      withdrawAndAssertRevert(
+        receiver,
+        withdrawCred,
+        AgentPolice.AgentStateRejected.selector
+      );
+    }
+
+    function testWithdrawIntoUnapprovedDTI(uint256 principal, uint256 badEDR) public {
+      // in this test, we want EDR to be > maxDTI, so we set the principal to be
+      principal = bound(principal, WAD, MAX_FIL);
+      uint256 rate = _getAdjustedRate(GCRED);
+
+      uint256 badEDRUpper = (((rate * EPOCHS_IN_DAY * principal) / WAD) - DUST) / 6;
+      badEDR = bound(badEDR, DUST, badEDRUpper);
+      // collateral needs to result in LTV < 1
+      uint256 collateralValue = principal * 3;
+      // agent value needs to result in DTE < 1
+      uint256 agentValue = collateralValue * 3;
+
+      (
+        address receiver,
+        SignedCredential memory withdrawCred
+      ) = customWithdrawCred(
+        // balance doesn't matter in this test
+        100e18,
+        // withdraw amount doesn't matter in this test
+        1e18,
+        principal,
+        // agent value needs to result in LTV < 1
+        agentValue,
+        // collateral value
+        collateralValue,
+        // EDR does not matter for this test
+        badEDR
+      );
+
+      // create an account to act as if a pool was created and the agent borrowed
+      Account memory account = createAccount(principal);
+
+      // set the account on the router and on the agent police
+      vm.startPrank(address(pool));
+      IRouter(router).setAccount(agent.id(), pool.id(), account);
+      GetRoute.agentPolice(router).addPoolToList(agent.id(), pool.id());
+      vm.stopPrank();
+
+      withdrawAndAssertRevert(
+        receiver,
+        withdrawCred,
+        AgentPolice.AgentStateRejected.selector
+      );
+    }
+
+    function testWithdrawMoreThanLiquid(
+      uint256 bal,
+      uint256 withdrawAmount,
+      uint256 principal,
+      uint256 agentValue
+    ) public {
+      bal = bound(bal, 0, MAX_FIL);
+      withdrawAmount = bound(withdrawAmount, bal + 1, MAX_FIL);
+
+      principal = bound(principal, WAD, MAX_FIL / 3);
+      // ensure DTE < 1
+      agentValue = bound(agentValue, principal * 3, MAX_FIL);
+
+      (
+        address receiver,
+        SignedCredential memory withdrawCred
+       ) = customWithdrawCred(
+        bal,
+        withdrawAmount,
+        principal,
+        agentValue,
+        agentValue / 10,
+        // great EDR
+        WAD
+      );
+
+      withdrawAndAssertRevert(
+        receiver,
+        withdrawCred,
+        Agent.InsufficientFunds.selector
+      );
+    }
+
+    function customWithdrawCred(
+      uint256 bal,
+      uint256 withdrawAmount,
+      uint256 principal,
+      uint256 agentValue,
+      uint256 collateralValue,
+      uint256 edr
+    ) internal returns (
+      address receiver,
+      SignedCredential memory sc
+    ) {
+      receiver = makeAddr("RECEIVER");
+      vm.deal(address(agent), bal);
+
+      AgentData memory agentData = AgentData(
+        agentValue,
+        DEFAULT_BASE_RATE,
+        collateralValue,
+        // no expected daily faults
+        0,
+        edr,
+        GCRED,
+        // locked funds are 50% of the agent's value
+        agentValue / 50,
+        10e18,
+        principal,
+        0
+      );
+
+      sc = issueWithdrawCred(
+        agent.id(),
+        withdrawAmount,
+        agentData
+      );
+    }
+
+    // no matter what statistics come in the credential, if no loans, can remove miner
+    function testRemoveMinerWithNoLoans() public {
+      (
+        address newMinerOwner,
+        SignedCredential memory removeMinerCred
+      ) = customRemoveMinerCred(
+        // balance doesn't matter in this test
+        miner,
+        // principal has to be 0 for this test (no loans)
+        0,
+        // agent value does not matter for this test
+        DUST,
+        // collateral value does not matter for this test
+        DUST,
+        // EDR does not matter for this test
+        0
+      );
+
+      removeMinerAndAssertSuccess(
+        miner,
+        newMinerOwner,
+        removeMinerCred
+      );
+    }
+
+    /// @dev this test only checks against the AgentPolice DTE check, it does not check against the pool's checks
+    function testRemoveMinerWithOutstandingPrincipal(
+      uint256 principal,
+      uint256 agentValue
+    ) public {
+      principal = bound(principal, WAD, MAX_FIL);
+      // agentValue includes principal, so it should never be less than principal
+      agentValue = bound(agentValue, principal, MAX_FIL);
+
+      (
+        address newMinerOwner,
+        SignedCredential memory removeMinerCred
+      ) = customRemoveMinerCred(
+        // balance doesn't matter in this test
+        miner,
+        principal,
+        agentValue,
+        // collateral value
+        agentValue / 10,
+        // EDR does not matter for this test
+        WAD
+      );
+
+      uint256 equity = agentValue - principal;
+
+      if (principal > equity) {
+        // DTE > 1 -> no go
+        removeMinerAndAssertRevert(
+          miner,
+          newMinerOwner,
+          removeMinerCred,
+          AgentPolice.AgentStateRejected.selector
+        );
+      } else {
+        // DTE <= 1
+        removeMinerAndAssertSuccess(
+          miner,
+          newMinerOwner,
+          removeMinerCred
+        );
+      }
+    }
+
+    function testRemoveMinerWithActiveBeneficiary(
+      uint256 principal,
+      uint256 agentValue,
+      uint256 expiration,
+      uint256 quota,
+      uint256 withdrawAmount
+    ) public {
+      address beneficiary = makeAddr("BENNY");
+
+      principal = bound(principal, WAD, MAX_FIL);
+      // agentValue includes principal, so it should never be less than principal
+      agentValue = bound(agentValue, principal, MAX_FIL);
+      // make sure the beneficiary is active
+      expiration = bound(expiration, block.number + 100000, type(uint256).max);
+      quota = bound(quota, WAD, MAX_FIL);
+      // ensure we have some unused quota left
+      withdrawAmount = bound(withdrawAmount, 0, DUST);
+      // set up benny
+      configureBeneficiary(agent, beneficiary, expiration, quota);
+
+      vm.assume(beneficiary != address(0));
+      vm.deal(address(agent), withdrawAmount);
+      // take some money out of the agent to increase quota
+      vm.startPrank(beneficiary);
+      agent.withdraw(
+        beneficiary,
+        issueWithdrawCred(agent.id(), withdrawAmount, emptyAgentData())
+      );
+      vm.stopPrank();
+
+      (
+        address newMinerOwner,
+        SignedCredential memory removeMinerCred
+      ) = customRemoveMinerCred(
+        // balance doesn't matter in this test
+        miner,
+        principal,
+        agentValue,
+        // collateral value
+        agentValue / 10,
+        // EDR does not matter for this test
+        WAD
+      );
+
+      AgentBeneficiary memory benny = GetRoute.agentPolice(router).agentBeneficiary(agent.id());
+
+      uint256 unused = benny.active.quota - benny.active.usedQuota;
+      uint256 equity = agentValue > principal
+        ? agentValue - principal
+        : 0;
+      // DTE (including additional beneficiary liability) > 1
+      if (principal + unused > (equity * GetRoute.agentPolice(router).maxDTE()) / WAD) {
+        // DTE > 1 -> no go
+        removeMinerAndAssertRevert(
+          miner,
+          newMinerOwner,
+          removeMinerCred,
+          AgentPolice.AgentStateRejected.selector
+        );
+      } else {
+        // DTE <= 1
+        removeMinerAndAssertSuccess(
+          miner,
+          newMinerOwner,
+          removeMinerCred
+        );
+      }
+    }
+
+    function customRemoveMinerCred(
+      uint64 miner,
+      uint256 principal,
+      uint256 agentValue,
+      uint256 collateralValue,
+      uint256 edr
+    ) internal returns (
+      address newMinerOwner,
+      SignedCredential memory rmMinerCred
+    ) {
+      newMinerOwner = makeAddr("NEW_MINER_OWNER");
+
+      AgentData memory agentData = AgentData(
+        agentValue,
+        DEFAULT_BASE_RATE,
+        collateralValue,
+        // no expected daily faults
+        0,
+        edr,
+        GCRED,
+        // locked funds are 50% of the agent's value
+        agentValue / 50,
+        10e18,
+        principal,
+        0
+      );
+
+      rmMinerCred = issueRemoveMinerCred(
+        agent.id(),
+        miner,
+        agentData
+      );
+    }
+
+    function withdrawAndAssertSuccess(
+      address receiver,
+      uint256 withdrawAmount,
+      SignedCredential memory withdrawCred
+    ) internal {
+      uint256 preAgentLiquidFunds = agent.liquidAssets();
+
+      vm.startPrank(minerOwner);
+      agent.withdraw(receiver, withdrawCred);
+      vm.stopPrank();
+
+      assertEq(agent.liquidAssets(), preAgentLiquidFunds - withdrawAmount);
+      assertEq(receiver.balance, withdrawAmount);
+    }
+
+    function withdrawAndAssertRevert(
+      address receiver,
+      SignedCredential memory withdrawCred,
+      bytes4 errorSelector
+    ) internal {
+      uint256 preAgentLiquidFunds = agent.liquidAssets();
+      // withdraw
+      vm.startPrank(minerOwner);
+      vm.expectRevert(abi.encodeWithSelector(errorSelector));
+      agent.withdraw(receiver, withdrawCred);
+      vm.stopPrank();
+
+      assertEq(
+        agent.liquidAssets(),
+        preAgentLiquidFunds,
+        "No funds should have been withdrawn"
+      );
+    }
+
+    function removeMinerAndAssertSuccess(
+      uint64 removedMiner,
+      address newMinerOwner,
+      SignedCredential memory rmMinerCred
+    ) internal {
+      vm.startPrank(minerOwner);
+      agent.removeMiner(newMinerOwner, rmMinerCred);
+      vm.stopPrank();
+
+      assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 0, "Agent should have no miners registered");
+      assertFalse(GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner), "Miner should not be registered after removing");
+      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), newMinerOwner, "Miner should have new propsed owner");
+    }
+
+    function removeMinerAndAssertRevert(
+      uint64 removedMiner,
+      address newMinerOwner,
+      SignedCredential memory rmMinerCred,
+      bytes4 errorSelector
+    ) internal {
+      vm.startPrank(minerOwner);
+      vm.expectRevert(abi.encodeWithSelector(errorSelector));
+      agent.removeMiner(newMinerOwner, rmMinerCred);
+      vm.stopPrank();
+
+      assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 1, "Agent should have 1 miner registered");
+      assertTrue(GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner), "Miner should be registered");
+      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), address(0), "Miner should not have new propsed owner");
+    }
 }
 
 contract AgentBorrowingTest is BaseTest {
@@ -302,12 +763,12 @@ contract AgentBorrowingTest is BaseTest {
 
       borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
       // Since we've already borrowed, we pretend the SP locks substantially more funds
-      uint256 lockedFunds = borrowAmount * 4;
+      uint256 collateralValue = borrowAmount * 4;
 
       uint256 adjustedRate = rateArray[GCRED] * DEFAULT_BASE_RATE / 1e18;
 
       AgentData memory agentData = createAgentData(
-        lockedFunds,
+        collateralValue,
         GCRED,
         borrowCred.vc.getExpectedDailyRewards(credParser),
         // principal = borrowAmount * 2 (second time borrowing)
@@ -1426,7 +1887,7 @@ contract AgentBeneficiaryTest is BaseTest {
     uint256 quota,
     uint256 expiration
   ) public {
-    changeBeneficiary(beneficiary, quota, expiration);
+    changeBeneficiary(agent, beneficiary, quota, expiration);
   }
 
   function testAcceptBeneficiary(
@@ -1434,7 +1895,7 @@ contract AgentBeneficiaryTest is BaseTest {
     uint256 expiration,
     uint256 quota
   ) public {
-    configureBeneficiary(beneficiary, expiration, quota);
+    configureBeneficiary(agent, beneficiary, expiration, quota);
   }
 
   function testWithdrawalBadSender(
@@ -1448,7 +1909,7 @@ contract AgentBeneficiaryTest is BaseTest {
     vm.deal(address(agent), balance);
     vm.assume(recipient != ownerAddr);
     vm.startPrank(recipient);
-    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount);
+    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount, emptyAgentData());
     vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
     agent.withdraw(recipient, sc);
   }
@@ -1466,7 +1927,7 @@ contract AgentBeneficiaryTest is BaseTest {
     quota = bound(quota, DUST, type(uint256).max);
     address beneficiary = makeAddr(beneficiarySeed);
     address recipient = makeAddr(receipientSeed);
-    configureBeneficiary(beneficiary, expiration, quota);
+    configureBeneficiary(agent, beneficiary, expiration, quota);
 
     balance = bound(balance, withdrawAmount, type(uint256).max);
 
@@ -1474,7 +1935,7 @@ contract AgentBeneficiaryTest is BaseTest {
     vm.deal(address(agent), balance);
 
     vm.startPrank(beneficiary);
-    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount);
+    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount, emptyAgentData());
     agent.withdraw(recipient, sc);
     vm.stopPrank();
 
@@ -1486,7 +1947,7 @@ contract AgentBeneficiaryTest is BaseTest {
     if(withdrawAmount > quota) {
       vm.startPrank(ownerAddr);
       uint256 ownerWithdraw = withdrawAmount - quota;
-      sc = issueWithdrawCred(agent.id(), ownerWithdraw);
+      sc = issueWithdrawCred(agent.id(), ownerWithdraw, emptyAgentData());
       agent.withdraw(recipient, sc);
       assertEq(agent.beneficiary().active.usedQuota, quota, "used quota");
     }
@@ -1506,7 +1967,7 @@ contract AgentBeneficiaryTest is BaseTest {
     vm.deal(address(agent), balance);
 
     vm.startPrank(ownerAddr);
-    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount);
+    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount, emptyAgentData());
     agent.withdraw(recipient, sc);
 
     assertEq(address(recipient).balance - balanceBefore, withdrawAmount);
@@ -1527,13 +1988,13 @@ contract AgentBeneficiaryTest is BaseTest {
     address beneficiary = makeAddr(beneficiarySeed);
     address recipient = makeAddr(receipientSeed);
     vm.assume(beneficiary != recipient);
-    configureBeneficiary(beneficiary, expiration, quota);
+    configureBeneficiary(agent, beneficiary, expiration, quota);
     balance = bound(balance, withdrawAmount, type(uint256).max);
     uint256 balanceBefore = address(beneficiary).balance;
     vm.deal(address(agent), balance);
 
     vm.startPrank(ownerAddr);
-    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount);
+    SignedCredential memory sc = issueWithdrawCred(agent.id(), withdrawAmount, emptyAgentData());
     vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
     agent.withdraw(recipient, sc);
     agent.withdraw(beneficiary, sc);
@@ -1541,64 +2002,5 @@ contract AgentBeneficiaryTest is BaseTest {
     uint256 withdrawnAmount = withdrawAmount > quota ? quota : withdrawAmount;
     assertEq(address(beneficiary).balance - balanceBefore, withdrawnAmount);
     assertEq(balance - address(agent).balance, withdrawnAmount);
-  }
-
-
-  function configureBeneficiary(
-    address beneficiary,
-    uint256 expiration,
-    uint256 quota
-  ) internal {
-    changeBeneficiary(beneficiary, expiration, quota);
-    address prankster = makeAddr("PRANKSTER");
-    vm.startPrank(prankster);
-    try GetRoute.agentPolice(router).approveAgentBeneficiary(agent.id()) {
-      assertTrue(false, "Should not be able to approve beneficiary without permission");
-    } catch (bytes memory e) {
-      assertEq(errorSelector(e), BeneficiaryHelpers.Unauthorized.selector);
-    }
-    vm.stopPrank();
-
-    vm.startPrank(beneficiary);
-    GetRoute.agentPolice(router).approveAgentBeneficiary(agent.id());
-    vm.stopPrank();
-
-    AgentBeneficiary memory ab = agent.beneficiary();
-
-    assertEq(ab.proposed.beneficiary, address(0));
-    assertEq(ab.proposed.expiration, 0);
-    assertEq(ab.proposed.quota, 0);
-
-    assertEq(ab.active.beneficiary, beneficiary);
-    assertEq(ab.active.expiration, expiration);
-    assertEq(ab.active.quota, quota);
-  }
-
-  function changeBeneficiary(
-    address beneficiary,
-    uint256 expiration,
-    uint256 quota
-  ) internal {
-    address prankster = makeAddr("PRANKSTER");
-    vm.startPrank(prankster);
-    try agent.changeBeneficiary(beneficiary, expiration, quota) {
-      assertTrue(false, "Should not be able to change beneficiary without permission");
-    } catch (bytes memory e) {
-      assertEq(errorSelector(e), Unauthorized.selector);
-    }
-    vm.stopPrank();
-    vm.startPrank(ownerAddr);
-    agent.changeBeneficiary(beneficiary, expiration, quota);
-    vm.stopPrank();
-
-    AgentBeneficiary memory ab = agent.beneficiary();
-
-    assertEq(ab.proposed.beneficiary, beneficiary);
-    assertEq(ab.proposed.expiration, expiration);
-    assertEq(ab.proposed.quota, quota);
-
-    assertEq(ab.active.beneficiary, address(0));
-    assertEq(ab.active.expiration, 0);
-    assertEq(ab.active.quota, 0);
   }
 }

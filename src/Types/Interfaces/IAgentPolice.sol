@@ -30,6 +30,10 @@ interface IAgentPolice {
 
   function liquidated(uint256 agentID) external view returns (bool);
 
+  function paused() external view returns (bool);
+
+  function maxDTE() external view returns (uint256);
+
   /*//////////////////////////////////////////////
                     VC HANDLING
   //////////////////////////////////////////////*/
@@ -64,6 +68,11 @@ interface IAgentPolice {
 
   function liquidatedAgent(address agentID) external;
 
+  function confirmRmEquity(
+    VerifiableCredential memory vc,
+    uint256 additionalLiability
+  ) external view;
+
   /*//////////////////////////////////////////////
                     BENEFICIARIES
   //////////////////////////////////////////////*/
@@ -95,4 +104,8 @@ interface IAgentPolice {
   //////////////////////////////////////////////*/
 
   function setDefaultWindow(uint256 defaultWindow) external;
+
+  function pause() external;
+
+  function resume() external;
 }

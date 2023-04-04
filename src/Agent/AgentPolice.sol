@@ -8,6 +8,7 @@ import {Ownable} from "src/Auth/Ownable.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
+import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
@@ -33,11 +34,20 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
 
   error AgentStateRejected();
 
+  uint256 constant WAD = 1e18;
+
   /// @notice `defaultLookback` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
   uint256 public defaultWindow;
 
   /// @notice `maxPoolsPoerAgent`
   uint256 public maxPoolsPerAgent;
+
+  /// @notice `maxDTE` is the maximum amount of principal to equity ratio before withdrawals are prohibited
+  /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
+  uint256 public maxDTE = 1e18;
+
+  /// @notice `paused` is a flag that determines whether the protocol is paused
+  bool public paused = false;
 
   /// @notice `_liquidated` maps agentID to whether the liquidation process has been completed
   mapping(uint256 => bool) public liquidated;
@@ -269,6 +279,36 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     _agentBeneficiaries[agentID] = beneficiary;
   }
 
+  function confirmRmEquity(
+    VerifiableCredential memory vc,
+    uint256 additionalLiability
+  ) external view {
+    // check to ensure we can withdraw from this pool
+    _agentApproved(vc);
+    // check to ensure the withdrawal does not bring us over maxDTE
+    address credParser = address(GetRoute.credParser(router));
+    // check to make sure the after the withdrawal, the DTE is under max
+    // the additionalLiability is used when an Agent wants to remove a miner
+    // but an active beneficiary is set
+    uint256 principal = vc.getPrincipal(credParser);
+    // nothing borrowed, so DTE is 0, good to go!
+    if (principal == 0) return;
+
+    uint256 agentTotalValue = vc.getAgentValue(credParser);
+    // since agentTotalValue includes borrowed funds (principal),
+    // agentTotalValue should always be greater than principal
+    // however, this could happen if the agent is severely slashed over long durations
+    // in this case, they're definitely over the maxDTE, regardless of what it's set to
+    if (agentTotalValue <= principal) {
+      revert AgentStateRejected();
+    }
+
+    // if the DTE is greater than maxDTE, revert
+    if (((principal + additionalLiability) * WAD) / (agentTotalValue - principal) > maxDTE) {
+      revert AgentStateRejected();
+    }
+  }
+
   /*//////////////////////////////////////////////
                   ADMIN CONTROLS
   //////////////////////////////////////////////*/
@@ -285,6 +325,21 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
    */
   function setMaxPoolsPerAgent(uint256 _maxPoolsPerAgent) external onlyOwner {
     maxPoolsPerAgent = _maxPoolsPerAgent;
+  }
+
+  /**
+   * @notice `setMaxDTE` sets the maximum DTE for withdrawals and removing miners
+   */
+  function setMaxDTE(uint256 _maxDTE) external onlyOwner {
+    maxDTE = _maxDTE;
+  }
+
+  function pause() external onlyOwner {
+    paused = true;
+  }
+
+  function resume() external onlyOwner {
+    paused = false;
   }
 
   /*//////////////////////////////////////////////
