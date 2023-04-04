@@ -575,6 +575,60 @@ contract AgentPayTest is BaseTest {
     }
 }
 
+
+contract AgentPoolsTest is BaseTest {
+  using Credentials for VerifiableCredential;
+  using AccountHelpers for Account;
+
+  address investor1 = makeAddr("INVESTOR_1");
+  address minerOwner = makeAddr("MINER_OWNER");
+  uint256 stakeAmount = 1000e18;
+
+  IAgent agent;
+  uint64 miner;
+  IPool pool;
+
+  function setUp() public {
+    // We only need a single agent instance across all pools
+    IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
+    agent = IAgent(agentFactory.create(minerOwner, minerOwner));
+  }
+  
+  function testCreateRemoveMultiplePools(uint256 poolCount, uint256 totalBorrow) public {
+    // NOTE: This has been tested up to 1000 but it takes a very long time to run
+    poolCount = bound(poolCount, 1, 10);
+    totalBorrow = bound(totalBorrow, WAD * poolCount, stakeAmount);
+    uint256 borrowPerPool = totalBorrow / poolCount;
+    uint256 borrowRemainder = totalBorrow % poolCount;
+    IPool[] memory pools = new IPool[](poolCount);
+
+    for (uint256 i = 0; i < poolCount; i++) {
+      pools[i] = createFundBorrowPool(borrowPerPool);
+    }
+
+    assertEq(agent.borrowedPoolsCount(), poolCount, "agent should have correct pool count");
+    
+    for (uint256 i = 0; i < poolCount; i++) {
+      SignedCredential memory sc = issueGenericPayCred(agent.id(), borrowPerPool*2);
+      vm.deal(address(agent), borrowPerPool*2);
+
+      (,uint256 epochsPaid,,,) = agentPay(agent, pools[i], sc);
+    }
+    assertEq(agent.borrowedPoolsCount(), 0, "agent should have correct pool count");
+
+  }
+
+
+  function createFundBorrowPool(uint256 amount) internal returns (IPool pool) {
+    pool = createAndFundPool(stakeAmount, investor1);
+    uint64 miner = _newMiner(minerOwner);
+    _agentClaimOwnership(address(agent), miner, minerOwner);
+    agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), amount));
+    return pool;
+  }
+}
+
+
 contract AgentPoliceTest is BaseTest {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
