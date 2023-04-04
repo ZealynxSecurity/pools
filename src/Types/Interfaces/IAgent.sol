@@ -28,8 +28,6 @@ interface IAgent {
 
   function defaulted() external view returns (bool);
 
-  function miners(uint256) external view returns (uint64);
-
   function borrowedPoolsCount() external view returns (uint256);
 
   function liquidAssets() external view returns (uint256);

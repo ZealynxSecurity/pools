@@ -36,9 +36,6 @@ contract Agent is IAgent, Operatable {
   /// @notice `id` is the GLIF Pools ID address of the Agent (not to be confused with the evm actor's ID address)
   uint256 public id;
 
-  /// @notice `miners` Returns the minerID at a specific index
-  uint64[] public miners;
-
   /// @notice `newAgent` returns an address of an upgraded agent during the upgrade process
   address public newAgent;
 
@@ -191,8 +188,10 @@ contract Agent is IAgent, Operatable {
     if(IAgent(_newAgent).id() != id) revert Unauthorized();
     // set the newAgent in storage, which marks the upgrade process as starting
     newAgent = _newAgent;
+    uint256 _liquidAssets = liquidAssets();
     // Withdraw all liquid funds from the Agent to the newAgent
-    (bool success,) = _newAgent.call{value: liquidAssets()}("");
+    _poolFundsInFIL(_liquidAssets);
+    (bool success,) = _newAgent.call{value: _liquidAssets}("");
     if (!success) revert Internal();
   }
 

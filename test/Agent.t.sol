@@ -22,6 +22,8 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {Window} from "src/Types/Structs/Window.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {AgentBeneficiary, BeneficiaryHelpers} from "src/Types/Structs/Beneficiary.sol";
+import {UpgradedAgentDeployer} from "test/helpers/UpgradedAgentDeployer.sol";
+import {UpgradedAgent} from "test/helpers/UpgradedAgent.sol";
 import {ROUTE_AGENT_FACTORY_ADMIN, ROUTE_MINER_REGISTRY} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 import {Roles} from "src/Constants/Roles.sol";
@@ -413,7 +415,7 @@ contract AgentPayTest is BaseTest {
       // Borrow funds and roll forward to generate interest
       agentBorrow(agent, poolId, borrowCred);
       vm.roll(block.number + rollFwdAmt);
-      
+
       // Load the payer with sufficient funds to make the payment
       vm.startPrank(payer);
       vm.deal(payer, payAmount);
@@ -963,6 +965,105 @@ contract AgentPoliceTest is BaseTest {
         // ensure the write down amount is correct:
         assertApproxEqAbs(balanceAfter - balanceArray[i], recoveredFunds * percentArray[i] / WAD, 5,  "Pool should have received the correct amount of funds");
       }
+    }
+}
+
+contract AgentUpgradeTest is BaseTest {
+    using Credentials for VerifiableCredential;
+    using AccountHelpers for Account;
+    using MinerHelper for uint64;
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner = makeAddr("MINER_OWNER");
+    uint256 stakeAmount = 10e18;
+    IAgent agent;
+    uint64 miner;
+    IPool pool;
+    address prevAgentAddr;
+
+    function setUp() public {
+        pool = createAndFundPool(
+            stakeAmount,
+            investor1
+        );
+        (agent, miner) = configureAgent(minerOwner);
+        prevAgentAddr = address(agent);
+    }
+
+    function testUpgradeNoAuth() public {
+        IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
+        vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
+        agentFactory.upgradeAgent(prevAgentAddr);
+    }
+
+    function testUpgradeBasic() public {
+        uint256 agentId = agent.id();
+        address agentOwner = _agentOwner(agent);
+        address agentOperator = _agentOperator(agent);
+        IAgentFactory agentFactory = GetRoute.agentFactory(router);
+        vm.prank(minerOwner);
+        IAgent newAgent = IAgent(agentFactory.upgradeAgent(prevAgentAddr));
+        assertEq(newAgent.id(), agentId);
+        assertEq(_agentOwner(newAgent), agentOwner);
+        assertEq(_agentOperator(newAgent), agentOperator);
+    }
+
+    function testDecommissionAgentNoAuth() public {
+        vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
+        agent.decommissionAgent(address(agent));
+    }
+
+    function testUpgradeFundsForward(uint256 filBal, uint256 wFILBal) public {
+        filBal = bound(filBal, 0, MAX_FIL / 2);
+        wFILBal = bound(wFILBal, 0, MAX_FIL / 2);
+
+        IAgentFactory agentFactory = GetRoute.agentFactory(router);
+        uint256 agentId = agent.id();
+        address agentOwner = _agentOwner(agent);
+        address agentOperator = _agentOperator(agent);
+
+        vm.deal(prevAgentAddr, filBal + wFILBal);
+        // give the agent some WFIL to push
+        vm.prank(prevAgentAddr);
+        wFIL.deposit{value: wFILBal}();
+
+        assertEq(wFIL.balanceOf(prevAgentAddr), wFILBal, "agent should have wFIL");
+        assertEq(prevAgentAddr.balance, filBal, "agent should have FIL");
+
+        vm.prank(minerOwner);
+        IAgent newAgent = IAgent(agentFactory.upgradeAgent(prevAgentAddr));
+        assertEq(newAgent.id(), agentId);
+        assertEq(_agentOwner(newAgent), agentOwner);
+        assertEq(_agentOperator(newAgent), agentOperator);
+        assertEq(address(newAgent).balance, filBal + wFILBal, "new agent should have funds");
+        assertEq(wFIL.balanceOf(prevAgentAddr), 0, "old agent should have no funds in wFIL");
+        assertEq(prevAgentAddr.balance, 0, "old agent should have no funds in FIL");
+    }
+
+    function testUpgradeMigrateMiner() public {
+      uint64[] memory miners = new uint64[](1);
+      miners[0] = miner;
+
+      IMinerRegistry registry = GetRoute.minerRegistry(router);
+      IAgentFactory agentFactory = GetRoute.agentFactory(router);
+
+      UpgradedAgentDeployer deployer = new UpgradedAgentDeployer();
+
+      vm.prank(systemAdmin);
+      IRouter(router).pushRoute(ROUTE_AGENT_DEPLOYER, address(deployer));
+
+      assertTrue(registry.minerRegistered(agent.id(), miner), "Agent should have miner before removing");
+      assertEq(registry.minersCount(agent.id()), 1, "Agent should have 1 miner");
+
+      vm.prank(minerOwner);
+      IAgent newAgent = IAgent(agentFactory.upgradeAgent(prevAgentAddr));
+
+      vm.prank(address(newAgent));
+      agent.migrateMiner(miner);
+
+      vm.prank(minerOwner);
+      UpgradedAgent(payable(address(newAgent))).addMigratedMiners(miners);
+      assertTrue(registry.minerRegistered(newAgent.id(), miner), "miner should still be registed to the agent");
+      assertTrue(miner.isOwner(address(newAgent)), "The mock miner's owner should change to the new agent");
     }
 }
 
