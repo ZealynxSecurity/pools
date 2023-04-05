@@ -613,6 +613,11 @@ contract BaseTest is Test {
   ) internal {
     changeBeneficiary(agent, beneficiary, expiration, quota);
     address prankster = makeAddr("PRANKSTER");
+
+    // fuzz test accidentally sets beneficiary address to prankster
+    if (beneficiary == prankster) {
+      prankster = makeAddr("PRANKSTER2");
+    }
     vm.startPrank(prankster);
     try GetRoute.agentPolice(router).approveAgentBeneficiary(agent.id()) {
       assertTrue(false, "Should not be able to approve beneficiary without permission");

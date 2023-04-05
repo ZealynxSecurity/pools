@@ -1056,7 +1056,7 @@ contract AgentPoolsTest is BaseTest {
     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
     agent = IAgent(agentFactory.create(minerOwner, minerOwner));
   }
-  
+
   function testCreateRemoveMultiplePools(uint256 poolCount, uint256 totalBorrow) public {
     // NOTE: This has been tested up to 1000 but it takes a very long time to run
     poolCount = bound(poolCount, 1, 10);
@@ -1070,7 +1070,7 @@ contract AgentPoolsTest is BaseTest {
     }
 
     assertEq(agent.borrowedPoolsCount(), poolCount, "agent should have correct pool count");
-    
+
     for (uint256 i = 0; i < poolCount; i++) {
       SignedCredential memory sc = issueGenericPayCred(agent.id(), borrowPerPool*2);
       vm.deal(address(agent), borrowPerPool*2);
@@ -1895,6 +1895,15 @@ contract AgentBeneficiaryTest is BaseTest {
     uint256 expiration,
     uint256 quota
   ) public {
+    configureBeneficiary(agent, beneficiary, expiration, quota);
+  }
+
+  // this is a hardcoded parameter test basd on a single failing fuzz test
+  function testAcceptBeneficiaryFailedFuzz() public {
+    address beneficiary = 0xDf6b52E30EC5230ff26a6ac94d92e782720Aa4bD;
+    uint256 expiration = 1322;
+    uint256 quota = 12270;
+
     configureBeneficiary(agent, beneficiary, expiration, quota);
   }
 
