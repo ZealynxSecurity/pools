@@ -25,20 +25,15 @@ contract Deploy is Script {
 
     address public treasury = address(0);
 
-    // just used for testing
-    uint256 public vcIssuerPk = 1;
-    address public vcIssuer;
-
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployerAddr = vm.addr(deployerPrivateKey);
         vm.startBroadcast(deployerPrivateKey);
 
-        address wFIL = vm.envAddress("WFIL_ADDR");
-
         // deploys the router
         router = address(new Router(deployerAddr));
 
+        address wFIL = vm.envAddress("WFIL_ADDR");
         address minerRegistry = address(new MinerRegistry(router));
         address agentFactory = address(new AgentFactory(router));
         address agentPolice = address(
@@ -47,10 +42,9 @@ contract Deploy is Script {
         address poolRegistry = address(
             new PoolRegistry(IERC20(wFIL), 1e17, 0, deployerAddr, router)
         );
+        address vcIssuer = vm.envAddress("VC_ISSUER_ADDR");
         address credParser = address(new CredParser());
         address agentDeployer = address(new AgentDeployer());
-
-        vcIssuer = vm.addr(vcIssuerPk);
 
         Deployer.setupContractRoutes(
             router,
