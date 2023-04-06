@@ -28,10 +28,8 @@ contract PoolToken is IPoolTokenPlus, ERC20, Ownable {
     }
 
     constructor(
-        string memory _name,
-        string memory _symbol,
         address _owner
-    ) ERC20(_name, _symbol, 18) Ownable(_owner) {}
+    ) ERC20("Infinity Pool Staked FIL", "iFIL", 18) Ownable(_owner) {}
 
     /*//////////////////////////////////////////////////////////////
                             MINT/BURN TOKENS

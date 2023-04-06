@@ -111,7 +111,7 @@ contract PoolBasicSetupTest is BaseTest {
 
   function testCreatePool() public {
     IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
-    PoolToken liquidStakingToken = new PoolToken("LIQUID", "LQD",systemAdmin);
+    PoolToken liquidStakingToken = new PoolToken(systemAdmin);
     uint256 id = poolRegistry.allPoolsLength();
     address rateModule = address(new RateModule(systemAdmin, router, rateArray, levels));
     pool = IPool(new InfinityPool(

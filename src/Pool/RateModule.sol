@@ -80,7 +80,7 @@ contract RateModule is IRateModule, Ownable {
         VerifiableCredential memory vc
     ) external view returns (bool) {
         // if you're behind on your payments, you're not approved
-        if (account.epochsPaid < block.number - GetRoute.agentPolice(router).defaultWindow()) {
+        if (account.epochsPaid + GetRoute.agentPolice(router).defaultWindow() < block.number) {
             return false;
         }
 

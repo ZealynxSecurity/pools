@@ -388,7 +388,7 @@ contract BaseTest is Test {
 
   function createPool() internal returns (IPool pool) {
     IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
-    PoolToken liquidStakingToken = new PoolToken("Infinity Pool Staked FIL", "iFIL", systemAdmin);
+    PoolToken liquidStakingToken = new PoolToken(systemAdmin);
     pool = IPool(new InfinityPool(
       systemAdmin,
       router,
@@ -672,7 +672,7 @@ contract BaseTest is Test {
 
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
     IPoolToken liquidStakingToken = pool.liquidStakingToken();
-    PoolToken iou = new PoolToken("IOU", "IOU",systemAdmin);
+    PoolToken iou = new PoolToken(systemAdmin);
     ramp = IOffRamp(new OffRamp(
       router,
       address(iou),
