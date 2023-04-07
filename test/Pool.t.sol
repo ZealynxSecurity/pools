@@ -833,18 +833,98 @@ contract PoolAdminTests is PoolTestState {
     assertEq(address(pool.rateModule()), address(newRateModule));
   }
 
-  function testDecommissionPool() public {
+  function testshutDownPool() public {
     IPool newPool = createAndFundPool(stakeAmount, investor1);
     assertEq(stakeAmount, asset.balanceOf(address(pool)));
     vm.prank(address(systemAdmin));
     pool.shutDown();
     assertTrue(pool.isShuttingDown(), "Pool should be shut down");
     vm.prank(address(poolRegistry));
-    // NOTE: can't decomission pool due to #361
-    // pool.decommissionPool(newPool);
+  }
 
-    // Need to make payments to test fee assertions
 
+  function testUpgradePool(uint256 paymentAmt, uint256 initialBorrow) public {
+
+    initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
+    paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
+
+    // Generate some fees in the "old" pool
+
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, initialBorrow));
+    vm.roll(block.number + GetRoute.agentPolice(router).defaultWindow() - 1);
+    agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmt));
+    uint256 fees = pool.feesCollected();
+    uint256 treasuryBalance = asset.balanceOf(address(treasury));
+
+
+    IPool newPool = IPool(new InfinityPool(
+      systemAdmin,
+      router,
+      address(asset),
+      address(pool.rateModule()),
+      // no min liquidity for test pool
+      address(liquidStakingToken),
+      0,
+      poolID
+    ));
+    vm.prank(systemAdmin);
+    liquidStakingToken.setMinter(address(newPool));
+
+    // get stats before upgrade
+    uint256 lstBalance = liquidStakingToken.balanceOf(investor1);
+    uint256 totalBorrowed = pool.totalBorrowed();
+    uint256 agentBorrowed = pool.getAgentBorrowed(agentID);
+    uint256 assetBalance = asset.balanceOf(address(pool));
+
+    // first shut down the pool
+    vm.startPrank(systemAdmin);
+    pool.shutDown();
+    // then upgrade it
+    poolRegistry.upgradePool(newPool);
+    vm.stopPrank();
+
+    // get stats after upgrade
+    uint256 lstBalanceNew = newPool.liquidStakingToken().balanceOf(investor1);
+    uint256 totalBorrowedNew = newPool.totalBorrowed();
+    uint256 agentBorrowedNew = newPool.getAgentBorrowed(agentID);
+    uint256 agentBalanceNew = wFIL.balanceOf(address(agent));
+    uint256 assetBalanceNew = newPool.asset().balanceOf(address(newPool));
+
+    // Test balances updated correctly through upgrade
+    assertEq(lstBalanceNew, lstBalance, "LST balance should be the same");
+    assertEq(totalBorrowedNew, totalBorrowed, "Total borrowed should be the same");
+    assertEq(agentBorrowedNew, agentBorrowed, "Agent borrowed should be the same");
+    assertEq(assetBalanceNew, assetBalance - fees, "Asset balance should be the same");
+    assertTrue(poolRegistry.isPool(address(newPool)), "New pool should be registered");
+    assertFalse(poolRegistry.isPool(address(pool)), "Old pool should not be registered");
+    assertEq(asset.balanceOf(treasury), treasuryBalance + fees, "Treasury should have received fees");
+
+    assertNewPoolWorks(newPool, assetBalanceNew, agentBalanceNew);
+  }
+
+  function assertNewPoolWorks(IPool newPool, uint256 assetBalanceNew, uint256 agentWFILBal) internal {
+    // deposit into the pool again
+    address newInvestor = makeAddr("NEW_INVESTOR");
+    uint256 newStakeAmount = borrowAmount;
+    uint256 newLSTBal = newPool.previewDeposit(newStakeAmount);
+
+    depositFundsIntoPool(newPool, WAD, newInvestor);
+
+    assertEq(
+      newPool.liquidStakingToken().balanceOf(newInvestor), newLSTBal,
+      "Investor should have received new liquid staking tokens"
+    );
+    assertEq(
+      wFIL.balanceOf(address(newPool)),
+      assetBalanceNew + newStakeAmount,
+      "Pool should have received new stake amount"
+    );
+
+    uint256 newBorrowAmount = newPool.totalBorrowableAssets();
+    // Test that the new pool can be used to borrow
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, newPool.totalBorrowableAssets()));
+
+    assertEq(wFIL.balanceOf(address(agent)), newBorrowAmount + agentWFILBal, "Agent should have received new borrow amount");
   }
 }
 
@@ -2051,13 +2131,6 @@ contract PoolPreStakeIntegrationTest is BaseTest {
 //     assertEq(poolAuth.operator(), operator);
 //   }
 
-//   function testShutDown() public {
-//     assertTrue(!pool.isShuttingDown(), "Pool should not be shut down");
-//     vm.prank(poolOperator);
-//     pool.shutDown();
-//     assertTrue(pool.isShuttingDown(), "Pool should be shut down");
-//   }
-
 //   function testSetImplementation() public {
 //     address newImplementation = makeAddr("NEW_IMPLEMENTATION");
 //     // expect this call to revert because the implementation is not approved
@@ -2081,47 +2154,3 @@ contract PoolPreStakeIntegrationTest is BaseTest {
 //     pool.setMinimumLiquidity(newMinLiq);
 //     assertEq(pool.minimumLiquidity(), newMinLiq, "Minimum liquidity should be set");
 //   }
-
-//   function testUpgradePool() public {
-//     // at this point, the pool has 1 staker, and 1 borrower
-
-//     // get stats before upgrade
-//     uint256 investorPoolShares = pool.share().balanceOf(investor1);
-//     uint256 totalBorrowed = pool.totalBorrowed();
-//     uint256 agentBorrowed = pool.getAgentBorrowed(agent.id());
-//     uint256 powerTokenBalance = powerToken.balanceOf(address(pool));
-
-//     // first shut down the pool
-//     vm.prank(poolOperator);
-//     pool.shutDown();
-//     // then upgrade it
-//     vm.startPrank(IAuth(address(pool)).owner());
-//     pool = poolRegistry.upgradePool(pool.id());
-//     vm.stopPrank();
-
-//     uint256 investorPoolSharesNew = pool.share().balanceOf(investor1);
-//     uint256 totalBorrowedNew = pool.totalBorrowed();
-//     uint256 agentBorrowedNew = pool.getAgentBorrowed(agent.id());
-
-//     assertEq(investorPoolSharesNew, investorPoolShares);
-//     assertEq(totalBorrowedNew, totalBorrowed);
-//     assertEq(agentBorrowedNew, agentBorrowed);
-//     assertEq(powerToken.balanceOf(address(pool)), powerTokenBalance);
-
-//     // now attempt to deposit and borrow again
-//     vm.startPrank(investor1);
-//     wFIL.approve(address(pool), investor1UnderlyingAmount);
-//     pool.deposit(investor1UnderlyingAmount, investor1);
-//     vm.stopPrank();
-
-//     agentBorrow(agent, borrowAmount, issueGenericSC(address(agent)), pool, address(powerToken), powerAmtStake);
-
-//     // investorPoolSharesNew = pool.share().balanceOf(investor1);
-//     // totalBorrowedNew = pool.totalBorrowed();
-//     // agentBorrowedNew = pool.getAgentBorrowed(agent.id());
-
-//     // assertGt(investorPoolSharesNew, investorPoolShares);
-//     // assertGt(totalBorrowedNew, totalBorrowed);
-//     // assertGt(agentBorrowedNew, agentBorrowed);
-//   }
-// }
