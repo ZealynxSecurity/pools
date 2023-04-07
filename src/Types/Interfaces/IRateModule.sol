@@ -21,6 +21,10 @@ interface IRateModule {
       VerifiableCredential memory vc
   ) external view returns (uint256);
 
+  function baseRate() external view returns (uint256);
+
+  function penaltyRate() external view returns (uint256);
+
   function isApproved(
       Account memory account,
       VerifiableCredential memory vc

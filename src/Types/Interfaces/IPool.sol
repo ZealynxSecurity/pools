@@ -42,7 +42,12 @@ interface IPool {
         uint256 shares
     );
 
-    event WriteOff(uint256 agentID, uint256 recoveredDebt, uint256 lostAmount);
+    event WriteOff(
+      uint256 indexed agentID,
+      uint256 recoveredFunds,
+      uint256 lostFunds,
+      uint256 interestPaid
+    );
 
     /*////////////////////////////////////////////////////////
                             GETTERS

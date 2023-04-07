@@ -219,30 +219,67 @@ contract InfinityPool is IPool, Ownable {
         return rateModule.isApproved(account, vc);
     }
 
-    function writeOff(uint256 agentID, uint256 recoveredDebt) external {
+    /**
+     * @notice writeOff writes down the Agent's account and the Pool's borrowed amount after a liquidation
+     * @param agentID The ID of the Agent
+     * @param recoveredFunds The amount of funds recovered from the liquidation. This is the total amount the Police was able to recover from the Agent's Miner Actors
+     * @dev If `recoveredFunds` > `principal` owed on the Agent's account, then the remaining amount gets applied as interest according to a penalty rate
+     */
+    function writeOff(uint256 agentID, uint256 recoveredFunds) external {
         // only the agent police can call this function
         AuthController.onlyAgentPolice(router, msg.sender);
 
         Account memory account = _getAccount(agentID);
 
         if (account.defaulted) revert AlreadyDefaulted();
-
-        uint256 owed = account.principal;
-
-        if (recoveredDebt >= owed) recoveredDebt = owed;
+        // set the account to defaulted
+        account.defaulted = true;
+        // amount of principal owed to this pool
+        uint256 principalOwed = account.principal;
+        // compute the amount of funds > principal that can be applied towards interest
+        uint256 remainder = recoveredFunds > principalOwed ? recoveredFunds - principalOwed : 0;
+        // compute the amount of interest owed on the account, based on a penalty rate
+        uint256 interestPaid;
+        // if the account is not "current", compute the amount of interest owed based on the penalty rate
+        if (remainder > 0 && account.epochsPaid < block.number) {
+            // compute a rate based on the agent's current financial situation
+            uint256 rate = rateModule.penaltyRate();
+            // compute the number of epochs that are owed to get current
+            uint256 epochsToPay = block.number - account.epochsPaid;
+            // multiply the rate by the principal to get the per epoch interest rate
+            // the interestPerEpoch has an extra WAD to maintain precision
+            // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
+            // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
+            uint256 interestOwed = principalOwed.mulWadUp(rate).mulWadUp(epochsToPay);
+            // compute the amount of interest to pay down
+            interestPaid = interestOwed > remainder ? remainder : interestOwed;
+            // collect fees on the interest paid
+            feesCollected += GetRoute
+                .poolRegistry(router)
+                .treasuryFeeRate()
+                // only charge on the actual interest paid
+                .mulWadUp(interestPaid);
+        }
 
         // transfer the assets into the pool
-        asset.transferFrom(msg.sender, address(this), recoveredDebt);
         // whatever we couldn't pay back
-        uint256 lostAmt = owed - recoveredDebt;
+        uint256 lostAmt = principalOwed > recoveredFunds ? principalOwed - recoveredFunds : 0;
+
+        uint256 totalOwed = interestPaid + principalOwed;
+
+        asset.transferFrom(
+          msg.sender,
+          address(this),
+          totalOwed > recoveredFunds ? recoveredFunds : totalOwed
+        );
         // write off only what we lost
         totalBorrowed -= lostAmt;
-
-        account.defaulted = true;
+        // set the account with the funds the pool lost
+        account.principal = lostAmt;
 
         account.save(router, agentID, id);
 
-        emit WriteOff(agentID, recoveredDebt, lostAmt);
+        emit WriteOff(agentID, recoveredFunds, lostAmt, interestPaid);
     }
 
     /*//////////////////////////////////////////////////////////////

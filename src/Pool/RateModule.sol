@@ -33,6 +33,9 @@ contract RateModule is IRateModule, Ownable {
     /// @dev `levels` is a leveling system that sets maximum borrow amounts on accounts
     uint256[10] public levels;
 
+    /// @dev `baseRate` floats according to the market, and is multiplied against the riskMultiplier to set the interest rate
+    uint256 public baseRate = 18e16;
+
     /// @dev `accountLevel` is a mapping of agentID to level
     mapping(uint256 => uint256) public accountLevel;
 
@@ -60,7 +63,15 @@ contract RateModule is IRateModule, Ownable {
         Account memory account,
         VerifiableCredential memory vc
     ) public view returns (uint256) {
-        return _getRate(vc.getBaseRate(credParser), vc.getGCRED(credParser));
+        return _getRate(vc.getGCRED(credParser));
+    }
+
+    /**
+     * @notice _getRate returns the rate for an Agent's current position within the Pool
+     * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
+     */
+    function penaltyRate() external view returns (uint256) {
+        return _getRate(minGCRED);
     }
 
     /**
@@ -105,7 +116,7 @@ contract RateModule is IRateModule, Ownable {
 
         return computeDTI(
             vc.getExpectedDailyRewards(credParser),
-            _getRate(vc.getBaseRate(credParser), gcred),
+            _getRate(gcred),
             account.principal,
             totalPrincipal
         ) <= maxDTI;
@@ -129,6 +140,10 @@ contract RateModule is IRateModule, Ownable {
 
     function setRateLookup(uint256[61] calldata _rateLookup) external onlyOwner {
         rateLookup = _rateLookup;
+    }
+
+    function setBaseRate(uint256 _baseRate) external onlyOwner {
+        baseRate = _baseRate;
     }
 
     function updateCredParser() external onlyOwner {
@@ -194,7 +209,7 @@ contract RateModule is IRateModule, Ownable {
     }
 
     /// @dev _getRate returns the rate with an extra WAD factor for precision
-    function _getRate(uint256 baseRate, uint256 gcred) internal view returns (uint256) {
+    function _getRate(uint256 gcred) internal view returns (uint256) {
         // since GCRED is between 40-100, we subtract 39 to get the index in the rateArray
         return baseRate.mulWadUp(rateLookup[gcred - minGCRED]);
     }

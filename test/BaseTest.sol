@@ -543,6 +543,30 @@ contract BaseTest is Test {
     }
   }
 
+  function calculateInterestOwed(
+    IAgent agent,
+    IPool pool,
+    VerifiableCredential memory vc,
+    uint256 borrowAmount,
+    uint256 rollFwdAmt
+  ) internal returns (
+    uint256 interestOwed,
+    uint256 interestOwedPerEpoch
+  ) {
+    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+    // since gcred is hardcoded in the credential, we know the rate ahead of time (rate does not change if gcred does not change, even if other financial statistics change)
+    // rate here is WAD based
+    uint256 rate = pool.getRate(account, vc);
+    // note we add 1 more bock of interest owed to account for the roll forward of 1 epoch inside agentBorrow helper
+    // since borrowAmount is also WAD based, the _interestOwedPerEpoch is also WAD based (e18 * e18 / e18)
+    uint256 _interestOwedPerEpoch = borrowAmount.mulWadUp(rate);
+    // _interestOwedPerEpoch is mulWadUp by epochs (not WAD based), which cancels the WAD out for interestOwed
+    interestOwed = (_interestOwedPerEpoch.mulWadUp(rollFwdAmt + 1));
+    // when setting the interestOwedPerEpoch, we div out the WAD manually here
+    // we'd rather use the more precise _interestOwedPerEpoch to compute interestOwed above
+    interestOwedPerEpoch = _interestOwedPerEpoch / WAD;
+  }
+
   function putAgentOnAdministration(
     IAgent agent,
     address administration,
