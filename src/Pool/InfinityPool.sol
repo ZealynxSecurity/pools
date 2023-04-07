@@ -87,21 +87,11 @@ contract InfinityPool is IPool, Ownable {
         _;
     }
 
-    modifier onlyAgent() {
-        AuthController.onlyAgent(router, msg.sender);
-        _;
-    }
-
     /// @dev a modifier that ensures the caller matches the `vc.subject` and that the caller is an agent
     modifier subjectIsAgentCaller(VerifiableCredential memory vc) {
         if (
             GetRoute.agentFactory(router).agents(msg.sender) != vc.subject
         ) revert Unauthorized();
-        _;
-    }
-
-    modifier onlyAgentPolice() {
-        AuthController.onlyAgentPolice(router, msg.sender);
         _;
     }
 
@@ -229,7 +219,10 @@ contract InfinityPool is IPool, Ownable {
         return rateModule.isApproved(account, vc);
     }
 
-    function writeOff(uint256 agentID, uint256 recoveredDebt) external onlyAgentPolice {
+    function writeOff(uint256 agentID, uint256 recoveredDebt) external {
+        // only the agent police can call this function
+        AuthController.onlyAgentPolice(router, msg.sender);
+
         Account memory account = _getAccount(agentID);
 
         if (account.defaulted) revert AlreadyDefaulted();
@@ -259,8 +252,8 @@ contract InfinityPool is IPool, Ownable {
     function borrow(VerifiableCredential memory vc) external subjectIsAgentCaller(vc) {
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
-
-        _checkLiquidity(vc.value);
+        // can't borrow more than the pool has
+        if (totalBorrowableAssets() < vc.value) revert InsufficientLiquidity();
         Account memory account = _getAccount(vc.subject);
         // fresh account, set start epoch and epochsPaid to beginning of current window
         if (account.principal == 0) {
@@ -293,7 +286,7 @@ contract InfinityPool is IPool, Ownable {
         // grab this Agent's account from storage
         Account memory account = _getAccount(vc.subject);
         // ensure we're not making payments to a non-existent account
-        _accountExists(account);
+        if (!account.exists()) revert AccountDNE();
         // compute a rate based on the agent's current financial situation
         rate = getRate(account, vc);
         uint256 interestOwed;
@@ -609,21 +602,6 @@ contract InfinityPool is IPool, Ownable {
 
     function _getAccount(uint256 agent) internal view returns (Account memory) {
         return AccountHelpers.getAccount(router, agent, id);
-    }
-
-    function _accountExists(
-        Account memory account
-    ) internal pure {
-        if (!account.exists()) {
-            revert AccountDNE();
-        }
-    }
-
-    function _checkLiquidity(uint256 amount) internal view {
-        uint256 available = totalBorrowableAssets();
-        if (available < amount) {
-            revert InsufficientLiquidity();
-        }
     }
 
     function _deposit(uint256 assets, address receiver) internal returns (uint256 shares) {
