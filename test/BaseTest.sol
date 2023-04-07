@@ -63,6 +63,7 @@ contract BaseTest is Test {
   using MinerHelper for uint64;
   using AccountHelpers for Account;
   using Credentials for VerifiableCredential;
+  using FixedPointMathLib for uint256;
 
   uint256 public constant WAD = 1e18;
   // max FIL value - 2B atto
@@ -70,7 +71,7 @@ contract BaseTest is Test {
   uint256 public constant DUST = 10000;
   // 3 week window deadline for defaults
   uint256 public constant DEFAULT_WINDOW = EPOCHS_IN_WEEK * 3;
-  uint256 public constant DEFAULT_BASE_RATE = 15e18;
+  uint256 public constant DEFAULT_BASE_RATE = 15e16;
   // by default, moderately good GCRED
   uint256 public constant GCRED = 80;
   address public constant ZERO_ADDRESS = address(0);
@@ -103,7 +104,7 @@ contract BaseTest is Test {
       address(new AgentFactory(router)),
       address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, router)),
       // 1e17 = 10% treasury fee on yield
-      address(new PoolRegistry(IERC20(address(wFIL)), 1e17, 0, systemAdmin, router)),
+      address(new PoolRegistry(IERC20(address(wFIL)), 10e16, 0, systemAdmin, router)),
       vcIssuer,
       credParser,
       address(new AgentDeployer())
@@ -709,7 +710,7 @@ contract BaseTest is Test {
   }
 
   function _getAdjustedRate(uint256 gcred) internal view returns (uint256) {
-    return rateArray[gcred] * DEFAULT_BASE_RATE / 1e18;
+    return DEFAULT_BASE_RATE.mulWadUp(rateArray[gcred]);
   }
 
   uint256[100] rateArray = [
@@ -793,7 +794,7 @@ contract BaseTest is Test {
     1390968128463780000 / EPOCHS_IN_YEAR,
     1370259310957000000 / EPOCHS_IN_YEAR,
     1349858807576000000 / EPOCHS_IN_YEAR,
-    1329762028121470000 / EPOCHS_IN_YEAR,
+    1283612379502790461377473363774,
     1309964450733250000 / EPOCHS_IN_YEAR,
     1290461620872890000 / EPOCHS_IN_YEAR,
     1271249150321400000 / EPOCHS_IN_YEAR,

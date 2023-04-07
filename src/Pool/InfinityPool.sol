@@ -35,6 +35,7 @@ contract InfinityPool is IPool, Ownable {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
     using FilAddress for address;
+    using FixedPointMathLib for uint256;
 
     error InsufficientLiquidity();
     error AccountDNE();
@@ -308,16 +309,20 @@ contract InfinityPool is IPool, Ownable {
             // compute the number of epochs that are owed to get current
             uint256 epochsToPay = block.number - account.epochsPaid;
             // multiply the rate by the principal to get the per epoch interest rate
-            interestPerEpoch = (rate * account.principal) / WAD;
+            // the interestPerEpoch has an extra WAD to maintain precision
+            interestPerEpoch = account.principal.mulWadUp(rate);
             // ensure the payment is greater than or equal to at least 1 epochs worth of interest
-            if (vc.value < interestPerEpoch) revert InvalidParams();
+            // NOTE - we multiply by WAD here because the interestPerEpoch has an extra WAD to maintain precision
+            if (vc.value * WAD < interestPerEpoch) revert InvalidParams();
             // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
-            interestOwed = interestPerEpoch * epochsToPay;
+            // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
+            interestOwed = interestPerEpoch.mulWadUp(epochsToPay);
         }
         // if the payment is less than the interest owed, pay interest only
         if (vc.value <= interestOwed) {
             // compute the amount of epochs this payment covers
-            uint256 epochsForward = vc.value / interestPerEpoch;
+            // vc.value is not WAD yet, so divWadDown cancels the extra WAD in interestPerEpoch
+            uint256 epochsForward = vc.value.divWadDown(interestPerEpoch);
             // update the account's `epochsPaid` cursor
             account.epochsPaid += epochsForward;
             // since the entire payment is interest, the entire payment is used to compute the fee (principal payments are fee-free)
@@ -351,7 +356,7 @@ contract InfinityPool is IPool, Ownable {
         feesCollected += GetRoute
             .poolRegistry(router)
             .treasuryFeeRate()
-             * feeBasis / WAD;
+            .mulWadUp(feeBasis);
 
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), vc.value - refund);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity 0.8.17;
 
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
@@ -12,14 +13,13 @@ import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 contract RateModule is IRateModule, Ownable {
 
     using Credentials for VerifiableCredential;
-
-    uint256 constant WAD = 1e18;
+    using FixedPointMathLib for uint256;
 
     /// @dev `maxDTI` is the maximum ratio of expected daily interest payments to expected daily rewards
     uint256 public maxDTI = 0.5e18;
 
     /// @dev `maxDTE` is the maximum ratio of principal to equity (principal / (agentValue - principal))
-    uint256 private maxDTE = 3e18;
+    uint256 public maxDTE = 3e18;
 
     /// @dev `maxLTV` is the maximum ratio of principal to collateral
     uint256 public maxLTV = 1e18;
@@ -100,15 +100,15 @@ contract RateModule is IRateModule, Ownable {
         if (collateralValue == 0) return false;
 
         // if LTV is greater than `maxLTV` (e18 denominated), we are over leveraged (can't mortgage more than the value of your home)
-        if (_computeLTV(totalPrincipal, collateralValue) > maxLTV) {
+        if (computeLTV(totalPrincipal, collateralValue) > maxLTV) {
             return false;
         }
 
-        if (_computeDTE(totalPrincipal, vc.getAgentValue(credParser)) > maxDTE) {
+        if (computeDTE(totalPrincipal, vc.getAgentValue(credParser)) > maxDTE) {
             return false;
         }
 
-        return _computeDTI(
+        return computeDTI(
             vc.getExpectedDailyRewards(credParser),
             _getRate(vc.getBaseRate(credParser), gcred),
             account.principal,
@@ -153,48 +153,53 @@ contract RateModule is IRateModule, Ownable {
     }
 
     /// @dev compute the loan to value, where value is locked funds
-    function _computeLTV(
+    function computeLTV(
         uint256 totalPrincipal,
         uint256 collateralValue
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // compute the loan to value
-        return totalPrincipal * WAD / collateralValue;
+        return totalPrincipal.divWadDown(collateralValue);
     }
 
     /// @dev compute the DTI
-    function _computeDTI(
+    function computeDTI(
         uint256 expectedDailyRewards,
         uint256 rate,
         uint256 accountPrincipal,
         uint256 totalPrincipal
-    ) internal pure returns (uint256) {
-        uint256 equityPercentage = (accountPrincipal * WAD) / totalPrincipal;
+    ) public pure returns (uint256) {
+        // equityPercentage now has an extra WAD factor for precision
+        uint256 equityPercentage = accountPrincipal.divWadDown(totalPrincipal);
         // compute the % of EDR this pool can rely on
-        uint256 weightedEDR = (equityPercentage * expectedDailyRewards) / WAD;
+        // mulWadDown here cancels the extra WAD factor in equityPercentage
+        uint256 weightedEDR = equityPercentage.mulWadDown(expectedDailyRewards);
         // if the EDR is too low, we return the highest DTI
         if (weightedEDR == 0) return type(uint256).max;
 
         // compute expected daily payments to align with expected daily reward
-        uint256 dailyRate = rate * EPOCHS_IN_DAY * accountPrincipal;
-        // compute DTI
-        return dailyRate / weightedEDR;
+        // `rate` has an extra WAD factor for precision, and accountPrincipal is already in WAD
+        // so mulWadUp by EPOCHS_IN_DAY cancels the extra WAD factor in `rate` to get a daily rate in WAD
+        uint256 dailyRate = accountPrincipal.mulWadUp(rate).mulWadUp(EPOCHS_IN_DAY);
+        // compute DTI - divWadUp here adds the extra WAD back to compare with DTI level in storage
+        return dailyRate.divWadUp(weightedEDR);
     }
 
     /// @dev compute the DTE
-    function _computeDTE(
+    function computeDTE(
         uint256 principal,
         uint256 agentTotalValue
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         // since agentTotalValue includes borrowed funds (principal),
         // agentTotalValue should always be greater than principal
         // however, this could happen if the agent is severely slashed over long durations
         // in this case, they're definitely over the maxDTE, regardless of what it's set to
         if (agentTotalValue <= principal) return type(uint256).max;
         // return DTE
-        return (principal * WAD) / (agentTotalValue - principal);
+        return principal.divWadDown(agentTotalValue - principal);
     }
 
+    /// @dev _getRate returns the rate with an extra WAD factor for precision
     function _getRate(uint256 baseRate, uint256 gcred) internal view returns (uint256) {
-        return (baseRate * rateLookup[gcred]) / WAD;
+        return baseRate.mulWadUp(rateLookup[gcred]);
     }
 }

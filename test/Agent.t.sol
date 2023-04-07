@@ -3,6 +3,7 @@ pragma solidity 0.8.17;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import "test/helpers/MockMiner.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
@@ -15,6 +16,7 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IMockMiner} from "test/helpers/MockMiner.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
@@ -245,6 +247,7 @@ contract AgentRmEquityTest is BaseTest {
 
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
+    using FixedPointMathLib for uint256;
 
     address investor1 = makeAddr("INVESTOR_1");
     address minerOwner = makeAddr("MINER_OWNER");
@@ -383,8 +386,15 @@ contract AgentRmEquityTest is BaseTest {
       principal = bound(principal, WAD, MAX_FIL);
       uint256 rate = _getAdjustedRate(GCRED);
 
-      uint256 badEDRUpper = (((rate * EPOCHS_IN_DAY * principal) / WAD) - DUST) / 6;
-      badEDR = bound(badEDR, DUST, badEDRUpper);
+      IRateModule rateModule = IRateModule(pool.rateModule());
+
+      uint256 badEDRUpper =
+        _getAdjustedRate(GCRED)
+        .mulWadUp(principal)
+        .mulWadUp(EPOCHS_IN_DAY)
+        .divWadDown(rateModule.maxDTE());
+
+      badEDR = bound(badEDR, DUST, badEDRUpper - DUST);
       // collateral needs to result in LTV < 1
       uint256 collateralValue = principal * 3;
       // agent value needs to result in DTE < 1
@@ -844,6 +854,7 @@ contract AgentBorrowingTest is BaseTest {
 contract AgentPayTest is BaseTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
+    using FixedPointMathLib for uint256;
 
     address investor1 = makeAddr("INVESTOR_1");
     address minerOwner = makeAddr("MINER_OWNER");
@@ -959,18 +970,22 @@ contract AgentPayTest is BaseTest {
       VerifiableCredential memory vc,
       uint256 borrowAmount,
       uint256 rollFwdAmt
-    ) internal view returns (
+    ) internal returns (
       uint256 interestOwed,
       uint256 interestOwedPerEpoch
     ) {
       Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-
       // since gcred is hardcoded in the credential, we know the rate ahead of time (rate does not change if gcred does not change, even if other financial statistics change)
+      // rate here is WAD based
       uint256 rate = pool.getRate(account, vc);
-
       // note we add 1 more bock of interest owed to account for the roll forward of 1 epoch inside agentBorrow helper
-      interestOwedPerEpoch = borrowAmount * rate / WAD;
-      interestOwed = (interestOwedPerEpoch * (rollFwdAmt + 1));
+      // since borrowAmount is also WAD based, the _interestOwedPerEpoch is also WAD based (e18 * e18 / e18)
+      uint256 _interestOwedPerEpoch = borrowAmount.mulWadUp(rate);
+      // _interestOwedPerEpoch is mulWadUp by epochs (not WAD based), which cancels the WAD out for interestOwed
+      interestOwed = (_interestOwedPerEpoch.mulWadUp(rollFwdAmt + 1));
+      // when setting the interestOwedPerEpoch, we div out the WAD manually here
+      // we'd rather use the more precise _interestOwedPerEpoch to compute interestOwed above
+      interestOwedPerEpoch = _interestOwedPerEpoch / WAD;
     }
 
     function borrowRollFwdAndPay(
