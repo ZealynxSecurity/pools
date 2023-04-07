@@ -12,9 +12,9 @@ interface IRateModule {
 
   function maxLTV() external view returns (uint256);
 
-  function credParser() external view returns (address);
+  function minGCRED() external view returns (uint256);
 
-  function lookupRate(uint256 gcred) external view returns (uint256);
+  function credParser() external view returns (address);
 
   function getRate(
       Account memory account,
@@ -49,7 +49,7 @@ interface IRateModule {
 
   function setMinGCRED(uint256 _minGCRED) external;
 
-  function setRateLookup(uint256[100] memory _rateLookup) external;
+  function setRateLookup(uint256[61] memory _rateLookup) external;
 
   function updateCredParser() external;
 }

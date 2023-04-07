@@ -775,7 +775,7 @@ contract AgentBorrowingTest is BaseTest {
       // Since we've already borrowed, we pretend the SP locks substantially more funds
       uint256 collateralValue = borrowAmount * 4;
 
-      uint256 adjustedRate = rateArray[GCRED] * DEFAULT_BASE_RATE / 1e18;
+      uint256 adjustedRate = rateArray[GCRED - pool.rateModule().minGCRED()] * DEFAULT_BASE_RATE / 1e18;
 
       AgentData memory agentData = createAgentData(
         collateralValue,

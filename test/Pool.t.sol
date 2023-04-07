@@ -179,12 +179,12 @@ contract PoolGetRateTest is PoolTestState {
 
   function testGetRateBasic() public {
     uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
-    uint256 expectedRate = baseRate.mulWadUp(rateArray[gCredBasic]);
+    uint256 expectedRate = baseRate.mulWadUp(rateArray[gCredBasic - pool.rateModule().minGCRED()]);
     assertEq(rate, expectedRate);
   }
 
   function testGetRateFuzz(uint256 gCRED) public {
-    gCRED = bound(gCRED, 0, 99);
+    gCRED = bound(gCRED, 40, 100);
     AgentData memory agentData = createAgentData(
       // collateral value => 2x the borrowAmount
       borrowAmount * 2,
@@ -200,7 +200,7 @@ contract PoolGetRateTest is PoolTestState {
     vcBasic.claim = abi.encode(agentData);
     pool.getRate(Account(0,0,0, true), vcBasic);
     uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
-    uint256 expectedRate = baseRate.mulWadUp(rateArray[gCRED]);
+    uint256 expectedRate = baseRate.mulWadUp(rateArray[gCRED - pool.rateModule().minGCRED()]);
     assertEq(rate, expectedRate);
   }
 }
@@ -392,8 +392,8 @@ contract PoolAPRTests is PoolTestState {
 
   using FixedPointMathLib for uint256;
 
-    // we know that a GCRED score of 80 should come out to be a 20.24% APR rougly
-  uint256 constant KNOWN_RATE = 20.24e16;
+  // we know that a GCRED score of 80 should come out to be 22% APR rougly
+  uint256 KNOWN_RATE = 22e16;
 
   function testGetRateAppliedAnnually() public {
     uint256 testRate = _getAdjustedRate(GCRED);
@@ -430,7 +430,7 @@ contract PoolAPRTests is PoolTestState {
   }
 
   function testGetRateAppliedTenYears() public {
-    uint256 KNOWN_RATE_10Y = 20.24e16 * 10;
+    uint256 KNOWN_RATE_10Y = KNOWN_RATE * 10;
 
     uint256 testRate = _getAdjustedRate(GCRED);
 

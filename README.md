@@ -21,4 +21,16 @@ For testing contracts, from the repository root, run `yarn test:contracts`. Unde
 
 On GitHub, you can run the `artifacts` action to generate typechain types as well as build artifacts like the `.bin` and `.abi` files for specific contracts
 
+## Levels
 
+0 -> 0
+1 -> 10_000
+2 -> 25_000
+3 -> 50_000
+4 -> 100_000
+5 -> 250_000
+6 -> 500_000
+7 -> 750_000
+8 -> 1_000_000
+9 -> 2_500_000
+10 -> 5_000_000

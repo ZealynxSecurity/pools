@@ -28,7 +28,7 @@ contract RateModule is IRateModule, Ownable {
     uint256 public minGCRED = 40;
 
     /// @dev `rateLookup` is a memoized GCRED => rateMultiplier lookup table. It sets the interest curve
-    uint256[100] public rateLookup;
+    uint256[61] public rateLookup;
 
     /// @dev `levels` is a leveling system that sets maximum borrow amounts on accounts
     uint256[10] public levels;
@@ -44,7 +44,7 @@ contract RateModule is IRateModule, Ownable {
     constructor(
         address _owner,
         address _router,
-        uint256[100] memory _rateLookup,
+        uint256[61] memory _rateLookup,
         uint256[10] memory _levels
     ) Ownable(_owner) {
         router = _router;
@@ -52,11 +52,6 @@ contract RateModule is IRateModule, Ownable {
         rateLookup = _rateLookup;
         levels = _levels;
     }
-
-    function lookupRate(uint256 gcred) external view returns (uint256) {
-        return rateLookup[gcred];
-    }
-
     /**
     * @notice getRate returns the rate for an Agent's current position within the Pool
     * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
@@ -132,7 +127,7 @@ contract RateModule is IRateModule, Ownable {
         minGCRED = _minGCRED;
     }
 
-    function setRateLookup(uint256[100] calldata _rateLookup) external onlyOwner {
+    function setRateLookup(uint256[61] calldata _rateLookup) external onlyOwner {
         rateLookup = _rateLookup;
     }
 
@@ -200,6 +195,7 @@ contract RateModule is IRateModule, Ownable {
 
     /// @dev _getRate returns the rate with an extra WAD factor for precision
     function _getRate(uint256 baseRate, uint256 gcred) internal view returns (uint256) {
-        return baseRate.mulWadUp(rateLookup[gcred]);
+        // since GCRED is between 40-100, we subtract 39 to get the index in the rateArray
+        return baseRate.mulWadUp(rateLookup[gcred - minGCRED]);
     }
 }
