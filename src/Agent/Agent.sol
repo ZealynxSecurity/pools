@@ -207,8 +207,8 @@ contract Agent is IAgent, Operatable {
     uint256 _liquidAssets = liquidAssets();
     // Withdraw all liquid funds from the Agent to the newAgent
     _poolFundsInFIL(_liquidAssets);
-    (bool success,) = _newAgent.call{value: _liquidAssets}("");
-    if (!success) revert Internal();
+    // transfer funds to new agent
+    payable(_newAgent).sendValue(_liquidAssets);
   }
 
   /**

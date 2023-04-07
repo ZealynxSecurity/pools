@@ -634,7 +634,7 @@ contract InfinityPool is IPool, Ownable {
         asset.transferFrom(msg.sender, address(this), assets);
         liquidStakingToken.mint(receiver, shares);
         assets = convertToAssets(shares);
-        emit Deposit(msg.sender, receiver, assets, shares);
+        emit Deposit(msg.sender, receiver.normalize(), assets, shares);
     }
 
     function _depositFIL(address receiver) internal returns (uint256 shares) {
