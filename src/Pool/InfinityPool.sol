@@ -260,10 +260,6 @@ contract InfinityPool is IPool, Ownable {
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
 
-        // if (vc.action == borrow && !belowLimit) || vc.action == refinance {
-        //     ...proceed
-        // }
-
         _checkLiquidity(vc.value);
         Account memory account = _getAccount(vc.subject);
         // fresh account, set start epoch and epochsPaid to beginning of current window

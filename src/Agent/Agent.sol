@@ -427,40 +427,6 @@ contract Agent is IAgent, Operatable {
     return pool.pay(sc.vc);
   }
 
-  /**
-   * @notice Allows an agent to refinance their position from one pool to another
-   * This is useful in situations where the Agent is illiquid in power and FIL,
-   * and can secure a better rate from a different pool
-   * @param oldPoolID The ID of the pool to exit from
-   * @param newPoolID The ID of the pool to borrow from
-   * @param sc The signed credential of the agent refinance the pool
-   * @dev This function acts like one Pool "buying out" the position of an Agent on another Pool
-   *
-   * The `value` in the `refinance` credential must be equal to the total amount of FIL owed to the old pool
-   */
-  function refinance(
-    uint256 oldPoolID,
-    uint256 newPoolID,
-    SignedCredential memory sc
-  ) external
-    onlyOwnerOperator
-    notInDefault
-    validateAndBurnCred(sc)
-  {
-    // borrow the amount of FIL owed to the old pool (including interest) from the new pool
-    GetRoute.pool(router, newPoolID).borrow(sc.vc);
-
-    IPool oldPool = GetRoute.pool(router, oldPoolID);
-    // approve old Pool to take wFIL from this agent
-    GetRoute.wFIL(router).approve(address(oldPool), sc.vc.value);
-    // pay back the old pool principal + interest
-    (,uint256 epochsPaid,,) = oldPool.pay(sc.vc);
-    // ensure the account is closed on the old pool
-    if (epochsPaid > 0) revert BadAgentState();
-    // transaction will revert if any of the pool's accounts reject the new agent's state
-    GetRoute.agentPolice(router).agentApproved(sc.vc);
-  }
-
   /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/

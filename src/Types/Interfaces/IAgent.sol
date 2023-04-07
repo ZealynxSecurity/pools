@@ -93,12 +93,6 @@ interface IAgent {
     uint256 refund
   );
 
-  function refinance(
-    uint256 oldPoolID,
-    uint256 newPoolID,
-    SignedCredential memory signedCred
-  ) external;
-
   function pullFunds(
     SignedCredential memory signedCred
   ) external;
