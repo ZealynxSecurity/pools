@@ -855,6 +855,7 @@ contract AgentPayTest is BaseTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
+    error AccountDNE();
 
     address investor1 = makeAddr("INVESTOR_1");
     address minerOwner = makeAddr("MINER_OWNER");
@@ -897,6 +898,29 @@ contract AgentPayTest is BaseTest {
       // Attempt to pay the interest - we should revert as unauthorized since the payer is not the agent
       SignedCredential memory payCred = issueGenericPayCred(agentId, payAmount);
       vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
+      agent.pay(poolId, payCred);
+      vm.stopPrank();
+
+    }
+
+    function testCannotPayOnNonExistentAccount() public {
+      // Establish Static Params
+      uint256 payAmount = 10e18;
+      uint256 poolId = pool.id();
+      uint256 agentId = agent.id();
+
+
+      // Load the payer with sufficient funds to make the payment
+      vm.startPrank(address(agent));
+      vm.deal(address(agent), payAmount);
+      wFIL.deposit{value: payAmount}();
+      wFIL.approve(address(pool), payAmount);
+      vm.stopPrank();
+
+      vm.startPrank(address(minerOwner));
+      // Attempt to pay the interest - we should revert since the account does not exist
+      SignedCredential memory payCred = issueGenericPayCred(agentId, payAmount);
+      vm.expectRevert(abi.encodeWithSelector(AccountDNE.selector));
       agent.pay(poolId, payCred);
       vm.stopPrank();
 
