@@ -7,23 +7,17 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
-import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
-import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
-import {SignedCredential, VerifiableCredential, Credentials} from "src/Types/Structs/Credentials.sol";
+import {SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
-import {
-  ROUTE_AGENT_POLICE
-} from "src/Constants/Routes.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 
 contract Agent is IAgent, Operatable {
 
-  using Credentials for VerifiableCredential;
   using MinerHelper for uint64;
   using FilAddress for address;
   using FilAddress for address payable;
@@ -184,8 +178,8 @@ contract Agent is IAgent, Operatable {
     if (
       agentPolice.isBeneficiaryActive(id)
     ) {
-      AgentBeneficiary memory beneficiary = agentPolice.agentBeneficiary(id);
-      additionalLiability = beneficiary.active.quota - beneficiary.active.usedQuota;
+      AgentBeneficiary memory _beneficiary = agentPolice.agentBeneficiary(id);
+      additionalLiability = _beneficiary.active.quota - _beneficiary.active.usedQuota;
     }
 
     agentPolice.confirmRmEquity(sc.vc, additionalLiability);
