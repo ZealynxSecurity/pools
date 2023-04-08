@@ -24,9 +24,7 @@ contract MinerRegistryTest is BaseTest {
     (Agent agent, uint64 miner1) = configureAgent(agentOwner);
     uint64 miner2 = configureMiner(address(agent), agentOwner);
 
-    address newOwner = makeAddr("NEW_OWNER");
     uint256 minerCount = registry.minersCount(agent.id());
-    SignedCredential memory rmMinerCred = issueRemoveMinerCred(agent.id(), miner2, emptyAgentData());
     vm.startPrank(address(agent));
     registry.removeMiner(agent.id(), miner2);
     vm.stopPrank();

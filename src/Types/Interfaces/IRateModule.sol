@@ -17,7 +17,6 @@ interface IRateModule {
   function credParser() external view returns (address);
 
   function getRate(
-      Account memory account,
       VerifiableCredential memory vc
   ) external view returns (uint256);
 

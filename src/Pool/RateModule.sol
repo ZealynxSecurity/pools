@@ -60,7 +60,6 @@ contract RateModule is IRateModule, Ownable {
     * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
     */
     function getRate(
-        Account memory account,
         VerifiableCredential memory vc
     ) public view returns (uint256) {
         return _getRate(vc.getGCRED(credParser));

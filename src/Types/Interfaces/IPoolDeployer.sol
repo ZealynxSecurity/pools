@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.17;
+
 // Interface for the Pool Deployer contract
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 

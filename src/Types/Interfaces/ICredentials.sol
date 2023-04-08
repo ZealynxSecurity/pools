@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.17;
+
 interface ICredentials {
   function getAgentValue(bytes memory _agentData) external pure returns (uint256);
   function getBaseRate(bytes memory _agentData) external pure returns (uint256);

@@ -34,7 +34,7 @@ library FilAddress {
 
     address constant ZERO_ID_ADDRESS = SYSTEM_ACTOR;
 
-    function normalize(address _a) internal view returns (address) {
+    function normalize(address _a) internal pure returns (address) {
         return _a;
     }
 

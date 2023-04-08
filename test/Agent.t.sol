@@ -35,9 +35,6 @@ import "src/Constants/FuncSigs.sol";
 import "./BaseTest.sol";
 
 contract AgentBasicTest is BaseTest {
-    error InvalidCredential();
-    error InvalidParams();
-    error InsufficientCollateral();
     using Credentials for VerifiableCredential;
     using MinerHelper for uint64;
 
@@ -51,9 +48,9 @@ contract AgentBasicTest is BaseTest {
         agent = _configureAgent(minerOwner1, miner);
     }
 
-    function assertAgentPermissions(address operator, address owner, address agent) public {
-      assertEq(Agent(payable(agent)).owner(), owner, "wrong owner");
-      assertEq(Agent(payable(agent)).operator(), operator, "wrong operator");
+    function assertAgentPermissions(address operator, address owner, address _agent) public {
+      assertEq(Agent(payable(_agent)).owner(), owner, "wrong owner");
+      assertEq(Agent(payable(_agent)).operator(), operator, "wrong operator");
     }
 
     function testInitialState() public {
@@ -118,26 +115,26 @@ contract AgentBasicTest is BaseTest {
       uint256 transferAmt = 1e18;
 
       vm.deal(investor1, transferAmt);
-      (Agent agent,) = configureAgent(investor1);
-      uint256 agentFILBal = address(agent).balance;
+      (Agent agent1,) = configureAgent(investor1);
+      uint256 agentFILBal = address(agent1).balance;
 
       vm.prank(investor1);
-      (bool sent,) = payable(address(agent)).call{value: transferAmt}("");
+      (bool sent,) = payable(address(agent1)).call{value: transferAmt}("");
       assertTrue(sent);
-      assertEq(address(agent).balance, agentFILBal + transferAmt);
+      assertEq(address(agent1).balance, agentFILBal + transferAmt);
     }
 
     function testFallback() public {
       uint256 transferAmt = 1e18;
 
       vm.deal(investor1, transferAmt);
-      (Agent agent,) = configureAgent(investor1);
-      uint256 agentFILBal = address(agent).balance;
+      (Agent _agent,) = configureAgent(investor1);
+      uint256 agentFILBal = address(_agent).balance;
 
       vm.prank(investor1);
-      (bool sent,) = payable(address(agent)).call{value: transferAmt}(bytes("fdsa"));
+      (bool sent,) = payable(address(_agent)).call{value: transferAmt}(bytes("fdsa"));
       assertTrue(sent);
-      assertEq(address(agent).balance, agentFILBal + transferAmt);
+      assertEq(address(_agent).balance, agentFILBal + transferAmt);
     }
 
     function testSingleUseCredentials() public {
@@ -209,7 +206,6 @@ contract AgentPushPullFundsTest is BaseTest {
 
     function testPushFundsToRandomMiner() public {
       uint64 secondMiner = _newMiner(minerOwner1);
-      address miner2 = idStore.ids(secondMiner);
 
       SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), secondMiner, 1e18);
       vm.startPrank(minerOwner1);
@@ -322,7 +318,7 @@ contract AgentRmEquityTest is BaseTest {
         WAD
       );
 
-      uint256 preAgentBalance = address(agent).balance;
+      // uint256 preAgentBalance = address(agent).balance;
 
       uint256 equity = agentValue - principal;
 
@@ -384,7 +380,6 @@ contract AgentRmEquityTest is BaseTest {
     function testWithdrawIntoUnapprovedDTI(uint256 principal, uint256 badEDR) public {
       // in this test, we want EDR to be > maxDTI, so we set the principal to be
       principal = bound(principal, WAD, MAX_FIL);
-      uint256 rate = _getAdjustedRate(GCRED);
 
       IRateModule rateModule = IRateModule(pool.rateModule());
 
@@ -640,7 +635,7 @@ contract AgentRmEquityTest is BaseTest {
     }
 
     function customRemoveMinerCred(
-      uint64 miner,
+      uint64 minerToRemove,
       uint256 principal,
       uint256 agentValue,
       uint256 collateralValue,
@@ -668,7 +663,7 @@ contract AgentRmEquityTest is BaseTest {
 
       rmMinerCred = issueRemoveMinerCred(
         agent.id(),
-        miner,
+        minerToRemove,
         agentData
       );
     }
@@ -691,12 +686,12 @@ contract AgentRmEquityTest is BaseTest {
     function withdrawAndAssertRevert(
       address receiver,
       SignedCredential memory withdrawCred,
-      bytes4 errorSelector
+      bytes4 errorSelectorValue
     ) internal {
       uint256 preAgentLiquidFunds = agent.liquidAssets();
       // withdraw
       vm.startPrank(minerOwner);
-      vm.expectRevert(abi.encodeWithSelector(errorSelector));
+      vm.expectRevert(abi.encodeWithSelector(errorSelectorValue));
       agent.withdraw(receiver, withdrawCred);
       vm.stopPrank();
 
@@ -725,10 +720,10 @@ contract AgentRmEquityTest is BaseTest {
       uint64 removedMiner,
       address newMinerOwner,
       SignedCredential memory rmMinerCred,
-      bytes4 errorSelector
+      bytes4 errorSelectorValue
     ) internal {
       vm.startPrank(minerOwner);
-      vm.expectRevert(abi.encodeWithSelector(errorSelector));
+      vm.expectRevert(abi.encodeWithSelector(errorSelectorValue));
       agent.removeMiner(newMinerOwner, rmMinerCred);
       vm.stopPrank();
 
@@ -774,8 +769,6 @@ contract AgentBorrowingTest is BaseTest {
       borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
       // Since we've already borrowed, we pretend the SP locks substantially more funds
       uint256 collateralValue = borrowAmount * 4;
-
-      uint256 adjustedRate = rateArray[GCRED - pool.rateModule().minGCRED()] * DEFAULT_BASE_RATE / 1e18;
 
       AgentData memory agentData = createAgentData(
         collateralValue,
@@ -879,7 +872,7 @@ contract AgentPayTest is BaseTest {
       SignedCredential memory borrowCred = issueGenericBorrowCred(agentId, borrowAmount);
 
       // We're just going to use the full amount of interest owed as our pay amount
-      (uint256 payAmount,) = calculateInterestOwed(agent, pool, borrowCred.vc, borrowAmount, rollFwdAmt);
+      (uint256 payAmount,) = calculateInterestOwed(pool, borrowCred.vc, borrowAmount, rollFwdAmt);
       // Set fuzzed values to logical test limits - in this case anyone but the agent should be unauthorized
       address payer = makeAddr(payerSeed);
       vm.assume(payer != address(agent));
@@ -931,7 +924,7 @@ contract AgentPayTest is BaseTest {
       borrowAmount = bound(borrowAmount, 1e18, stakeAmount);
 
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
-      (uint256 interestOwed, uint256 interestOwedPerEpoch) = calculateInterestOwed(agent, pool, borrowCred.vc, borrowAmount, rollFwdAmt);
+      (uint256 interestOwed, uint256 interestOwedPerEpoch) = calculateInterestOwed(pool, borrowCred.vc, borrowAmount, rollFwdAmt);
 
       // bind the pay amount to less than the interest owed
       payAmount = bound(payAmount, interestOwedPerEpoch + DUST, interestOwed - DUST);
@@ -940,7 +933,6 @@ contract AgentPayTest is BaseTest {
         agent,
         pool,
         borrowCred,
-        borrowAmount,
         payAmount,
         rollFwdAmt
       );
@@ -959,7 +951,7 @@ contract AgentPayTest is BaseTest {
 
       SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      (uint256 interestOwed,) = calculateInterestOwed(agent, pool, borrowCred.vc, borrowAmount, rollFwdAmt);
+      (uint256 interestOwed,) = calculateInterestOwed(pool, borrowCred.vc, borrowAmount, rollFwdAmt);
       // bind the pay amount to in between the interest owed and less than the principal
       payAmount = bound(payAmount, interestOwed + DUST, interestOwed + borrowAmount - DUST);
 
@@ -967,7 +959,6 @@ contract AgentPayTest is BaseTest {
         agent,
         pool,
         borrowCred,
-        borrowAmount,
         payAmount,
         rollFwdAmt
       );
@@ -989,47 +980,46 @@ contract AgentPayTest is BaseTest {
     function testPayTooMuch(uint256 payAmount) public {}
 
     function borrowRollFwdAndPay(
-      IAgent agent,
-      IPool pool,
+      IAgent _agent,
+      IPool newPool,
       SignedCredential memory borrowCred,
-      uint256 borrowAmount,
       uint256 payAmount,
       uint256 rollFwdAmt
     ) internal returns (
       StateSnapshot memory
     ) {
-      uint256 agentID = agent.id();
-      uint256 poolID = pool.id();
-      agentBorrow(agent, poolID, borrowCred);
+      uint256 agentID = _agent.id();
+      uint256 poolID = newPool.id();
+      agentBorrow(_agent, poolID, borrowCred);
 
       vm.roll(block.number + rollFwdAmt);
-      uint256 prevAccountEpochsPaid = AccountHelpers.getAccount(router, agentID, poolID).epochsPaid;
-      uint256 prevAgentPoolBorrowCount = agent.borrowedPoolsCount();
+      // uint256 prevAccountEpochsPaid = AccountHelpers.getAccount(router, agentID, poolID).epochsPaid;
+      // uint256 prevAgentPoolBorrowCount = agent.borrowedPoolsCount();
 
       (
-        ,uint256 epochsPaid,
+        ,,
         uint256 principalPaid,
         uint256 refund,
         StateSnapshot memory prePayState
-      ) = agentPay(agent, pool, issueGenericPayCred(agentID, payAmount));
+      ) = agentPay(_agent, newPool, issueGenericPayCred(agentID, payAmount));
 
-      assertPmtSuccess(agent, pool, prePayState, payAmount, principalPaid, refund);
+      assertPmtSuccess(_agent, newPool, prePayState, payAmount, principalPaid, refund);
 
       return prePayState;
     }
 
     function assertPmtSuccess(
-      IAgent agent,
-      IPool pool,
+      IAgent newAgent,
+      IPool newPool,
       StateSnapshot memory prePayState,
       uint256 payAmount,
       uint256 principalPaid,
       uint256 refund
     ) internal {
-      assertEq(prePayState.poolBalanceWFIL + payAmount, wFIL.balanceOf(address(pool)), "pool should have received funds");
-      assertEq(prePayState.agentBalanceWFIL - payAmount, wFIL.balanceOf(address(agent)), "agent should have paid funds");
+      assertEq(prePayState.poolBalanceWFIL + payAmount, wFIL.balanceOf(address(newPool)), "pool should have received funds");
+      assertEq(prePayState.agentBalanceWFIL - payAmount, wFIL.balanceOf(address(newAgent)), "agent should have paid funds");
 
-      Account memory postPaymentAccount = AccountHelpers.getAccount(router, agent.id(), pool.id());
+      Account memory postPaymentAccount = AccountHelpers.getAccount(router, newAgent.id(), newPool.id());
 
       // full exit
       if (principalPaid >= prePayState.agentBorrowed) {
@@ -1047,7 +1037,7 @@ contract AgentPayTest is BaseTest {
         // partial exit or interest only payment
         assertGt(postPaymentAccount.epochsPaid, prePayState.accountEpochsPaid, "epochs paid should have moved forward");
         assertLe(postPaymentAccount.epochsPaid, block.number, "epochs paid should not be in the future");
-        assertEq(agent.borrowedPoolsCount(), prePayState.agentPoolBorrowCount, "agent should not have removed pool from borrowed list");
+        assertEq(newAgent.borrowedPoolsCount(), prePayState.agentPoolBorrowCount, "agent should not have removed pool from borrowed list");
 
       }
     }
@@ -1077,7 +1067,7 @@ contract AgentPoolsTest is BaseTest {
     poolCount = bound(poolCount, 1, 10);
     totalBorrow = bound(totalBorrow, WAD * poolCount, stakeAmount);
     uint256 borrowPerPool = totalBorrow / poolCount;
-    uint256 borrowRemainder = totalBorrow % poolCount;
+    // uint256 borrowRemainder = totalBorrow % poolCount;
     IPool[] memory pools = new IPool[](poolCount);
 
     for (uint256 i = 0; i < poolCount; i++) {
@@ -1090,19 +1080,19 @@ contract AgentPoolsTest is BaseTest {
       SignedCredential memory sc = issueGenericPayCred(agent.id(), borrowPerPool*2);
       vm.deal(address(agent), borrowPerPool*2);
 
-      (,uint256 epochsPaid,,,) = agentPay(agent, pools[i], sc);
+      agentPay(agent, pools[i], sc);
     }
     assertEq(agent.borrowedPoolsCount(), 0, "agent should have correct pool count");
 
   }
 
 
-  function createFundBorrowPool(uint256 amount) internal returns (IPool pool) {
-    pool = createAndFundPool(stakeAmount, investor1);
-    uint64 miner = _newMiner(minerOwner);
-    _agentClaimOwnership(address(agent), miner, minerOwner);
-    agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), amount));
-    return pool;
+  function createFundBorrowPool(uint256 amount) internal returns (IPool borrowPool) {
+    borrowPool = createAndFundPool(stakeAmount, investor1);
+    uint64 minerNew = _newMiner(minerOwner);
+    _agentClaimOwnership(address(agent), minerNew, minerOwner);
+    agentBorrow(agent, borrowPool.id(), issueGenericBorrowCred(agent.id(), amount));
+    return borrowPool;
   }
 }
 
@@ -1320,8 +1310,6 @@ contract AgentPoliceTest is BaseTest {
       // helper contains assertions
       setAgentLiquidated(
         agent,
-        police.defaultWindow() + 1,
-        WAD,
         pool.id()
       );
     }
@@ -1990,7 +1978,6 @@ contract AgentBeneficiaryTest is BaseTest {
     uint256 balance
   ) public {
     balance = bound(balance, withdrawAmount, type(uint256).max);
-    uint256 balanceBefore = address(ownerAddr).balance;
     address recipient = makeAddr(receipientSeed);
     vm.deal(address(agent), balance);
     vm.assume(recipient != ownerAddr);

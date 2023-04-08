@@ -10,8 +10,6 @@ import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 
 contract PoolTestState is BaseTest {
 
-
-  error InvalidParams();
   error InvalidState();
 
   using Credentials for VerifiableCredential;
@@ -88,7 +86,7 @@ contract PoolTestState is BaseTest {
   }
 
   function _stakeToRamp(uint256 amount, address staker) internal {
-    vm.startPrank(investor1);
+    vm.startPrank(staker);
     // Finally, we can stake & harvest after setup
     ramp.stake(amount);
   }
@@ -178,7 +176,7 @@ contract PoolGetRateTest is PoolTestState {
   using FixedPointMathLib for uint256;
 
   function testGetRateBasic() public {
-    uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
+    uint256 rate = pool.getRate(vcBasic);
     uint256 expectedRate = baseRate.mulWadUp(rateArray[gCredBasic - pool.rateModule().minGCRED()]);
     assertEq(rate, expectedRate);
   }
@@ -198,8 +196,7 @@ contract PoolGetRateTest is PoolTestState {
       0
     );
     vcBasic.claim = abi.encode(agentData);
-    pool.getRate(Account(0,0,0, true), vcBasic);
-    uint256 rate = pool.getRate(Account(0,0,0, true), vcBasic);
+    uint256 rate = pool.getRate(vcBasic);
     uint256 expectedRate = baseRate.mulWadUp(rateArray[gCRED - pool.rateModule().minGCRED()]);
     assertEq(rate, expectedRate);
   }
@@ -247,7 +244,7 @@ contract PoolIsOverLeveragedTest is PoolTestState {
     assertTrue(
       rateModule.computeDTI(
         agentData.expectedDailyRewards,
-        pool.getRate(account, vcBasic),
+        pool.getRate(vcBasic),
         principal,
         principal
       ) < rateModule.maxDTI(), "Should be under DTI"
@@ -296,7 +293,7 @@ contract PoolIsOverLeveragedTest is PoolTestState {
     assertTrue(
       rateModule.computeDTI(
         agentData.expectedDailyRewards,
-        pool.getRate(account, vcBasic),
+        pool.getRate(vcBasic),
         principal,
         principal
       ) > rateModule.maxDTI(), "Should be over DTI"
@@ -337,7 +334,7 @@ contract PoolIsOverLeveragedTest is PoolTestState {
     assertTrue(
       rateModule.computeDTI(
         agentData.expectedDailyRewards,
-        pool.getRate(account, vcBasic),
+        pool.getRate(vcBasic),
         principal,
         principal
       ) < rateModule.maxDTI(), "Should be under DTI"
@@ -399,7 +396,6 @@ contract PoolAPRTests is PoolTestState {
     uint256 testRate = _getAdjustedRate(GCRED);
 
     uint256 chargedRatePerEpoch = pool.getRate(
-      createAccount(WAD),
       issueGenericBorrowCred(agentID, WAD).vc
     );
 
@@ -435,7 +431,6 @@ contract PoolAPRTests is PoolTestState {
     uint256 testRate = _getAdjustedRate(GCRED);
 
     uint256 chargedRatePerEpoch = pool.getRate(
-      createAccount(WAD),
       issueGenericBorrowCred(agentID, WAD).vc
     );
 
@@ -713,7 +708,8 @@ contract Pool4626Tests is PoolTestState {
     vm.deal(investor1, amount);
     uint256 balanceBefore = asset.balanceOf(address(pool));
     vm.prank(investor1);
-    address(pool).call{value: amount}("");
+    (bool success, ) = address(pool).call{value: amount}("");
+    assertTrue(success, "Address: unable to send value, recipient may have reverted");
     uint256 balanceAfter = asset.balanceOf(address(pool));
     assertEq(balanceAfter - balanceBefore, amount);
   }
@@ -723,7 +719,8 @@ contract Pool4626Tests is PoolTestState {
     vm.deal(investor1, amount);
     uint256 balanceBefore = asset.balanceOf(address(pool));
     vm.prank(investor1);
-    address(pool).call{value: amount}(abi.encodeWithSignature("fakeFunction(uint256, uint256)", 1, 2));
+    (bool success, ) = address(pool).call{value: amount}(abi.encodeWithSignature("fakeFunction(uint256, uint256)", 1, 2));
+    assertTrue(success, "Address: unable to send value, recipient may have reverted");
     uint256 balanceAfter = asset.balanceOf(address(pool));
     assertEq(balanceAfter - balanceBefore, amount);
   }
@@ -765,7 +762,6 @@ contract Pool4626Tests is PoolTestState {
     uint256 balanceBeforeLST = liquidStakingToken.balanceOf(address(investor1));
     vm.prank(address(investor1));
     pool.redeem(shares, investor1, investor1);
-    uint256 balanceAfter = iou.balanceOf(address(ramp));
     uint256 balanceAfterIOU = iou.balanceOf(address(ramp));
     uint256 balanceAfterLST = liquidStakingToken.balanceOf(address(investor1));
     assertEq(balanceAfterIOU - balanceBeforeIOU, expectedRedeem, "IOU balance should be updated");
@@ -834,14 +830,12 @@ contract PoolAdminTests is PoolTestState {
   }
 
   function testshutDownPool() public {
-    IPool newPool = createAndFundPool(stakeAmount, investor1);
     assertEq(stakeAmount, asset.balanceOf(address(pool)));
     vm.prank(address(systemAdmin));
     pool.shutDown();
     assertTrue(pool.isShuttingDown(), "Pool should be shut down");
     vm.prank(address(poolRegistry));
   }
-
 
   function testUpgradePool(uint256 paymentAmt, uint256 initialBorrow) public {
 

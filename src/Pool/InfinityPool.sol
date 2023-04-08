@@ -200,10 +200,9 @@ contract InfinityPool is IPool, Ownable {
     * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
     */
     function getRate(
-        Account memory account,
         VerifiableCredential memory vc
     ) public view returns (uint256) {
-        return rateModule.getRate(account, vc);
+        return rateModule.getRate(vc);
     }
 
     /**
@@ -325,7 +324,7 @@ contract InfinityPool is IPool, Ownable {
         // ensure we're not making payments to a non-existent account
         if (!account.exists()) revert AccountDNE();
         // compute a rate based on the agent's current financial situation
-        rate = getRate(account, vc);
+        rate = getRate(vc);
         uint256 interestOwed;
         uint256 interestPerEpoch;
         uint256 feeBasis;

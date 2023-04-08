@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.17;
+
 import {Agent} from "src/Agent/Agent.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
 error Unauthorized();
@@ -14,9 +16,9 @@ contract UpgradedAgent is Agent {
     address _operator
   ) Agent(_router, _agentID, _owner, _operator) {}
 
-  function addMigratedMiners(uint64[] calldata miners) external onlyOwnerOperator {
-    for (uint256 i = 0; i < miners.length; i++) {
-      _addMinerNoRegistration(miners[i]);
+  function addMigratedMiners(uint64[] calldata migratedMiners) external onlyOwnerOperator {
+    for (uint256 i = 0; i < migratedMiners.length; i++) {
+      _addMinerNoRegistration(migratedMiners[i]);
     }
   }
 

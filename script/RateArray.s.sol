@@ -81,7 +81,7 @@ contract RateArrayGenerator is Script {
     rateArray[100 - 40]  =  18e16;
   }
 
-  function run() public {
+  function run() public view {
     console.log("~~~ Generating rate array ~~~");
 
     uint256[61] memory rateMultipliers;

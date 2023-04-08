@@ -437,7 +437,7 @@ contract BaseTest is Test {
     baseRate = vcBasic.getBaseRate(credParser);
   }
 
-  function createAccount(uint256 amount) internal returns(Account memory account) {
+  function createAccount(uint256 amount) internal view returns(Account memory account) {
     uint256 currentBlock = block.number;
     account = Account(currentBlock, amount, currentBlock, false);
   }
@@ -502,16 +502,12 @@ contract BaseTest is Test {
 
     vm.startPrank(_agentOperator(agent));
 
-    // Establsh the state before the borrow
-    StateSnapshot memory preBorrowState = _snapshot(address(agent), pool.id());
-
     Account memory account = AccountHelpers.getAccount(
       router,
       address(agent),
       pool.id()
     );
 
-    uint256 borrowBlock = block.number;
     uint256 prePayEpochsPaid = account.epochsPaid;
 
     prePayState = _snapshot(address(agent), pool.id());
@@ -544,19 +540,17 @@ contract BaseTest is Test {
   }
 
   function calculateInterestOwed(
-    IAgent agent,
     IPool pool,
     VerifiableCredential memory vc,
     uint256 borrowAmount,
     uint256 rollFwdAmt
-  ) internal returns (
+  ) internal view returns (
     uint256 interestOwed,
     uint256 interestOwedPerEpoch
   ) {
-    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
     // since gcred is hardcoded in the credential, we know the rate ahead of time (rate does not change if gcred does not change, even if other financial statistics change)
     // rate here is WAD based
-    uint256 rate = pool.getRate(account, vc);
+    uint256 rate = pool.getRate(vc);
     // note we add 1 more bock of interest owed to account for the roll forward of 1 epoch inside agentBorrow helper
     // since borrowAmount is also WAD based, the _interestOwedPerEpoch is also WAD based (e18 * e18 / e18)
     uint256 _interestOwedPerEpoch = borrowAmount.mulWadUp(rate);
@@ -610,8 +604,6 @@ contract BaseTest is Test {
 
   function setAgentLiquidated(
     IAgent agent,
-    uint256 rollFwdPeriod,
-    uint256 borrowAmount,
     uint256 poolID
   ) internal {
     IAgentPolice police = GetRoute.agentPolice(router);

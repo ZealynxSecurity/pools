@@ -80,7 +80,6 @@ interface IPool {
     function feesCollected() external view returns (uint256);
 
     function getRate(
-        Account memory account,
         VerifiableCredential memory vc
     ) external view returns (uint256);
 

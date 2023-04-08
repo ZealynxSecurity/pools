@@ -17,9 +17,9 @@ contract Router is IRouter, Ownable {
   constructor(address owner) Ownable(owner) {}
 
   function getRoute(bytes4 id) public view returns (address) {
-    address route = route[id];
-    if (route == ADDRESS_ZERO) revert RouteDNE();
-    return route;
+    address _route = route[id];
+    if (_route == ADDRESS_ZERO) revert RouteDNE();
+    return _route;
   }
 
   function getRoute(string memory id) external view returns (address) {

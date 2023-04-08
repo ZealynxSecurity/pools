@@ -83,13 +83,13 @@ contract Agent is IAgent, Operatable {
   }
 
   constructor(
-    address _router,
-    uint256 _agentID,
-    address _owner,
-    address _operator
-  ) Operatable(_owner, _operator) {
-    router = _router;
-    id = _agentID;
+    address agentRouter,
+    uint256 agentID,
+    address owner,
+    address operator
+  ) Operatable(owner, operator) {
+    router = agentRouter;
+    id = agentID;
   }
 
   /*//////////////////////////////////////////////////
@@ -260,13 +260,13 @@ contract Agent is IAgent, Operatable {
   }
 
   function changeBeneficiary(
-    address beneficiary,
+    address agentBeneficiary,
     uint256 expiration,
     uint256 quota
   ) external onlyOwner notPaused {
     GetRoute.agentPolice(router).changeAgentBeneficiary(
       // the beneficiary address gets normalized in agent police to save on code size
-      beneficiary,
+      agentBeneficiary,
       id,
       expiration,
       quota
