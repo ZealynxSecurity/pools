@@ -348,7 +348,6 @@ contract BaseTest is Test {
     uint256 agentValue = lockedFunds * 120 / 100;
     return AgentData(
       agentValue,
-      DEFAULT_BASE_RATE,
       collateralValue,
       // expectedDailyFaultPenalties
       0,
@@ -364,7 +363,6 @@ contract BaseTest is Test {
 
   function emptyAgentData() internal pure returns (AgentData memory) {
     return AgentData(
-      0,
       0,
       0,
       0,
@@ -426,15 +424,13 @@ contract BaseTest is Test {
     uint64 miner,
     SignedCredential memory borrowCredBasic,
     VerifiableCredential memory vcBasic,
-    uint256 gCredBasic,
-    uint256 baseRate)
-  {
+    uint256 gCredBasic
+  ) {
     pool = createAndFundPool(stakeAmount, investor1);
     (agent, miner) = configureAgent(minerOwner);
     borrowCredBasic = issueGenericBorrowCred(agent.id(), borrowAmount);
     vcBasic = borrowCredBasic.vc;
     gCredBasic = vcBasic.getGCRED(credParser);
-    baseRate = vcBasic.getBaseRate(credParser);
   }
 
   function createAccount(uint256 amount) internal view returns(Account memory account) {

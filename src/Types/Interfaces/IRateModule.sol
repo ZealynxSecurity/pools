@@ -24,6 +24,10 @@ interface IRateModule {
 
   function penaltyRate() external view returns (uint256);
 
+  function rateLookup(uint256 index) external view returns (uint256);
+
+  function accountLevel(uint256 agentID) external view returns (uint256);
+
   function isApproved(
       Account memory account,
       VerifiableCredential memory vc
@@ -52,7 +56,7 @@ interface IRateModule {
 
   function setMinGCRED(uint256 _minGCRED) external;
 
-  function setRateLookup(uint256[61] memory _rateLookup) external;
+  function setRateLookup(uint256[61] calldata _rateLookup) external;
 
   function updateCredParser() external;
 }

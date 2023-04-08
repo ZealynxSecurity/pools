@@ -10,6 +10,14 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
+/**
+ * @title RateModule
+ * @author GLIF
+ * @notice RateModule is a contract that the Infinity Pool outsource's its financial math related to getting rates and approving borrow requests
+ *
+ * The primary responsibility of this contract is the `isApproved` function, which is used to determine whether an Agent is in "good standing". An Agent is in good standing if:
+
+ */
 contract RateModule is IRateModule, Ownable {
 
     using Credentials for VerifiableCredential;
@@ -42,6 +50,7 @@ contract RateModule is IRateModule, Ownable {
     /// @dev `credParser` is the cached cred parser
     address public credParser;
 
+    /// @dev `router` is the cached router address
     address public router;
 
     constructor(
@@ -55,30 +64,38 @@ contract RateModule is IRateModule, Ownable {
         rateLookup = _rateLookup;
         levels = _levels;
     }
+
     /**
-    * @notice getRate returns the rate for an Agent's current position within the Pool
-    * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
-    */
+     * @notice getRate returns the rate for an Agent's current position within the Pool
+     * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
+     * @param vc - the Agent's verifiable credential
+     * @return rate - the rate for the Agent's current position within the Pool
+     * @dev getRate returns a per epoch rate with an additional WAD for precision
+     */
     function getRate(
         VerifiableCredential memory vc
-    ) public view returns (uint256) {
+    ) public view returns (uint256 rate) {
         return _getRate(vc.getGCRED(credParser));
     }
 
-    /**
-     * @notice _getRate returns the rate for an Agent's current position within the Pool
-     * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
-     */
-    function penaltyRate() external view returns (uint256) {
+    /// @dev penaltyRate returns the rate for the worst GCRED which is used in liquidations
+    function penaltyRate() external view returns (uint256 rate) {
         return _getRate(minGCRED);
     }
 
     /**
      * @notice isApproved returns false if the Agent is in a bad state (over leveraged, not on whitelist..etc)
-     * The bulk of this check is around:
-     * 1. Minimum GCRED score
-     * 2. Maximum loan-to-value ratio, where the loan is the total agent's principal, and the value is the total Agent's locked funds in pledge collateral + vesting rewards on filecoin
-     * 3. Maximum debt-to-income ratio, where the debt is the total agent's interest payments, and the income is the weighted agent's expected daily rewards
+     * @param account - the Agent's account with the Infinity Pool
+     * @param vc - the Agent's verifiable credential.
+     * @dev the VC's statistics are post-processed - they report the information of an Agent as if the associated action had just executed. For example, if an Agent is attempting to borrow, the VC will report the Agent's new principal as if the Agent had just borrowed.
+     *
+     * @dev isApproved returns true if all of the following conditions are met:
+     * 1. The Agent is not more than `defaultWindow` epochs behind on payments. This ensure that a SP can't lag too far behind on payments.
+     * 2. The Agent's total principal is less than or equal to the maximum principal for their level. This is primarily a safety mechanism to ensure the Pool can roll-out in a well diversified way. It also allows the pool to toggle between more/less KYC type checks to allow Agents to increase the amount they can borrow.
+     * 3. The Agent's principal divided by its collateral value (LTV ratio) must be less than `maxLTV`. This check exists to ensure that the pool can recover its funds in the event of a liquidation.
+     * 4. The Agent's principal divided by its equity (DTE ratio) must be less than `maxDTE`. This check exists to ensure that the Agent has sufficient skin in the game and is not incentivized to walk away from their Agent and SPs.
+     * 5. The Agent's expected daily interest payments divided by its expected daily rewards must be less than `maxDTI`. This check exists to ensure that a SP can meet its expected payments solely from its block rewards.
+     *
      */
     function isApproved(
         Account memory account,
@@ -93,8 +110,8 @@ contract RateModule is IRateModule, Ownable {
         if (account.principal > levels[accountLevel[vc.subject]]) {
             return false;
         }
-
         uint256 totalPrincipal = vc.getPrincipal(credParser);
+        // checks for zero to avoid dividing or multiplying by zero downstream
         // if you have nothing borrowed, you're good no matter what
         if (totalPrincipal == 0) return true;
         // if you have bad GCRED, you're not approved
@@ -104,15 +121,16 @@ contract RateModule is IRateModule, Ownable {
         uint256 collateralValue = vc.getCollateralValue(credParser);
         if (collateralValue == 0) return false;
 
-        // if LTV is greater than `maxLTV` (e18 denominated), we are over leveraged (can't mortgage more than the value of your home)
+        // if LTV is greater than `maxLTV`, Agent is undercollateralized
         if (computeLTV(totalPrincipal, collateralValue) > maxLTV) {
             return false;
         }
-
+        // if DTE is greater than `maxDTE`, Agent does not have sufficient skin in the game
         if (computeDTE(totalPrincipal, vc.getAgentValue(credParser)) > maxDTE) {
             return false;
         }
 
+        // if DTI is greater than `maxDTI`, Agent cannot meet its payments solely from block rewards
         return computeDTI(
             vc.getExpectedDailyRewards(credParser),
             _getRate(gcred),
@@ -121,38 +139,39 @@ contract RateModule is IRateModule, Ownable {
         ) <= maxDTI;
     }
 
+    /// @dev sets the max DTI score to be considered approved
     function setMaxDTI(uint256 _maxDTI) external onlyOwner {
         maxDTI = _maxDTI;
     }
-
+    /// @dev sets the max DTE score to be considered approved
     function setMaxDTE(uint256 _maxDTE) external onlyOwner {
         maxDTE = _maxDTE;
     }
-
+    /// @dev sets the max LTV to be considered approved
     function setMaxLTV(uint256 _maxLTV) external onlyOwner {
         maxLTV = _maxLTV;
     }
-
+    /// @dev sets the min GCRED score to be considered approved
     function setMinGCRED(uint256 _minGCRED) external onlyOwner {
         minGCRED = _minGCRED;
     }
-
-    function setRateLookup(uint256[61] calldata _rateLookup) external onlyOwner {
-        rateLookup = _rateLookup;
-    }
-
+    /// @dev sets the base rate
     function setBaseRate(uint256 _baseRate) external onlyOwner {
         baseRate = _baseRate;
     }
-
+    /// @dev sets the rate lookup table. The rateLookup table is a table of perEpoch rate multipliers that get mulWad'd with the base rate to get the final rate
+    function setRateLookup(uint256[61] calldata _rateLookup) external onlyOwner {
+        rateLookup = _rateLookup;
+    }
+    /// @dev sets the credentialParser in case we need to update a data type
     function updateCredParser() external onlyOwner {
         credParser = address(GetRoute.credParser(router));
     }
-
+    /// @dev sets the array of max borrow amounts for each level
     function setLevels(uint256[10] calldata _levels) external onlyOwner {
         levels = _levels;
     }
-
+    /// @dev sets the array of max borrow amounts for each level
     function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external onlyOwner {
         if (agentIDs.length != level.length) revert InvalidParams();
         uint256 i = 0;
@@ -161,16 +180,28 @@ contract RateModule is IRateModule, Ownable {
         }
     }
 
-    /// @dev compute the loan to value, where value is locked funds
+    /**
+     * @notice computeLTV computes the principal to collateral value ratio
+     * @param principal - the total principal of the Agent
+     * @param collateralValue - the total collateral value of the Agent
+     * @dev collateral value is computed on the server as: vesting funds + (locked funds * termination risk discount)
+     */
     function computeLTV(
-        uint256 totalPrincipal,
+        uint256 principal,
         uint256 collateralValue
     ) public pure returns (uint256) {
-        // compute the loan to value
-        return totalPrincipal.divWadDown(collateralValue);
+        return principal.divWadDown(collateralValue);
     }
 
-    /// @dev compute the DTI
+    /**
+     * @notice computeDTI computes the principal to expectedDailyRewards ratio
+     * @param expectedDailyRewards - the total principal of the Agent
+     * @param rate - the per epoch rate of the Agent given the GCRED score
+     * @param accountPrincipal - the total principal borrowed from the infinity pool
+     * @param totalPrincipal - the total principal borrowed from all pools
+     * @dev the DTI is weighted by the Agent's borrow amount from the pool relative to any other pools
+     * @dev the rate is WAD based
+     */
     function computeDTI(
         uint256 expectedDailyRewards,
         uint256 rate,
@@ -193,14 +224,19 @@ contract RateModule is IRateModule, Ownable {
         return dailyRate.divWadUp(weightedEDR);
     }
 
-    /// @dev compute the DTE
+    /**
+     * @notice computeDTE computes the principal to equity value ratio
+     * @param principal - the total principal of the Agent
+     * @param agentTotalValue - the total value of the Agent
+     * @dev agent total value includes principal borrowed by the Agent
+     */
     function computeDTE(
         uint256 principal,
         uint256 agentTotalValue
     ) public pure returns (uint256) {
         // since agentTotalValue includes borrowed funds (principal),
         // agentTotalValue should always be greater than principal
-        // however, this could happen if the agent is severely slashed over long durations
+        // however, this assumption could break if the agent is severely slashed over long durations
         // in this case, they're definitely over the maxDTE, regardless of what it's set to
         if (agentTotalValue <= principal) return type(uint256).max;
         // return DTE

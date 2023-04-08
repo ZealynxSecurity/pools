@@ -27,7 +27,6 @@ contract PoolTestState is BaseTest {
   VerifiableCredential vcBasic;
   IAgent agent;
   uint64 miner;
-  uint256 baseRate;
   IPoolToken public liquidStakingToken;
   IERC20 public asset;
   uint256 agentID;
@@ -36,7 +35,7 @@ contract PoolTestState is BaseTest {
   IPoolToken iou;
 
   function setUp() public virtual {
-    (pool, agent, miner, borrowCredBasic, vcBasic, gCredBasic, baseRate) = PoolBasicSetup(
+    (pool, agent, miner, borrowCredBasic, vcBasic, gCredBasic) = PoolBasicSetup(
       stakeAmount,
       borrowAmount,
       investor1,
@@ -108,7 +107,6 @@ contract PoolBasicSetupTest is BaseTest {
   VerifiableCredential vcBasic;
   IAgent agent;
   uint64 miner;
-  uint256 baseRate;
 
   function testCreatePool() public {
     IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
@@ -177,7 +175,7 @@ contract PoolGetRateTest is PoolTestState {
 
   function testGetRateBasic() public {
     uint256 rate = pool.getRate(vcBasic);
-    uint256 expectedRate = baseRate.mulWadUp(rateArray[gCredBasic - pool.rateModule().minGCRED()]);
+    uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(rateArray[gCredBasic - pool.rateModule().minGCRED()]);
     assertEq(rate, expectedRate);
   }
 
@@ -197,7 +195,7 @@ contract PoolGetRateTest is PoolTestState {
     );
     vcBasic.claim = abi.encode(agentData);
     uint256 rate = pool.getRate(vcBasic);
-    uint256 expectedRate = baseRate.mulWadUp(rateArray[gCRED - pool.rateModule().minGCRED()]);
+    uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(rateArray[gCRED - pool.rateModule().minGCRED()]);
     assertEq(rate, expectedRate);
   }
 }

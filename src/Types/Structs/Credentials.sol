@@ -13,18 +13,38 @@ struct AgentData {
    */
   uint256 agentValue;
   /**
-   * @dev The lowest interest rate that the protocol will charge
-   *
-   * This rate is computed dynamically based off the network's inflation rate
+   * @dev collateralValue is computed as vesting funds + locked funds - termination fees
+   * This does not include available funds on the Agent or any of its miners - it incentivizes miners to pledge their available balances
    */
-  uint256 baseRate;
   uint256 collateralValue;
+  /**
+   * @dev The daily fee for sector fault penalties for any of the Agent's faulty sectors
+   */
   uint256 expectedDailyFaultPenalties;
+  /**
+   * @dev The aggregated block rewards expected to be earned by this Agent's miners in the next 24h
+   */
   uint256 expectedDailyRewards;
+  /**
+   * @dev A numerical representation of the Agent's financial risk
+   * GCRED is used as an index in the rateArray in the rateModule, such that it applies a per epoch multiplier to the base rate
+   */
   uint256 gcred;
+  /**
+   * @dev The total amount of vesting funds + initial pledge collateral aggregated across all of the Agent's miners
+   */
   uint256 lockedFunds;
+  /**
+   * @dev The aggregated quality adjusted power of all of the Agent's miners
+   */
   uint256 qaPower;
+  /**
+   * @dev The total amount of FIL borrowed by the Agent
+   */
   uint256 principal;
+  /**
+   * @dev The epoch in which the Agent started borrowing FIL
+   */
   uint256 startEpoch;
 }
 
@@ -81,13 +101,6 @@ library Credentials {
     VerifiableCredential memory vc
   ) internal pure returns (AgentData memory agentData) {
     agentData = abi.decode(vc.claim, (AgentData));
-  }
-
-  function getBaseRate(
-    VerifiableCredential memory vc,
-    address credParser
-  ) internal pure returns (uint256) {
-    return ICredentials(credParser).getBaseRate(vc.claim);
   }
 
   function getAgentValue(

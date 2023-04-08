@@ -46,13 +46,15 @@ contract PoolRegistry is IPoolRegistry, Ownable {
     router = _router;
   }
 
+  /// @notice allPoolsLength returns the number of registered pools
   function allPoolsLength() public view returns (uint256) {
     return allPools.length;
   }
 
   /**
-   * @dev Creates a new pool
+   * @notice Creates a new pool
    * @param pool The new pool instance
+   * @dev only the Pool Factory owner can upgrade pools
    */
   function attachPool(
     IPool pool
@@ -67,7 +69,7 @@ contract PoolRegistry is IPoolRegistry, Ownable {
    * @notice upgrades a Pool Accounting instance
    * @param newPool The address of the pool to upgrade
    *
-   * @dev only the Pool Factory owner or operator can upgrade pools
+   * @dev only the Pool Factory owner can upgrade pools
    */
   function upgradePool(
     IPool newPool

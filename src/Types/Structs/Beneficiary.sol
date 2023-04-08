@@ -46,6 +46,7 @@ library BeneficiaryHelpers {
     return beneficiary;
   }
 
+  /// @dev `approve` converts the proposed beneficiary into the active beneficiary. Must be called by proposed beneficiary
   function approve(AgentBeneficiary memory beneficiary, address approver) internal pure returns (AgentBeneficiary memory) {
     if (beneficiary.proposed.beneficiary != approver) {
       revert Unauthorized();

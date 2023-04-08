@@ -108,6 +108,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
                       CHECKERS
   //////////////////////////////////////////////*/
 
+  /**
+   * @notice `agentApproved` checks with each pool to see if the agent's position is approved and reverts if any pool returns false
+   * @param vc the VerifiableCredential of the agent
+   */
   function agentApproved(
     VerifiableCredential memory vc
   ) external view {
@@ -126,9 +130,12 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
   /**
    * @notice `putAgentOnAdministration` puts the agent on administration, hopefully only temporarily
    * @param agent The address of the agent to put on administration
+   * @param administration The address of the administration
    */
   function putAgentOnAdministration(
-    address agent, address administration
+    address agent,
+
+      address administration
   ) external
     onlyOwner
     onlyWhenBehindTargetEpoch(agent)
@@ -148,10 +155,36 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     emit OffAdministration(agent);
   }
 
-  function prepareMinerForLiquidation(address agent, address liquidator, uint64 miner) external onlyOwner {
+  /**
+   * @notice `prepareMinerForLiquidation` changes the owner address of `miner` on `agent` to be `liquidator`
+   * @param agent The address of the agent to set the state of
+   * @param liquidator The address of the liquidator
+   * @param miner The ID of the miner to change owner to liquidator
+   * @dev After calling this function and the liquidation completes, call `liquidatedAgent` next to proceed with the liquidation
+   */
+  function prepareMinerForLiquidation(
+    address agent,
+    address liquidator,
+    uint64 miner
+  ) external onlyOwner {
     IAgent(agent).prepareMinerForLiquidation(miner, liquidator.normalize());
   }
 
+  /**
+   * @notice `liquidatedAgent` permanently sets the agent as liquidated in storage
+   * @param agent The address of the agent to set the state of
+   */
+  function liquidatedAgent(address agent) external onlyOwner {
+    if (!IAgent(agent).defaulted()) revert Unauthorized();
+
+    liquidated[IAgent(agent).id()] = true;
+  }
+
+  /**
+   * @notice `distributeLiquidatedFunds` distributes liquidated funds to the pools
+   * @param agentID The ID of the agent to set the state of
+   * @param amount The amount of funds recovered from the liquidation
+   */
   function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external {
     if (!liquidated[agentID]) revert Unauthorized();
 
@@ -160,17 +193,16 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     _writeOffPools(agentID, amount);
   }
 
-  function liquidatedAgent(address agent) external onlyOwner {
-    if (!IAgent(agent).defaulted()) revert Unauthorized();
-
-    liquidated[IAgent(agent).id()] = true;
-  }
-
   /**
    * @notice `isValidCredential` returns true if the credential is valid
    * @param agent the ID of the agent
+   * @param action the 4 byte function signature of the function the Agent is aiming to execute
    * @param signedCredential the signed credential of the agent
-   * @dev a credential is valid if it's subject is `agent` and is signed by an authorized issuer
+   * @dev a credential is valid if it meets the following criteria:
+   *      1. the credential is signed by the known issuer
+   *      2. the credential is not expired
+   *      3. the credential has not been used before
+   *      4. the credential's `subject` is the `agent`
    */
   function isValidCredential(
     uint256 agent,
@@ -184,8 +216,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
       signedCredential
     );
 
+    // check to see if this credential has been used for
     if (
       _credentialUseBlock[
+        // hash the signature
         keccak256(abi.encode(
           signedCredential.v, signedCredential.r, signedCredential.s
         ))
@@ -193,7 +227,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     ) revert InvalidCredential();
   }
 
-  function registerCredentialUseBlock(SignedCredential memory signedCredential) external  {
+  /// @dev burns a credential by storing a hash of its signature
+  function registerCredentialUseBlock(SignedCredential memory signedCredential) external {
     _credentialUseBlock[keccak256(abi.encode(signedCredential.v, signedCredential.r, signedCredential.s))] = block.number;
   }
 
@@ -231,14 +266,29 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
                   BENEFICIARIES
   //////////////////////////////////////////////*/
 
+  /**
+   * @notice `isBeneficiaryActive` returns true if the beneficiary is active
+   * @param agentID the ID of the agent
+   */
   function isBeneficiaryActive(uint256 agentID) external view returns (bool) {
     return _agentBeneficiaries[agentID].isActive();
   }
 
+  /**
+   * @notice `agentBeneficiary` returns the beneficiary of an agent
+   * @param agentID the ID of the agent
+   */
   function agentBeneficiary(uint256 agentID) external view returns (AgentBeneficiary memory) {
     return _agentBeneficiaries[agentID];
   }
 
+  /**
+   * @notice `changeAgentBeneficiary` changes the beneficiary of an agent
+   * @param beneficiary the address of the beneficiary
+   * @param agentID the ID of the agent
+   * @param expiration the epoch expiration of the beneficiary
+   * @param quota the FIL quota of the beneficiary
+   */
   function changeAgentBeneficiary(
     address beneficiary,
     uint256 agentID,
@@ -247,15 +297,29 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
   ) external onlyAgent {
     AgentBeneficiary memory benny = _agentBeneficiaries[agentID];
 
+    // if you already have a beneficiary addres set, you can't change it
     if (benny.isActive()) revert Unauthorized();
     // as long as we do not have an existing, active beneficiary, propose a new one
     _agentBeneficiaries[agentID] = benny.propose(beneficiary.normalize(), quota, expiration);
   }
 
+  /**
+   * @notice `approveAgentBeneficiary` converts the proposed beneficiary to the active beneficiary
+   * @param agentID the ID of the agent
+   * @dev must be called by the proposed beneficiary
+   */
   function approveAgentBeneficiary(uint256 agentID) external {
     _agentBeneficiaries[agentID] = _agentBeneficiaries[agentID].approve(msg.sender);
   }
 
+  /**
+   * @notice `beneficiaryWithdrawable` is called by the Agent during withdraw when there is an active beneficiary. It withdraws funds to the beneficiary address and updates the beneficiary's quota in storage
+   * @param recipient the address of the recipient
+   * @param sender the address of the sender
+   * @param agentID the ID of the agent
+   * @param proposedAmount the amount of FIL the beneficiary is proposing to withdraw
+   * @dev the agent's owner can force a beneficiary withdrawal if it calls this function when the receipient is the active beneficiary
+   */
   function beneficiaryWithdrawable(
     address recipient,
     address sender,
@@ -279,6 +343,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     _agentBeneficiaries[agentID] = beneficiary;
   }
 
+  /**
+   * @notice `confirmRmEquity` checks to see if a withdrawal will bring the agent over maxDTE
+   * @param vc the verifiable credential
+   * @param additionalLiability any additional liability to apply to the agent (used when removing a miner with an active beneficiary)
+   */
   function confirmRmEquity(
     VerifiableCredential memory vc,
     uint256 additionalLiability
@@ -334,10 +403,16 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     maxDTE = _maxDTE;
   }
 
+  /**
+   * @notice `pause` sets this contract paused
+   */
   function pause() external onlyOwner {
     paused = true;
   }
 
+  /**
+   * @notice `resume` resumes this contract
+   */
   function resume() external onlyOwner {
     paused = false;
   }
@@ -397,6 +472,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     return false;
   }
 
+  /// @dev loops through the pools and calls isApproved on each, reverting in the case of any non-approvals
   function _agentApproved(VerifiableCredential memory vc) internal view {
     uint256[] memory pools = _poolIDs[vc.subject];
 

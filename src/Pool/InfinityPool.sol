@@ -31,6 +31,12 @@ import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
+/**
+ * @title InfinityPool
+ * @author GLIF
+ * @notice The InfinityPool contract is an ERC4626 vault for FIL. It primarily handles depositing, borrowing, and paying FIL.
+ * @dev the InfinityPool has some hooks and light integrations with the Offramp. The Offramp will not be enabled during launch.
+ */
 contract InfinityPool is IPool, Ownable {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
@@ -196,25 +202,28 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
-    * @notice getRate returns the rate for an Agent's current position within the Pool
-    * rate is based on the formula base rate  e^(bias * (100 - GCRED)) where the exponent is pulled from a lookup table
-    */
+     * @notice getRate returns the rate for an Agent's current position within the Pool
+     * @param vc The Agent's VerifiableCredential
+     * @return rate The rate for the Agent's current position and base rate
+     * @dev rate is determined by the `rateModule`
+     */
     function getRate(
         VerifiableCredential memory vc
-    ) public view returns (uint256) {
+    ) public view returns (uint256 rate) {
         return rateModule.getRate(vc);
     }
 
     /**
-     * @notice isApproved returns false if the Agent is in an unacceptable state
-     * In this version, an Agent will be rejected in either of two cases:
-     * 1. The Agent's principal is more than the equity weighted `collateralValue`
-     * 2. The Agent's expected daily payment is more than `dtiWeight` of their income
+     * @notice isApproved returns false if the Agent is in an rejected state as determined by the rate module
+     * @param account The Agent's account
+     * @param vc The Agent's VerifiableCredential
+     * @return approved Whether the Agent is approved
+     * @dev approval criteria are determined by the `rateModule`
      */
     function isApproved(
         Account memory account,
         VerifiableCredential memory vc
-    ) external view returns (bool) {
+    ) external view returns (bool approved) {
         return rateModule.isApproved(account, vc);
     }
 
@@ -285,6 +294,12 @@ contract InfinityPool is IPool, Ownable {
                         POOL BORROWING FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
+    /**
+     * @notice borrow borrows funds from the Pool. Will revert if the Agent is not approved to borrow
+     * @param vc The Agent's VerifiableCredential - the `subject` must be the Agent's ID and the `value` must be the amount to borrow
+     * @dev the Agent must be approved to borrow from the Pool
+     * @dev the min borrow amount is 1 FIL
+     */
     function borrow(VerifiableCredential memory vc) external subjectIsAgentCaller(vc) {
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
@@ -310,7 +325,16 @@ contract InfinityPool is IPool, Ownable {
         asset.transfer(msg.sender, vc.value);
     }
 
-
+    /**
+     * @notice pay handles the accounting for a payment from the Agent to the Infintiy Pool
+     * @param vc The Agent's VerifiableCredential - the `subject` must be the Agent's ID and the `value` must be the amount to pay
+     * @return rate The dynamic rate applied to this payment
+     * @return epochsPaid The number of epochs to move the account forward after payment
+     * @return principalPaid The amount of principal paid down (could be 0 if interest only payment)
+     * @return refund The amount of funds to refund to the Agent (could be 0 if no overpayment)
+     * @dev The pay function applies the payment amount to the interest owed on the account first. If the entire interest owed is paid off by the payment, then the remainder is applied to the principal owed on the account.
+     * @dev Treasury fees only apply to interest payments, not principal payments
+     */
     function pay(
         VerifiableCredential memory vc
     ) external subjectIsAgentCaller(vc) returns (
@@ -325,8 +349,11 @@ contract InfinityPool is IPool, Ownable {
         if (!account.exists()) revert AccountDNE();
         // compute a rate based on the agent's current financial situation
         rate = getRate(vc);
+        // the total interest amount owed to get the epochsPaid cursor to the current epoch
         uint256 interestOwed;
+        // rate * principal, used for computing the interest owed and moving the epochsPaid cursor
         uint256 interestPerEpoch;
+        // the amount of interest paid on this payment, used for computing the treasury fee
         uint256 feeBasis;
 
         // if the account is not "current", compute the amount of interest owed based on the new rate
@@ -377,7 +404,7 @@ contract InfinityPool is IPool, Ownable {
         }
         // update the account in storage
         account.save(router, vc.subject, id);
-        // take fee
+        // accrue treasury fee
         feesCollected += GetRoute
             .poolRegistry(router)
             .treasuryFeeRate()
@@ -575,10 +602,7 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
-     * @dev Distributes funds to the offramp when the liquid assets are below the liquidity threshold
-     *
-     * @notice we piggy back the fee collection off a transaction once accrued fees reach the threshold value
-     * anyone can call this function to send the fees to the treasury at any time
+     * @dev Distributes feesCollected to the treasury
      */
     function harvestFees(uint256 harvestAmount) public {
         feesCollected -= harvestAmount;
@@ -589,36 +613,57 @@ contract InfinityPool is IPool, Ownable {
                             ADMIN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
+    /**
+     * @notice setRamp sets the address of the ramp in storage
+     */
     function setRamp(IOffRamp _ramp) external onlyOwner {
         ramp = _ramp;
     }
 
+    /**
+     * @notice decomissionPool shuts down the pool and transfers all assets to the new pool
+     * @param newPool The address of new pool to transfer assets to
+     */
     function decommissionPool(
         IPool newPool
     ) external onlyPoolRegistry returns(uint256 borrowedAmount) {
         require(isShuttingDown, "POOL: Must be shutting down");
         require(newPool.id() == id, "POOL: New pool must have same ID");
+        // forward fees to the treasury
         harvestFees(feesCollected);
+
         asset.transfer(address(newPool), asset.balanceOf(address(this)));
+        // unstuck any liquid staking tokens that were accidentally sent to this contract to the new pool
         liquidStakingToken.transfer(address(newPool), liquidStakingToken.balanceOf(address(this)));
+
         borrowedAmount = totalBorrowed;
     }
-
+    /**
+     * @notice jumpStartTotalBorrowed sets the totalBorrowed variable to the given amount in the pool
+     * @dev this is only called in a pool upgrade scenario
+     */
     function jumpStartTotalBorrowed(uint256 amount) external onlyPoolRegistry {
-        if(totalBorrowed != 0) {
-            revert InvalidState();
-        }
+        if (totalBorrowed != 0) revert InvalidState();
         totalBorrowed = amount;
     }
 
+    /**
+     * @notice setMinimumLiquidity sets the liquidity reserve threshold used for exits
+     */
     function setMinimumLiquidity(uint256 _minimumLiquidity) external onlyOwner {
         minimumLiquidity = _minimumLiquidity;
     }
 
+    /**
+     * @notice shutDown sets the isShuttingDown variable to true, effectively halting all
+     */
     function shutDown() external onlyOwner {
         isShuttingDown = true;
     }
 
+    /**
+     * @notice setRateModule sets the address of the rate module in storage
+     */
     function setRateModule(IRateModule _rateModule) external onlyOwner {
         rateModule = _rateModule;
     }
@@ -640,18 +685,19 @@ contract InfinityPool is IPool, Ownable {
         return AccountHelpers.getAccount(router, agent, id);
     }
 
-    function _deposit(uint256 assets, address receiver) internal returns (uint256 shares) {
-        if(assets == 0) {
-            revert InvalidParams();
-        }
-        shares = previewDeposit(assets);
+    function _deposit(uint256 assets, address receiver) internal returns (uint256 lstAmount) {
+        if (assets == 0) revert InvalidParams();
+        // get the number of iFIL tokens to mint
+        lstAmount = previewDeposit(assets);
+        // pull in the assets
         asset.transferFrom(msg.sender, address(this), assets);
-        liquidStakingToken.mint(receiver, shares);
-        assets = convertToAssets(shares);
-        emit Deposit(msg.sender, receiver.normalize(), assets, shares);
+        // mint the iFIL tokens
+        liquidStakingToken.mint(receiver, lstAmount);
+        assets = convertToAssets(lstAmount);
+        emit Deposit(msg.sender, receiver.normalize(), assets, lstAmount);
     }
 
-    function _depositFIL(address receiver) internal returns (uint256 shares) {
+    function _depositFIL(address receiver) internal returns (uint256 lstAmount) {
         if(msg.value == 0) {
             revert InvalidParams();
         }
@@ -661,9 +707,9 @@ contract InfinityPool is IPool, Ownable {
         wFIL.deposit{value: msg.value}();
         wFIL.transfer(address(this), msg.value);
 
-        shares = previewDeposit(msg.value);
-        liquidStakingToken.mint(receiver, shares);
-        emit Deposit(msg.sender, receiver.normalize(),  convertToAssets(shares), shares);
+        lstAmount = previewDeposit(msg.value);
+        liquidStakingToken.mint(receiver, lstAmount);
+        emit Deposit(msg.sender, receiver.normalize(),  convertToAssets(lstAmount), lstAmount);
     }
 }
 

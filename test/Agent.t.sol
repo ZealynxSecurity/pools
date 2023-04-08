@@ -477,7 +477,6 @@ contract AgentRmEquityTest is BaseTest {
 
       AgentData memory agentData = AgentData(
         agentValue,
-        DEFAULT_BASE_RATE,
         collateralValue,
         // no expected daily faults
         0,
@@ -648,7 +647,6 @@ contract AgentRmEquityTest is BaseTest {
 
       AgentData memory agentData = AgentData(
         agentValue,
-        DEFAULT_BASE_RATE,
         collateralValue,
         // no expected daily faults
         0,

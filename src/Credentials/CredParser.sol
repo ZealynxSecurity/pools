@@ -6,9 +6,6 @@ contract CredParser {
   function getAgentValue(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(_agentData, (AgentData)).agentValue;
   }
-  function getBaseRate(bytes memory _agentData) external pure returns (uint256) {
-    return abi.decode(_agentData, (AgentData)).baseRate;
-  }
   function getCollateralValue(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(_agentData, (AgentData)).collateralValue;
   }

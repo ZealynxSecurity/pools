@@ -16,6 +16,11 @@ import {AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 
+/**
+ * @title Agent
+ * @author GLIF
+ * @notice The Agent is a collateral and policy enforcement wrapper around one or more Filecoin Miner Actors. It is the primary interface for borrowing from the GLIF Pools Protocol.
+ */
 contract Agent is IAgent, Operatable {
 
   using MinerHelper for uint64;
@@ -98,9 +103,7 @@ contract Agent is IAgent, Operatable {
 
   /**
    * @notice Get the number of pools that an Agent is actively borrowing from
-   * @return count Returns the number of pools that an Agent has staked power tokens in
-   *
-   * @dev this corresponds to the number of Pools that an Agent is actively borrowing from
+   * @return count Returns the number of pools that an Agent has borrowed from
    */
   function borrowedPoolsCount() public view returns (uint256 count) {
     count = _getStakedPoolIDs().length;
@@ -110,14 +113,17 @@ contract Agent is IAgent, Operatable {
    * @notice Get the total liquid assets of the Agent, not including any liquid assets on any of its staked Miners
    * @return liquidAssets Returns the total liquid assets of the Agent in FIL and wFIL
    *
-   * @dev once assets are flushed down into Miners,
-   * the liquidAssets will decrease,
-   * but the total liquidationValue of the Agent should not change
+   * @dev once assets are flushed down into Miners, the liquidAssets will decrease, but the total liquidationValue of the Agent should not change
    */
   function liquidAssets() public view returns (uint256) {
     return address(this).balance + GetRoute.wFIL(router).balanceOf(address(this));
   }
 
+  /**
+   * @notice Beneficiary returns the beneficiary of the Agent
+   * @return beneficiary The Agent's beneficiary
+   * @dev The beneficiary is active if its both unexpired and has unused quota
+   */
   function beneficiary() external view returns (AgentBeneficiary memory) {
     return GetRoute.agentPolice(router).agentBeneficiary(id);
   }
@@ -135,30 +141,30 @@ contract Agent is IAgent, Operatable {
   //////////////////////////////////////////////////*/
 
   /**
-   * @notice Adds miner addresses to the miner registry
-   * @param sc The a signed credential with an `addMiner` action type
-   * The `target` in the `sc` is the uint64 ID of the miner
-   *
-   * @dev under the hood this function calls `changeOwnerAddress` on the underlying Miner Actor to claim its ownership.
-   * The underlying Miner Actor's nextPendingOwner _must_ be the address of this Agent or else this call will fail.
+   * @notice Adds a miner id to the agent
+   * @param sc The a signed credential with an `addMiner` action type. The `target` in the `sc` is the uint64 ID of the miner These credentials will not be issued for invalid miner IDs
+   * @dev Under the hood this function calls `changeOwnerAddress` on the underlying Miner Actor to claim its ownership.
+   * @dev The underlying Miner Actor's nextPendingOwner _must_ be the address of this Agent or else this call will fail.
    *
    * This function can only be called by the Agent's owner or operator
    */
   function addMiner(
     SignedCredential memory sc
   ) external onlyOwnerOperator validateAndBurnCred(sc) {
-    // Confirm the miner is valid and can be added
+    // confirm the miner is valid and can be added
     if (!sc.vc.target.configuredForTakeover()) revert Unauthorized();
     // change the owner address
     sc.vc.target.changeOwnerAddress(address(this));
-    // add the miner to the central registry, this call will fail if the miner is already registered
+    // add the miner to the central registry, this call will revert if the miner is already registered
     GetRoute.minerRegistry(router).addMiner(id, sc.vc.target);
   }
 
   /**
-   * @notice Removes a miner from the miner registry
+   * @notice Removes a miner from the Agent. The Agent must have sufficient equity in order to execute this action.
    * @param newMinerOwner The address that will become the new owner of the miner
    * @param sc The signed credential of the agent attempting to remove the miner. The `target` will be the uint64 miner ID to remove and the `value` will be the value of assets that would be removed along with this particular miner.
+   * @dev Under the hood this function calls `changeOwnerAddress` on the underlying Miner Actor to propose an ownership claim. The new owner must then call `changeOwnerAddress` on the Miner Actor to claim ownership.
+   * @dev The Agent must maintain a DTE < 1 in order to remove a miner.
    */
   function removeMiner(
     address newMinerOwner,
@@ -181,9 +187,9 @@ contract Agent is IAgent, Operatable {
       AgentBeneficiary memory _beneficiary = agentPolice.agentBeneficiary(id);
       additionalLiability = _beneficiary.active.quota - _beneficiary.active.usedQuota;
     }
-
+    // checks to see if the
     agentPolice.confirmRmEquity(sc.vc, additionalLiability);
-    // Remove the miner from the central registry
+    // remove the miner from the central registry
     GetRoute.minerRegistry(router).removeMiner(id, sc.vc.target);
     // change the owner address of the miner to the new miner owner
     sc.vc.target.changeOwnerAddress(newMinerOwner);
@@ -259,14 +265,21 @@ contract Agent is IAgent, Operatable {
     emit ChangeMinerWorker(miner, worker, controlAddresses);
   }
 
+  /**
+   * @notice Changes the beneficiary address associated with a miner
+   * @param newBeneficiary The new beneficiary address
+   * @param expiration The epoch expiration date of the beneficiary
+   * @param quota The amount in attoFIL that the beneficiary is allowed to withdraw
+   * @dev miner must be owned by this Agent in order for this call to execute
+   */
   function changeBeneficiary(
-    address agentBeneficiary,
+    address newBeneficiary,
     uint256 expiration,
     uint256 quota
   ) external onlyOwner notPaused {
     GetRoute.agentPolice(router).changeAgentBeneficiary(
       // the beneficiary address gets normalized in agent police to save on code size
-      agentBeneficiary,
+      newBeneficiary,
       id,
       expiration,
       quota
@@ -275,8 +288,7 @@ contract Agent is IAgent, Operatable {
 
   /**
    * @notice Sets the Agent in default to prepare for a liquidation
-   *
-   * This process is irreversible
+   * @dev This process is irreversible
    */
   function setInDefault() external onlyAgentPolice {
     defaulted = true;
@@ -285,8 +297,7 @@ contract Agent is IAgent, Operatable {
   /**
    * @notice Sets the administration address
    * @param _administration The address of the administration
-   *
-   * This process is reversible - it is the first step towards getting the Agent back in good standing
+   * @dev This process is reversible - it is the first step towards getting the Agent back in good standing
    */
   function setAdministration(address _administration) external onlyAgentPolice {
     administration = _administration;
@@ -297,9 +308,10 @@ contract Agent is IAgent, Operatable {
   //////////////////////////////////////////////*/
 
   /**
-   * @notice Allows an agent to withdraw balance to a recipient. Only callable by the Agent's Owner(s).
+   * @notice Allows an agent to withdraw balance to a recipient. Agent must have sufficient equity to withdraw.
    * @param receiver The address to which the funds will be withdrawn
-   * @param sc The signed credential of the user attempting to withdraw balance with a `withdraw` action type
+   * @param sc The signed credential of the user attempting to withdraw balance with a `withdraw` action type. The credential's `value` field is the amount to withdraw.
+   * @dev If the agent is not approved by every pool, or cannot maintain a DTE < 1, it cannot withdraw.
    * @dev A credential must be passed when existing $FIL is borrowed in order to compute the max withdraw amount
    */
   function withdraw(
@@ -335,8 +347,8 @@ contract Agent is IAgent, Operatable {
   }
 
   /**
-   * @notice Allows an agent to pull up funds from a staked Miner Actor into the Agent
-   * @param sc The signed credential of the user attempting to pull funds from a miner. The credential must contain a `pullFundsFromMiner` action type with the `value` field set to the amount to pull, and the `target` as the ID of the miner to pull funds from
+   * @notice Allows an agent to pull up funds from a pledged Miner Actor into the Agent
+   * @param sc The signed credential of the Agent attempting to pull funds from a miner. The credential must contain a `pullFunds` action type with the `value` field set to the amount to pull, and the `target` as the ID of the miner to pull funds from
    * @dev The Agent must own the miner its withdrawing funds from
    *
    * This function adds a native FIL balance to the Agent
@@ -354,9 +366,8 @@ contract Agent is IAgent, Operatable {
 
   /**
    * @notice Allows an agent to push funds to a miner
-   * @param sc The signed credential of the user attempting to push funds to a miner. The credential must contain a `pushFundsFromMiner` action type with the `value` field set to the amount to push, and the `target` as the ID of the miner to push funds to
-   * @dev The Agent must own the miner its withdrawing funds from
-   * If the agents FIL balance is less than the total amount to push, the function will attempt to convert any wFIL before reverting
+   * @param sc The signed credential of the Agent attempting to push funds to a miner. The credential must contain a `pushFunds` action type with the `value` field set to the amount to push, and the `target` as the ID of the miner to push funds to
+   * If the agents FIL balance is less than the total amount to push, the function will attempt to convert any wFIL into FIL before reverting
    */
   function pushFunds(SignedCredential memory sc)
     external
@@ -379,7 +390,7 @@ contract Agent is IAgent, Operatable {
    * @param poolID The ID of the pool to borrow from
    * @param sc The signed credential of the user attempting to borrow funds from a pool. The credential must contain a `borrow` action type with the `value` field set to the amount to borrow. In case of a `borrow` action, the `target` field goes unused
    *
-   * @dev The transaction will revert if the agent is in a bad state after borrowing
+   * @dev The transaction will revert if the agent is not approved
    */
   function borrow(
     uint256 poolID,
@@ -399,7 +410,7 @@ contract Agent is IAgent, Operatable {
    * @notice Allows an agent to repay funds to a Pool
    * @param poolID The ID of the pool to repay to
    * @param sc The signed credential of the user attempting to repay funds to a pool. The credential must contain a `repay` action type with the `value` field set to the amount to repay. In case of a `repay` action, the `target` field goes unused
-   * @dev If the payment covers all the interest owed, then the remaining payments will go towards down principal
+   * @dev If the payment covers all the interest owed, then the remaining payments will go towards down principal. If the amount exceeds both the interest and the principal, then the remaining amount will be refunded to the agent
    *
    * The Agent's account must exist in order to pay back to a pool
    */
@@ -425,7 +436,7 @@ contract Agent is IAgent, Operatable {
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/
 
-  // ensures theres enough native FIL bal in the agent to push funds to miners
+  /// @dev ensures theres enough native FIL bal in the agent to push funds to miners
   function _poolFundsInFIL(uint256 amount) internal {
     uint256 filBal = address(this).balance;
     IWFIL wFIL = GetRoute.wFIL(router);
@@ -439,7 +450,7 @@ contract Agent is IAgent, Operatable {
     wFIL.withdraw(amount - filBal);
   }
 
-  // ensures theres enough wFIL bal in the agent to make payments to pools
+  /// @dev ensures theres enough wFIL bal in the agent to make payments to pools
   function _poolFundsInWFIL(uint256 amount) internal {
     IWFIL wFIL = GetRoute.wFIL(router);
     uint256 wFILBal = wFIL.balanceOf(address(this));
@@ -453,6 +464,7 @@ contract Agent is IAgent, Operatable {
     wFIL.deposit{value: amount - wFILBal}();
   }
 
+  /// @dev validates the credential, and then registers its signature with the agent police so it can't be used again
   function _validateAndBurnCred(
     SignedCredential memory signedCredential
   ) internal {
@@ -461,18 +473,22 @@ contract Agent is IAgent, Operatable {
     agentPolice.registerCredentialUseBlock(signedCredential);
   }
 
+  /// @dev returns the poolIDs that the agent is currently borrowing from
   function _getStakedPoolIDs() internal view returns (uint256[] memory) {
     return GetRoute.agentPolice(router).poolIDs(id);
   }
 
+  /// @dev gets an Agent's account from a pool
   function _getAccount(uint256 poolID) internal view returns (Account memory) {
     return IRouter(router).getAccount(id, poolID);
   }
 
+  /// @dev ensures `miner` is registered to the agent
   function _checkMinerRegistered(uint64 miner) internal view {
     if (!GetRoute.minerRegistry(router).minerRegistered(id, miner)) revert Unauthorized();
   }
 
+  /// @dev ensures the caller is the owner, operator, or the administration address
   function _onlyOwnerOperatorOverride() internal view {
     // only allow calls from the owner, operator, or administration address (if one is set)
     if (

@@ -47,21 +47,21 @@ abstract contract Operatable is Ownable {
     }
 
     /**
-     * @dev Returns the address of the current owner.
+     * @dev Returns the address of the current operator.
      */
     function operator() public view virtual returns (address) {
       return _operator;
     }
 
     /**
-     * @dev Returns the address of the pending owner.
+     * @dev Returns the address of the pending operator.
      */
     function pendingOperator() public view virtual returns (address) {
       return _pendingOperator;
     }
 
     /**
-     * @dev Throws if the sender is not the owner.
+     * @dev Throws if the sender is not the owner or the operator.
      */
     function _checkOwnerOperator() internal view virtual {
       if (operator() != msg.sender && owner() != msg.sender) revert Unauthorized();
@@ -69,7 +69,7 @@ abstract contract Operatable is Ownable {
 
     /**
      * @dev Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one.
-     * Can only be called by the current owner.
+     * Can only be called by the current owner or operator.
      */
     function transferOperator(address newOperator) public virtual onlyOwnerOperator {
         _pendingOperator = newOperator;
@@ -78,7 +78,7 @@ abstract contract Operatable is Ownable {
 
 
     /**
-     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * @dev Transfers operator role of the contract to a new account (`newOperator`).
      * Internal function without access restriction.
      */
     function _transferOperator(address newOperator) internal virtual {
@@ -89,7 +89,7 @@ abstract contract Operatable is Ownable {
     }
 
     /**
-     * @dev The new owner accepts the ownership transfer.
+     * @dev The new operator accepts the ownership transfer.
      */
     function acceptOperator() external {
       if (pendingOperator() != msg.sender) revert Unauthorized();

@@ -9,6 +9,13 @@ import {ROUTE_VC_ISSUER} from "src/Constants/Routes.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 
+/**
+ * @title VCVerifier
+ * @author GLIF
+ * @notice Responsible for validating EIP712 signed data blobs of W3C inspired Verifiable Credentials
+ * @dev Each credential must be signed by the known VC Issuer and corresponds to an `action` being taken by a particular agent `subject`
+ * @dev Each credential can only be used once, see Agent Police for more details
+ */
 abstract contract VCVerifier is IVCVerifier, EIP712 {
   error InvalidCredential();
   address public router;
