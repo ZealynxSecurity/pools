@@ -806,6 +806,29 @@ contract PoolAdminTests is PoolTestState {
     assertEq(pool.totalBorrowed(), amount);
   }
 
+  function testJumpStartAccount(uint256 jumpStartAmount) public {
+    jumpStartAmount = bound(jumpStartAmount, WAD, MAX_FIL);
+    address receiver = makeAddr("receiver");
+    (Agent newAgent,) = configureAgent(receiver);
+    uint256 agentID = newAgent.id();
+    vm.startPrank(IAuth(address(pool)).owner());
+    pool.jumpStartAccount(receiver, agentID, jumpStartAmount);
+    vm.stopPrank();
+
+    uint256 balanceOfReceiver = pool.liquidStakingToken().balanceOf(receiver);
+
+    Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
+
+    assertEq(account.principal, jumpStartAmount, "Account principal should be updated");
+    assertEq(balanceOfReceiver, jumpStartAmount, "Should have minted liquid staking tokens");
+    assertEq(account.startEpoch, block.number, "Account start epoch should be updated");
+    assertEq(account.epochsPaid, block.number, "Account epochsPaid should be updated");
+
+    // test making a payment
+    uint256 payment = jumpStartAmount / 2;
+    agentPay(IAgent(address(newAgent)), pool, issueGenericPayCred(agentID, payment));
+  }
+
   function testJumpStartTotalBorrowedBadState() public {
     agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, WAD));
     vm.prank(address(poolRegistry));

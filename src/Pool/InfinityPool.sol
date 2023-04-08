@@ -648,6 +648,30 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
+     * @notice jumpStartAccount allows the pool's owner to create an account for an agent that was made outside the pool
+     * @param receiver The address to credit with the borrow amount in iFIL
+     * @param agentID The ID of the agent to create an account for
+     * @param accountPrincipal The principal amount to create the account with
+     */
+    function jumpStartAccount(address receiver, uint256 agentID, uint256 accountPrincipal) external onlyOwner {
+        Account memory account = _getAccount(agentID);
+        // if the account is already initialized, revert
+        if (account.principal != 0) revert InvalidState();
+        // create the account
+        account.principal = accountPrincipal;
+        account.startEpoch = block.number;
+        account.epochsPaid = block.number;
+        // save the account
+        account.save(router, agentID, id);
+        // add the pool to the agent's list of borrowed pools
+        GetRoute.agentPolice(router).addPoolToList(agentID, id);
+        // mint the iFIL to the receiver, using principal as the deposit amount
+        liquidStakingToken.mint(receiver, convertToShares(accountPrincipal));
+        // account for the new principal in the total borrowed of the pool
+        totalBorrowed += accountPrincipal;
+    }
+
+    /**
      * @notice setMinimumLiquidity sets the liquidity reserve threshold used for exits
      */
     function setMinimumLiquidity(uint256 _minimumLiquidity) external onlyOwner {

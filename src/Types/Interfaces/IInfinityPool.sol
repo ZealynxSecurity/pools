@@ -162,6 +162,8 @@ interface IInfinityPool {
 
     function jumpStartTotalBorrowed(uint256 amount) external;
 
+    function jumpStartAccount(address receiver, uint256 agentID, uint256 principal) external;
+
     function setRamp(IOffRamp newRamp) external;
 
     function setMinimumLiquidity(uint256 minLiquidity) external;
