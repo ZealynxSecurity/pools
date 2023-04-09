@@ -76,6 +76,11 @@ contract OffRamp is IOffRamp, Ownable {
         conversionWindow = 50;
     }
 
+    /// @notice this function is called by the InfinityPool to determin how many assets should be sent to the ramp
+    function totalExitDemand() external view returns (uint256) {
+      return totalIOUStaked;
+    }
+
     ///@return displays the user's share of the pooled ious.
     function dividendsOwing(address account) public view returns (uint256) {
         // remember that `lastAccountUpdateCursor` was the totalDividendPoints when the account was updated last

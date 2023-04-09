@@ -182,7 +182,7 @@ contract InfinityPool is IPool, Ownable {
      * @return minLiquidity The minimum amount of FIL to keep in reserves
      */
     function getAbsMinLiquidity() public view returns (uint256) {
-        return (totalAssets() * minimumLiquidity / WAD);
+        return (totalAssets().mulWadUp(minimumLiquidity));
     }
 
     /**
@@ -582,9 +582,9 @@ contract InfinityPool is IPool, Ownable {
     /**
      * @dev Distributes funds to the offramp when the liquid assets are below the liquidity threshold
      */
-    function harvestToRamp() public requiresRamp {
+    function harvestToRamp() external requiresRamp {
         // distribute funds to the offramp when we are below the liquidity threshold
-        uint256 exitDemand = ramp.totalIOUStaked();
+        uint256 exitDemand = ramp.totalExitDemand();
         uint256 rampAssets = asset.balanceOf(address(ramp));
 
         // only send funds to the offramp if our liquidityReserves are less than the min liquidity reserve requirement
