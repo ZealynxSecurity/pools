@@ -25,7 +25,7 @@ contract PoolRegistry is IPoolRegistry, Ownable {
   uint256 public feeThreshold;
   IERC20 public asset;
   address[] public allPools;
-  address public router;
+  address public immutable router;
   // poolExists
   mapping(address => bool) internal exists;
 

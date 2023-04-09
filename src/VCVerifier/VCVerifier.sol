@@ -18,7 +18,7 @@ import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
  */
 abstract contract VCVerifier is IVCVerifier, EIP712 {
   error InvalidCredential();
-  address public router;
+  address public immutable router;
   constructor(string memory _name, string memory _version, address _router)
     EIP712(_name, _version) {
       router = _router;

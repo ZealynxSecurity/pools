@@ -29,7 +29,7 @@ contract OffRamp is IOffRamp, Ownable {
     address public asset;
     // This represents an ERC4626 _share_. This is the token that we're "throttling" the exit of.
     address public liquidStakingToken;
-    address public router;
+    address public immutable router;
     /**
      * @dev iouTokens start staked,
      * and then move into iouTokensToRealize during the phased distribution,

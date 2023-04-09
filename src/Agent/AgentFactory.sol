@@ -22,7 +22,7 @@ contract AgentFactory is IAgentFactory {
   // we start at ID 1 because ID 0 is reserved for empty agent ID
   uint256 public agentCount = 0;
 
-  address public router;
+  address public immutable router;
 
   constructor(address _router) {
     router = _router;

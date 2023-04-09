@@ -51,7 +51,7 @@ contract RateModule is IRateModule, Ownable {
     address public credParser;
 
     /// @dev `router` is the cached router address
-    address public router;
+    address public immutable router;
 
     constructor(
         address _owner,

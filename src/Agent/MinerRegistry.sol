@@ -10,7 +10,7 @@ import {ROUTE_AGENT_FACTORY} from "src/Constants/Routes.sol";
 
 contract MinerRegistry is IMinerRegistry {
 
-  address public router;
+  address public immutable router;
 
   error InvalidParams();
 
