@@ -41,6 +41,7 @@ contract InfinityPool is IPool, Ownable {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
     using FilAddress for address;
+    using FilAddress for address payable;
     using FixedPointMathLib for uint256;
 
     error InsufficientLiquidity();
@@ -53,24 +54,24 @@ contract InfinityPool is IPool, Ownable {
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    uint256 constant WAD = 1e18;
+    uint256 immutable WAD = 1e18;
+
+    address public immutable router;
 
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
 
     /// @dev `asset` is the token that is being borrowed in the pool
-    IERC20 public asset;
+    IERC20 public immutable asset;
 
     /// @dev `liquidStakingToken` is the token that represents a liquidStakingToken in the pool
-    IPoolToken public liquidStakingToken;
+    IPoolToken public immutable liquidStakingToken;
 
     /// @dev `rateModule` is a separate module for computing rates and determining lending eligibility
     IRateModule public rateModule;
 
     /// @dev `ramp` is the interface that handles off-ramping
     IOffRamp public ramp;
-
-    address public router;
 
     /// @dev `feesCollected` is the total fees collected in this pool
     uint256 public feesCollected = 0;
@@ -89,7 +90,7 @@ contract InfinityPool is IPool, Ownable {
     //////////////////////////////////////////////////////////////*/
 
     modifier requiresRamp() {
-        require(address(ramp) != address(0), "No ramp set");
+        if (address(ramp) == address(0)) revert InvalidState();
         _;
     }
 
@@ -154,7 +155,7 @@ contract InfinityPool is IPool, Ownable {
      * @param agentID The ID of the agent
      * @return totalBorrowed The total borrowed from the agent
      */
-    function getAgentBorrowed(uint256 agentID) public view returns (uint256) {
+    function getAgentBorrowed(uint256 agentID) external view returns (uint256) {
         return AccountHelpers.getAccount(router, agentID, id).principal;
     }
 
@@ -300,7 +301,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev the Agent must be approved to borrow from the Pool
      * @dev the min borrow amount is 1 FIL
      */
-    function borrow(VerifiableCredential memory vc) external subjectIsAgentCaller(vc) {
+    function borrow(VerifiableCredential memory vc) external isOpen subjectIsAgentCaller(vc) {
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
         // can't borrow more than the pool has
@@ -627,17 +628,35 @@ contract InfinityPool is IPool, Ownable {
     function decommissionPool(
         IPool newPool
     ) external onlyPoolRegistry returns(uint256 borrowedAmount) {
-        require(isShuttingDown, "POOL: Must be shutting down");
-        require(newPool.id() == id, "POOL: New pool must have same ID");
+      if (newPool.id() != id || !isShuttingDown) revert InvalidState();
         // forward fees to the treasury
         harvestFees(feesCollected);
 
         asset.transfer(address(newPool), asset.balanceOf(address(this)));
-        // unstuck any liquid staking tokens that were accidentally sent to this contract to the new pool
-        liquidStakingToken.transfer(address(newPool), liquidStakingToken.balanceOf(address(this)));
 
         borrowedAmount = totalBorrowed;
     }
+
+    /**
+     * @notice recoverFIL recovers any FIL that was accidentally sent to this contract
+     * @dev this can only occur on FEVM through a raw send to this actor
+     */
+    function recoverFIL(address receiver) external onlyOwner {
+      if (address(this).balance > 0) {
+        payable(receiver).sendValue(address(this).balance);
+      }
+    }
+
+    /**
+     * @notice recoverERC20 recovers any ERC20 that was accidentally sent to this contract
+     */
+    function recoverERC20(address receiver, IERC20 token) external onlyOwner {
+      // cannot unstuck the Pool's native asset (wFIL)
+      if (token == asset) revert Unauthorized();
+
+      token.transfer(receiver.normalize(), token.balanceOf(address(this)));
+    }
+
     /**
      * @notice jumpStartTotalBorrowed sets the totalBorrowed variable to the given amount in the pool
      * @dev this is only called in a pool upgrade scenario
@@ -717,23 +736,23 @@ contract InfinityPool is IPool, Ownable {
         asset.transferFrom(msg.sender, address(this), assets);
         // mint the iFIL tokens
         liquidStakingToken.mint(receiver, lstAmount);
-        assets = convertToAssets(lstAmount);
+
         emit Deposit(msg.sender, receiver.normalize(), assets, lstAmount);
     }
 
     function _depositFIL(address receiver) internal returns (uint256 lstAmount) {
-        if(msg.value == 0) {
-            revert InvalidParams();
-        }
+        if (msg.value == 0) revert InvalidParams();
+
         IWFIL wFIL = GetRoute.wFIL(router);
 
         // handle FIL deposit
         wFIL.deposit{value: msg.value}();
-        wFIL.transfer(address(this), msg.value);
 
         lstAmount = previewDeposit(msg.value);
+
         liquidStakingToken.mint(receiver, lstAmount);
-        emit Deposit(msg.sender, receiver.normalize(),  convertToAssets(lstAmount), lstAmount);
+
+        emit Deposit(msg.sender, receiver.normalize(),  msg.value, lstAmount);
     }
 }
 

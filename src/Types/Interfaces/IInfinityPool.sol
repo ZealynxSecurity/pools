@@ -173,5 +173,9 @@ interface IInfinityPool {
     function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 
     function transferFromPreStake(address preStake, uint256 amount) external;
+
+    function recoverFIL(address receiver) external;
+
+    function recoverERC20(address receiver, IERC20 token) external;
 }
 
