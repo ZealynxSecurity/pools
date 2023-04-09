@@ -10,6 +10,7 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
@@ -32,13 +33,18 @@ contract Agent is IAgent, Operatable {
   error Internal();
   error BadAgentState();
 
+  address public immutable router;
+
+  // cached routes to save on gas and code size
+  IWFIL private wFIL;
+  IAgentPolice private agentPolice;
+  IMinerRegistry private minerRegistry;
+
   /// @notice `id` is the GLIF Pools ID address of the Agent (not to be confused with the evm actor's ID address)
-  uint256 public id;
+  uint256 public immutable id;
 
   /// @notice `newAgent` returns an address of an upgraded agent during the upgrade process
   address public newAgent;
-
-  address public router;
 
   /// @notice `administration` returns the address of an admin that can make payments on behalf of the agent, _only_ when the Agent falls behind on payments
   address public administration;
@@ -62,11 +68,6 @@ contract Agent is IAgent, Operatable {
     _;
   }
 
-  modifier onlyAgentFactory() {
-    AuthController.onlyAgentFactory(router, msg.sender);
-    _;
-  }
-
   modifier onlyAgentPolice() {
     AuthController.onlyAgentPolice(router, msg.sender);
     _;
@@ -83,7 +84,7 @@ contract Agent is IAgent, Operatable {
   }
 
   modifier notPaused() {
-    if (GetRoute.agentPolice(router).paused()) revert Unauthorized();
+    if (agentPolice.paused()) revert Unauthorized();
     _;
   }
 
@@ -95,6 +96,10 @@ contract Agent is IAgent, Operatable {
   ) Operatable(owner, operator) {
     router = agentRouter;
     id = agentID;
+
+    wFIL = GetRoute.wFIL(router);
+    agentPolice = GetRoute.agentPolice(router);
+    minerRegistry = GetRoute.minerRegistry(router);
   }
 
   /*//////////////////////////////////////////////////
@@ -105,8 +110,8 @@ contract Agent is IAgent, Operatable {
    * @notice Get the number of pools that an Agent is actively borrowing from
    * @return count Returns the number of pools that an Agent has borrowed from
    */
-  function borrowedPoolsCount() public view returns (uint256 count) {
-    count = _getStakedPoolIDs().length;
+  function borrowedPoolsCount() external view returns (uint256 count) {
+    return agentPolice.poolIDs(id).length;
   }
 
   /**
@@ -116,7 +121,7 @@ contract Agent is IAgent, Operatable {
    * @dev once assets are flushed down into Miners, the liquidAssets will decrease, but the total liquidationValue of the Agent should not change
    */
   function liquidAssets() public view returns (uint256) {
-    return address(this).balance + GetRoute.wFIL(router).balanceOf(address(this));
+    return address(this).balance + wFIL.balanceOf(address(this));
   }
 
   /**
@@ -125,7 +130,7 @@ contract Agent is IAgent, Operatable {
    * @dev The beneficiary is active if its both unexpired and has unused quota
    */
   function beneficiary() external view returns (AgentBeneficiary memory) {
-    return GetRoute.agentPolice(router).agentBeneficiary(id);
+    return agentPolice.agentBeneficiary(id);
   }
 
   /*//////////////////////////////////////////////
@@ -156,7 +161,7 @@ contract Agent is IAgent, Operatable {
     // change the owner address
     sc.vc.target.changeOwnerAddress(address(this));
     // add the miner to the central registry, this call will revert if the miner is already registered
-    GetRoute.minerRegistry(router).addMiner(id, sc.vc.target);
+    minerRegistry.addMiner(id, sc.vc.target);
   }
 
   /**
@@ -177,20 +182,16 @@ contract Agent is IAgent, Operatable {
     notInDefault
     validateAndBurnCred(sc)
   {
-    IAgentPolice agentPolice = GetRoute.agentPolice(router);
-
     uint256 additionalLiability = 0;
 
-    if (
-      agentPolice.isBeneficiaryActive(id)
-    ) {
+    if (agentPolice.isBeneficiaryActive(id)) {
       AgentBeneficiary memory _beneficiary = agentPolice.agentBeneficiary(id);
       additionalLiability = _beneficiary.active.quota - _beneficiary.active.usedQuota;
     }
     // checks to see if the
     agentPolice.confirmRmEquity(sc.vc, additionalLiability);
     // remove the miner from the central registry
-    GetRoute.minerRegistry(router).removeMiner(id, sc.vc.target);
+    minerRegistry.removeMiner(id, sc.vc.target);
     // change the owner address of the miner to the new miner owner
     sc.vc.target.changeOwnerAddress(newMinerOwner);
   }
@@ -199,7 +200,9 @@ contract Agent is IAgent, Operatable {
    * @notice Gets called by the agent factory to begin the upgrade process to a new Agent
    * @param _newAgent The address of the new agent to which the miner will be migrated
    */
-  function decommissionAgent(address _newAgent) public onlyAgentFactory {
+  function decommissionAgent(address _newAgent) external {
+    // only the agent factory can decommission an agent
+    AuthController.onlyAgentFactory(router, msg.sender);
     // if the newAgent has a mismatching ID, revert
     if(IAgent(_newAgent).id() != id) revert Unauthorized();
     // set the newAgent in storage, which marks the upgrade process as starting
@@ -225,7 +228,7 @@ contract Agent is IAgent, Operatable {
       // then make sure this is the same agent, just upgraded
       newId != id ||
       // check to ensure this miner was registered to the original agent
-      !GetRoute.minerRegistry(router).minerRegistered(id, miner)
+      !minerRegistry.minerRegistered(id, miner)
     ) revert Unauthorized();
 
     // propose an ownership change (must be accepted in v2 agent)
@@ -277,7 +280,7 @@ contract Agent is IAgent, Operatable {
     uint256 expiration,
     uint256 quota
   ) external onlyOwner notPaused {
-    GetRoute.agentPolice(router).changeAgentBeneficiary(
+    agentPolice.changeAgentBeneficiary(
       // the beneficiary address gets normalized in agent police to save on code size
       newBeneficiary,
       id,
@@ -303,6 +306,15 @@ contract Agent is IAgent, Operatable {
     administration = _administration;
   }
 
+  /**
+   * @notice `refreshRoutes` allows any caller to update the cached routes in this contract from the router
+   */
+  function refreshRoutes() external {
+    wFIL = GetRoute.wFIL(router);
+    agentPolice = GetRoute.agentPolice(router);
+    minerRegistry = GetRoute.minerRegistry(router);
+  }
+
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS
   //////////////////////////////////////////////*/
@@ -323,7 +335,6 @@ contract Agent is IAgent, Operatable {
     notOnAdministration
     validateAndBurnCred(sc)
   {
-    IAgentPolice agentPolice = GetRoute.agentPolice(router);
     uint256 sendAmount = sc.vc.value;
     // Regardless of sender if the agent is overleveraged they cannot withdraw
     agentPolice.confirmRmEquity(sc.vc, 0);
@@ -403,7 +414,7 @@ contract Agent is IAgent, Operatable {
   {
     GetRoute.pool(router, poolID).borrow(sc.vc);
     // transaction will revert if any of the pool's accounts reject the new agent's state
-    GetRoute.agentPolice(router).agentApproved(sc.vc);
+    agentPolice.agentApproved(sc.vc);
   }
 
   /**
@@ -427,7 +438,7 @@ contract Agent is IAgent, Operatable {
     // aggregate funds into WFIL to make a payment
     _poolFundsInWFIL(sc.vc.value);
     // approve the pool to pull in the WFIL asset
-    GetRoute.wFIL(router).approve(address(GetRoute.pool(router, poolID)), sc.vc.value);
+    wFIL.approve(address(pool), sc.vc.value);
     // make the payment
     return pool.pay(sc.vc);
   }
@@ -439,7 +450,6 @@ contract Agent is IAgent, Operatable {
   /// @dev ensures theres enough native FIL bal in the agent to push funds to miners
   function _poolFundsInFIL(uint256 amount) internal {
     uint256 filBal = address(this).balance;
-    IWFIL wFIL = GetRoute.wFIL(router);
 
     if (filBal >= amount) {
       return;
@@ -452,7 +462,6 @@ contract Agent is IAgent, Operatable {
 
   /// @dev ensures theres enough wFIL bal in the agent to make payments to pools
   function _poolFundsInWFIL(uint256 amount) internal {
-    IWFIL wFIL = GetRoute.wFIL(router);
     uint256 wFILBal = wFIL.balanceOf(address(this));
 
     if (wFILBal >= amount) {
@@ -468,24 +477,13 @@ contract Agent is IAgent, Operatable {
   function _validateAndBurnCred(
     SignedCredential memory signedCredential
   ) internal {
-    IAgentPolice agentPolice = GetRoute.agentPolice(router);
     agentPolice.isValidCredential(id, msg.sig, signedCredential);
     agentPolice.registerCredentialUseBlock(signedCredential);
   }
 
-  /// @dev returns the poolIDs that the agent is currently borrowing from
-  function _getStakedPoolIDs() internal view returns (uint256[] memory) {
-    return GetRoute.agentPolice(router).poolIDs(id);
-  }
-
-  /// @dev gets an Agent's account from a pool
-  function _getAccount(uint256 poolID) internal view returns (Account memory) {
-    return IRouter(router).getAccount(id, poolID);
-  }
-
   /// @dev ensures `miner` is registered to the agent
   function _checkMinerRegistered(uint64 miner) internal view {
-    if (!GetRoute.minerRegistry(router).minerRegistered(id, miner)) revert Unauthorized();
+    if (!minerRegistry.minerRegistered(id, miner)) revert Unauthorized();
   }
 
   /// @dev ensures the caller is the owner, operator, or the administration address

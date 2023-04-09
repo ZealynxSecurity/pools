@@ -23,7 +23,7 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {BeneficiaryHelpers, AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
 import {Roles} from "src/Constants/Roles.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
-uint256 constant wad = 1e18;
+
 contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
 
   using AccountHelpers for Account;
@@ -134,8 +134,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
    */
   function putAgentOnAdministration(
     address agent,
-
-      address administration
+    address administration
   ) external
     onlyOwner
     onlyWhenBehindTargetEpoch(agent)
@@ -450,9 +449,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
       // compute this pool's share of the total amount
       poolShare = (principalAmts[i] * _totalAmount / totalPrincipal);
       // approve the pool to pull in WFIL
-      wFIL.approve(address(GetRoute.pool(router, poolID)), poolShare);
+      IPool pool = GetRoute.pool(router, poolID);
+      wFIL.approve(address(pool), poolShare);
       // write off the pool's assets
-      GetRoute.pool(router, poolID).writeOff(_agentID, poolShare);
+      pool.writeOff(_agentID, poolShare);
     }
   }
 

@@ -30,12 +30,12 @@ contract AgentFactory is IAgentFactory {
 
   function create(address owner, address operator) external returns (address agent) {
     agentCount++;
-    agent = address(GetRoute.agentDeployer(router).deploy(
+    agent = GetRoute.agentDeployer(router).deploy(
       router,
       agentCount,
       owner,
       operator
-    ));
+    );
     agents[agent] = agentCount;
 
     emit CreateAgent(agentCount, agent, operator);
@@ -57,14 +57,14 @@ contract AgentFactory is IAgentFactory {
     // only the Agent's owner can upgrade, and only a registered agent can be upgraded
     if (owner != msg.sender || agentId == 0) revert Unauthorized();
     // deploy a new instance of Agent with the same ID and auth
-    newAgent = address(GetRoute.agentDeployer(router).deploy(
+    newAgent = GetRoute.agentDeployer(router).deploy(
       router,
       agentId,
       owner,
       IAuth(address(oldAgent)).operator()
-    ));
+    );
     // Register the new agent and unregister the old agent
-    agents[address(newAgent)] = agentId;
+    agents[newAgent] = agentId;
     // transfer funds from old agent to new agent and mark old agent as decommissioning
     oldAgent.decommissionAgent(newAgent);
     // delete the old agent from the registry
