@@ -21,16 +21,12 @@ import {IMockMiner} from "test/helpers/MockMiner.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {Window} from "src/Types/Structs/Window.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {AgentBeneficiary, BeneficiaryHelpers} from "src/Types/Structs/Beneficiary.sol";
 import {UpgradedAgentDeployer} from "test/helpers/UpgradedAgentDeployer.sol";
 import {UpgradedAgent} from "test/helpers/UpgradedAgent.sol";
-import {ROUTE_AGENT_FACTORY_ADMIN, ROUTE_MINER_REGISTRY} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
-import {Roles} from "src/Constants/Roles.sol";
 import {errorSelector} from "test/helpers/Utils.sol";
-import "src/Constants/FuncSigs.sol";
 
 import "./BaseTest.sol";
 

@@ -18,10 +18,8 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {Window} from "src/Types/Structs/Window.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {BeneficiaryHelpers, AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
-import {Roles} from "src/Constants/Roles.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
 contract AgentPolice is IAgentPolice, VCVerifier, Ownable {

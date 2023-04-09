@@ -25,9 +25,7 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
-import {Window} from "src/Types/Structs/Window.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {Roles} from "src/Constants/Roles.sol";
 import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
