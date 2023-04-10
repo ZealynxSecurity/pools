@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.17;
 
-import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 
 library AccountHelpers {
-  using FixedPointMathLib for uint256;
 
   /*////////////////////////////////////////////////////////
                         Agent Utils

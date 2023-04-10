@@ -4,7 +4,6 @@ pragma solidity 0.8.17;
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
@@ -29,8 +28,6 @@ contract Agent is IAgent, Operatable {
   using FilAddress for address payable;
 
   error InsufficientFunds();
-  error InsufficientCollateral();
-  error Internal();
   error BadAgentState();
 
   address public immutable router;

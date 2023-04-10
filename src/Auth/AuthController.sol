@@ -20,13 +20,6 @@ library AuthController {
     }
   }
 
-  function onlyPoolAccounting(address router, address poolAccounting) internal view {
-    require(
-      GetRoute.poolRegistry(router).isPool(poolAccounting),
-      "onlyPoolAccounting: Not authorized"
-    );
-  }
-
   function onlyPoolRegistry(address router, address poolRegistry) internal view {
     if (address(GetRoute.poolRegistry(router)) != poolRegistry) {
       revert Unauthorized();
