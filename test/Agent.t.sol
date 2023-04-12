@@ -1115,6 +1115,14 @@ contract AgentPoliceTest is BaseTest {
       police = GetRoute.agentPolice(router);
     }
 
+    function testBurnSomeoneElseCredential() public {
+      // different agent ID
+      SignedCredential memory sc = issueGenericBorrowCred(2, WAD);
+      vm.startPrank(address(agent));
+      vm.expectRevert(Unauthorized.selector);
+      police.registerCredentialUseBlock(sc);
+    }
+
     function testPutAgentOnAdministration(uint256 rollFwdPeriod, uint256 borrowAmount) public {
       rollFwdPeriod = bound(
         rollFwdPeriod,
@@ -1293,11 +1301,13 @@ contract AgentPoliceTest is BaseTest {
         pool.id()
       );
 
-      vm.startPrank(IAuth(address(police)).owner());
-      police.prepareMinerForLiquidation(address(agent), liquidator, miner);
+      address policeOwner =  IAuth(address(police)).owner();
 
-      // get the miner actor to ensure that the proposed owner on the miner is the liquidator
-      assertEq(IMockMiner(idStore.ids(miner)).proposed(), liquidator, "Mock miner should have liquidator as its proposed owner");
+      vm.startPrank(policeOwner);
+      police.prepareMinerForLiquidation(address(agent), miner);
+      vm.stopPrank();
+      // get the miner actor to ensure that the proposed owner on the miner is the policeOwner
+      assertEq(IMockMiner(idStore.ids(miner)).proposed(), policeOwner, "Mock miner should have policeOwner as its proposed owner");
     }
 
     function testSetAgentLiquidated() public {
@@ -1306,6 +1316,25 @@ contract AgentPoliceTest is BaseTest {
         agent,
         pool.id()
       );
+    }
+
+    function testDistributeLiquidatedFundsNonAgentPolice() public {
+      address policeOwner = IAuth(address(police)).owner();
+      uint256 agentID = agent.id();
+      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agentID, WAD));
+      vm.roll(block.number + police.defaultWindow() + 100);
+
+      vm.startPrank(policeOwner);
+      // set the agent in default
+      police.setAgentDefaulted(address(agent));
+      // liquidate the agent
+      police.liquidatedAgent(address(agent));
+      vm.stopPrank();
+
+      address prankster = makeAddr("prankster");
+      vm.startPrank(prankster);
+      vm.expectRevert(Unauthorized.selector);
+      police.distributeLiquidatedFunds(agentID, 0);
     }
 
     function testDistributeLiquidatedFundsEvenSplit(

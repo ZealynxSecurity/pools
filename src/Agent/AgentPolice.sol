@@ -153,18 +153,16 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
   }
 
   /**
-   * @notice `prepareMinerForLiquidation` changes the owner address of `miner` on `agent` to be `liquidator`
+   * @notice `prepareMinerForLiquidation` changes the owner address of `miner` on `agent` to be `owner` of Agent Police
    * @param agent The address of the agent to set the state of
-   * @param liquidator The address of the liquidator
    * @param miner The ID of the miner to change owner to liquidator
    * @dev After calling this function and the liquidation completes, call `liquidatedAgent` next to proceed with the liquidation
    */
   function prepareMinerForLiquidation(
     address agent,
-    address liquidator,
     uint64 miner
   ) external onlyOwner {
-    IAgent(agent).prepareMinerForLiquidation(miner, liquidator.normalize());
+    IAgent(agent).prepareMinerForLiquidation(miner, owner());
   }
 
   /**
@@ -182,7 +180,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
    * @param agentID The ID of the agent to set the state of
    * @param amount The amount of funds recovered from the liquidation
    */
-  function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external {
+  function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external onlyOwner {
     if (!liquidated[agentID]) revert Unauthorized();
 
     // transfer the assets into the pool
@@ -224,9 +222,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     ) revert InvalidCredential();
   }
 
-  /// @dev burns a credential by storing a hash of its signature
-  function registerCredentialUseBlock(SignedCredential memory signedCredential) external {
-    _credentialUseBlock[keccak256(abi.encode(signedCredential.v, signedCredential.r, signedCredential.s))] = block.number;
+  /**
+   * @notice registerCredentialUseBlock burns a credential by storing a hash of its signature
+   * @dev only an Agent can burn its own credential
+   */
+  function registerCredentialUseBlock(
+    SignedCredential memory sc
+  ) external {
+    if (IAgent(msg.sender).id() != sc.vc.subject) revert Unauthorized();
+    _credentialUseBlock[keccak256(abi.encode(sc.v, sc.r, sc.s))] = block.number;
   }
 
   /*//////////////////////////////////////////////

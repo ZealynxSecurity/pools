@@ -62,7 +62,7 @@ interface IAgentPolice {
 
   function rmAgentFromAdministration(address agent) external;
 
-  function prepareMinerForLiquidation(address agent, address liquidator, uint64 miner) external;
+  function prepareMinerForLiquidation(address agent, uint64 miner) external;
 
   function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external;
 
