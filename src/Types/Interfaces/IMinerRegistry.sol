@@ -9,4 +9,5 @@ interface IMinerRegistry {
   function removeMiner(uint256 agentId, uint64 miner) external;
   function minerRegistered(uint256 agentID, uint64 miner) external view returns (bool);
   function minersCount(uint256 agentID) external view returns (uint256);
+  function getMiner(uint256 agentID, uint256 index) external view returns (uint64);
 }

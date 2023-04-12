@@ -34,6 +34,11 @@ contract MinerRegistry is IMinerRegistry {
   function minersCount(uint256 agentID) external view returns (uint256) {
     return _minersByAgent[agentID].length;
   }
+
+  function getMiner(uint256 agentID, uint256 index) external view returns (uint64) {
+    return _minersByAgent[agentID][index];
+  }
+
   /*///////////////////////////////////////////////////////////////
                             MODIFIERS
   //////////////////////////////////////////////////////////////*/
