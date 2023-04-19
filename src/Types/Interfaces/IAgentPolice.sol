@@ -44,6 +44,8 @@ interface IAgentPolice {
     SignedCredential memory signedCredential
   ) external;
 
+  function credentialUsed(uint8 v, bytes32 r, bytes32 s) external view returns (bool);
+
   function registerCredentialUseBlock(
     SignedCredential memory signedCredential
   ) external;

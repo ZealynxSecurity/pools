@@ -192,7 +192,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
    * @notice `isValidCredential` returns true if the credential is valid
    * @param agent the ID of the agent
    * @param action the 4 byte function signature of the function the Agent is aiming to execute
-   * @param signedCredential the signed credential of the agent
+   * @param sc the signed credential of the agent
    * @dev a credential is valid if it meets the following criteria:
    *      1. the credential is signed by the known issuer
    *      2. the credential is not expired
@@ -202,24 +202,24 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
   function isValidCredential(
     uint256 agent,
     bytes4 action,
-    SignedCredential memory signedCredential
+    SignedCredential memory sc
   ) external view {
     // reverts if the credential isn't valid
     validateCred(
       agent,
       action,
-      signedCredential
+      sc
     );
 
     // check to see if this credential has been used for
-    if (
-      _credentialUseBlock[
-        // hash the signature
-        keccak256(abi.encode(
-          signedCredential.v, signedCredential.r, signedCredential.s
-        ))
-      ] > 0
-    ) revert InvalidCredential();
+    if (credentialUsed(sc.v, sc.r, sc.s)) revert InvalidCredential();
+  }
+
+  /**
+   * @notice `credentialUsed` returns true if the credential has been used before
+   */
+  function credentialUsed(uint8 v, bytes32 r, bytes32 s) public view returns (bool) {
+    return _credentialUseBlock[createSigKey(v, r, s)] > 0;
   }
 
   /**
@@ -230,7 +230,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     SignedCredential memory sc
   ) external {
     if (IAgent(msg.sender).id() != sc.vc.subject) revert Unauthorized();
-    _credentialUseBlock[keccak256(abi.encode(sc.v, sc.r, sc.s))] = block.number;
+    _credentialUseBlock[createSigKey(sc.v, sc.r, sc.s)] = block.number;
   }
 
   /*//////////////////////////////////////////////
@@ -492,5 +492,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
 
   function createKey(string memory partitionKey, uint256 agentID) internal pure returns (bytes32) {
     return keccak256(abi.encode(partitionKey, agentID));
+  }
+
+  function createSigKey(uint8 v, bytes32 r, bytes32 s) internal pure returns (bytes32){
+    return keccak256(abi.encode(v, r, s));
   }
 }
