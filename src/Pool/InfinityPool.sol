@@ -384,7 +384,7 @@ contract InfinityPool is IPool, Ownable {
             // the fee basis only applies to the interest payment
             feeBasis = interestOwed;
             // protect against underflow
-            totalBorrowed -= (principalPaid > totalBorrowed) ? 0 : principalPaid;
+            totalBorrowed -= (principalPaid > totalBorrowed) ? totalBorrowed : principalPaid;
             // fully paid off
             if (principalPaid >= account.principal) {
                 // remove the account from the pool's list of accounts
