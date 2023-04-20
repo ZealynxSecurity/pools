@@ -189,9 +189,7 @@ contract PoolGetRateTest is PoolTestState {
       // good EDR
       goodEDR,
       // principal = borrowAmount
-      borrowAmount,
-      // no account yet (startEpoch)
-      0
+      borrowAmount
     );
     vcBasic.claim = abi.encode(agentData);
     uint256 rate = pool.getRate(vcBasic);
@@ -224,9 +222,7 @@ contract PoolIsOverLeveragedTest is PoolTestState {
       // enormous EDR to ensure we are not over DTI
       MAX_FIL,
       // principal = borrowAmount
-      principal,
-      // no account yet (startEpoch)
-      0
+      principal
     );
     // overwrite agent value to avoid DTE errors
     agentData.agentValue = (principal.mulWadUp(rateModule.maxDTE())) + DUST;
@@ -275,9 +271,7 @@ contract PoolIsOverLeveragedTest is PoolTestState {
       GCRED,
       // edr < expectedDailyPayment
       badEDR,
-      principal,
-      // no account yet (startEpoch)
-      0
+      principal
     );
 
     Account memory account = createAccount(principal);
@@ -316,9 +310,7 @@ contract PoolIsOverLeveragedTest is PoolTestState {
       GCRED,
       // great EDR so we dont have DTI error
       MAX_FIL,
-      principal,
-      // no account yet (startEpoch)
-      0
+      principal
     );
 
     Account memory account = createAccount(principal);
@@ -463,7 +455,6 @@ contract PoolAPRTests is PoolTestState {
     principal = bound(principal, WAD, MAX_FIL / 2);
     collateralValue = bound(collateralValue, principal * 2, MAX_FIL);
 
-    uint256 epochStart = block.number;
     uint256 interestOwed = startSimulation(principal);
 
     Account memory accountBefore = AccountHelpers.getAccount(router, agentID, poolID);
@@ -474,7 +465,6 @@ contract PoolAPRTests is PoolTestState {
       agentID,
       principal,
       collateralValue,
-      epochStart,
       payment
     );
     // pay back the amount
@@ -497,7 +487,6 @@ contract PoolAPRTests is PoolTestState {
     collateralValue = bound(collateralValue, principal * 2, MAX_FIL);
     // test APR when making payments twice a week to once every two weeks
     numPayments = bound(numPayments, 26, 104);
-    uint256 epochStart = block.number;
 
     // borrow an amount
     uint256 interestOwed = startSimulation(principal);
@@ -514,7 +503,6 @@ contract PoolAPRTests is PoolTestState {
         agentID,
         principal,
         collateralValue,
-        epochStart,
         payment
       );
       // pay back the amount
@@ -636,7 +624,6 @@ contract PoolAPRTests is PoolTestState {
     uint256 agentID,
     uint256 principal,
     uint256 collateralValue,
-    uint256 epochYear1,
     uint256 paymentAmount
   ) internal returns (SignedCredential memory) {
     // here we temporarily roll forward so we don't get an identical credential that's already been used
@@ -651,9 +638,7 @@ contract PoolAPRTests is PoolTestState {
       GCRED,
       // good EDR
       adjustedRate.mulWadUp(principal).mulWadUp(EPOCHS_IN_DAY) * 5,
-      principal,
-      // start the account
-      epochYear1
+      principal
     );
 
     VerifiableCredential memory vc = VerifiableCredential(

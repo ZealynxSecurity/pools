@@ -478,11 +478,8 @@ contract AgentRmEquityTest is BaseTest {
         0,
         edr,
         GCRED,
-        // locked funds are 50% of the agent's value
-        agentValue / 50,
         10e18,
-        principal,
-        0
+        principal
       );
 
       sc = issueWithdrawCred(
@@ -648,11 +645,8 @@ contract AgentRmEquityTest is BaseTest {
         0,
         edr,
         GCRED,
-        // locked funds are 50% of the agent's value
-        agentValue / 50,
         10e18,
-        principal,
-        0
+        principal
       );
 
       rmMinerCred = issueRemoveMinerCred(
@@ -769,9 +763,7 @@ contract AgentBorrowingTest is BaseTest {
         GCRED,
         borrowCred.vc.getExpectedDailyRewards(credParser),
         // principal = borrowAmount * 2 (second time borrowing)
-        borrowAmount * 2,
-        // Account started at previous borrow block
-        borrowBlock
+        borrowAmount * 2
       );
       borrowCred.vc.claim = abi.encode(agentData);
       borrowCred = signCred(borrowCred.vc);

@@ -31,10 +31,6 @@ struct AgentData {
    */
   uint256 gcred;
   /**
-   * @dev The total amount of vesting funds + initial pledge collateral aggregated across all of the Agent's miners
-   */
-  uint256 lockedFunds;
-  /**
    * @dev The aggregated quality adjusted power of all of the Agent's miners
    */
   uint256 qaPower;
@@ -42,10 +38,6 @@ struct AgentData {
    * @dev The total amount of FIL borrowed by the Agent
    */
   uint256 principal;
-  /**
-   * @dev The epoch in which the Agent started borrowing FIL
-   */
-  uint256 startEpoch;
 }
 
 struct VerifiableCredential {

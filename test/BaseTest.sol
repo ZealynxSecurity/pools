@@ -281,9 +281,7 @@ contract BaseTest is Test {
       // good EDR
       1000,
       // principal = borrowAmount
-      amount,
-      // no account yet (startEpoch)
-      0
+      amount
     );
 
     VerifiableCredential memory vc = VerifiableCredential(
@@ -315,9 +313,7 @@ contract BaseTest is Test {
       // good EDR (5x expected payments)
       (adjustedRate * EPOCHS_IN_DAY * principal * 5) / WAD,
       // principal = borrowAmount
-      principal,
-      // no account yet (startEpoch)
-      0
+      principal
     );
 
     VerifiableCredential memory vc = VerifiableCredential(
@@ -339,8 +335,7 @@ contract BaseTest is Test {
     uint256 collateralValue,
     uint256 gcred,
     uint256 expectedDailyRewards,
-    uint256 principal,
-    uint256 startEpoch
+    uint256 principal
   ) internal pure returns (AgentData memory) {
     // lockedFunds = collateralValue * 1.67 (such that CV = 60% of locked funds)
     uint256 lockedFunds = collateralValue * 167 / 100;
@@ -353,18 +348,14 @@ contract BaseTest is Test {
       0,
       expectedDailyRewards,
       gcred,
-      lockedFunds,
       // qaPower hardcoded
       10e18,
-      principal,
-      startEpoch
+      principal
     );
   }
 
   function emptyAgentData() internal pure returns (AgentData memory) {
     return AgentData(
-      0,
-      0,
       0,
       0,
       0,
