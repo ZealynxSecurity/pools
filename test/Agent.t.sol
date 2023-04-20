@@ -1108,11 +1108,13 @@ contract AgentPoliceTest is BaseTest {
     uint64 miner;
     IPool pool;
     IAgentPolice police;
+    address policeOwner;
 
     function setUp() public {
       pool = createAndFundPool(stakeAmount, investor1);
       (agent, miner) = configureAgent(minerOwner);
       police = GetRoute.agentPolice(router);
+      policeOwner = IAuth(address(police)).owner();
     }
 
     function testBurnSomeoneElseCredential() public {
@@ -1301,8 +1303,6 @@ contract AgentPoliceTest is BaseTest {
         pool.id()
       );
 
-      address policeOwner =  IAuth(address(police)).owner();
-
       vm.startPrank(policeOwner);
       police.prepareMinerForLiquidation(address(agent), miner);
       vm.stopPrank();
@@ -1319,7 +1319,6 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testDistributeLiquidatedFundsNonAgentPolice() public {
-      address policeOwner = IAuth(address(police)).owner();
       uint256 agentID = agent.id();
       agentBorrow(agent, pool.id(), issueGenericBorrowCred(agentID, WAD));
       vm.roll(block.number + police.defaultWindow() + 100);
@@ -1337,13 +1336,43 @@ contract AgentPoliceTest is BaseTest {
       police.distributeLiquidatedFunds(agentID, 0);
     }
 
+    function testDistributeLiquidatedFunds() public {
+      uint256 agentID = agent.id();
+      // borrow half the stake amount
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, stakeAmount / 2);
+      agentBorrow(agent, pool.id(), borrowCred);
+      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+      uint256 borrowedBefore = pool.totalBorrowed();
+      // roll forward to the default window
+      vm.roll(block.number + police.defaultWindow() + 1);
+
+      vm.startPrank(policeOwner);
+      // set the agent in default
+      police.setAgentDefaulted(address(agent));
+      // liquidate the agent
+      police.liquidatedAgent(address(agent));
+
+      // recover a tiny portion of the funds, but use a known amount for checks
+      uint256 recoveredFunds = WAD;
+
+      vm.deal(policeOwner, recoveredFunds);
+      wFIL.deposit{value: recoveredFunds}();
+      wFIL.approve(address(police), recoveredFunds);
+
+      // distribute the recovered funds
+      police.distributeLiquidatedFunds(agentID, recoveredFunds);
+
+      uint256 borrowedAfter = pool.totalBorrowed();
+      assertEq(borrowedBefore - borrowedAfter, account.principal, "Pool should have written down assets correctly");
+    }
+
     function testDistributeLiquidatedFundsEvenSplit(
       uint256 rollFwdPeriod,
       uint256 borrowAmount,
       uint256 numPools,
       uint256 recoveredFunds
     ) public {
-      address policeOwner = IAuth(address(police)).owner();
       IPool _pool;
       rollFwdPeriod = bound(
         rollFwdPeriod,
@@ -1367,6 +1396,9 @@ contract AgentPoliceTest is BaseTest {
         agentBorrow(agent, _pool.id(), borrowCred);
       }
 
+      Account memory postBorrowAccount = AccountHelpers.getAccount(router, agent.id(), _pool.id());
+
+      uint256 borrowedBefore = _pool.totalBorrowed();
       uint256 balanceBefore = wFIL.balanceOf(address(_pool));
 
       // roll forward to the default window
@@ -1384,10 +1416,13 @@ contract AgentPoliceTest is BaseTest {
 
       // distribute the recovered funds
       police.distributeLiquidatedFunds(agentID, recoveredFunds);
+
+      uint256 borrowedAfter = _pool.totalBorrowed();
       uint256 balanceAfter = wFIL.balanceOf(address(_pool));
 
       // ensure the write down amount is correct:
       assertEq(balanceAfter - balanceBefore, recoveredFunds / numPools, "Pool should have received the correct amount of funds");
+      assertEq(borrowedBefore - borrowedAfter, postBorrowAccount.principal, "Pool should have written down assets correctly");
 
       Account memory account = AccountHelpers.getAccount(router, agent.id(), _pool.id());
       assertTrue(account.defaulted, "Agent should be defaulted");
@@ -1421,7 +1456,6 @@ contract AgentPoliceTest is BaseTest {
       poolTwoPercent = bound(poolTwoPercent, 1, WAD - poolOnePercent);
       poolThreePercent = WAD - poolOnePercent - poolTwoPercent;
 
-      address policeOwner = IAuth(address(police)).owner();
       uint256 balanceAfter;
       IPool[] memory poolArray = new IPool[](numPools);
       uint256[] memory percentArray = new uint256[](numPools);
@@ -1479,7 +1513,6 @@ contract AgentPoliceTest is BaseTest {
       );
       vm.assume(recoveredFunds > WAD);
 
-      address policeOwner = IAuth(address(police)).owner();
       uint256 balanceAfter;
       uint256 balanceBefore;
       uint256 interestOwed= getPenaltyOwed(borrowAmount, rollFwdPeriod);

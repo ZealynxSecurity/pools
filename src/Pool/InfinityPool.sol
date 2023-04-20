@@ -279,8 +279,8 @@ contract InfinityPool is IPool, Ownable {
           address(this),
           totalOwed > recoveredFunds ? recoveredFunds : totalOwed
         );
-        // write off only what we lost
-        totalBorrowed -= lostAmt;
+        // write off the pool's account
+        totalBorrowed -= account.principal;
         // set the account with the funds the pool lost
         account.principal = lostAmt;
 
