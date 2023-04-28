@@ -441,7 +441,7 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
-     * @dev Allows Staker to mint `shares` into the Pool to receive `assets`
+     * @dev Allows Staker to specify the number of `shares` to mint from the Pool by depositing `assets`
      * @param shares Number of shares to mint
      * @param receiver The address to receive the shares
      * @return assets Number of assets deposited
@@ -452,7 +452,7 @@ contract InfinityPool is IPool, Ownable {
         assets = previewMint(shares);
         asset.transferFrom(msg.sender, address(this), assets);
         liquidStakingToken.mint(receiver, shares);
-        assets = convertToAssets(shares);
+
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 

@@ -20,7 +20,6 @@ contract VCVerifierTest is BaseTest {
 
   function setUp() public {
     vcv = new VCVerifierMock(address(router), "glif.io", "1");
-    vm.stopPrank();
   }
 
   function testVerifyCredential() public {

@@ -194,7 +194,6 @@ contract AgentPushPullFundsTest is BaseTest {
       SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), miner, pushAmount);
       vm.prank(minerOwner1);
       agent.pushFunds(pushFundsCred);
-      vm.stopPrank();
 
       assertEq(address(agent).balance, 0);
       assertEq(miner1.balance, pushAmount);

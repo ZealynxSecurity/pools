@@ -2,7 +2,7 @@
 pragma solidity 0.8.17;
 
 interface IAgentFactory {
-  event CreateAgent(uint256 indexed agentID, address indexed agent, address indexed operator);
+  event CreateAgent(uint256 indexed agentID, address indexed agent, address indexed creator);
 
   function agents(address agent) external view returns (uint256);
   function agentCount() external view returns (uint256);

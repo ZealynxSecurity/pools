@@ -38,7 +38,7 @@ contract AgentFactory is IAgentFactory {
     );
     agents[agent] = agentCount;
 
-    emit CreateAgent(agentCount, agent, operator);
+    emit CreateAgent(agentCount, agent, msg.sender);
 
     return agent;
   }
