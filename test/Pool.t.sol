@@ -90,6 +90,11 @@ contract PoolTestState is BaseTest {
     ramp.stake(amount);
   }
 
+  function _generateFees(uint256 paymentAmt, uint256 initialBorrow) internal {
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, initialBorrow));
+    vm.roll(block.number + GetRoute.agentPolice(router).defaultWindow() - 1);
+    agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmt));
+  }
 }
 
 contract PoolBasicSetupTest is BaseTest {
@@ -848,11 +853,9 @@ contract PoolAdminTests is PoolTestState {
     initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
     paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
 
-    // Generate some fees in the "old" pool
+    // Generate some fees to harvest
+    _generateFees(paymentAmt, initialBorrow);
 
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, initialBorrow));
-    vm.roll(block.number + GetRoute.agentPolice(router).defaultWindow() - 1);
-    agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmt));
     uint256 fees = pool.feesCollected();
     uint256 treasuryBalance = asset.balanceOf(address(treasury));
 
@@ -925,6 +928,24 @@ contract PoolAdminTests is PoolTestState {
     agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, newPool.totalBorrowableAssets()));
 
     assertEq(wFIL.balanceOf(address(agent)), newBorrowAmount + agentWFILBal, "Agent should have received new borrow amount");
+  }
+
+  function testHarvestFeesTreasury(uint256 paymentAmt, uint256 initialBorrow, uint256 harvestAmount) public {
+    initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
+    paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
+    // Generate some fees to harvest
+    _generateFees(paymentAmt, initialBorrow);
+
+    uint256 fees = pool.feesCollected();
+    assertGt(fees, 0, "Fees should be greater than 0");
+    uint256 treasuryBalance = asset.balanceOf(address(treasury));
+    harvestAmount = bound(harvestAmount, 0, fees);
+
+    vm.prank(systemAdmin);
+    pool.harvestFees(harvestAmount);
+
+    assertEq(pool.feesCollected(), fees - harvestAmount, "Fees should be reduced by harvest amount");
+    assertEq(asset.balanceOf(address(treasury)), treasuryBalance + harvestAmount, "Treasury should have received harvest amount");
   }
 }
 
