@@ -95,6 +95,7 @@ contract InfinityPool is IPool, Ownable {
     /// @dev a modifier that ensures the caller matches the `vc.subject` and that the caller is an agent
     modifier subjectIsAgentCaller(VerifiableCredential memory vc) {
         if (
+            vc.subject == 0 ||
             GetRoute.agentFactory(router).agents(msg.sender) != vc.subject
         ) revert Unauthorized();
         _;

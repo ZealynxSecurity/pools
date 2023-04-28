@@ -145,6 +145,33 @@ contract PoolBasicSetupTest is BaseTest {
   }
 }
 
+contract PoolDrainTest is PoolTestState {
+  function testDrainPool() public {
+    uint256 amount = 100e18;
+    loadApproveWFIL(amount, investor1);
+    vm.prank(investor1);
+    pool.deposit(amount, investor1);
+
+    address prankster = makeAddr("PRANKSTER");
+
+    uint256 totalBorrowable = pool.totalBorrowableAssets();
+    SignedCredential memory sc = issueGenericBorrowCred(0, totalBorrowable);
+
+    // Confirm that the pool has the FIL
+    uint256 preDrainPoolBal = wFIL.balanceOf(address(pool));
+    assertGt(preDrainPoolBal, 0, "Pool should have FIL");
+    assertEq(wFIL.balanceOf(prankster), 0, "prankster should not have fil");
+
+    vm.startPrank(prankster);
+    vm.expectRevert(Unauthorized.selector);
+    pool.borrow(sc.vc);
+    vm.stopPrank();
+
+    assertEq(wFIL.balanceOf(address(pool)), preDrainPoolBal, "Pool should not have been drained");
+    assertEq(wFIL.balanceOf(prankster), 0, "Prankster should not have received money");
+  }
+}
+
 contract PoolDepositTest is PoolTestState {
   function testDepositBasic() public {
     uint256 amount = WAD;

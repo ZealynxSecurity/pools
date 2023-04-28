@@ -75,6 +75,18 @@ contract VCVerifierTest is BaseTest {
     }
   }
 
+  function testSubjectZero() public {
+    SignedCredential memory sc = _issueSC(agentID);
+
+    sc.vc.subject = 0;
+
+    try vcv.validateCred(agentID, 0x0, sc) {
+      assertTrue(false, "Credential should be invalid - bad subject");
+    } catch (bytes memory e) {
+      assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
+    }
+  }
+
   function testFalseSubject() public {
     SignedCredential memory sc = _issueSC(agentID);
 

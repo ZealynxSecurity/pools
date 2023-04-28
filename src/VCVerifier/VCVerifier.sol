@@ -70,7 +70,8 @@ abstract contract VCVerifier is IVCVerifier, EIP712 {
       !(
         block.number >= sc.vc.epochIssued &&
         block.number <= sc.vc.epochValidUntil
-      )
+      ) ||
+      sc.vc.subject == 0
     ) revert InvalidCredential();
   }
 
