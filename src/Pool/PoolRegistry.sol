@@ -22,7 +22,6 @@ contract PoolRegistry is IPoolRegistry, Ownable {
    */
   uint256 public constant MAX_TREASURY_FEE = 1e17;
   uint256 public treasuryFeeRate;
-  uint256 public feeThreshold;
   IERC20 public asset;
   address[] public allPools;
   address public immutable router;
@@ -36,13 +35,11 @@ contract PoolRegistry is IPoolRegistry, Ownable {
   constructor(
     IERC20 _asset,
     uint256 _treasuryFeeRate,
-    uint256 _feeThreshold,
     address _owner,
     address _router
   ) Ownable(_owner) {
     asset = _asset;
     treasuryFeeRate = _treasuryFeeRate;
-    feeThreshold = _feeThreshold;
     router = _router;
   }
 
@@ -106,15 +103,7 @@ contract PoolRegistry is IPoolRegistry, Ownable {
     require(newFeeRate <= MAX_TREASURY_FEE, "Pool: Fee too high");
     treasuryFeeRate = newFeeRate;
   }
-
-  /**
-   * @dev Sets the treasury fee threshold
-   * The fee threshold is the amount of assets to accure in a Pool until transferring the fee to the treasury
-   */
-  function setFeeThreshold(uint256 newThreshold) external onlyOwner {
-    feeThreshold = newThreshold;
-  }
-
+  
   function createKey(string memory partitionKey, address entity) internal pure returns (bytes32) {
     return keccak256(abi.encode(partitionKey, entity));
   }
