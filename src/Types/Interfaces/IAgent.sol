@@ -34,6 +34,8 @@ interface IAgent {
 
   function beneficiary() external view returns (AgentBeneficiary memory);
 
+  function publicKey() external view returns (bytes memory);
+
   /*//////////////////////////////////////////////////
         MINER OWNERSHIP/WORKER/OPERATOR CHANGES
   //////////////////////////////////////////////////*/
@@ -68,6 +70,8 @@ interface IAgent {
   function setAdministration(address administration) external;
 
   function prepareMinerForLiquidation(uint64 miner, address liquidator) external;
+
+  function setPublicKey(bytes calldata publicKey) external;
 
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS

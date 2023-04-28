@@ -49,6 +49,9 @@ contract Agent is IAgent, Operatable {
   /// @notice `defaulted` returns true if the agent is in default
   bool public defaulted;
 
+  /// @notice `publicKey` is a hashed key that the ado uses to validate requests from the agent
+  bytes public publicKey;
+
   /*//////////////////////////////////////
                 MODIFIERS
   //////////////////////////////////////*/
@@ -89,7 +92,8 @@ contract Agent is IAgent, Operatable {
     address agentRouter,
     uint256 agentID,
     address owner,
-    address operator
+    address operator,
+    bytes memory pubKey
   ) Operatable(owner, operator) {
     router = agentRouter;
     id = agentID;
@@ -97,6 +101,8 @@ contract Agent is IAgent, Operatable {
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);
     minerRegistry = GetRoute.minerRegistry(router);
+
+    publicKey = pubKey;
   }
 
   /*//////////////////////////////////////////////////
@@ -310,6 +316,14 @@ contract Agent is IAgent, Operatable {
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);
     minerRegistry = GetRoute.minerRegistry(router);
+  }
+
+  /**
+   * @notice `setPublicKey` allows the owner or operator to update the public key in storage
+   * @param _publicKey The new public key
+   */
+  function setPublicKey(bytes calldata _publicKey) external onlyOwnerOperator {
+    publicKey = _publicKey;
   }
 
   /*//////////////////////////////////////////////

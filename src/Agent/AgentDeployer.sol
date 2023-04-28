@@ -10,8 +10,9 @@ contract AgentDeployer {
     address router,
     uint256 agentId,
     address owner,
-    address operator
+    address operator,
+    bytes memory publicKey
   ) external returns (address agent) {
-    agent = address(new Agent(router, agentId, owner, operator));
+    agent = address(new Agent(router, agentId, owner, operator, publicKey));
   }
 }
