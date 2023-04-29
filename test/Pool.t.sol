@@ -882,7 +882,6 @@ contract PoolAdminTests is PoolTestState {
 
     // Generate some fees to harvest
     _generateFees(paymentAmt, initialBorrow);
-
     uint256 fees = pool.feesCollected();
     uint256 treasuryBalance = asset.balanceOf(address(treasury));
 

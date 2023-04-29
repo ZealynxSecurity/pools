@@ -37,7 +37,7 @@ contract VCVerifierTest is BaseTest {
     uint256 collateralValue = agentValue * 60 / 100;
 
     AgentData memory agent = AgentData(
-      agentValue, collateralValue, 0, 500, GCRED, 10e18, 5e18
+      agentValue, collateralValue, 0, 500, GCRED, 10e18, 5e18, 0, 0, 0
     );
 
     VerifiableCredential memory vc = VerifiableCredential(
@@ -104,7 +104,7 @@ contract VCVerifierTest is BaseTest {
     uint256 collateralValue = agentValue * 60 / 100;
 
     AgentData memory agent = AgentData(
-      agentValue, collateralValue, 0, 500, 80, 10e18, 5e18
+      agentValue, collateralValue, 0, 500, 80, 10e18, 5e18, 0, 0, 0
     );
 
     VerifiableCredential memory vc = VerifiableCredential(

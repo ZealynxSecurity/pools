@@ -483,7 +483,10 @@ contract AgentRmEquityTest is BaseTest {
         edr,
         GCRED,
         10e18,
-        principal
+        principal,
+        0,
+        0,
+        0
       );
 
       sc = issueWithdrawCred(
@@ -581,7 +584,10 @@ contract AgentRmEquityTest is BaseTest {
         edr,
         GCRED,
         10e18,
-        principal
+        principal,
+        0,
+        0,
+        0
       );
 
       rmMinerCred = issueRemoveMinerCred(
@@ -1577,6 +1583,88 @@ contract AgentUpgradeTest is BaseTest {
       assertTrue(registry.minerRegistered(newAgent.id(), miner), "miner should still be registed to the agent");
       assertTrue(miner.isOwner(address(newAgent)), "The mock miner's owner should change to the new agent");
     }
+}
+
+contract AgentDataTest is BaseTest{
+  using Credentials for VerifiableCredential;
+  function testGreenScore(uint32 greenScore) public {
+    AgentData memory data = AgentData(
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      // Green Score
+      greenScore
+    );
+    VerifiableCredential memory vc = VerifiableCredential(
+      address(0x0),
+      0,
+      0,
+      0,
+      0,
+      bytes4(0),
+      0,
+      abi.encode(data)
+    );
+    assertEq(vc.getGreenScore(credParser), greenScore, "Green score should be correct");
+  }
+
+  function testFaultySectors(uint256 faultySectors) public {
+    AgentData memory data = AgentData(
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      faultySectors,
+      0,
+      0
+    );
+    VerifiableCredential memory vc = VerifiableCredential(
+      address(0x0),
+      0,
+      0,
+      0,
+      0,
+      bytes4(0),
+      0,
+      abi.encode(data)
+    );
+    assertEq(vc.getFaultySectors(credParser), faultySectors, "Faulty sectors should be correct");
+  }
+
+  function testLiveSectors(uint256 liveSectors) public {
+    AgentData memory data = AgentData(
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      liveSectors,
+      0
+    );
+    VerifiableCredential memory vc = VerifiableCredential(
+      address(0x0),
+      0,
+      0,
+      0,
+      0,
+      bytes4(0),
+      0,
+      abi.encode(data)
+    );
+    assertEq(vc.getLiveSectors(credParser), liveSectors, "Live sectors should be correct");
+  }
 }
 
 // contract AgentCollateralsTest is BaseTest {

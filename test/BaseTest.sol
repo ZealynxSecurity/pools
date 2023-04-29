@@ -349,12 +349,21 @@ contract BaseTest is Test {
       gcred,
       // qaPower hardcoded
       10e18,
-      principal
+      principal,
+      // faulty sectors
+      0,
+      // live sectors
+      0,
+      // Green Score
+      0
     );
   }
 
   function emptyAgentData() internal pure returns (AgentData memory) {
     return AgentData(
+      0,
+      0,
+      0,
       0,
       0,
       0,

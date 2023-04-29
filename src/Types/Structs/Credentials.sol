@@ -38,6 +38,18 @@ struct AgentData {
    * @dev The total amount of FIL borrowed by the Agent
    */
   uint256 principal;
+  /**
+   * @dev The total amount of faulty sectors summed up across all the Agent's miners
+   */
+  uint256 faultySectors;
+  /**
+   * @dev The total amount of live sectors summed up across all the Agent's miners
+   */
+  uint256 liveSectors;
+  /**
+   * @dev An energy efficiency score computed by the Filecoin Green API
+   */
+  uint32 greenScore;
 }
 
 struct VerifiableCredential {
@@ -142,5 +154,26 @@ library Credentials {
     address credParser
   ) internal pure returns (uint256) {
     return ICredentials(credParser).getLockedFunds(vc.claim);
+  }
+
+  function getGreenScore(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint32) {
+    return ICredentials(credParser).getGreenScore(vc.claim);
+  }
+
+  function getFaultySectors(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return ICredentials(credParser).getFaultySectors(vc.claim);
+  }
+
+  function getLiveSectors(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return ICredentials(credParser).getLiveSectors(vc.claim);
   }
 }
