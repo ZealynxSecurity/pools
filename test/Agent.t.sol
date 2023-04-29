@@ -1261,7 +1261,7 @@ contract AgentPoliceTest is BaseTest {
       address prankster = makeAddr("prankster");
       vm.startPrank(prankster);
       vm.expectRevert(Unauthorized.selector);
-      police.distributeLiquidatedFunds(agentID, 0);
+      police.distributeLiquidatedFunds(address(agent), 0);
     }
 
     function testDistributeLiquidatedFunds() public {
@@ -1289,10 +1289,11 @@ contract AgentPoliceTest is BaseTest {
       wFIL.approve(address(police), recoveredFunds);
 
       // distribute the recovered funds
-      police.distributeLiquidatedFunds(agentID, recoveredFunds);
+      police.distributeLiquidatedFunds(address(agent), recoveredFunds);
 
       uint256 borrowedAfter = pool.totalBorrowed();
       assertEq(borrowedBefore - borrowedAfter, account.principal, "Pool should have written down assets correctly");
+      assertEq(wFIL.balanceOf(address(police)), 0, "Agent police should not have funds");
     }
 
     function testDistributeLiquidatedFundsEvenSplit(
@@ -1343,7 +1344,7 @@ contract AgentPoliceTest is BaseTest {
       wFIL.approve(address(police), recoveredFunds);
 
       // distribute the recovered funds
-      police.distributeLiquidatedFunds(agentID, recoveredFunds);
+      police.distributeLiquidatedFunds(address(agent), recoveredFunds);
 
       uint256 borrowedAfter = _pool.totalBorrowed();
       uint256 balanceAfter = wFIL.balanceOf(address(_pool));
@@ -1359,7 +1360,7 @@ contract AgentPoliceTest is BaseTest {
       wFIL.deposit{value: recoveredFunds}();
       wFIL.approve(address(police), recoveredFunds);
       vm.expectRevert(abi.encodeWithSelector(AlreadyDefaulted.selector));
-      police.distributeLiquidatedFunds(agentID, recoveredFunds);
+      police.distributeLiquidatedFunds(address(agent), recoveredFunds);
       vm.stopPrank();
     }
 
@@ -1417,7 +1418,7 @@ contract AgentPoliceTest is BaseTest {
       wFIL.approve(address(police), recoveredFunds);
       vm.assume(recoveredFunds > WAD);
       // distribute the recovered funds
-      police.distributeLiquidatedFunds(agent.id(), recoveredFunds);
+      police.distributeLiquidatedFunds(address(agent), recoveredFunds);
       for (uint8 i = 0; i < numPools; i++) {
         balanceAfter = wFIL.balanceOf(address(poolArray[i]));
         // ensure the write down amount is correct:
@@ -1460,12 +1461,13 @@ contract AgentPoliceTest is BaseTest {
       wFIL.deposit{value: recoveredFunds}();
       wFIL.approve(address(police), recoveredFunds);
       // distribute the recovered funds
-      police.distributeLiquidatedFunds(agent.id(), recoveredFunds);
+      police.distributeLiquidatedFunds(address(agent), recoveredFunds);
       Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
       assertTrue(account.defaulted, "Agent should be defaulted");
       balanceAfter = wFIL.balanceOf(address(pool));
       uint256 balanceChange = borrowAmount + interestOwed > recoveredFunds ? recoveredFunds : borrowAmount + interestOwed;
       assertEq(balanceAfter - balanceBefore, balanceChange,  "Pool should have received the correct amount of funds");
+      assertEq(wFIL.balanceOf(IAuth(address(agent)).owner()), recoveredFunds - balanceChange,  "Police owner should only have paid the amount owed");
     }
 
     function getPenaltyOwed(uint256 amount, uint256 rollFwdPeriod) public view returns (uint256) {

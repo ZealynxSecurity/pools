@@ -172,15 +172,19 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
 
   /**
    * @notice `distributeLiquidatedFunds` distributes liquidated funds to the pools
-   * @param agentID The ID of the agent to set the state of
+   * @param agent The address of the agent to set the state of
    * @param amount The amount of funds recovered from the liquidation
    */
-  function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external onlyOwner {
+  function distributeLiquidatedFunds(address agent, uint256 amount) external onlyOwner {
+    uint256 agentID = IAgent(agent).id();
     if (!liquidated[agentID]) revert Unauthorized();
 
     // transfer the assets into the pool
     GetRoute.wFIL(router).transferFrom(msg.sender, address(this), amount);
-    _writeOffPools(agentID, amount);
+    uint256 excessAmount = _writeOffPools(agentID, amount);
+
+    // transfer the excess assets to the Agent's owner
+    GetRoute.wFIL(router).transfer(IAuth(agent).owner(), excessAmount);
   }
 
   /**
@@ -336,7 +340,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
   function _writeOffPools(
     uint256 _agentID,
     uint256 _totalAmount
-  ) internal {
+  ) internal returns (uint256 excessFunds) {
     // Setup the variables we use in the loops here to save gas
     uint256 totalPrincipal;
     uint256 i;
@@ -347,6 +351,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
 
     uint256[] memory _pools = _poolIDs[_agentID];
     uint256 poolCount = _pools.length;
+    uint256 totalOwed;
 
     uint256[] memory principalAmts = new uint256[](poolCount);
     // add up total principal across pools, and cache the principal in each pool
@@ -364,7 +369,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
       IPool pool = GetRoute.pool(router, poolID);
       wFIL.approve(address(pool), poolShare);
       // write off the pool's assets
-      pool.writeOff(_agentID, poolShare);
+      totalOwed = pool.writeOff(_agentID, poolShare);
+      excessFunds += poolShare > totalOwed ? poolShare - totalOwed : 0;
     }
   }
 

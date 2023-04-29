@@ -65,9 +65,9 @@ interface IAgentPolice {
 
   function prepareMinerForLiquidation(address agent, uint64 miner) external;
 
-  function distributeLiquidatedFunds(uint256 agentID, uint256 amount) external;
+  function distributeLiquidatedFunds(address agent, uint256 amount) external;
 
-  function liquidatedAgent(address agentID) external;
+  function liquidatedAgent(address agent) external;
 
   function confirmRmEquity(
     VerifiableCredential memory vc

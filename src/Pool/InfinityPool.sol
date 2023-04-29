@@ -233,7 +233,7 @@ contract InfinityPool is IPool, Ownable {
      * @param recoveredFunds The amount of funds recovered from the liquidation. This is the total amount the Police was able to recover from the Agent's Miner Actors
      * @dev If `recoveredFunds` > `principal` owed on the Agent's account, then the remaining amount gets applied as interest according to a penalty rate
      */
-    function writeOff(uint256 agentID, uint256 recoveredFunds) external {
+    function writeOff(uint256 agentID, uint256 recoveredFunds) external returns (uint256 totalOwed){
         // only the agent police can call this function
         AuthController.onlyAgentPolice(router, msg.sender);
 
@@ -269,12 +269,12 @@ contract InfinityPool is IPool, Ownable {
                 .mulWadUp(interestPaid);
         }
 
-        // transfer the assets into the pool
         // whatever we couldn't pay back
         uint256 lostAmt = principalOwed > recoveredFunds ? principalOwed - recoveredFunds : 0;
 
-        uint256 totalOwed = interestPaid + principalOwed;
+        totalOwed = interestPaid + principalOwed;
 
+        // transfer the assets into the pool
         asset.transferFrom(
           msg.sender,
           address(this),

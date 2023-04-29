@@ -173,6 +173,6 @@ interface IPool {
 
     function setRateModule(IRateModule newRateModule) external;
 
-    function writeOff(uint256 agentID, uint256 recoveredDebt) external;
+    function writeOff(uint256 agentID, uint256 recoveredDebt) external returns (uint256 totalOwed);
 }
 
