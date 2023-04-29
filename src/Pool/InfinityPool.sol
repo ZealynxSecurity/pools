@@ -171,6 +171,7 @@ contract InfinityPool is IPool, Ownable {
      * @return totalBorrowed The total borrowed from the agent
      */
     function totalBorrowableAssets() public view returns (uint256) {
+        if (isShuttingDown) return 0;
         uint256 _assets = asset.balanceOf(address(this)) - feesCollected;
         uint256 _absMinLiquidity = getAbsMinLiquidity();
 
