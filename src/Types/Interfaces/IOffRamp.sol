@@ -100,6 +100,10 @@ interface IOffRamp {
 
   function setConversionWindow(uint256 newConversionWindow) external;
 
+  function maxWithdraw(address account) external view returns (uint256);
+
+  function maxRedeem(address account) external view returns (uint256);
+
   function redeem(
     uint256 shares,
     address receiver,

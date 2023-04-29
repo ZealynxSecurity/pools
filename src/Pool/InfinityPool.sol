@@ -568,11 +568,11 @@ contract InfinityPool is IPool, Ownable {
     }
 
     function maxWithdraw(address owner) public view returns (uint256) {
-        return convertToAssets(liquidStakingToken.balanceOf(owner));
+        return ramp.maxWithdraw(owner);
     }
 
     function maxRedeem(address owner) public view returns (uint256) {
-        return liquidStakingToken.balanceOf(owner);
+        return ramp.maxRedeem(owner);
     }
 
 
