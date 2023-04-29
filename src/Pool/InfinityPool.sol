@@ -193,13 +193,12 @@ contract InfinityPool is IPool, Ownable {
      */
     function getLiquidAssets() public view returns (uint256) {
         if(isShuttingDown) return 0;
-        // This will throw if there is no excess liquidity due to underflow
 
         uint256 balance = asset.balanceOf(address(this));
         // ensure we dont pay out treasury fees
         if (balance <= feesCollected) return 0;
 
-        return balance -= feesCollected;
+        return balance - feesCollected;
     }
 
     /**
