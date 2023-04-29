@@ -371,7 +371,7 @@ contract Agent is IAgent, Operatable {
     uint256 poolID,
     SignedCredential memory sc
   ) external
-    onlyOwnerOperator
+    onlyOwner
     notPaused
     notInDefault
     validateAndBurnCred(sc)
