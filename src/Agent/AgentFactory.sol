@@ -67,10 +67,10 @@ contract AgentFactory is IAgentFactory {
     );
     // Register the new agent and unregister the old agent
     agents[newAgent] = agentId;
-    // transfer funds from old agent to new agent and mark old agent as decommissioning
-    oldAgent.decommissionAgent(newAgent);
     // delete the old agent from the registry
     agents[agent] = 0;
+    // transfer funds from old agent to new agent and mark old agent as decommissioning
+    oldAgent.decommissionAgent(newAgent);
   }
 
   function isAgent(address agent) external view returns (bool) {
