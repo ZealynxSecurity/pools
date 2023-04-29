@@ -19,7 +19,6 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {BeneficiaryHelpers, AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
 contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
@@ -28,7 +27,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
   using FixedPointMathLib for uint256;
   using Credentials for VerifiableCredential;
   using FilAddress for address;
-  using BeneficiaryHelpers for AgentBeneficiary;
 
   error AgentStateRejected();
 
@@ -55,9 +53,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
 
   /// @notice `_credentialUseBlock` maps signature bytes to when a credential was used
   mapping(bytes32 => uint256) private _credentialUseBlock;
-
-  /// @notice `_agentBeneficiaries` maps an Agent ID to its Beneficiary struct
-  mapping(uint256 => AgentBeneficiary) private _agentBeneficiaries;
 
   constructor(
     string memory _name,
@@ -263,103 +258,18 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     }
   }
 
-  /*//////////////////////////////////////////////
-                  BENEFICIARIES
-  //////////////////////////////////////////////*/
-
-  /**
-   * @notice `isBeneficiaryActive` returns true if the beneficiary is active
-   * @param agentID the ID of the agent
-   */
-  function isBeneficiaryActive(uint256 agentID) external view returns (bool) {
-    return _agentBeneficiaries[agentID].isActive();
-  }
-
-  /**
-   * @notice `agentBeneficiary` returns the beneficiary of an agent
-   * @param agentID the ID of the agent
-   */
-  function agentBeneficiary(uint256 agentID) external view returns (AgentBeneficiary memory) {
-    return _agentBeneficiaries[agentID];
-  }
-
-  /**
-   * @notice `changeAgentBeneficiary` changes the beneficiary of an agent
-   * @param beneficiary the address of the beneficiary
-   * @param agentID the ID of the agent
-   * @param expiration the epoch expiration of the beneficiary
-   * @param quota the FIL quota of the beneficiary
-   */
-  function changeAgentBeneficiary(
-    address beneficiary,
-    uint256 agentID,
-    uint256 expiration,
-    uint256 quota
-  ) external onlyAgent {
-    AgentBeneficiary memory benny = _agentBeneficiaries[agentID];
-
-    // if you already have a beneficiary addres set, you can't change it
-    if (benny.isActive()) revert Unauthorized();
-    // as long as we do not have an existing, active beneficiary, propose a new one
-    _agentBeneficiaries[agentID] = benny.propose(beneficiary.normalize(), quota, expiration);
-  }
-
-  /**
-   * @notice `approveAgentBeneficiary` converts the proposed beneficiary to the active beneficiary
-   * @param agentID the ID of the agent
-   * @dev must be called by the proposed beneficiary
-   */
-  function approveAgentBeneficiary(uint256 agentID) external {
-    _agentBeneficiaries[agentID] = _agentBeneficiaries[agentID].approve(msg.sender);
-  }
-
-  /**
-   * @notice `beneficiaryWithdrawable` is called by the Agent during withdraw when there is an active beneficiary. It withdraws funds to the beneficiary address and updates the beneficiary's quota in storage
-   * @param recipient the address of the recipient
-   * @param sender the address of the sender
-   * @param agentID the ID of the agent
-   * @param proposedAmount the amount of FIL the beneficiary is proposing to withdraw
-   * @dev the agent's owner can force a beneficiary withdrawal if it calls this function when the receipient is the active beneficiary
-   */
-  function beneficiaryWithdrawable(
-    address recipient,
-    address sender,
-    uint256 agentID,
-    uint256 proposedAmount
-  ) external returns (
-    uint256 amount
-  ) {
-    AgentBeneficiary memory beneficiary = _agentBeneficiaries[agentID];
-    address benneficiaryAddress = beneficiary.active.beneficiary;
-    // If the sender is not the owner of the Agent or the beneficiary, revert
-    if(
-      !(benneficiaryAddress == sender || (IAuth(msg.sender).owner() == sender && recipient == benneficiaryAddress) )) {
-        revert Unauthorized();
-      }
-    (
-      beneficiary,
-      amount
-    ) = beneficiary.withdraw(proposedAmount);
-    // update the beneficiary in storage
-    _agentBeneficiaries[agentID] = beneficiary;
-  }
-
   /**
    * @notice `confirmRmEquity` checks to see if a withdrawal will bring the agent over maxDTE
    * @param vc the verifiable credential
-   * @param additionalLiability any additional liability to apply to the agent (used when removing a miner with an active beneficiary)
    */
   function confirmRmEquity(
-    VerifiableCredential memory vc,
-    uint256 additionalLiability
+    VerifiableCredential memory vc
   ) external view {
     // check to ensure we can withdraw from this pool
     _agentApproved(vc);
     // check to ensure the withdrawal does not bring us over maxDTE
     address credParser = address(GetRoute.credParser(router));
     // check to make sure the after the withdrawal, the DTE is under max
-    // the additionalLiability is used when an Agent wants to remove a miner
-    // but an active beneficiary is set
     uint256 principal = vc.getPrincipal(credParser);
     // nothing borrowed, so DTE is 0, good to go!
     if (principal == 0) return;
@@ -374,7 +284,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     }
 
     // if the DTE is greater than maxDTE, revert
-    if (((principal + additionalLiability) * WAD) / (agentTotalValue - principal) > maxDTE) {
+    if ((principal * WAD) / (agentTotalValue - principal) > maxDTE) {
       revert AgentStateRejected();
     }
   }

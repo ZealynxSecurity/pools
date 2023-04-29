@@ -12,7 +12,6 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {SignedCredential} from "src/Types/Structs/Credentials.sol";
-import {AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 
@@ -127,15 +126,6 @@ contract Agent is IAgent, Operatable {
     return address(this).balance + wFIL.balanceOf(address(this));
   }
 
-  /**
-   * @notice Beneficiary returns the beneficiary of the Agent
-   * @return beneficiary The Agent's beneficiary
-   * @dev The beneficiary is active if its both unexpired and has unused quota
-   */
-  function beneficiary() external view returns (AgentBeneficiary memory) {
-    return agentPolice.agentBeneficiary(id);
-  }
-
   /*//////////////////////////////////////////////
             PAYABLE / FALLBACK FUNCTIONS
   //////////////////////////////////////////////*/
@@ -185,14 +175,8 @@ contract Agent is IAgent, Operatable {
     notInDefault
     validateAndBurnCred(sc)
   {
-    uint256 additionalLiability = 0;
-
-    if (agentPolice.isBeneficiaryActive(id)) {
-      AgentBeneficiary memory _beneficiary = agentPolice.agentBeneficiary(id);
-      additionalLiability = _beneficiary.active.quota - _beneficiary.active.usedQuota;
-    }
-    // checks to see if the
-    agentPolice.confirmRmEquity(sc.vc, additionalLiability);
+    // checks to see if Agent has enough equity to remove miner
+    agentPolice.confirmRmEquity(sc.vc);
     // remove the miner from the central registry
     minerRegistry.removeMiner(id, sc.vc.target);
     // change the owner address of the miner to the new miner owner
@@ -272,27 +256,6 @@ contract Agent is IAgent, Operatable {
   }
 
   /**
-   * @notice Changes the beneficiary address associated with a miner
-   * @param newBeneficiary The new beneficiary address
-   * @param expiration The epoch expiration date of the beneficiary
-   * @param quota The amount in attoFIL that the beneficiary is allowed to withdraw
-   * @dev miner must be owned by this Agent in order for this call to execute
-   */
-  function changeBeneficiary(
-    address newBeneficiary,
-    uint256 expiration,
-    uint256 quota
-  ) external onlyOwner notPaused {
-    agentPolice.changeAgentBeneficiary(
-      // the beneficiary address gets normalized in agent police to save on code size
-      newBeneficiary,
-      id,
-      expiration,
-      quota
-    );
-  }
-
-  /**
    * @notice Sets the Agent in default to prepare for a liquidation
    * @dev This process is irreversible
    */
@@ -341,6 +304,7 @@ contract Agent is IAgent, Operatable {
     address receiver,
     SignedCredential memory sc
   ) external
+    onlyOwner
     notPaused
     notInDefault
     notOnAdministration
@@ -348,18 +312,7 @@ contract Agent is IAgent, Operatable {
   {
     uint256 sendAmount = sc.vc.value;
     // Regardless of sender if the agent is overleveraged they cannot withdraw
-    agentPolice.confirmRmEquity(sc.vc, 0);
-    if (
-      agentPolice.isBeneficiaryActive(id)
-    ) {
-      // This call will revert if the sender is not owner/beneficiary
-      // Otherwise it will return up the lesser of beneficiary quota or the credentialed amount
-      sendAmount = agentPolice.beneficiaryWithdrawable(receiver, msg.sender, id, sendAmount);
-    }
-    else if (msg.sender != owner()) {
-      revert Unauthorized();
-    }
-
+    agentPolice.confirmRmEquity(sc.vc);
     // unwrap any wfil needed to withdraw
     _poolFundsInFIL(sendAmount);
     // transfer funds

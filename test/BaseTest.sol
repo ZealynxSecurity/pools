@@ -33,7 +33,6 @@ import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {AgentBeneficiary, BeneficiaryHelpers} from "src/Types/Structs/Beneficiary.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
@@ -607,71 +606,6 @@ contract BaseTest is Test {
     vm.stopPrank();
 
     assertTrue(police.liquidated(agent.id()), "Agent should be liquidated");
-  }
-
-  function configureBeneficiary(
-    IAgent agent,
-    address beneficiary,
-    uint256 expiration,
-    uint256 quota
-  ) internal {
-    changeBeneficiary(agent, beneficiary, expiration, quota);
-    address prankster = makeAddr("PRANKSTER");
-
-    // fuzz test accidentally sets beneficiary address to prankster
-    if (beneficiary == prankster) {
-      prankster = makeAddr("PRANKSTER2");
-    }
-    vm.startPrank(prankster);
-    try GetRoute.agentPolice(router).approveAgentBeneficiary(agent.id()) {
-      assertTrue(false, "Should not be able to approve beneficiary without permission");
-    } catch (bytes memory e) {
-      assertEq(errorSelector(e), BeneficiaryHelpers.Unauthorized.selector);
-    }
-    vm.stopPrank();
-
-    vm.startPrank(beneficiary);
-    GetRoute.agentPolice(router).approveAgentBeneficiary(agent.id());
-    vm.stopPrank();
-
-    AgentBeneficiary memory ab = agent.beneficiary();
-
-    assertEq(ab.proposed.beneficiary, address(0));
-    assertEq(ab.proposed.expiration, 0);
-    assertEq(ab.proposed.quota, 0);
-
-    assertEq(ab.active.beneficiary, beneficiary);
-    assertEq(ab.active.expiration, expiration);
-    assertEq(ab.active.quota, quota);
-  }
-
-  function changeBeneficiary(
-    IAgent agent,
-    address beneficiary,
-    uint256 expiration,
-    uint256 quota
-  ) internal {
-    address prankster = makeAddr("PRANKSTER");
-    vm.startPrank(prankster);
-    try agent.changeBeneficiary(beneficiary, expiration, quota) {
-      assertTrue(false, "Should not be able to change beneficiary without permission");
-    } catch (bytes memory e) {
-      assertEq(errorSelector(e), Unauthorized.selector);
-    }
-    vm.stopPrank();
-    vm.startPrank(_agentOwner(agent));
-    agent.changeBeneficiary(beneficiary, expiration, quota);
-    vm.stopPrank();
-
-    AgentBeneficiary memory ab = agent.beneficiary();
-
-    assertEq(ab.proposed.beneficiary, beneficiary);
-    assertEq(ab.proposed.expiration, expiration);
-    assertEq(ab.proposed.quota, quota);
-
-    assertEq(ab.active.beneficiary, address(0));
-    assertEq(ab.active.expiration, 0);
-    assertEq(ab.active.quota, 0);
   }
 
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {

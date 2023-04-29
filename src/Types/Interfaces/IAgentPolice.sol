@@ -2,7 +2,6 @@
 pragma solidity 0.8.17;
 
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {AgentBeneficiary} from "src/Types/Structs/Beneficiary.sol";
 
 interface IAgentPolice {
 
@@ -71,35 +70,8 @@ interface IAgentPolice {
   function liquidatedAgent(address agentID) external;
 
   function confirmRmEquity(
-    VerifiableCredential memory vc,
-    uint256 additionalLiability
+    VerifiableCredential memory vc
   ) external view;
-
-  /*//////////////////////////////////////////////
-                    BENEFICIARIES
-  //////////////////////////////////////////////*/
-
-  function isBeneficiaryActive(uint256 agentID) external view returns (bool);
-
-  function agentBeneficiary(uint256 agentID) external view returns (AgentBeneficiary memory);
-
-  function changeAgentBeneficiary(
-    address newBeneficiary,
-    uint256 agentID,
-    uint256 expiration,
-    uint256 quota
-  ) external;
-
-  function approveAgentBeneficiary(uint256 agentID) external;
-
-  function beneficiaryWithdrawable(
-    address recipient,
-    address sender,
-    uint256 agentID,
-    uint256 proposedAmount
-  ) external returns (
-    uint256 amount
-  );
 
   /*//////////////////////////////////////////////
                   ADMIN CONTROLS
