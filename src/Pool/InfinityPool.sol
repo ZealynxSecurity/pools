@@ -171,6 +171,7 @@ contract InfinityPool is IPool, Ownable {
      * @return totalBorrowed The total borrowed from the agent
      */
     function totalBorrowableAssets() public view returns (uint256) {
+        if (isShuttingDown) return 0;
         uint256 _assets = asset.balanceOf(address(this)) - feesCollected;
         uint256 _absMinLiquidity = getAbsMinLiquidity();
 
@@ -192,13 +193,12 @@ contract InfinityPool is IPool, Ownable {
      */
     function getLiquidAssets() public view returns (uint256) {
         if(isShuttingDown) return 0;
-        // This will throw if there is no excess liquidity due to underflow
 
         uint256 balance = asset.balanceOf(address(this));
         // ensure we dont pay out treasury fees
         if (balance <= feesCollected) return 0;
 
-        return balance -= feesCollected;
+        return balance - feesCollected;
     }
 
     /**
@@ -568,11 +568,11 @@ contract InfinityPool is IPool, Ownable {
     }
 
     function maxWithdraw(address owner) public view returns (uint256) {
-        return convertToAssets(liquidStakingToken.balanceOf(owner));
+        return ramp.maxWithdraw(owner);
     }
 
     function maxRedeem(address owner) public view returns (uint256) {
-        return liquidStakingToken.balanceOf(owner);
+        return ramp.maxRedeem(owner);
     }
 
 

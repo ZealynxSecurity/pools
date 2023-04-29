@@ -81,6 +81,18 @@ contract OffRamp is IOffRamp, Ownable {
       return totalIOUStaked;
     }
 
+    /// @notice maxWithdraw returns the maximum amount of assets that can be withdrawn from the ramp
+    function maxWithdraw(address account) external view returns (uint256) {
+        return GetRoute
+            .pool(router, poolID)
+            .convertToAssets(IPoolToken(liquidStakingToken).balanceOf(account));
+    }
+
+    /// @notice maxRedeem returns the maximum amount of assets that can be withdrawn from the ramp
+    function maxRedeem(address account) external view returns (uint256) {
+        return IPoolToken(liquidStakingToken).balanceOf(account);
+    }
+
     ///@return displays the user's share of the pooled ious.
     function dividendsOwing(address account) public view returns (uint256) {
         // remember that `lastAccountUpdateCursor` was the totalDividendPoints when the account was updated last
