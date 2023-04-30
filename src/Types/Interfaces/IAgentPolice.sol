@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 
 interface IAgentPolice {
 
@@ -13,7 +14,7 @@ interface IAgentPolice {
 
   event OnAdministration(address agent);
 
-  event OffAdministration(address agent);
+  event FaultySectors(address indexed agentID, uint256 faultEpoch);
 
   /*//////////////////////////////////////////////
                       GETTERS
@@ -32,6 +33,10 @@ interface IAgentPolice {
   function paused() external view returns (bool);
 
   function maxDTE() external view returns (uint256);
+
+  function maxConsecutiveFaultEpochs() external view returns (uint256);
+
+  function sectorFaultyTolerancePercent() external view returns (uint256);
 
   /*//////////////////////////////////////////////
                     VC HANDLING
@@ -61,7 +66,15 @@ interface IAgentPolice {
 
   function putAgentOnAdministration(address agent, address administration) external;
 
-  function rmAgentFromAdministration(address agent) external;
+  function markAsFaulty(IAgent[] calldata agents) external;
+
+  function putAgentOnAdministrationDueToFaultySectorDays(address agent, address administration) external;
+
+  function setAgentDefaultDueToFaultySectorDays(address agent) external;
+
+  function setSectorFaultyTolerancePercent(uint256 percent) external;
+
+  function setMaxConsecutiveFaultEpochs(uint256 epochs) external;
 
   function prepareMinerForLiquidation(address agent, uint64 miner) external;
 
@@ -70,6 +83,10 @@ interface IAgentPolice {
   function liquidatedAgent(address agent) external;
 
   function confirmRmEquity(
+    VerifiableCredential memory vc
+  ) external view;
+
+  function confirmRmAdministration(
     VerifiableCredential memory vc
   ) external view;
 

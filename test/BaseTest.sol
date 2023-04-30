@@ -101,7 +101,7 @@ contract BaseTest is Test {
       address(wFIL),
       address(new MinerRegistry(router)),
       address(new AgentFactory(router)),
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, router)),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router)),
       // 1e17 = 10% treasury fee on yield
       address(new PoolRegistry(IERC20(address(wFIL)), 10e16, systemAdmin, router)),
       vcIssuer,
@@ -291,6 +291,37 @@ contract BaseTest is Test {
       amount,
       Agent.pay.selector,
       // minerID irrelevant for pay action
+      0,
+      abi.encode(agentData)
+    );
+
+    return signCred(vc);
+  }
+
+  function issueGenericRecoverCred(uint256 agent, uint256 faultySectors, uint256 liveSectors) internal returns (SignedCredential memory) {
+    AgentData memory agentData = AgentData(
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      // faulty sectors
+      faultySectors,
+      // livesectors
+      liveSectors,
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent,
+      block.number,
+      block.number + 100,
+      0,
+      Agent.setRecovered.selector,
+      // minerID irrelevant for setRecovered action
       0,
       abi.encode(agentData)
     );

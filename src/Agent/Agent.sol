@@ -11,7 +11,7 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
-import {SignedCredential} from "src/Types/Structs/Credentials.sol";
+import {Credentials, SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 
@@ -25,6 +25,7 @@ contract Agent is IAgent, Operatable {
   using MinerHelper for uint64;
   using FilAddress for address;
   using FilAddress for address payable;
+  using Credentials for VerifiableCredential;
 
   error InsufficientFunds();
   error BadAgentState();
@@ -44,6 +45,9 @@ contract Agent is IAgent, Operatable {
 
   /// @notice `administration` returns the address of an admin that can make payments on behalf of the agent, _only_ when the Agent falls behind on payments
   address public administration;
+
+  /// @notice `faultySectorStartEpoch` is the epoch that one of the Agent's miners began having faulty sectors
+  uint256 public faultySectorStartEpoch;
 
   /// @notice `defaulted` returns true if the agent is in default
   bool public defaulted;
@@ -232,6 +236,38 @@ contract Agent is IAgent, Operatable {
   function prepareMinerForLiquidation(uint64 miner, address liquidator) external onlyAgentPolice {
   if (!defaulted) revert Unauthorized();
     miner.changeOwnerAddress(liquidator);
+  }
+
+  /**
+   * @notice `setFaulty` Marks the agent as having faulty sectors at a particular epoch
+   * @dev Can be called multiple times on the same Agent without getting the wrong result
+   */
+  function setFaulty() external onlyAgentPolice {
+    // dont reset faultySectorStartEpoch if one already exists
+    if (faultySectorStartEpoch == 0) {
+      faultySectorStartEpoch = block.number;
+    }
+  }
+
+  /**
+   * @notice `setRecovered` Marks the agent as having recovered from being in an administration state
+   * @param sc The signed credential of the agent attempting to recover
+   * @dev the `sc` must have under the tolerance ratio of faultySectors:liveSectors in order for this call to succeed
+   * @dev the Account must be paid up within the defaultWindow in order for this call to succeed
+   * @dev if the Agent has recovered, administration gets removed
+   */
+  function setRecovered(SignedCredential memory sc) 
+    external
+    onlyOwnerOperator
+    validateAndBurnCred(sc)
+    notPaused
+    notInDefault
+  {
+    agentPolice.confirmRmAdministration(sc.vc);
+    faultySectorStartEpoch = 0;
+    administration = address(0);
+
+    emit OffAdministration();
   }
 
   /**

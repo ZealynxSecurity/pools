@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {Ownable} from "src/Auth/Ownable.sol";
+import {Operatable} from "src/Auth/Operatable.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
@@ -21,7 +21,7 @@ import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Str
 import {Account} from "src/Types/Structs/Account.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
-contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
+contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   using AccountHelpers for Account;
   using FixedPointMathLib for uint256;
@@ -42,6 +42,12 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
   /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
   uint256 public maxDTE = 1e18;
 
+  /// @notice `maxConsecutiveFaultEpochs` is the number of epochs of consecutive faults that are required in order to put an agent on administration or into default
+  uint256 public maxConsecutiveFaultEpochs = 3 * EPOCHS_IN_DAY;
+
+  /// @notice `sectorFaultyTolerancePercent` is the percentage of sectors that can be faulty before an agent is considered in a faulty state. 1e18 = 100%
+  uint256 public sectorFaultyTolerancePercent = 1e15;
+
   /// @notice `paused` is a flag that determines whether the protocol is paused
   bool public paused = false;
 
@@ -59,8 +65,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     string memory _version,
     uint256 _defaultWindow,
     address _owner,
+    address _operator,
     address _router
-  ) VCVerifier(_name, _version, _router) Ownable(_owner) {
+  ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
     defaultWindow = _defaultWindow;
     maxPoolsPerAgent = 10;
   }
@@ -80,6 +87,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
 
   modifier onlyWhenBehindTargetEpoch(address agent) {
     if (!_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) {
+      revert Unauthorized();
+    }
+    _;
+  }
+
+  modifier onlyWhenConsecutiveFaultyEpochsExceeded(address agent) {
+    if (!_consecutiveFaultyEpochsExceeded(agent)) {
       revert Unauthorized();
     }
     _;
@@ -137,14 +151,43 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
   }
 
   /**
-   * @notice `rmAgentFromAdministration` removes the agent from administration
-   * @param agent The address of the agent to remove from administration
+   * @notice `markAsFaulty` marks the epoch height where one of an agent's miners began faulting
+   * @param agents The IDs of the agents to mark as having faulty sectors
    */
-  function rmAgentFromAdministration(address agent) external onlyOwner {
-    if (_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) revert Unauthorized();
+  function markAsFaulty(IAgent[] memory agents) external onlyOwnerOperator {
+    IAgent agent;
+    for (uint256 i = 0; i < agents.length; i++) {
+      agent = agents[i];
+      agent.setFaulty();
+      emit FaultySectors(address(agent), block.number);
+    }
+  }
 
-    IAgent(agent).setAdministration(address(0));
-    emit OffAdministration(agent);
+  /**
+   * @notice `putAgentOnAdminstration` puts the agent on administration due to administrationFaultDays of consectutive faulty sector days
+   */
+  function putAgentOnAdministrationDueToFaultySectorDays(
+    address agent,
+    address administration
+  ) external
+    onlyOwner
+    onlyWhenConsecutiveFaultyEpochsExceeded(agent)
+  {
+    IAgent(agent).setAdministration(administration.normalize());
+    emit OnAdministration(agent);
+  }
+
+  /**
+   * @notice `setAgentDefaultDueToFaultySectorDays` puts the agent on administration due to administrationFaultDays of consectutive faulty sector days
+   */
+  function setAgentDefaultDueToFaultySectorDays(
+    address agent
+  ) external
+    onlyOwner
+    onlyWhenConsecutiveFaultyEpochsExceeded(agent)
+  {
+    IAgent(agent).setInDefault();
+    emit Defaulted(agent);
   }
 
   /**
@@ -293,6 +336,20 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     }
   }
 
+  /**
+   * @notice `confirmRmAdministration` checks to ensure an Agent's faulty sectors are in the tolerance range, and they're within the payment tolerance window
+   * @param vc the verifiable credential
+   */
+  function confirmRmAdministration(VerifiableCredential memory vc) external view {
+    address credParser = address(GetRoute.credParser(router));
+
+    if (
+      vc.getFaultySectors(credParser).divWadDown(vc.getLiveSectors(credParser)) > sectorFaultyTolerancePercent
+    ) revert AgentStateRejected();
+
+    if (_epochsPaidBehindTarget(vc.subject, defaultWindow)) revert AgentStateRejected();
+  }
+
   /*//////////////////////////////////////////////
                   ADMIN CONTROLS
   //////////////////////////////////////////////*/
@@ -330,6 +387,20 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
    */
   function resume() external onlyOwner {
     paused = false;
+  }
+
+  /**
+   * @notice `setMaxConsecutiveFaultEpochs` sets the number of consecutive days of fault before the agent is put on administration or into default
+   */
+  function setMaxConsecutiveFaultEpochs(uint256 _maxConsecutiveFaultEpochs) external onlyOwner {
+    maxConsecutiveFaultEpochs = _maxConsecutiveFaultEpochs;
+  }
+
+  /**
+   * @notice `setSectorFaultyTolerancePercent` sets the percentage of sectors that can be faulty before the agent is considered faulty
+   */
+  function setSectorFaultyTolerancePercent(uint256 _sectorFaultyTolerancePercent) external onlyOwner {
+    sectorFaultyTolerancePercent = _sectorFaultyTolerancePercent;
   }
 
   /*//////////////////////////////////////////////
@@ -388,6 +459,16 @@ contract AgentPolice is IAgentPolice, VCVerifier, Ownable {
     }
 
     return false;
+  }
+
+  /// @dev returns true if the Agent has 
+  function _consecutiveFaultyEpochsExceeded(address _agent) internal view returns (bool) {
+    uint256 faultyStart = IAgent(_agent).faultySectorStartEpoch();
+    // if the agent is not faulty, return false
+    if (faultyStart == 0) return false;
+
+    // must be faulty for maxConsecutiveFaultEpochs epochs before taking action
+    return block.number >= faultyStart + maxConsecutiveFaultEpochs;
   }
 
   /// @dev loops through the pools and calls isApproved on each, reverting in the case of any non-approvals

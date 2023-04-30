@@ -1086,6 +1086,100 @@ contract AgentPoliceTest is BaseTest {
       }
     }
 
+    function testTakeActionFaultySectors(uint256 consecutiveEpochsOfFaults) public {
+      // consecutiveEpochsOfFaults should be less than 42 days of faults
+      vm.assume(consecutiveEpochsOfFaults < 42 * EPOCHS_IN_DAY);
+      uint256 limitBeforeActionAllowed = police.maxConsecutiveFaultEpochs();
+      vm.startPrank(IAuth(address(police)).owner());
+      // should not be able to take action on agent with no faults
+      try police.putAgentOnAdministrationDueToFaultySectorDays(address(agent), administration) {
+        assertTrue(false, "Agent should not be eligible for administration");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), Unauthorized.selector);
+        assertEq(agent.administration(), address(0), "Agent should not be on administration");
+      }
+
+      try police.setAgentDefaultDueToFaultySectorDays(address(agent)) {
+        assertTrue(false, "Agent should not be eligible for default");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), Unauthorized.selector);
+        assertFalse(agent.defaulted(), "Agent should not be defaulted");
+      }
+
+      IAgent[] memory agents = new IAgent[](1);
+      agents[0] = agent;
+      police.markAsFaulty(agents);
+
+      assertEq(agent.faultySectorStartEpoch(), block.number, "Agent should have faulty sectors");
+
+      vm.roll(block.number + consecutiveEpochsOfFaults);
+
+      if (consecutiveEpochsOfFaults == 0 || consecutiveEpochsOfFaults < limitBeforeActionAllowed) {
+        // no actions should be possible
+        try police.putAgentOnAdministrationDueToFaultySectorDays(address(agent), administration) {
+          assertTrue(false, "Agent should not be eligible for administration");
+        } catch (bytes memory e) {
+          assertEq(agent.administration(), address(0), "Agent should not be on administration");
+          assertEq(errorSelector(e), Unauthorized.selector);
+        }
+
+        try police.setAgentDefaultDueToFaultySectorDays(address(agent)) {
+          assertTrue(false, "Agent should not be eligible for default");
+        } catch (bytes memory e) {
+          assertFalse(agent.defaulted(), "Agent should not be defaulted");
+          assertEq(errorSelector(e), Unauthorized.selector);
+        }
+      } else {
+        // actions should be possible
+        police.putAgentOnAdministrationDueToFaultySectorDays(address(agent), administration);
+        assertEq(agent.administration(), administration, "Agent should be on administration");
+
+        police.setAgentDefaultDueToFaultySectorDays(address(agent));
+        assertEq(agent.defaulted(), true, "Agent should be defaulted");
+      }
+    }
+
+    function testRmAgentFromAdministrationAgentRecovered(uint256 consecutiveEpochsOfFaults, uint256 faultySectors, uint256 liveSectors) public {
+      // consecutiveEpochsOfFaults should be more than maxConsecutiveFaultDays days of faults
+      uint256 limitBeforeActionAllowed = police.maxConsecutiveFaultEpochs();
+      consecutiveEpochsOfFaults = bound(consecutiveEpochsOfFaults, limitBeforeActionAllowed, 42 * EPOCHS_IN_DAY);
+      liveSectors = bound(liveSectors, 1, 1e27);
+      faultySectors = bound(faultySectors, 0, 1e27);
+      vm.startPrank(IAuth(address(police)).owner());
+
+      IAgent[] memory agents = new IAgent[](1);
+      agents[0] = agent;
+      uint256 faultyHeight = block.number;
+      police.markAsFaulty(agents);
+
+      assertEq(agent.faultySectorStartEpoch(), faultyHeight, "Agent should have faulty sectors");
+
+      vm.roll(faultyHeight + consecutiveEpochsOfFaults);
+
+      police.putAgentOnAdministrationDueToFaultySectorDays(address(agent), administration);
+      assertEq(agent.administration(), administration, "Agent should be on administration");
+
+      vm.stopPrank();
+
+      SignedCredential memory sc = issueGenericRecoverCred(agent.id(), faultySectors, liveSectors);
+
+      vm.startPrank(IAuth(address(agent)).owner());
+
+      if (faultySectors == 0 || faultySectors * WAD / liveSectors < police.sectorFaultyTolerancePercent()) {
+        agent.setRecovered(sc);
+        assertEq(agent.faultySectorStartEpoch(), 0, "Agent should not have faulty sectors");
+        assertEq(agent.administration(), address(0), "Agent should be on administration");
+      } else {
+        try agent.setRecovered(sc) {
+          assertTrue(false, "Agent should not be able to recover");
+        } catch (bytes memory e) {
+          assertEq(agent.faultySectorStartEpoch(), faultyHeight, "Agent should have faulty sectors");
+          assertEq(agent.administration(), administration, "Agent should be on administration");
+          assertEq(errorSelector(e), AgentPolice.AgentStateRejected.selector);
+        }
+      }
+    }
+
     function testInvalidPutAgentOnAdministration() public {
       uint256 borrowAmount = WAD;
 
@@ -1123,10 +1217,12 @@ contract AgentPoliceTest is BaseTest {
 
       require(epochsPaid == 0, "Should have exited from the pool");
 
-      // check that the agent is no longer on administration
-      vm.startPrank(IAuth(address(police)).owner());
 
-      police.rmAgentFromAdministration(address(agent));
+      sc = issueGenericRecoverCred(agent.id(), 0, 1e18);
+      // check that the agent is no longer on administration
+      vm.startPrank(IAuth(address(agent)).owner());
+      agent.setRecovered(sc);
+      vm.stopPrank();
 
       assertEq(agent.administration(), address(0), "Agent Should not be on administration after paying up");
     }
@@ -1169,35 +1265,6 @@ contract AgentPoliceTest is BaseTest {
 
       try agent.setAdministration(administration) {
         assertTrue(false, "only agent police should be able to put the agent on adminstration");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-      }
-    }
-
-    function testRmAdministrationNonAgentPolice() public {
-      uint256 rollFwdPeriod = police.defaultWindow() + 100;
-      uint256 borrowAmount = WAD;
-
-      putAgentOnAdministration(
-        agent,
-        administration,
-        rollFwdPeriod,
-        borrowAmount,
-        pool.id()
-      );
-
-      // deal enough funds to the Agent so it can make a payment back to the Pool
-      vm.deal(address(agent), borrowAmount * 4);
-
-      SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
-
-      // here we are exiting the pool by overpaying so much
-      (,uint256 epochsPaid,,,) = agentPay(agent, pool, sc);
-
-      require(epochsPaid == 0, "Should have exited from the pool");
-
-      try police.rmAgentFromAdministration(address(agent)) {
-        assertTrue(false, "only agent police owner operator should be able to call rmAgentFromAdministration");
       } catch (bytes memory e) {
         assertEq(errorSelector(e), Unauthorized.selector);
       }

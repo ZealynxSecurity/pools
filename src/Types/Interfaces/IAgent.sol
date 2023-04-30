@@ -15,6 +15,8 @@ interface IAgent {
 
   event Withdraw(address indexed receiver, uint256 amount);
 
+  event OffAdministration();
+
   /*//////////////////////////////////////////////////
                         GETTERS
   //////////////////////////////////////////////////*/
@@ -32,6 +34,8 @@ interface IAgent {
   function liquidAssets() external view returns (uint256);
 
   function publicKey() external view returns (bytes memory);
+
+  function faultySectorStartEpoch() external view returns (uint256);
 
   /*//////////////////////////////////////////////////
         MINER OWNERSHIP/WORKER/OPERATOR CHANGES
@@ -61,6 +65,10 @@ interface IAgent {
   function setAdministration(address administration) external;
 
   function prepareMinerForLiquidation(uint64 miner, address liquidator) external;
+
+  function setFaulty() external;
+
+  function setRecovered(SignedCredential memory sc) external;
 
   function setPublicKey(bytes calldata publicKey) external;
 
