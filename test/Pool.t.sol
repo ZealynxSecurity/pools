@@ -949,6 +949,9 @@ contract PoolAdminTests is PoolTestState {
       "Pool should have received new stake amount"
     );
 
+    // Temporarily bump the epochsPaidBorrowBuffer so we can borrow
+    _bumpMaxEpochsOwedTolerance(EPOCHS_IN_DAY*25, address(newPool));
+
     uint256 newBorrowAmount = newPool.totalBorrowableAssets();
     // Test that the new pool can be used to borrow
     agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, newPool.totalBorrowableAssets()));
@@ -995,6 +998,28 @@ contract PoolErrorBranches is PoolTestState {
     assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when pool is shutting down");
   }
 
+  function testPayUpBeforeBorrow(uint256 borrowAmount, uint256 rollFwdAmount) public {
+    uint256 secondBorrowAmount = WAD;
+    borrowAmount = bound(borrowAmount, WAD, stakeAmount - secondBorrowAmount - DUST);
+    rollFwdAmount = bound(rollFwdAmount, 1, 42*EPOCHS_IN_DAY);
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, borrowAmount));
+    vm.roll(block.number + rollFwdAmount);
+
+    uint256 buffer = IInfinityPool(address(pool)).maxEpochsOwedTolerance();
+
+    if (rollFwdAmount < buffer) {
+      agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, secondBorrowAmount));
+    } else {
+      vm.startPrank(_agentOperator(agent));
+      try agent.borrow(poolID, issueGenericBorrowCred(agentID, WAD)) {
+        fail("Should not be able to borrow without paying up");
+      } catch (bytes memory e) {
+        assertEq(errorSelector(e), InfinityPool.PayUp.selector);
+      }
+      vm.stopPrank();
+    }
+  }
+
   function testLiquidAssetsLessThanFees(
     uint256 initialBorrow,
     uint256 paymentAmt
@@ -1017,7 +1042,8 @@ contract PoolErrorBranches is PoolTestState {
       wFIL.deposit{value: WAD}();
       vm.stopPrank();
     }
-
+    // temporarily bump the epochsPaidBorrowBuffer so we can borrow again
+    _bumpMaxEpochsOwedTolerance(EPOCHS_IN_DAY*25, address(pool));
     // borrow the rest of the assets
     agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
     assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when pool is shutting down");

@@ -32,6 +32,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {IInfinityPool} from "src/Types/Interfaces/IInfinityPool.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
@@ -667,6 +668,13 @@ contract BaseTest is Test {
 
     vm.prank(IAuth(address(pool)).owner());
     pool.setRamp(ramp);
+  }
+
+  function _bumpMaxEpochsOwedTolerance(uint256 epochs, address pool) internal {
+    vm.startPrank((IAuth(pool)).owner());
+    // temporarily up the buffer of the pool to get past the epochs paid borrow buffer so we can borrow the rest
+    IInfinityPool(pool).setMaxEpochsOwedTolerance(epochs);
+    vm.stopPrank();
   }
 
   function _agentOwner(IAgent agent) internal view returns (address) {

@@ -61,6 +61,8 @@ interface IInfinityPool {
 
     function minimumLiquidity() external view returns (uint256);
 
+    function maxEpochsOwedTolerance() external view returns (uint256);
+
     function getAbsMinLiquidity() external view returns (uint256);
 
     function isShuttingDown() external view returns (bool);
@@ -169,6 +171,8 @@ interface IInfinityPool {
     function setMinimumLiquidity(uint256 minLiquidity) external;
 
     function setRateModule(IRateModule newRateModule) external;
+
+    function setMaxEpochsOwedTolerance(uint256 epochs) external;
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 

@@ -47,6 +47,7 @@ contract InfinityPool is IPool, Ownable {
     error InvalidState();
     error PoolShuttingDown();
     error AlreadyDefaulted();
+    error PayUp();
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -79,6 +80,9 @@ contract InfinityPool is IPool, Ownable {
 
     /// @dev `minimumLiquidity` is the percentage of total assets that should be reserved for exits
     uint256 public minimumLiquidity = 0;
+
+    /// @dev `maxEpochsOwedTolerance` - an agent's account must be paid up within this epoch buffer in order to borrow again
+    uint256 public maxEpochsOwedTolerance = EPOCHS_IN_DAY * 1;
 
     /// @dev `isShuttingDown` is a boolean that, when true, halts deposits and borrows. Once set, it cannot be unset.
     bool public isShuttingDown = false;
@@ -306,12 +310,17 @@ contract InfinityPool is IPool, Ownable {
         // can't borrow more than the pool has
         if (totalBorrowableAssets() < vc.value) revert InsufficientLiquidity();
         Account memory account = _getAccount(vc.subject);
+
         // fresh account, set start epoch and epochsPaid to beginning of current window
-        if (account.principal == 0) {
+        if (account.epochsPaid == 0) {
             uint256 currentEpoch = block.number;
             account.startEpoch = currentEpoch;
             account.epochsPaid = currentEpoch;
             GetRoute.agentPolice(router).addPoolToList(vc.subject, id);
+        } else if (account.epochsPaid + maxEpochsOwedTolerance < block.number) {
+          // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
+          // this is to prevent the agent overpaying on previously borrowed amounts
+          revert PayUp();
         }
 
         account.principal += vc.value;
@@ -708,6 +717,14 @@ contract InfinityPool is IPool, Ownable {
      */
     function setRateModule(IRateModule _rateModule) external onlyOwner {
         rateModule = _rateModule;
+    }
+
+    /**
+     * @notice setMaxEpochsOwedTolerance sets epochsPaidBorrowBuffer in storage
+     * @param _maxEpochsOwedTolerance The new value for maxEpochsOwedTolerance
+     */
+    function setMaxEpochsOwedTolerance(uint256 _maxEpochsOwedTolerance) external onlyOwner {
+        maxEpochsOwedTolerance = _maxEpochsOwedTolerance;
     }
 
     /**
