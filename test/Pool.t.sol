@@ -126,6 +126,7 @@ contract PoolBasicSetupTest is BaseTest {
       rateModule,
       // no min liquidity for test pool
       address(liquidStakingToken),
+      address(new PreStake(systemAdmin, IWFIL(address(wFIL)), IPoolToken(address(liquidStakingToken)))),
       0,
       id
     ));
@@ -893,6 +894,7 @@ contract PoolAdminTests is PoolTestState {
       address(pool.rateModule()),
       // no min liquidity for test pool
       address(liquidStakingToken),
+      address(new PreStake(systemAdmin, IWFIL(address(wFIL)), IPoolToken(address(liquidStakingToken)))),
       0,
       poolID
     ));

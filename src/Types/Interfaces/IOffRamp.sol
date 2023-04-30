@@ -104,6 +104,10 @@ interface IOffRamp {
 
   function maxRedeem(address account) external view returns (uint256);
 
+  function previewWithdraw(uint256 assets) external view returns (uint256);
+
+  function previewRedeem(uint256 assets) external view returns (uint256);
+
   function redeem(
     uint256 shares,
     address receiver,

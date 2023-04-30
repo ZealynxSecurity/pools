@@ -3,6 +3,7 @@ pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
 import "test/helpers/MockMiner.sol";
+import {PreStake} from "test/helpers/PreStake.sol";
 import {PoolToken} from "shim/PoolToken.sol";
 import {WFIL} from "shim/WFIL.sol";
 import {InfinityPool} from "src/Pool/InfinityPool.sol";
@@ -21,6 +22,7 @@ import {Router} from "src/Router/Router.sol";
 import {OffRamp} from "src/OffRamp/OffRamp.sol";
 import {RateModule} from "src/Pool/RateModule.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
@@ -426,6 +428,7 @@ contract BaseTest is Test {
       address(new RateModule(systemAdmin, router, rateArray, levels)),
       // no min liquidity for test pool
       address(liquidStakingToken),
+      address(new PreStake(systemAdmin, IWFIL(address(wFIL)), IPoolToken(address(liquidStakingToken)))),
       0,
       GetRoute.poolRegistry(router).allPoolsLength()
     ));

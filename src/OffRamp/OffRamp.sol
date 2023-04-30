@@ -6,6 +6,7 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 
 // The Offramp relies on 3 main tokens -
 // 1. The IOU token - this is the token that is staked into the Offramp.
@@ -20,6 +21,9 @@ import {Ownable} from "src/Auth/Ownable.sol";
 // to burn IOU tokens (when they're exchanged for asset) and liquid staking tokens (when they're exchanged for IOU).
 
 contract OffRamp is IOffRamp, Ownable {
+
+    using FixedPointMathLib for uint256;
+
     // the conversionWindow protects against flash loan attacks
     uint256 public conversionWindow;
     // the token that gets staked into the Offramp to accrue a balance and eventually exit into the asset.
@@ -91,6 +95,22 @@ contract OffRamp is IOffRamp, Ownable {
     /// @notice maxRedeem returns the maximum amount of assets that can be withdrawn from the ramp
     function maxRedeem(address account) external view returns (uint256) {
         return IPoolToken(liquidStakingToken).balanceOf(account);
+    }
+
+    /// @notice previewWithdraw returns the amount of assets that can be withdrawn from the ramp
+    function previewWithdraw(uint256 assets) external view returns (uint256) {
+        uint256 supply = IPoolToken(liquidStakingToken).totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 totalAssets = GetRoute
+            .pool(router, poolID)
+            .totalAssets();
+        return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets);
+    }
+
+    /// @notice previewRedeem returns the amount of assets that can be withdrawn from the ramp
+    function previewRedeem(uint256 shares) external view returns (uint256) {
+        return GetRoute
+            .pool(router, poolID)
+            .convertToAssets(shares);
     }
 
     ///@return displays the user's share of the pooled ious.

@@ -22,6 +22,7 @@ import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
+import {IPreStake} from "src/Types/Interfaces/IPreStake.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
@@ -71,6 +72,9 @@ contract InfinityPool is IPool, Ownable {
 
     /// @dev `ramp` is the interface that handles off-ramping
     IOffRamp public ramp;
+
+    /// @dev `prestake` is the address of the prestake contract
+    IPreStake public preStake;
 
     /// @dev `feesCollected` is the total fees collected in this pool
     uint256 public feesCollected = 0;
@@ -136,12 +140,14 @@ contract InfinityPool is IPool, Ownable {
         address _asset,
         address _rateModule,
         address _liquidStakingToken,
+        address _preStake,
         uint256 _minimumLiquidity,
         uint256 _id
     ) Ownable(_owner) {
         router = _router;
         asset = IERC20(_asset);
         rateModule = IRateModule(_rateModule);
+        preStake = IPreStake(_preStake);
         minimumLiquidity = _minimumLiquidity;
         // set the ID
         id = _id;
@@ -167,7 +173,7 @@ contract InfinityPool is IPool, Ownable {
      * @return totalBorrowed The total borrowed from the agent
      */
     function totalAssets() public view override returns (uint256) {
-        return asset.balanceOf(address(this)) + totalBorrowed - feesCollected;
+        return asset.balanceOf(address(this)) + totalBorrowed + preStake.totalValueLocked() - feesCollected;
     }
 
     /**
@@ -550,9 +556,9 @@ contract InfinityPool is IPool, Ownable {
      * @return shares - The amount of shares to be converted from assets
      */
     function previewWithdraw(uint256 assets) public view returns (uint256) {
-        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        if (address(ramp) == address(0)) return 0;
 
-        return supply == 0 ? assets : assets * supply / totalAssets();
+        return ramp.previewWithdraw(assets);
     }
 
     /**
@@ -561,7 +567,9 @@ contract InfinityPool is IPool, Ownable {
      * @return assets - The amount of assets that would be converted from shares
      */
     function previewRedeem(uint256 shares) public view returns (uint256) {
-        return convertToAssets(shares);
+        if (address(ramp) == address(0)) return 0;
+
+        return ramp.previewRedeem(shares);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -577,10 +585,14 @@ contract InfinityPool is IPool, Ownable {
     }
 
     function maxWithdraw(address owner) public view returns (uint256) {
+        if (address(ramp) == address(0)) return 0;
+
         return ramp.maxWithdraw(owner);
     }
 
     function maxRedeem(address owner) public view returns (uint256) {
+        if (address(ramp) == address(0)) return 0;
+
         return ramp.maxRedeem(owner);
     }
 
