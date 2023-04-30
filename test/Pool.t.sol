@@ -7,7 +7,8 @@ import {IInfinityPool} from "src/Types/Interfaces/IInfinityPool.sol";
 
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
-
+import {NewCredParser} from "test/helpers/NewCredParser.sol";
+import {NewCredentials, NewAgentData} from "test/helpers/NewCredentials.sol";
 contract PoolTestState is BaseTest {
 
   error InvalidState();
@@ -33,6 +34,7 @@ contract PoolTestState is BaseTest {
   uint256 poolID;
   IOffRamp ramp;
   IPoolToken iou;
+  address newCredParser;
 
   function setUp() public virtual {
     (pool, agent, miner, borrowCredBasic, vcBasic, gCredBasic) = PoolBasicSetup(
@@ -67,6 +69,15 @@ contract PoolTestState is BaseTest {
     vm.prank(systemAdmin);
     pool.setRamp(IOffRamp(ramp));
     iou = IPoolToken(ramp.iouToken());
+  }
+
+  function _updateCredParser() internal {
+    newCredParser = address(new NewCredParser());
+    vm.startPrank(systemAdmin);
+    Router(router).pushRoute(ROUTE_CRED_PARSER, newCredParser);
+    pool.rateModule().updateCredParser();
+    assertEq(pool.rateModule().credParser(), newCredParser);
+    vm.stopPrank();
   }
 
 
@@ -1085,6 +1096,65 @@ contract PoolPreStakeIntegrationTest is BaseTest {
     assertEq(wFIL.balanceOf(address(pool)), wFILPoolBal + transferFromAmt);
     assertEq(pool.liquidStakingToken().totalSupply(), poolSharesIssued);
   }
+}
+
+contract PoolUpgradeCredentialTest is PoolTestState {
+    using NewCredentials for VerifiableCredential;
+    function testUpdateCredParser() public {
+      _updateCredParser();
+    }
+
+    function testParsesOldCredential(uint256 principal) public {
+      principal = bound(principal, WAD, stakeAmount);
+      _updateCredParser();
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, principal);
+      agentBorrow(agent, poolID, borrowCred);
+    }
+
+    function testHasNewParameter(uint256 principal) public {
+      principal = bound(principal, WAD, stakeAmount);
+      _updateCredParser();
+      uint256 collateralValue = principal * 2;
+      // lockedFunds = collateralValue * 1.67 (such that CV = 60% of locked funds)
+      uint256 lockedFunds = collateralValue * 167 / 100;
+      // agent value = lockedFunds * 1.2 (such that locked funds = 83% of locked funds)
+      uint256 agentValue = lockedFunds * 120 / 100;
+      // NOTE: since we don't pull this off the pool it could be out of sync - careful
+      uint256 adjustedRate = _getAdjustedRate(gCredBasic);
+
+      NewAgentData memory agentData = NewAgentData(
+        agentValue,
+        collateralValue,
+        // expectedDailyFaultPenalties
+        0,
+        (adjustedRate * EPOCHS_IN_DAY * principal * 5) / WAD,
+        gCredBasic,
+        lockedFunds,
+        // qaPower hardcoded
+        10e18,
+        principal,
+        block.number,
+        12345 
+      );
+
+      
+
+      VerifiableCredential memory vc = VerifiableCredential(
+        vcIssuer,
+        agentID,
+        block.number,
+        block.number + 100,
+        principal,
+        Agent.borrow.selector,
+        // minerID irrelevant for borrow action
+        0,
+        abi.encode(agentData)
+      );
+
+      SignedCredential memory newCredential  =  signCred(vc);
+      uint256 newParameter = NewCredentials.getNewVariable(newCredential.vc, newCredParser);
+      assertEq(newParameter, 12345);
+    }
 }
 
 // // a value we use to test approximation of the cursor according to a window start/close
