@@ -10,12 +10,13 @@ contract UpgradedAgent is Agent {
   uint64[] public miners;
 
   constructor(
-    address _router,
+    uint8 _version,
     uint256 _agentID,
+    address _router,
     address _owner,
     address _operator,
     bytes memory _publicKey
-  ) Agent(_router, _agentID, _owner, _operator, _publicKey) {}
+  ) Agent(_version, _agentID, _router, _owner, _operator, _publicKey) {}
 
   function addMigratedMiners(uint64[] calldata migratedMiners) external onlyOwnerOperator {
     for (uint256 i = 0; i < migratedMiners.length; i++) {

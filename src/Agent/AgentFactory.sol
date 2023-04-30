@@ -7,6 +7,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
+import {IAgentDeployer} from "src/Types/Interfaces/IAgentDeployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import {
@@ -52,13 +53,18 @@ contract AgentFactory is IAgentFactory {
   function upgradeAgent(
     address agent
   ) external returns (address newAgent) {
+    IAgentDeployer agDeployer = GetRoute.agentDeployer(router);
     IAgent oldAgent = IAgent(agent);
+
+    // can only upgrade to a new version of the agent
+    if (agDeployer.version() <= oldAgent.version()) revert Unauthorized();
+
     address owner = IAuth(address(oldAgent)).owner();
     uint256 agentId = agents[agent];
     // only the Agent's owner can upgrade, and only a registered agent can be upgraded
     if (owner != msg.sender || agentId == 0) revert Unauthorized();
     // deploy a new instance of Agent with the same ID and auth
-    newAgent = GetRoute.agentDeployer(router).deploy(
+    newAgent = agDeployer.deploy(
       router,
       agentId,
       owner,

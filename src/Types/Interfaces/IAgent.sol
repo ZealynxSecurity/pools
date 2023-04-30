@@ -21,6 +21,8 @@ interface IAgent {
                         GETTERS
   //////////////////////////////////////////////////*/
 
+  function version() external view returns (uint8);
+
   function id() external view returns (uint256);
 
   function newAgent() external view returns (address);

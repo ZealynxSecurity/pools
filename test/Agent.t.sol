@@ -1580,11 +1580,23 @@ contract AgentUpgradeTest is BaseTest {
         agentFactory.upgradeAgent(prevAgentAddr);
     }
 
+    function testUpgradeSameAgentVersion() public {
+        address agentOwner = _agentOwner(agent);
+        IAgentFactory agentFactory = GetRoute.agentFactory(router);
+        vm.prank(agentOwner);
+        try agentFactory.upgradeAgent(prevAgentAddr) {
+          assertTrue(false, "Should have reverted");
+        } catch (bytes memory e) {
+          assertEq(errorSelector(e), Unauthorized.selector);
+        }
+    }
+
     function testUpgradeBasic() public {
         uint256 agentId = agent.id();
         address agentOwner = _agentOwner(agent);
         address agentOperator = _agentOperator(agent);
         IAgentFactory agentFactory = GetRoute.agentFactory(router);
+        _upgradeAgentDeployer();
         vm.prank(minerOwner);
         IAgent newAgent = IAgent(agentFactory.upgradeAgent(prevAgentAddr));
         assertEq(newAgent.id(), agentId);
@@ -1605,6 +1617,8 @@ contract AgentUpgradeTest is BaseTest {
         uint256 agentId = agent.id();
         address agentOwner = _agentOwner(agent);
         address agentOperator = _agentOperator(agent);
+
+        _upgradeAgentDeployer();
 
         vm.deal(prevAgentAddr, filBal + wFILBal);
         // give the agent some WFIL to push
@@ -1631,10 +1645,7 @@ contract AgentUpgradeTest is BaseTest {
       IMinerRegistry registry = GetRoute.minerRegistry(router);
       IAgentFactory agentFactory = GetRoute.agentFactory(router);
 
-      UpgradedAgentDeployer deployer = new UpgradedAgentDeployer();
-
-      vm.prank(systemAdmin);
-      IRouter(router).pushRoute(ROUTE_AGENT_DEPLOYER, address(deployer));
+      _upgradeAgentDeployer();
 
       assertTrue(registry.minerRegistered(agent.id(), miner), "Agent should have miner before removing");
       assertEq(registry.minersCount(agent.id()), 1, "Agent should have 1 miner");
@@ -1649,6 +1660,13 @@ contract AgentUpgradeTest is BaseTest {
       UpgradedAgent(payable(address(newAgent))).addMigratedMiners(miners);
       assertTrue(registry.minerRegistered(newAgent.id(), miner), "miner should still be registed to the agent");
       assertTrue(miner.isOwner(address(newAgent)), "The mock miner's owner should change to the new agent");
+    }
+
+    function _upgradeAgentDeployer() internal {
+      UpgradedAgentDeployer deployer = new UpgradedAgentDeployer();
+
+      vm.prank(systemAdmin);
+      IRouter(router).pushRoute(ROUTE_AGENT_DEPLOYER, address(deployer));
     }
 }
 
