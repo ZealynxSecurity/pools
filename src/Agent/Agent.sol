@@ -76,27 +76,27 @@ contract Agent is IAgent, Operatable {
   }
 
   modifier onlyAgentPolice() {
-    AuthController.onlyAgentPolice(router, msg.sender);
+    _onlyAgentPolice();
     _;
   }
 
   modifier notOnAdministration() {
-    if (administration != address(0)) revert Unauthorized();
+    _notOnAdministration();
     _;
   }
 
   modifier notInDefault() {
-    if (defaulted) revert BadAgentState();
+    _notInDefault();
     _;
   }
 
   modifier notPaused() {
-    if (agentPolice.paused()) revert Unauthorized();
+    _notPaused();
     _;
   }
 
   modifier checkVersion() {
-    if (GetRoute.agentDeployer(router).version() != version) revert BadAgentState();
+    _checkVersion();
     _;
   }
 
@@ -494,4 +494,23 @@ contract Agent is IAgent, Operatable {
     ) revert Unauthorized();
   }
 
+  function _notOnAdministration() internal view {
+    if (administration != address(0)) revert Unauthorized();
+  }
+
+  function _notInDefault() internal view {
+    if (defaulted) revert Unauthorized();
+  }
+
+  function _notPaused() internal view {
+    if (agentPolice.paused()) revert Unauthorized();
+  }
+
+  function _onlyAgentPolice() internal view {
+    if (address(agentPolice) != msg.sender) revert Unauthorized();
+  }
+
+  function _checkVersion() internal view {
+    if (GetRoute.agentDeployer(router).version() != version) revert BadAgentState();
+  }
 }
