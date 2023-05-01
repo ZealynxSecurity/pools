@@ -15,6 +15,8 @@ import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import "src/Constants/Routes.sol";
 
 library GetRoute {
+  error InvalidPoolID();
+
   function agentFactory(address router) internal view returns (IAgentFactory) {
     return IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
   }
@@ -50,7 +52,7 @@ library GetRoute {
 
   function pool(address router, uint256 poolID) internal view returns (IPool) {
     IPoolRegistry _poolRegistry = poolRegistry(router);
-    require(poolID <= _poolRegistry.allPoolsLength(), "Invalid pool ID");
+    if (poolID > _poolRegistry.allPoolsLength()) revert InvalidPoolID();
     return IPool(_poolRegistry.allPools(poolID));
   }
 
