@@ -102,26 +102,23 @@ contract InfinityPool is IPool, Ownable {
     //////////////////////////////////////////////////////////////*/
 
     modifier requiresRamp() {
-        if (address(ramp) == address(0)) revert InvalidState();
+        _requiresRamp();
         _;
     }
 
     /// @dev a modifier that ensures the caller matches the `vc.subject` and that the caller is an agent
     modifier subjectIsAgentCaller(VerifiableCredential calldata vc) {
-        if (
-            vc.subject == 0 ||
-            GetRoute.agentFactory(router).agents(msg.sender) != vc.subject
-        ) revert Unauthorized();
+        _subjectIsAgentCaller(vc);
         _;
     }
 
     modifier onlyPoolRegistry() {
-        AuthController.onlyPoolRegistry(router, msg.sender);
+        _onlyPoolRegistry();
         _;
     }
 
     modifier isOpen() {
-        if (isShuttingDown) revert PoolShuttingDown();
+        _isOpen();
         _;
     }
 
@@ -256,7 +253,7 @@ contract InfinityPool is IPool, Ownable {
      */
     function writeOff(uint256 agentID, uint256 recoveredFunds) external returns (uint256 totalOwed){
         // only the agent police can call this function
-        AuthController.onlyAgentPolice(router, msg.sender);
+        _onlyAgentPolice();
 
         Account memory account = _getAccount(agentID);
 
@@ -792,6 +789,29 @@ contract InfinityPool is IPool, Ownable {
         liquidStakingToken.mint(receiver, lstAmount);
 
         emit Deposit(msg.sender, receiver.normalize(),  msg.value, lstAmount);
+    }
+
+    function _requiresRamp() internal view {
+        if (address(ramp) == address(0)) revert InvalidState();
+    }
+
+    function _subjectIsAgentCaller(VerifiableCredential calldata vc) internal view {
+        if (
+            vc.subject == 0 ||
+            agentFactory.agents(msg.sender) != vc.subject
+        ) revert Unauthorized();
+    }
+
+    function _isOpen() internal view {
+        if (isShuttingDown) revert InvalidState();
+    }
+
+    function _onlyPoolRegistry() internal view {
+        if (address(poolRegistry) != msg.sender) revert Unauthorized();
+    }
+
+    function _onlyAgentPolice() internal view {
+        if (address(agentPolice) != msg.sender) revert Unauthorized();
     }
 }
 
