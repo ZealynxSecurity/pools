@@ -80,7 +80,7 @@ contract InfinityPool is IPool, Ownable {
     IOffRamp public ramp;
 
     /// @dev `prestake` is the address of the prestake contract
-    IPreStake public preStake;
+    IPreStake public immutable preStake;
 
     /// @dev `feesCollected` is the total fees collected in this pool
     uint256 public feesCollected = 0;
