@@ -1417,7 +1417,7 @@ contract AgentPoliceTest is BaseTest {
       vm.deal(policeOwner, recoveredFunds);
       wFIL.deposit{value: recoveredFunds}();
       wFIL.approve(address(police), recoveredFunds);
-      vm.expectRevert(abi.encodeWithSelector(AlreadyDefaulted.selector));
+      vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
       police.distributeLiquidatedFunds(address(agent), recoveredFunds);
       vm.stopPrank();
       assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
