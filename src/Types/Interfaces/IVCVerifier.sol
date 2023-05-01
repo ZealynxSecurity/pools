@@ -5,17 +5,17 @@ import {VerifiableCredential, SignedCredential} from "src/Types/Structs/Credenti
 
 interface IVCVerifier {
   function digest(
-    VerifiableCredential memory vc
+    VerifiableCredential calldata vc
   ) external view returns(bytes32);
 
   // validates a signed credential
   function validateCred(
     uint256 agent,
     bytes4 selector,
-    SignedCredential memory
+    SignedCredential calldata
   ) external;
 
   function recover(
-    SignedCredential memory
+    SignedCredential calldata
   ) external view returns (address);
 }

@@ -6,15 +6,15 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 
 /// @dev this is to reduce contract size in AgentFactory
 contract UpgradedAgentDeployer {
-  uint8 public immutable version = 2;
+  uint8 public constant version = 2;
 
   function deploy(
     address router,
     uint256 agentId,
     address owner,
     address operator,
-    bytes calldata publicKey
+    address adoRequestKey
   ) external returns (IAgent agent) {
-    agent = new UpgradedAgent(version, agentId, router, owner, operator, publicKey);
+    agent = new UpgradedAgent(agentId, router, owner, operator, adoRequestKey);
   }
 }

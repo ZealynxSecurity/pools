@@ -6,18 +6,6 @@ import {SignedCredential} from "src/Types/Structs/Credentials.sol";
 interface IAgent {
 
   /*//////////////////////////////////////////////////
-                        EVENTS
-  //////////////////////////////////////////////////*/
-
-  event MigrateMiner(address indexed oldAgent, address indexed newAgent, uint64 indexed miner);
-
-  event ChangeMinerWorker(uint64 indexed miner, uint64 newWorker, uint64[] newControlAddresses);
-
-  event Withdraw(address indexed receiver, uint256 amount);
-
-  event OffAdministration();
-
-  /*//////////////////////////////////////////////////
                         GETTERS
   //////////////////////////////////////////////////*/
 
@@ -31,13 +19,9 @@ interface IAgent {
 
   function defaulted() external view returns (bool);
 
-  function liquidated() external view returns (bool);
-
-  function borrowedPoolsCount() external view returns (uint256);
-
   function liquidAssets() external view returns (uint256);
 
-  function publicKey() external view returns (bytes memory);
+  function adoRequestKey() external view returns (address);
 
   function faultySectorStartEpoch() external view returns (uint256);
 
@@ -46,12 +30,12 @@ interface IAgent {
   //////////////////////////////////////////////////*/
 
   function addMiner(
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external;
 
   function removeMiner(
     address newMinerOwner,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external;
 
   function migrateMiner(uint64 miner) external;
@@ -70,13 +54,11 @@ interface IAgent {
 
   function prepareMinerForLiquidation(uint64 miner, address liquidator) external;
 
-  function setLiquidated() external;
-
   function setFaulty() external;
 
-  function setRecovered(SignedCredential memory sc) external;
+  function setRecovered(SignedCredential calldata sc) external;
 
-  function setPublicKey(bytes calldata publicKey) external;
+  function setAdoRequestKey(address adoRequestKey) external;
 
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS
@@ -84,17 +66,17 @@ interface IAgent {
 
   function withdraw(
     address receiver,
-    SignedCredential memory signedCred
+    SignedCredential calldata signedCred
   ) external;
 
   function borrow(
     uint256 poolID,
-    SignedCredential memory signedCred
+    SignedCredential calldata signedCred
   ) external;
 
   function pay(
     uint256 poolID,
-    SignedCredential memory signedCred
+    SignedCredential calldata signedCred
   ) external returns (
     uint256 rate,
     uint256 epochsPaid,
@@ -103,10 +85,10 @@ interface IAgent {
   );
 
   function pullFunds(
-    SignedCredential memory signedCred
+    SignedCredential calldata signedCred
   ) external;
 
   function pushFunds(
-    SignedCredential memory signedCred
+    SignedCredential calldata signedCred
   ) external;
 }

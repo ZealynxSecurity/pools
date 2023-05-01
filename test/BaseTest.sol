@@ -97,16 +97,19 @@ contract BaseTest is Test {
     // deploys the router
     router = address(new Router(systemAdmin));
 
+    address agentFactory = address(new AgentFactory(router));
+    // 1e17 = 10% treasury fee on yield
+    address poolRegistry = address(new PoolRegistry(10e16, systemAdmin, router));
+
     vcIssuer = vm.addr(vcIssuerPk);
     Deployer.setupContractRoutes(
       address(router),
       treasury,
       address(wFIL),
-      address(new MinerRegistry(router)),
-      address(new AgentFactory(router)),
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router)),
-      // 1e17 = 10% treasury fee on yield
-      address(new PoolRegistry(10e16, systemAdmin, router)),
+      address(new MinerRegistry(router, IAgentFactory(agentFactory))),
+      agentFactory,
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router, IPoolRegistry(poolRegistry), IWFIL(address(wFIL)))),
+      poolRegistry,
       vcIssuer,
       credParser,
       address(new AgentDeployer())
@@ -130,7 +133,7 @@ contract BaseTest is Test {
   function _configureAgent(address minerOwner, uint64 miner) public returns (Agent agent) {
     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
     vm.startPrank(minerOwner);
-    agent = Agent(payable(agentFactory.create(minerOwner, minerOwner, abi.encode(""))));
+    agent = Agent(payable(agentFactory.create(minerOwner, minerOwner, makeAddr("ADO_REQUEST_KEY"))));
     assertTrue(
       miner.isOwner(minerOwner),
       "The mock miner's current owner should be set to the original owner"
@@ -498,7 +501,7 @@ contract BaseTest is Test {
     vm.stopPrank();
     // Check the state after the borrow
     uint256 currentAgentBal = wFIL.balanceOf(address(agent));
-    uint256 currentPoolBal = wFIL.balanceOf(address(GetRoute.pool(router, poolID)));
+    uint256 currentPoolBal = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
     assertEq(currentAgentBal, preBorrowState.agentBalanceWFIL + sc.vc.value);
     assertEq(currentPoolBal, preBorrowState.poolBalanceWFIL - sc.vc.value);
 
@@ -632,26 +635,6 @@ contract BaseTest is Test {
     assertTrue(agent.defaulted(), "Agent should be put into default");
   }
 
-  function setAgentLiquidated(
-    IAgent agent,
-    uint256 poolID
-  ) internal {
-    IAgentPolice police = GetRoute.agentPolice(router);
-
-    setAgentDefaulted(
-      agent,
-      police.defaultWindow() + 1,
-      1e18,
-      poolID
-    );
-
-    vm.startPrank(IAuth(address(police)).owner());
-    police.liquidatedAgent(address(agent));
-    vm.stopPrank();
-
-    assertTrue(agent.liquidated(), "Agent should be liquidated");
-  }
-
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
     IPoolToken liquidStakingToken = pool.liquidStakingToken();
     PoolToken iou = new PoolToken(systemAdmin);
@@ -680,6 +663,10 @@ contract BaseTest is Test {
     vm.stopPrank();
   }
 
+  function _borrowedPoolsCount(uint256 agentID) internal view returns (uint256) {
+    return GetRoute.poolRegistry(router).poolIDs(agentID).length;
+  }
+
   function _agentOwner(IAgent agent) internal view returns (address) {
     return IAuth(address(agent)).owner();
   }
@@ -691,10 +678,10 @@ contract BaseTest is Test {
   function _snapshot(address agent, uint256 poolID) internal view returns (StateSnapshot memory snapshot) {
     Account memory account = AccountHelpers.getAccount(router, agent, poolID);
     snapshot.agentBalanceWFIL = wFIL.balanceOf(agent);
-    snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(router, poolID)));
+    snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
     snapshot.agentBorrowed = account.principal;
     snapshot.accountEpochsPaid = account.epochsPaid;
-    snapshot.agentPoolBorrowCount = IAgent(agent).borrowedPoolsCount();
+    snapshot.agentPoolBorrowCount = _borrowedPoolsCount(IAgent(agent).id());
   }
 
   function _getAdjustedRate(uint256 gcred) internal view returns (uint256) {

@@ -17,7 +17,7 @@ interface IRateModule {
   function credParser() external view returns (address);
 
   function getRate(
-      VerifiableCredential memory vc
+      VerifiableCredential calldata vc
   ) external view returns (uint256);
 
   function baseRate() external view returns (uint256);
@@ -29,8 +29,8 @@ interface IRateModule {
   function accountLevel(uint256 agentID) external view returns (uint256);
 
   function isApproved(
-      Account memory account,
-      VerifiableCredential memory vc
+      Account calldata account,
+      VerifiableCredential calldata vc
   ) external view returns (bool);
 
   function computeLTV(

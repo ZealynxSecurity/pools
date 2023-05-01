@@ -7,10 +7,11 @@ import {AccountHelpers} from "src/Pool/Account.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 
-address constant ADDRESS_ZERO = address(0);
-error RouteDNE();
-
 contract Router is IRouter, Ownable {
+
+  address constant ADDRESS_ZERO = address(0);
+  error RouteDNE();
+
   mapping(bytes4 => address) public route;
   mapping(bytes32 => Account) private _accounts;
 
@@ -22,7 +23,7 @@ contract Router is IRouter, Ownable {
     return _route;
   }
 
-  function getRoute(string memory id) external view returns (address) {
+  function getRoute(string calldata id) external view returns (address) {
     return getRoute(bytes4(keccak256(bytes(id))));
   }
 
@@ -32,19 +33,19 @@ contract Router is IRouter, Ownable {
     emit PushRoute(newRoute, id);
   }
 
-  function pushRoute(string memory id, address newRoute) public onlyOwner {
+  function pushRoute(string calldata id, address newRoute) public onlyOwner {
     pushRoute(bytes4(keccak256(bytes(id))), newRoute);
   }
 
   function pushRoutes(string[] calldata ids, address[] calldata newRoutes) external onlyOwner {
-    require(ids.length == newRoutes.length, "Router: ids and newRoutes must be same length");
+    if (ids.length != newRoutes.length) revert InvalidParams();
     for (uint i = 0; i < ids.length; i++) {
       pushRoute(ids[i], newRoutes[i]);
     }
   }
 
   function pushRoutes(bytes4[] calldata ids, address[] calldata newRoutes) external onlyOwner {
-    require(ids.length == newRoutes.length, "Router: ids and newRoutes must be same length");
+    if (ids.length != newRoutes.length) revert InvalidParams();
     for (uint i = 0; i < ids.length; i++) {
       pushRoute(ids[i], newRoutes[i]);
     }
@@ -60,9 +61,9 @@ contract Router is IRouter, Ownable {
   function setAccount(
     uint256 agentID,
     uint256 poolID,
-    Account memory account
+    Account calldata account
   ) external {
-    if (address(GetRoute.pool(address(this), poolID)) != msg.sender) {
+    if (address(GetRoute.pool(GetRoute.poolRegistry(address(this)), poolID)) != msg.sender) {
       revert Unauthorized();
     }
     _accounts[createAccountKey(agentID, poolID)] = account;

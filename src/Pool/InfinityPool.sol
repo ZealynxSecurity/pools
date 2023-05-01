@@ -14,6 +14,7 @@ import {AccountHelpers} from "src/Pool/Account.sol";
 
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
@@ -54,9 +55,14 @@ contract InfinityPool is IPool, Ownable {
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    uint256 immutable WAD = 1e18;
+    uint256 constant WAD = 1e18;
 
-    address public immutable router;
+    /// @dev cache the routes for gas efficiency
+    address internal immutable router;
+    IPoolRegistry internal poolRegistry;
+    IAgentPolice internal agentPolice;
+    IAgentFactory internal agentFactory;
+    IWFIL internal wFIL;
 
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
@@ -74,7 +80,7 @@ contract InfinityPool is IPool, Ownable {
     IOffRamp public ramp;
 
     /// @dev `prestake` is the address of the prestake contract
-    IPreStake public preStake;
+    IPreStake public immutable preStake;
 
     /// @dev `feesCollected` is the total fees collected in this pool
     uint256 public feesCollected = 0;
@@ -96,26 +102,23 @@ contract InfinityPool is IPool, Ownable {
     //////////////////////////////////////////////////////////////*/
 
     modifier requiresRamp() {
-        if (address(ramp) == address(0)) revert InvalidState();
+        _requiresRamp();
         _;
     }
 
     /// @dev a modifier that ensures the caller matches the `vc.subject` and that the caller is an agent
-    modifier subjectIsAgentCaller(VerifiableCredential memory vc) {
-        if (
-            vc.subject == 0 ||
-            GetRoute.agentFactory(router).agents(msg.sender) != vc.subject
-        ) revert Unauthorized();
+    modifier subjectIsAgentCaller(VerifiableCredential calldata vc) {
+        _subjectIsAgentCaller(vc);
         _;
     }
 
     modifier onlyPoolRegistry() {
-        AuthController.onlyPoolRegistry(router, msg.sender);
+        _onlyPoolRegistry();
         _;
     }
 
     modifier isOpen() {
-        if (isShuttingDown) revert PoolShuttingDown();
+        _isOpen();
         _;
     }
 
@@ -153,6 +156,11 @@ contract InfinityPool is IPool, Ownable {
         id = _id;
         // deploy a new liquid staking token for the pool
         liquidStakingToken = IPoolToken(_liquidStakingToken);
+
+        poolRegistry = GetRoute.poolRegistry(router);
+        agentPolice = GetRoute.agentPolice(router);
+        agentFactory = GetRoute.agentFactory(router);
+        wFIL = GetRoute.wFIL(router);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -218,7 +226,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev rate is determined by the `rateModule`
      */
     function getRate(
-        VerifiableCredential memory vc
+        VerifiableCredential calldata vc
     ) public view returns (uint256 rate) {
         return rateModule.getRate(vc);
     }
@@ -231,8 +239,8 @@ contract InfinityPool is IPool, Ownable {
      * @dev approval criteria are determined by the `rateModule`
      */
     function isApproved(
-        Account memory account,
-        VerifiableCredential memory vc
+        Account calldata account,
+        VerifiableCredential calldata vc
     ) external view returns (bool approved) {
         return rateModule.isApproved(account, vc);
     }
@@ -245,7 +253,7 @@ contract InfinityPool is IPool, Ownable {
      */
     function writeOff(uint256 agentID, uint256 recoveredFunds) external returns (uint256 totalOwed){
         // only the agent police can call this function
-        AuthController.onlyAgentPolice(router, msg.sender);
+        _onlyAgentPolice();
 
         Account memory account = _getAccount(agentID);
 
@@ -271,12 +279,8 @@ contract InfinityPool is IPool, Ownable {
             uint256 interestOwed = principalOwed.mulWadUp(rate).mulWadUp(epochsToPay);
             // compute the amount of interest to pay down
             interestPaid = interestOwed > remainder ? remainder : interestOwed;
-            // collect fees on the interest paid
-            feesCollected += GetRoute
-                .poolRegistry(router)
-                .treasuryFeeRate()
-                // only charge on the actual interest paid
-                .mulWadUp(interestPaid);
+            // collect fees on the interest paid - only charge on the actual interest paid
+            feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(interestPaid);
         }
 
         // whatever we couldn't pay back
@@ -310,7 +314,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev the Agent must be approved to borrow from the Pool
      * @dev the min borrow amount is 1 FIL
      */
-    function borrow(VerifiableCredential memory vc) external isOpen subjectIsAgentCaller(vc) {
+    function borrow(VerifiableCredential calldata vc) external isOpen subjectIsAgentCaller(vc) {
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
         // can't borrow more than the pool has
@@ -322,7 +326,7 @@ contract InfinityPool is IPool, Ownable {
             uint256 currentEpoch = block.number;
             account.startEpoch = currentEpoch;
             account.epochsPaid = currentEpoch;
-            GetRoute.poolRegistry(router).addPoolToList(vc.subject, id);
+            poolRegistry.addPoolToList(vc.subject, id);
         } else if (account.epochsPaid + maxEpochsOwedTolerance < block.number) {
           // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
           // this is to prevent the agent overpaying on previously borrowed amounts
@@ -351,7 +355,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev Treasury fees only apply to interest payments, not principal payments
      */
     function pay(
-        VerifiableCredential memory vc
+        VerifiableCredential calldata vc
     ) external isOpen subjectIsAgentCaller(vc) returns (
         uint256 rate,
         uint256 epochsPaid,
@@ -404,7 +408,7 @@ contract InfinityPool is IPool, Ownable {
             // fully paid off
             if (principalPaid >= account.principal) {
                 // remove the account from the pool's list of accounts
-                GetRoute.poolRegistry(router).removePoolFromList(vc.subject, id);
+                poolRegistry.removePoolFromList(vc.subject, id);
                 // return the amount of funds overpaid
                 refund = principalPaid - account.principal;
                 // reset the account
@@ -420,11 +424,7 @@ contract InfinityPool is IPool, Ownable {
         // update the account in storage
         account.save(router, vc.subject, id);
         // accrue treasury fee
-        feesCollected += GetRoute
-            .poolRegistry(router)
-            .treasuryFeeRate()
-            .mulWadUp(feeBasis);
-
+        feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(feeBasis);
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), vc.value - refund);
 
@@ -703,7 +703,7 @@ contract InfinityPool is IPool, Ownable {
         // save the account
         account.save(router, agentID, id);
         // add the pool to the agent's list of borrowed pools
-        GetRoute.poolRegistry(router).addPoolToList(agentID, id);
+        poolRegistry.addPoolToList(agentID, id);
         // mint the iFIL to the receiver, using principal as the deposit amount
         liquidStakingToken.mint(receiver, convertToShares(accountPrincipal));
         // account for the new principal in the total borrowed of the pool
@@ -748,6 +748,16 @@ contract InfinityPool is IPool, Ownable {
         asset.transferFrom(_preStake, address(this), _amount);
     }
 
+    /**
+     * @notice refreshRoutes refreshes the pool's cached routes
+     */
+    function refreshRoutes() external {
+        poolRegistry = GetRoute.poolRegistry(router);
+        agentPolice = GetRoute.agentPolice(router);
+        agentFactory = GetRoute.agentFactory(router);
+        wFIL = GetRoute.wFIL(router);
+    }
+
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
@@ -771,8 +781,6 @@ contract InfinityPool is IPool, Ownable {
     function _depositFIL(address receiver) internal returns (uint256 lstAmount) {
         if (msg.value == 0) revert InvalidParams();
 
-        IWFIL wFIL = GetRoute.wFIL(router);
-
         // handle FIL deposit
         wFIL.deposit{value: msg.value}();
 
@@ -781,6 +789,29 @@ contract InfinityPool is IPool, Ownable {
         liquidStakingToken.mint(receiver, lstAmount);
 
         emit Deposit(msg.sender, receiver.normalize(),  msg.value, lstAmount);
+    }
+
+    function _requiresRamp() internal view {
+        if (address(ramp) == address(0)) revert InvalidState();
+    }
+
+    function _subjectIsAgentCaller(VerifiableCredential calldata vc) internal view {
+        if (
+            vc.subject == 0 ||
+            agentFactory.agents(msg.sender) != vc.subject
+        ) revert Unauthorized();
+    }
+
+    function _isOpen() internal view {
+        if (isShuttingDown) revert InvalidState();
+    }
+
+    function _onlyPoolRegistry() internal view {
+        if (address(poolRegistry) != msg.sender) revert Unauthorized();
+    }
+
+    function _onlyAgentPolice() internal view {
+        if (address(agentPolice) != msg.sender) revert Unauthorized();
     }
 }
 

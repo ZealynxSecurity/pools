@@ -30,18 +30,16 @@ contract Agent is IAgent, Operatable {
 
   error InsufficientFunds();
   error BadAgentState();
-  error InvalidVersion();
-
-  address public immutable router;
 
   // cached routes to save on gas and code size
+  address private immutable router;
   IWFIL private wFIL;
   IAgentPolice private agentPolice;
   IMinerRegistry private minerRegistry;
   IPoolRegistry private poolRegistry;
 
   /// @notice `version` is the version of Agent that is deployed
-  uint8 public immutable version;
+  uint8 public constant version = 1;
 
   /// @notice `id` is the GLIF Pools ID address of the Agent (not to be confused with the evm actor's ID address)
   uint256 public immutable id;
@@ -51,6 +49,9 @@ contract Agent is IAgent, Operatable {
 
   /// @notice `administration` returns the address of an admin that can make payments on behalf of the agent, _only_ when the Agent falls behind on payments
   address public administration;
+  
+  /// @notice `publicKey` is a hashed key that the ado uses to validate requests from the agent
+  address public adoRequestKey;
 
   /// @notice `faultySectorStartEpoch` is the epoch that one of the Agent's miners began having faulty sectors
   uint256 public faultySectorStartEpoch;
@@ -58,11 +59,6 @@ contract Agent is IAgent, Operatable {
   /// @notice `defaulted` returns true if the agent is in default
   bool public defaulted;
 
-  /// @notice `liquidated` returns true if the agent has been liquidated
-  bool public liquidated;
-
-  /// @notice `publicKey` is a hashed key that the ado uses to validate requests from the agent
-  bytes public publicKey;
 
   /*//////////////////////////////////////
                 MODIFIERS
@@ -75,67 +71,56 @@ contract Agent is IAgent, Operatable {
   }
 
   /// @dev a modifier that checks and immediately burns a signed credential
-  modifier validateAndBurnCred(SignedCredential memory signedCredential) {
+  modifier validateAndBurnCred(SignedCredential calldata signedCredential) {
     _validateAndBurnCred(signedCredential);
     _;
   }
 
   modifier onlyAgentPolice() {
-    AuthController.onlyAgentPolice(router, msg.sender);
+    _onlyAgentPolice();
     _;
   }
 
   modifier notOnAdministration() {
-    if (administration != address(0)) revert Unauthorized();
+    _notOnAdministration();
     _;
   }
 
   modifier notInDefault() {
-    if (defaulted) revert BadAgentState();
+    _notInDefault();
     _;
   }
 
   modifier notPaused() {
-    if (agentPolice.paused()) revert Unauthorized();
+    _notPaused();
     _;
   }
 
   modifier checkVersion() {
-    if (GetRoute.agentDeployer(router).version() != version) revert InvalidVersion();
+    _checkVersion();
     _;
   }
 
   constructor(
-    uint8 agentVersion,
     uint256 agentID,
     address agentRouter,
     address owner,
     address operator,
-    bytes memory pubKey
+    address apiRequestKey
   ) Operatable(owner, operator) {
-    version = agentVersion;
     router = agentRouter;
     id = agentID;
+    adoRequestKey = apiRequestKey;
 
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);
     minerRegistry = GetRoute.minerRegistry(router);
     poolRegistry = GetRoute.poolRegistry(router);
-
-    publicKey = pubKey;
   }
 
   /*//////////////////////////////////////////////////
                         GETTERS
   //////////////////////////////////////////////////*/
-
-  /**
-   * @notice Get the number of pools that an Agent is actively borrowing from
-   * @return count Returns the number of pools that an Agent has borrowed from
-   */
-  function borrowedPoolsCount() external view returns (uint256 count) {
-    return poolRegistry.poolIDs(id).length;
-  }
 
   /**
    * @notice Get the total liquid assets of the Agent, not including any liquid assets on any of its staked Miners
@@ -168,7 +153,7 @@ contract Agent is IAgent, Operatable {
    * This function can only be called by the Agent's owner or operator
    */
   function addMiner(
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external onlyOwnerOperator validateAndBurnCred(sc) checkVersion {
     // confirm the miner is valid and can be added
     if (!sc.vc.target.configuredForTakeover()) revert Unauthorized();
@@ -187,7 +172,7 @@ contract Agent is IAgent, Operatable {
    */
   function removeMiner(
     address newMinerOwner,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   )
     external
     onlyOwner
@@ -242,8 +227,6 @@ contract Agent is IAgent, Operatable {
 
     // propose an ownership change (must be accepted in v2 agent)
     miner.changeOwnerAddress(newAgent);
-
-    emit MigrateMiner(msg.sender, newAgent, miner);
   }
 
   /**
@@ -252,15 +235,8 @@ contract Agent is IAgent, Operatable {
    * @param liquidator The address of the liquidator
    */
   function prepareMinerForLiquidation(uint64 miner, address liquidator) external onlyAgentPolice {
-  if (!defaulted) revert Unauthorized();
+    if (!defaulted) revert Unauthorized();
     miner.changeOwnerAddress(liquidator);
-  }
-
-  /**
-   * @notice Gets called by the agentPolice after the liquidation has been completed
-   */
-  function setLiquidated() external onlyAgentPolice {
-    liquidated = true;
   }
 
   /**
@@ -281,7 +257,7 @@ contract Agent is IAgent, Operatable {
    * @dev the Account must be paid up within the defaultWindow in order for this call to succeed
    * @dev if the Agent has recovered, administration gets removed
    */
-  function setRecovered(SignedCredential memory sc) 
+  function setRecovered(SignedCredential calldata sc) 
     external
     onlyOwnerOperator
     validateAndBurnCred(sc)
@@ -292,8 +268,6 @@ contract Agent is IAgent, Operatable {
     agentPolice.confirmRmAdministration(sc.vc);
     faultySectorStartEpoch = 0;
     administration = address(0);
-
-    emit OffAdministration();
   }
 
   /**
@@ -309,12 +283,11 @@ contract Agent is IAgent, Operatable {
     uint64[] calldata controlAddresses
   ) external checkVersion {
     if (
-      msg.sender != owner() &&
+      msg.sender != owner &&
       msg.sender != administration
     ) revert Unauthorized();
 
     miner.changeWorkerAddress(worker, controlAddresses);
-    emit ChangeMinerWorker(miner, worker, controlAddresses);
   }
 
   /**
@@ -345,11 +318,11 @@ contract Agent is IAgent, Operatable {
   }
 
   /**
-   * @notice `setPublicKey` allows the owner or operator to update the public key in storage
-   * @param _publicKey The new public key
+   * @notice `setAdoRequestKey` allows the owner or operator to update the ado requester key in storage
+   * @param _newKey The new public key
    */
-  function setPublicKey(bytes calldata _publicKey) external onlyOwnerOperator {
-    publicKey = _publicKey;
+  function setAdoRequestKey(address _newKey) external onlyOwnerOperator {
+    adoRequestKey = _newKey;
   }
 
   /*//////////////////////////////////////////////
@@ -365,7 +338,7 @@ contract Agent is IAgent, Operatable {
    */
   function withdraw(
     address receiver,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external
     onlyOwner
     notPaused
@@ -381,8 +354,6 @@ contract Agent is IAgent, Operatable {
     _poolFundsInFIL(sendAmount);
     // transfer funds
     payable(receiver).sendValue(sendAmount);
-
-    emit Withdraw(receiver, sendAmount);
   }
 
   /**
@@ -392,7 +363,7 @@ contract Agent is IAgent, Operatable {
    *
    * This function adds a native FIL balance to the Agent
    */
-  function pullFunds(SignedCredential memory sc)
+  function pullFunds(SignedCredential calldata sc)
     external
     onlyOwnerOperator
     validateAndBurnCred(sc)
@@ -409,7 +380,7 @@ contract Agent is IAgent, Operatable {
    * @param sc The signed credential of the Agent attempting to push funds to a miner. The credential must contain a `pushFunds` action type with the `value` field set to the amount to push, and the `target` as the ID of the miner to push funds to
    * If the agents FIL balance is less than the total amount to push, the function will attempt to convert any wFIL into FIL before reverting
    */
-  function pushFunds(SignedCredential memory sc)
+  function pushFunds(SignedCredential calldata sc)
     external
     onlyOwnerOperator
     notPaused
@@ -435,7 +406,7 @@ contract Agent is IAgent, Operatable {
    */
   function borrow(
     uint256 poolID,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external
     onlyOwner
     notPaused
@@ -443,7 +414,7 @@ contract Agent is IAgent, Operatable {
     validateAndBurnCred(sc)
     checkVersion
   {
-    GetRoute.pool(router, poolID).borrow(sc.vc);
+    GetRoute.pool(poolRegistry, poolID).borrow(sc.vc);
     // transaction will revert if any of the pool's accounts reject the new agent's state
     agentPolice.agentApproved(sc.vc);
   }
@@ -458,7 +429,7 @@ contract Agent is IAgent, Operatable {
    */
   function pay(
     uint256 poolID,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external
     onlyOwnerOperator
     validateAndBurnCred(sc)
@@ -466,7 +437,7 @@ contract Agent is IAgent, Operatable {
     returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
   {
     // get the Pool address
-    IPool pool = GetRoute.pool(router, poolID);
+    IPool pool = GetRoute.pool(poolRegistry, poolID);
     // aggregate funds into WFIL to make a payment
     _poolFundsInWFIL(sc.vc.value);
     // approve the pool to pull in the WFIL asset
@@ -507,7 +478,7 @@ contract Agent is IAgent, Operatable {
 
   /// @dev validates the credential, and then registers its signature with the agent police so it can't be used again
   function _validateAndBurnCred(
-    SignedCredential memory signedCredential
+    SignedCredential calldata signedCredential
   ) internal {
     agentPolice.isValidCredential(id, msg.sig, signedCredential);
     agentPolice.registerCredentialUseBlock(signedCredential);
@@ -522,10 +493,29 @@ contract Agent is IAgent, Operatable {
   function _onlyOwnerOperatorOverride() internal view {
     // only allow calls from the owner, operator, or administration address (if one is set)
     if (
-      msg.sender != owner() &&
-      msg.sender != operator() &&
+      msg.sender != owner &&
+      msg.sender != operator &&
       msg.sender != administration
     ) revert Unauthorized();
   }
 
+  function _notOnAdministration() internal view {
+    if (administration != address(0)) revert Unauthorized();
+  }
+
+  function _notInDefault() internal view {
+    if (defaulted) revert Unauthorized();
+  }
+
+  function _notPaused() internal view {
+    if (agentPolice.paused()) revert Unauthorized();
+  }
+
+  function _onlyAgentPolice() internal view {
+    if (address(agentPolice) != msg.sender) revert Unauthorized();
+  }
+
+  function _checkVersion() internal view {
+    if (GetRoute.agentDeployer(router).version() != version) revert BadAgentState();
+  }
 }

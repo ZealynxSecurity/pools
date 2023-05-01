@@ -39,7 +39,7 @@ library Deployer {
     routeIDs[3] = ROUTE_AGENT_FACTORY;
     routeAddrs[3] = agentFactory;
     // Add pool factory route
-    routeIDs[4] = ROUTE_POOL_FACTORY;
+    routeIDs[4] = ROUTE_POOL_REGISTRY;
     routeAddrs[4] = poolRegistry;
     // Add vc issuer route
     routeIDs[5] = ROUTE_VC_ISSUER;

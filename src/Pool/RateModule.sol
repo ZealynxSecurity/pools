@@ -51,7 +51,7 @@ contract RateModule is IRateModule, Ownable {
     address public credParser;
 
     /// @dev `router` is the cached router address
-    address public immutable router;
+    address internal immutable router;
 
     constructor(
         address _owner,
@@ -73,8 +73,8 @@ contract RateModule is IRateModule, Ownable {
      * @dev getRate returns a per epoch rate with an additional WAD for precision
      */
     function getRate(
-        VerifiableCredential memory vc
-    ) public view returns (uint256 rate) {
+        VerifiableCredential calldata vc
+    ) external view returns (uint256 rate) {
         return _getRate(vc.getGCRED(credParser));
     }
 
@@ -98,8 +98,8 @@ contract RateModule is IRateModule, Ownable {
      *
      */
     function isApproved(
-        Account memory account,
-        VerifiableCredential memory vc
+        Account calldata account,
+        VerifiableCredential calldata vc
     ) external view returns (bool) {
         // if you're behind on your payments, you're not approved
         if (account.epochsPaid + GetRoute.agentPolice(router).defaultWindow() < block.number) {

@@ -23,20 +23,20 @@ contract AgentFactory is IAgentFactory {
   // we start at ID 1 because ID 0 is reserved for empty agent ID
   uint256 public agentCount = 0;
 
-  address public immutable router;
+  address internal immutable router;
 
   constructor(address _router) {
     router = _router;
   }
 
-  function create(address owner, address operator, bytes calldata publicKey) external returns (address agent) {
+  function create(address owner, address operator, address adoRequestKey) external returns (address agent) {
     agentCount++;
     agent = GetRoute.agentDeployer(router).deploy(
       router,
       agentCount,
       owner,
       operator,
-      publicKey
+      adoRequestKey
     );
     agents[agent] = agentCount;
 
@@ -69,7 +69,7 @@ contract AgentFactory is IAgentFactory {
       agentId,
       owner,
       IAuth(address(oldAgent)).operator(),
-      oldAgent.publicKey()
+      oldAgent.adoRequestKey()
     );
     // Register the new agent and unregister the old agent
     agents[newAgent] = agentId;

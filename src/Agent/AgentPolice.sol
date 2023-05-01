@@ -13,6 +13,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -29,6 +30,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using FilAddress for address;
 
   error AgentStateRejected();
+
+  IPoolRegistry internal poolRegistry;
+  IWFIL internal wFIL;
 
   uint256 constant WAD = 1e18;
 
@@ -60,10 +64,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 _defaultWindow,
     address _owner,
     address _operator,
-    address _router
+    address _router,
+    IPoolRegistry _poolRegistry,
+    IWFIL _wFIL
   ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
     defaultWindow = _defaultWindow;
     maxPoolsPerAgent = 10;
+
+    poolRegistry = _poolRegistry;
+    wFIL = _wFIL;
   }
 
   modifier onlyAgent() {
@@ -94,7 +103,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param vc the VerifiableCredential of the agent
    */
   function agentApproved(
-    VerifiableCredential memory vc
+    VerifiableCredential calldata vc
   ) external view {
     _agentApproved(vc);
   }
@@ -106,6 +115,19 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function setAgentDefaulted(address agent) external onlyOwner onlyWhenBehindTargetEpoch(agent) {
     IAgent(agent).setInDefault();
     emit Defaulted(agent);
+  }
+
+  /**
+   * @notice `agentLiquidated` checks if the agent has been liquidated
+   * @param agentID The address of the agent to check
+   */
+  function agentLiquidated(uint256 agentID) public view returns (bool) {
+    uint256[] memory pools = poolRegistry.poolIDs(agentID);
+
+    if (pools.length == 0) return false;
+    // once an Agent gets liquidated, all of their pools get written down, and accounts `defaulted` flag set to true
+    // we only need to check the Agent's account in the first pool to see if the agent has been liquidated
+    return (AccountHelpers.getAccount(router, agentID, pools[0]).defaulted);
   }
 
   /**
@@ -128,7 +150,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `markAsFaulty` marks the epoch height where one of an agent's miners began faulting
    * @param agents The IDs of the agents to mark as having faulty sectors
    */
-  function markAsFaulty(IAgent[] memory agents) external onlyOwnerOperator {
+  function markAsFaulty(IAgent[] calldata agents) external onlyOwnerOperator {
     IAgent agent;
     for (uint256 i = 0; i < agents.length; i++) {
       agent = agents[i];
@@ -174,17 +196,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     address agent,
     uint64 miner
   ) external onlyOwner {
-    IAgent(agent).prepareMinerForLiquidation(miner, owner());
-  }
-
-  /**
-   * @notice `liquidatedAgent` permanently sets the agent as liquidated in storage
-   * @param agent The address of the agent to set the state of
-   */
-  function liquidatedAgent(address agent) external onlyOwner {
-    if (!IAgent(agent).defaulted()) revert Unauthorized();
-
-    IAgent(agent).setLiquidated();
+    IAgent(agent).prepareMinerForLiquidation(miner, owner);
   }
 
   /**
@@ -194,14 +206,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function distributeLiquidatedFunds(address agent, uint256 amount) external onlyOwner {
     uint256 agentID = IAgent(agent).id();
-    if (!IAgent(agent).liquidated()) revert Unauthorized();
-
+    // this call can only be called once per agent
+    if (agentLiquidated(agentID)) revert Unauthorized();
     // transfer the assets into the pool
-    GetRoute.wFIL(router).transferFrom(msg.sender, address(this), amount);
+    wFIL.transferFrom(msg.sender, address(this), amount);
     uint256 excessAmount = _writeOffPools(agentID, amount);
 
     // transfer the excess assets to the Agent's owner
-    GetRoute.wFIL(router).transfer(IAuth(agent).owner(), excessAmount);
+    wFIL.transfer(IAuth(agent).owner(), excessAmount);
   }
 
   /**
@@ -218,7 +230,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function isValidCredential(
     uint256 agent,
     bytes4 action,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external view {
     // reverts if the credential isn't valid
     validateCred(
@@ -258,7 +270,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param vc the verifiable credential
    */
   function confirmRmEquity(
-    VerifiableCredential memory vc
+    VerifiableCredential calldata vc
   ) external view {
     // check to ensure we can withdraw from this pool
     _agentApproved(vc);
@@ -288,7 +300,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `confirmRmAdministration` checks to ensure an Agent's faulty sectors are in the tolerance range, and they're within the payment tolerance window
    * @param vc the verifiable credential
    */
-  function confirmRmAdministration(VerifiableCredential memory vc) external view {
+  function confirmRmAdministration(VerifiableCredential calldata vc) external view {
     address credParser = address(GetRoute.credParser(router));
 
     if (
@@ -351,6 +363,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     sectorFaultyTolerancePercent = _sectorFaultyTolerancePercent;
   }
 
+  function refreshRoutes() external {
+    poolRegistry = GetRoute.poolRegistry(router);
+    wFIL = GetRoute.wFIL(router);
+  }
+
   /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/
@@ -366,9 +383,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 poolID;
     uint256 poolShare;
     uint256 principal;
-    IWFIL wFIL = GetRoute.wFIL(router);
 
-    uint256[] memory _pools = GetRoute.poolRegistry(router).poolIDs(_agentID);
+    uint256[] memory _pools = poolRegistry.poolIDs(_agentID);
     uint256 poolCount = _pools.length;
     uint256 totalOwed;
 
@@ -385,7 +401,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
       // compute this pool's share of the total amount
       poolShare = (principalAmts[i] * _totalAmount / totalPrincipal);
       // approve the pool to pull in WFIL
-      IPool pool = GetRoute.pool(router, poolID);
+      IPool pool = GetRoute.pool(poolRegistry, poolID);
       wFIL.approve(address(pool), poolShare);
       // write off the pool's assets
       totalOwed = pool.writeOff(_agentID, poolShare);
@@ -398,7 +414,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 _agentID,
     uint256 _targetEpoch
   ) internal view returns (bool) {
-    uint256[] memory pools = GetRoute.poolRegistry(router).poolIDs(_agentID);
+    uint256[] memory pools = poolRegistry.poolIDs(_agentID);
 
     for (uint256 i = 0; i < pools.length; ++i) {
       if (AccountHelpers.getAccount(router, _agentID, pools[i]).epochsPaid < block.number - _targetEpoch) {
@@ -420,12 +436,12 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /// @dev loops through the pools and calls isApproved on each, reverting in the case of any non-approvals
-  function _agentApproved(VerifiableCredential memory vc) internal view {
-    uint256[] memory pools = GetRoute.poolRegistry(router).poolIDs(vc.subject);
+  function _agentApproved(VerifiableCredential calldata vc) internal view {
+    uint256[] memory pools = poolRegistry.poolIDs(vc.subject);
 
     for (uint256 i = 0; i < pools.length; ++i) {
       uint256 poolID = pools[i];
-      IPool pool = GetRoute.pool(router, poolID);
+      IPool pool = GetRoute.pool(poolRegistry, poolID);
       if (!pool.isApproved(
         AccountHelpers.getAccount(router, vc.subject, poolID),
         vc
@@ -433,10 +449,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         revert AgentStateRejected();
       }
     }
-  }
-
-  function createKey(string memory partitionKey, uint256 agentID) internal pure returns (bytes32) {
-    return keccak256(abi.encode(partitionKey, agentID));
   }
 
   function createSigKey(uint8 v, bytes32 r, bytes32 s) internal pure returns (bytes32){

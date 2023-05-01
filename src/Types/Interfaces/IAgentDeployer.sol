@@ -10,6 +10,6 @@ interface IAgentDeployer {
       uint256 agentId,
       address owner,
       address operator,
-      bytes calldata publicKey
+      address adoRequestKey
     ) external returns (address agent);
 }
