@@ -187,7 +187,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     address agent,
     uint64 miner
   ) external onlyOwner {
-    IAgent(agent).prepareMinerForLiquidation(miner, owner());
+    IAgent(agent).prepareMinerForLiquidation(miner, owner);
   }
 
   /**

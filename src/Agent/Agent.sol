@@ -279,7 +279,7 @@ contract Agent is IAgent, Operatable {
     uint64[] calldata controlAddresses
   ) external checkVersion {
     if (
-      msg.sender != owner() &&
+      msg.sender != owner &&
       msg.sender != administration
     ) revert Unauthorized();
 
@@ -488,8 +488,8 @@ contract Agent is IAgent, Operatable {
   function _onlyOwnerOperatorOverride() internal view {
     // only allow calls from the owner, operator, or administration address (if one is set)
     if (
-      msg.sender != owner() &&
-      msg.sender != operator() &&
+      msg.sender != owner &&
+      msg.sender != operator &&
       msg.sender != administration
     ) revert Unauthorized();
   }
