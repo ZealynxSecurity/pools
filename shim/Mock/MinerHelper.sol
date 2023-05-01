@@ -58,7 +58,7 @@ library MinerHelper {
 
   /// @param target The miner actor id you want to interact with
   /// @param amount the amount you want to withdraw
-  function withdrawBalance(uint64 target, uint256 amount) internal returns (uint256 amountWithdrawn) {
-    amountWithdrawn = IMockMiner(MockIDAddrStore(ID_STORE_ADDR).ids(target)).withdrawBalance(amount);
+  function withdrawBalance(uint64 target, uint256 amount) internal {
+    IMockMiner(MockIDAddrStore(ID_STORE_ADDR).ids(target)).withdrawBalance(amount);
   }
 }

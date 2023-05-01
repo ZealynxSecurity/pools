@@ -20,8 +20,10 @@ contract Ping {
   }
 
   function withdrawBalance(uint64 target, uint256 amount) public {
-    uint256 amountWithdrawn = MinerHelper.withdrawBalance(target, amount);
-    emit AmountWithdrawn(amountWithdrawn);
+    uint256 preWithdrawBal = address(this).balance;
+    MinerHelper.withdrawBalance(target, amount);
+    uint256 postWithdrawBal = address(this).balance;
+    emit AmountWithdrawn(postWithdrawBal - preWithdrawBal);
   }
 
   function transfer(uint64 target, uint256 amount) public {

@@ -34,10 +34,10 @@ library MinerHelper {
    * @param target The miner actor id to get the balance of
    * @return balance - The FIL balance of the miner actor
    */
-  function balance(uint64 target) internal returns (uint256 balance) {
+  function balance(uint64 target) internal returns (uint256) {
     CommonTypes.FilActorId minerId = _getMinerId(target);
     // here we do not check the success boolean because the available balance cannot overflow max uint256
-    balance = _toUint256(MinerAPI.getAvailableBalance(minerId));
+    return _toUint256(MinerAPI.getAvailableBalance(minerId));
   }
 
   /**
@@ -135,7 +135,6 @@ library MinerHelper {
    */
   function withdrawBalance(uint64 target, uint256 amount)
     internal
-    returns (uint256 amountWithdrawn)
   {
     CommonTypes.FilActorId minerId = _getMinerId(target);
     MinerAPI.withdrawBalance(
@@ -144,7 +143,7 @@ library MinerHelper {
     );
   }
 
-  function _getMinerId(uint64 target) internal returns (CommonTypes.FilActorId) {
+  function _getMinerId(uint64 target) internal pure returns (CommonTypes.FilActorId) {
     return CommonTypes.FilActorId.wrap(target);
   }
 
