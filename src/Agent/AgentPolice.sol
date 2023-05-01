@@ -401,7 +401,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
       // compute this pool's share of the total amount
       poolShare = (principalAmts[i] * _totalAmount / totalPrincipal);
       // approve the pool to pull in WFIL
-      IPool pool = GetRoute.pool(router, poolID);
+      IPool pool = GetRoute.pool(poolRegistry, poolID);
       wFIL.approve(address(pool), poolShare);
       // write off the pool's assets
       totalOwed = pool.writeOff(_agentID, poolShare);
@@ -441,7 +441,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
     for (uint256 i = 0; i < pools.length; ++i) {
       uint256 poolID = pools[i];
-      IPool pool = GetRoute.pool(router, poolID);
+      IPool pool = GetRoute.pool(poolRegistry, poolID);
       if (!pool.isApproved(
         AccountHelpers.getAccount(router, vc.subject, poolID),
         vc

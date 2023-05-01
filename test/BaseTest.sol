@@ -501,7 +501,7 @@ contract BaseTest is Test {
     vm.stopPrank();
     // Check the state after the borrow
     uint256 currentAgentBal = wFIL.balanceOf(address(agent));
-    uint256 currentPoolBal = wFIL.balanceOf(address(GetRoute.pool(router, poolID)));
+    uint256 currentPoolBal = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
     assertEq(currentAgentBal, preBorrowState.agentBalanceWFIL + sc.vc.value);
     assertEq(currentPoolBal, preBorrowState.poolBalanceWFIL - sc.vc.value);
 
@@ -678,7 +678,7 @@ contract BaseTest is Test {
   function _snapshot(address agent, uint256 poolID) internal view returns (StateSnapshot memory snapshot) {
     Account memory account = AccountHelpers.getAccount(router, agent, poolID);
     snapshot.agentBalanceWFIL = wFIL.balanceOf(agent);
-    snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(router, poolID)));
+    snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
     snapshot.agentBorrowed = account.principal;
     snapshot.accountEpochsPaid = account.epochsPaid;
     snapshot.agentPoolBorrowCount = _borrowedPoolsCount(IAgent(agent).id());

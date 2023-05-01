@@ -7,7 +7,6 @@ import {AccountHelpers} from "src/Pool/Account.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 
-
 contract Router is IRouter, Ownable {
 
   address constant ADDRESS_ZERO = address(0);
@@ -64,7 +63,7 @@ contract Router is IRouter, Ownable {
     uint256 poolID,
     Account calldata account
   ) external {
-    if (address(GetRoute.pool(address(this), poolID)) != msg.sender) {
+    if (address(GetRoute.pool(GetRoute.poolRegistry(address(this)), poolID)) != msg.sender) {
       revert Unauthorized();
     }
     _accounts[createAccountKey(agentID, poolID)] = account;

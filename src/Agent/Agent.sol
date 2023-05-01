@@ -36,6 +36,7 @@ contract Agent is IAgent, Operatable {
   IWFIL private wFIL;
   IAgentPolice private agentPolice;
   IMinerRegistry private minerRegistry;
+  IPoolRegistry private poolRegistry;
 
   /// @notice `version` is the version of Agent that is deployed
   uint8 public constant version = 1;
@@ -112,6 +113,7 @@ contract Agent is IAgent, Operatable {
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);
     minerRegistry = GetRoute.minerRegistry(router);
+    poolRegistry = GetRoute.poolRegistry(router);
   }
 
   /*//////////////////////////////////////////////////
@@ -310,6 +312,7 @@ contract Agent is IAgent, Operatable {
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);
     minerRegistry = GetRoute.minerRegistry(router);
+    poolRegistry = GetRoute.poolRegistry(router);
   }
 
   /**
@@ -409,7 +412,7 @@ contract Agent is IAgent, Operatable {
     validateAndBurnCred(sc)
     checkVersion
   {
-    GetRoute.pool(router, poolID).borrow(sc.vc);
+    GetRoute.pool(poolRegistry, poolID).borrow(sc.vc);
     // transaction will revert if any of the pool's accounts reject the new agent's state
     agentPolice.agentApproved(sc.vc);
   }
@@ -432,7 +435,7 @@ contract Agent is IAgent, Operatable {
     returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
   {
     // get the Pool address
-    IPool pool = GetRoute.pool(router, poolID);
+    IPool pool = GetRoute.pool(poolRegistry, poolID);
     // aggregate funds into WFIL to make a payment
     _poolFundsInWFIL(sc.vc.value);
     // approve the pool to pull in the WFIL asset

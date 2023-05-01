@@ -88,7 +88,7 @@ contract OffRamp is IOffRamp, Ownable {
     /// @notice maxWithdraw returns the maximum amount of assets that can be withdrawn from the ramp
     function maxWithdraw(address account) external view returns (uint256) {
         return GetRoute
-            .pool(router, poolID)
+            .pool(GetRoute.poolRegistry(router), poolID)
             .convertToAssets(IPoolToken(liquidStakingToken).balanceOf(account));
     }
 
@@ -101,7 +101,7 @@ contract OffRamp is IOffRamp, Ownable {
     function previewWithdraw(uint256 assets) external view returns (uint256) {
         uint256 supply = IPoolToken(liquidStakingToken).totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
         uint256 totalAssets = GetRoute
-            .pool(router, poolID)
+            .pool(GetRoute.poolRegistry(router), poolID)
             .totalAssets();
         return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets);
     }
@@ -109,7 +109,7 @@ contract OffRamp is IOffRamp, Ownable {
     /// @notice previewRedeem returns the amount of assets that can be withdrawn from the ramp
     function previewRedeem(uint256 shares) external view returns (uint256) {
         return GetRoute
-            .pool(router, poolID)
+            .pool(GetRoute.poolRegistry(router), poolID)
             .convertToAssets(shares);
     }
 
