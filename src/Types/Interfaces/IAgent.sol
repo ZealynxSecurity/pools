@@ -6,18 +6,6 @@ import {SignedCredential} from "src/Types/Structs/Credentials.sol";
 interface IAgent {
 
   /*//////////////////////////////////////////////////
-                        EVENTS
-  //////////////////////////////////////////////////*/
-
-  event MigrateMiner(address indexed oldAgent, address indexed newAgent, uint64 indexed miner);
-
-  event ChangeMinerWorker(uint64 indexed miner, uint64 newWorker, uint64[] newControlAddresses);
-
-  event Withdraw(address indexed receiver, uint256 amount);
-
-  event OffAdministration();
-
-  /*//////////////////////////////////////////////////
                         GETTERS
   //////////////////////////////////////////////////*/
 

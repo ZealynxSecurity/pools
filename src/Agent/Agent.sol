@@ -234,8 +234,6 @@ contract Agent is IAgent, Operatable {
 
     // propose an ownership change (must be accepted in v2 agent)
     miner.changeOwnerAddress(newAgent);
-
-    emit MigrateMiner(msg.sender, newAgent, miner);
   }
 
   /**
@@ -277,8 +275,6 @@ contract Agent is IAgent, Operatable {
     agentPolice.confirmRmAdministration(sc.vc);
     faultySectorStartEpoch = 0;
     administration = address(0);
-
-    emit OffAdministration();
   }
 
   /**
@@ -299,7 +295,6 @@ contract Agent is IAgent, Operatable {
     ) revert Unauthorized();
 
     miner.changeWorkerAddress(worker, controlAddresses);
-    emit ChangeMinerWorker(miner, worker, controlAddresses);
   }
 
   /**
@@ -365,8 +360,6 @@ contract Agent is IAgent, Operatable {
     _poolFundsInFIL(sendAmount);
     // transfer funds
     payable(receiver).sendValue(sendAmount);
-
-    emit Withdraw(receiver, sendAmount);
   }
 
   /**
