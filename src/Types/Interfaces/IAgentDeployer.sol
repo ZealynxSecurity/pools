@@ -9,6 +9,7 @@ interface IAgentDeployer {
       address router,
       uint256 agentId,
       address owner,
-      address operator
+      address operator,
+      address adoRequestKey
     ) external returns (address agent);
 }

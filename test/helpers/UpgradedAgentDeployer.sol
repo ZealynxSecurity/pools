@@ -12,8 +12,9 @@ contract UpgradedAgentDeployer {
     address router,
     uint256 agentId,
     address owner,
-    address operator
+    address operator,
+    address adoRequestKey
   ) external returns (IAgent agent) {
-    agent = new UpgradedAgent(agentId, router, owner, operator);
+    agent = new UpgradedAgent(agentId, router, owner, operator, adoRequestKey);
   }
 }

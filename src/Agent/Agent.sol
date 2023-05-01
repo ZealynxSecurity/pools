@@ -105,10 +105,12 @@ contract Agent is IAgent, Operatable {
     uint256 agentID,
     address agentRouter,
     address owner,
-    address operator
+    address operator,
+    address apiRequestKey
   ) Operatable(owner, operator) {
     router = agentRouter;
     id = agentID;
+    adoRequestKey = apiRequestKey;
 
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);

@@ -980,7 +980,7 @@ contract AgentPoolsTest is BaseTest {
     // We only need a single agent instance across all pools
     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
     // public key does not matter for these solidity unit tests as it is only relevant for ado integration/security
-    agent = IAgent(agentFactory.create(minerOwner, minerOwner));
+    agent = IAgent(agentFactory.create(minerOwner, minerOwner, makeAddr("ADO_REQ_KEY")));
   }
 
   function testCreateRemoveMultiplePools(uint256 poolCount, uint256 totalBorrow) public {
