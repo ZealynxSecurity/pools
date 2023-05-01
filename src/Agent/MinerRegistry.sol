@@ -19,10 +19,10 @@ contract MinerRegistry is IMinerRegistry {
 
   mapping(uint256 => uint64[]) private _minersByAgent;
 
-  constructor(address _router) {
+  constructor(address _router, IAgentFactory _agentFactory) {
     router = _router;
 
-    agentFactory = GetRoute.agentFactory(router);
+    agentFactory = _agentFactory;
   }
 
   /*///////////////////////////////////////////////////////////////

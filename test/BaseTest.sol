@@ -97,13 +97,15 @@ contract BaseTest is Test {
     // deploys the router
     router = address(new Router(systemAdmin));
 
+    address agentFactory = address(new AgentFactory(router));
+
     vcIssuer = vm.addr(vcIssuerPk);
     Deployer.setupContractRoutes(
       address(router),
       treasury,
       address(wFIL),
-      address(new MinerRegistry(router)),
-      address(new AgentFactory(router)),
+      address(new MinerRegistry(router, IAgentFactory(agentFactory))),
+      agentFactory,
       address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router)),
       // 1e17 = 10% treasury fee on yield
       address(new PoolRegistry(10e16, systemAdmin, router)),
