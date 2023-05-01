@@ -24,7 +24,7 @@ interface IAgentPolice {
 
   function maxPoolsPerAgent() external view returns (uint256);
 
-  function agentApproved(VerifiableCredential memory vc) external;
+  function agentApproved(VerifiableCredential calldata vc) external;
 
   function agentLiquidated(uint256 agentID) external view returns (bool);
 
@@ -43,13 +43,13 @@ interface IAgentPolice {
   function isValidCredential(
     uint256 agent,
     bytes4 action,
-    SignedCredential memory signedCredential
+    SignedCredential calldata signedCredential
   ) external;
 
   function credentialUsed(uint8 v, bytes32 r, bytes32 s) external view returns (bool);
 
   function registerCredentialUseBlock(
-    SignedCredential memory signedCredential
+    SignedCredential calldata signedCredential
   ) external;
 
   /*//////////////////////////////////////////////
@@ -75,11 +75,11 @@ interface IAgentPolice {
   function distributeLiquidatedFunds(address agent, uint256 amount) external;
 
   function confirmRmEquity(
-    VerifiableCredential memory vc
+    VerifiableCredential calldata vc
   ) external view;
 
   function confirmRmAdministration(
-    VerifiableCredential memory vc
+    VerifiableCredential calldata vc
   ) external view;
 
   /*//////////////////////////////////////////////

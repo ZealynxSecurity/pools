@@ -148,7 +148,7 @@ contract PoolRegistry is IPoolRegistry, Ownable {
     treasuryFeeRate = newFeeRate;
   }
   
-  function createKey(string memory partitionKey, address entity) internal pure returns (bytes32) {
+  function createKey(string calldata partitionKey, address entity) internal pure returns (bytes32) {
     return keccak256(abi.encode(partitionKey, entity));
   }
 }

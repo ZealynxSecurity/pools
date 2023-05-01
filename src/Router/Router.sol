@@ -22,7 +22,7 @@ contract Router is IRouter, Ownable {
     return _route;
   }
 
-  function getRoute(string memory id) external view returns (address) {
+  function getRoute(string calldata id) external view returns (address) {
     return getRoute(bytes4(keccak256(bytes(id))));
   }
 
@@ -32,7 +32,7 @@ contract Router is IRouter, Ownable {
     emit PushRoute(newRoute, id);
   }
 
-  function pushRoute(string memory id, address newRoute) public onlyOwner {
+  function pushRoute(string calldata id, address newRoute) public onlyOwner {
     pushRoute(bytes4(keccak256(bytes(id))), newRoute);
   }
 
@@ -60,7 +60,7 @@ contract Router is IRouter, Ownable {
   function setAccount(
     uint256 agentID,
     uint256 poolID,
-    Account memory account
+    Account calldata account
   ) external {
     if (address(GetRoute.pool(address(this), poolID)) != msg.sender) {
       revert Unauthorized();

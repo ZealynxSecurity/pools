@@ -101,7 +101,7 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /// @dev a modifier that ensures the caller matches the `vc.subject` and that the caller is an agent
-    modifier subjectIsAgentCaller(VerifiableCredential memory vc) {
+    modifier subjectIsAgentCaller(VerifiableCredential calldata vc) {
         if (
             vc.subject == 0 ||
             GetRoute.agentFactory(router).agents(msg.sender) != vc.subject
@@ -218,7 +218,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev rate is determined by the `rateModule`
      */
     function getRate(
-        VerifiableCredential memory vc
+        VerifiableCredential calldata vc
     ) public view returns (uint256 rate) {
         return rateModule.getRate(vc);
     }
@@ -231,8 +231,8 @@ contract InfinityPool is IPool, Ownable {
      * @dev approval criteria are determined by the `rateModule`
      */
     function isApproved(
-        Account memory account,
-        VerifiableCredential memory vc
+        Account calldata account,
+        VerifiableCredential calldata vc
     ) external view returns (bool approved) {
         return rateModule.isApproved(account, vc);
     }
@@ -310,7 +310,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev the Agent must be approved to borrow from the Pool
      * @dev the min borrow amount is 1 FIL
      */
-    function borrow(VerifiableCredential memory vc) external isOpen subjectIsAgentCaller(vc) {
+    function borrow(VerifiableCredential calldata vc) external isOpen subjectIsAgentCaller(vc) {
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
         // can't borrow more than the pool has
@@ -351,7 +351,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev Treasury fees only apply to interest payments, not principal payments
      */
     function pay(
-        VerifiableCredential memory vc
+        VerifiableCredential calldata vc
     ) external isOpen subjectIsAgentCaller(vc) returns (
         uint256 rate,
         uint256 epochsPaid,

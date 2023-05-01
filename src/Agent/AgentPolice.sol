@@ -94,7 +94,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param vc the VerifiableCredential of the agent
    */
   function agentApproved(
-    VerifiableCredential memory vc
+    VerifiableCredential calldata vc
   ) external view {
     _agentApproved(vc);
   }
@@ -141,7 +141,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `markAsFaulty` marks the epoch height where one of an agent's miners began faulting
    * @param agents The IDs of the agents to mark as having faulty sectors
    */
-  function markAsFaulty(IAgent[] memory agents) external onlyOwnerOperator {
+  function markAsFaulty(IAgent[] calldata agents) external onlyOwnerOperator {
     IAgent agent;
     for (uint256 i = 0; i < agents.length; i++) {
       agent = agents[i];
@@ -221,7 +221,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function isValidCredential(
     uint256 agent,
     bytes4 action,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external view {
     // reverts if the credential isn't valid
     validateCred(
@@ -261,7 +261,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param vc the verifiable credential
    */
   function confirmRmEquity(
-    VerifiableCredential memory vc
+    VerifiableCredential calldata vc
   ) external view {
     // check to ensure we can withdraw from this pool
     _agentApproved(vc);
@@ -291,7 +291,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `confirmRmAdministration` checks to ensure an Agent's faulty sectors are in the tolerance range, and they're within the payment tolerance window
    * @param vc the verifiable credential
    */
-  function confirmRmAdministration(VerifiableCredential memory vc) external view {
+  function confirmRmAdministration(VerifiableCredential calldata vc) external view {
     address credParser = address(GetRoute.credParser(router));
 
     if (
@@ -423,7 +423,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /// @dev loops through the pools and calls isApproved on each, reverting in the case of any non-approvals
-  function _agentApproved(VerifiableCredential memory vc) internal view {
+  function _agentApproved(VerifiableCredential calldata vc) internal view {
     uint256[] memory pools = GetRoute.poolRegistry(router).poolIDs(vc.subject);
 
     for (uint256 i = 0; i < pools.length; ++i) {
@@ -438,7 +438,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     }
   }
 
-  function createKey(string memory partitionKey, uint256 agentID) internal pure returns (bytes32) {
+  function createKey(string calldata partitionKey, uint256 agentID) internal pure returns (bytes32) {
     return keccak256(abi.encode(partitionKey, agentID));
   }
 

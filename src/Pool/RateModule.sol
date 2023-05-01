@@ -73,7 +73,7 @@ contract RateModule is IRateModule, Ownable {
      * @dev getRate returns a per epoch rate with an additional WAD for precision
      */
     function getRate(
-        VerifiableCredential memory vc
+        VerifiableCredential calldata vc
     ) public view returns (uint256 rate) {
         return _getRate(vc.getGCRED(credParser));
     }
@@ -98,8 +98,8 @@ contract RateModule is IRateModule, Ownable {
      *
      */
     function isApproved(
-        Account memory account,
-        VerifiableCredential memory vc
+        Account calldata account,
+        VerifiableCredential calldata vc
     ) external view returns (bool) {
         // if you're behind on your payments, you're not approved
         if (account.epochsPaid + GetRoute.agentPolice(router).defaultWindow() < block.number) {

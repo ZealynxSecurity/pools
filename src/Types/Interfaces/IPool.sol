@@ -80,22 +80,22 @@ interface IPool {
     function feesCollected() external view returns (uint256);
 
     function getRate(
-        VerifiableCredential memory vc
+        VerifiableCredential calldata vc
     ) external view returns (uint256);
 
     function isApproved(
-        Account memory account,
-        VerifiableCredential memory vc
+        Account calldata account,
+        VerifiableCredential calldata vc
     ) external view returns (bool);
 
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function borrow(VerifiableCredential memory vc) external;
+    function borrow(VerifiableCredential calldata vc) external;
 
     function pay(
-        VerifiableCredential memory vc
+        VerifiableCredential calldata vc
     ) external returns (
         uint256 rate,
         uint256 epochsPaid,
