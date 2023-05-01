@@ -17,7 +17,7 @@ contract PoolRegistry is IPoolRegistry, Ownable {
   error InvalidState();
   error InvalidPoolID();
 
-  address public immutable router;
+  address internal immutable router;
   /**
    * @notice The PoolRegistryAdmin can change the treasury fee up to the MAX_TREASURY_FEE
    * @dev treasury fee is denominated by 1e18, in other words, 1e17 is 10% fee

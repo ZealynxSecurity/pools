@@ -54,9 +54,9 @@ contract InfinityPool is IPool, Ownable {
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    uint256 immutable WAD = 1e18;
+    uint256 constant WAD = 1e18;
 
-    address public immutable router;
+    address internal immutable router;
 
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
