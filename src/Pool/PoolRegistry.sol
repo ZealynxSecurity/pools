@@ -147,8 +147,4 @@ contract PoolRegistry is IPoolRegistry, Ownable {
     if (newFeeRate > MAX_TREASURY_FEE) revert InvalidState();
     treasuryFeeRate = newFeeRate;
   }
-  
-  function createKey(string calldata partitionKey, address entity) internal pure returns (bytes32) {
-    return keccak256(abi.encode(partitionKey, entity));
-  }
 }

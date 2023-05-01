@@ -438,10 +438,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     }
   }
 
-  function createKey(string calldata partitionKey, uint256 agentID) internal pure returns (bytes32) {
-    return keccak256(abi.encode(partitionKey, agentID));
-  }
-
   function createSigKey(uint8 v, bytes32 r, bytes32 s) internal pure returns (bytes32){
     return keccak256(abi.encode(v, r, s));
   }
