@@ -13,6 +13,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -29,6 +30,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using FilAddress for address;
 
   error AgentStateRejected();
+
+  IPoolRegistry internal poolRegistry;
+  IWFIL internal wFIL;
 
   uint256 constant WAD = 1e18;
 
@@ -60,10 +64,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 _defaultWindow,
     address _owner,
     address _operator,
-    address _router
+    address _router,
+    IPoolRegistry _poolRegistry,
+    IWFIL _wFIL
   ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
     defaultWindow = _defaultWindow;
     maxPoolsPerAgent = 10;
+
+    poolRegistry = _poolRegistry;
+    wFIL = _wFIL;
   }
 
   modifier onlyAgent() {
@@ -113,7 +122,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param agentID The address of the agent to check
    */
   function agentLiquidated(uint256 agentID) public view returns (bool) {
-    uint256[] memory pools = GetRoute.poolRegistry(router).poolIDs(agentID);
+    uint256[] memory pools = poolRegistry.poolIDs(agentID);
 
     if (pools.length == 0) return false;
     // once an Agent gets liquidated, all of their pools get written down, and accounts `defaulted` flag set to true
@@ -200,11 +209,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     // this call can only be called once per agent
     if (agentLiquidated(agentID)) revert Unauthorized();
     // transfer the assets into the pool
-    GetRoute.wFIL(router).transferFrom(msg.sender, address(this), amount);
+    wFIL.transferFrom(msg.sender, address(this), amount);
     uint256 excessAmount = _writeOffPools(agentID, amount);
 
     // transfer the excess assets to the Agent's owner
-    GetRoute.wFIL(router).transfer(IAuth(agent).owner(), excessAmount);
+    wFIL.transfer(IAuth(agent).owner(), excessAmount);
   }
 
   /**
@@ -354,6 +363,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     sectorFaultyTolerancePercent = _sectorFaultyTolerancePercent;
   }
 
+  function refreshRoutes() external {
+    poolRegistry = GetRoute.poolRegistry(router);
+    wFIL = GetRoute.wFIL(router);
+  }
+
   /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
   //////////////////////////////////////////////*/
@@ -369,9 +383,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 poolID;
     uint256 poolShare;
     uint256 principal;
-    IWFIL wFIL = GetRoute.wFIL(router);
 
-    uint256[] memory _pools = GetRoute.poolRegistry(router).poolIDs(_agentID);
+    uint256[] memory _pools = poolRegistry.poolIDs(_agentID);
     uint256 poolCount = _pools.length;
     uint256 totalOwed;
 
@@ -401,7 +414,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 _agentID,
     uint256 _targetEpoch
   ) internal view returns (bool) {
-    uint256[] memory pools = GetRoute.poolRegistry(router).poolIDs(_agentID);
+    uint256[] memory pools = poolRegistry.poolIDs(_agentID);
 
     for (uint256 i = 0; i < pools.length; ++i) {
       if (AccountHelpers.getAccount(router, _agentID, pools[i]).epochsPaid < block.number - _targetEpoch) {
@@ -424,7 +437,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   /// @dev loops through the pools and calls isApproved on each, reverting in the case of any non-approvals
   function _agentApproved(VerifiableCredential calldata vc) internal view {
-    uint256[] memory pools = GetRoute.poolRegistry(router).poolIDs(vc.subject);
+    uint256[] memory pools = poolRegistry.poolIDs(vc.subject);
 
     for (uint256 i = 0; i < pools.length; ++i) {
       uint256 poolID = pools[i];

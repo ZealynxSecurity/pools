@@ -13,6 +13,8 @@ import {PoolRegistry} from "src/Pool/PoolRegistry.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
+import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
 import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import "src/Constants/Routes.sol";
@@ -37,11 +39,11 @@ contract Deploy is Script {
         address wFIL = vm.envAddress("WFIL_ADDR");
         address agentFactory = address(new AgentFactory(router));
         address minerRegistry = address(new MinerRegistry(router, IAgentFactory(agentFactory)));
-        address agentPolice = address(
-            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router)
-        );
         address poolRegistry = address(
             new PoolRegistry(1e17, deployerAddr, router)
+        );
+        address agentPolice = address(
+            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router, IPoolRegistry(poolRegistry), IWFIL(wFIL))
         );
         address vcIssuer = vm.envAddress("VC_ISSUER_ADDR");
         address credParser = address(new CredParser());
