@@ -74,7 +74,7 @@ contract RateModule is IRateModule, Ownable {
      */
     function getRate(
         VerifiableCredential calldata vc
-    ) public view returns (uint256 rate) {
+    ) external view returns (uint256 rate) {
         return _getRate(vc.getGCRED(credParser));
     }
 
