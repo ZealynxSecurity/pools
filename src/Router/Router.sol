@@ -7,10 +7,12 @@ import {AccountHelpers} from "src/Pool/Account.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 
-address constant ADDRESS_ZERO = address(0);
-error RouteDNE();
 
 contract Router is IRouter, Ownable {
+
+  address constant ADDRESS_ZERO = address(0);
+  error RouteDNE();
+
   mapping(bytes4 => address) public route;
   mapping(bytes32 => Account) private _accounts;
 
@@ -37,14 +39,14 @@ contract Router is IRouter, Ownable {
   }
 
   function pushRoutes(string[] calldata ids, address[] calldata newRoutes) external onlyOwner {
-    require(ids.length == newRoutes.length, "Router: ids and newRoutes must be same length");
+    if (ids.length != newRoutes.length) revert InvalidParams();
     for (uint i = 0; i < ids.length; i++) {
       pushRoute(ids[i], newRoutes[i]);
     }
   }
 
   function pushRoutes(bytes4[] calldata ids, address[] calldata newRoutes) external onlyOwner {
-    require(ids.length == newRoutes.length, "Router: ids and newRoutes must be same length");
+    if (ids.length != newRoutes.length) revert InvalidParams();
     for (uint i = 0; i < ids.length; i++) {
       pushRoute(ids[i], newRoutes[i]);
     }

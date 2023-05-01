@@ -144,7 +144,7 @@ contract PoolRegistry is IPoolRegistry, Ownable {
    * @dev Sets the treasury fee rate
    */
   function setTreasuryFeeRate(uint256 newFeeRate) external onlyOwner {
-    require(newFeeRate <= MAX_TREASURY_FEE, "Pool: Fee too high");
+    if (newFeeRate > MAX_TREASURY_FEE) revert InvalidState();
     treasuryFeeRate = newFeeRate;
   }
   
