@@ -101,11 +101,6 @@ contract AgentBasicTest is BaseTest {
       assertEq(agent.operator(), operator);
     }
 
-    function testRouterConfigured() public {
-      address r = IRouterAware(address(agent)).router();
-      assertEq(IRouterAware(address(agent)).router(), address(r));
-    }
-
     function testSetAdoRequestKey(address pubKey) public {
       vm.startPrank(agent.owner());
       agent.setAdoRequestKey(pubKey);
