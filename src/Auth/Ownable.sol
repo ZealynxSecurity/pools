@@ -24,10 +24,6 @@ abstract contract Ownable {
     address public owner;
     address public pendingOwner;
 
-    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
-
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-
     /**
      * @dev Initializes the contract setting `owner` as the initial owner.
      */
@@ -59,7 +55,6 @@ abstract contract Ownable {
      */
     function transferOwnership(address newOwner) public virtual onlyOwner {
         pendingOwner = newOwner.normalize();
-        emit OwnershipTransferStarted(owner, pendingOwner);
     }
 
 
@@ -69,9 +64,7 @@ abstract contract Ownable {
      */
     function _transferOwnership(address newOwner) internal virtual {
       delete pendingOwner;
-      address oldOwner = owner;
       owner = newOwner.normalize();
-      emit OwnershipTransferred(oldOwner, owner);
     }
 
     /**

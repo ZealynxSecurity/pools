@@ -23,10 +23,6 @@ abstract contract Operatable is Ownable {
     address public operator;
     address public pendingOperator;
 
-    event OperatorTransferStarted(address indexed previousOperator, address indexed newOperator);
-
-    event OperatorTransferred(address indexed previousOperator, address indexed newOperator);
-
     /**
      * @dev Initializes the contract setting `_initialOperator` as the initial operator.
      */
@@ -59,7 +55,6 @@ abstract contract Operatable is Ownable {
      */
     function transferOperator(address newOperator) public virtual onlyOwnerOperator {
         pendingOperator = newOperator;
-        emit OperatorTransferStarted(operator, newOperator);
     }
 
 
@@ -69,9 +64,7 @@ abstract contract Operatable is Ownable {
      */
     function _transferOperator(address newOperator) internal virtual {
       delete pendingOperator;
-      address oldOperator = operator;
       operator = newOperator.normalize();
-      emit OperatorTransferred(oldOperator, operator);
     }
 
     /**
