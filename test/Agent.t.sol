@@ -1596,23 +1596,23 @@ contract AgentUpgradeTest is BaseTest {
 
         vm.startPrank(_agentOwner(agent));
         // make sure the old agent can't do anything
-        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
         agent.borrow(poolId, borrowCred);
 
         SignedCredential memory addMinerCred = issueAddMinerCred(agentId, 0);
-        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
         agent.addMiner(addMinerCred);
 
         SignedCredential memory removeMinerCred = issueRemoveMinerCred(agentId, 0, emptyAgentData());
-        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
         agent.removeMiner(makeAddr("newowner"), removeMinerCred);
 
         SignedCredential memory payCred = issueGenericPayCred(agentId, WAD);
-        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
         agent.pay(poolId, payCred);
 
         SignedCredential memory withdrawCred = issueWithdrawCred(agentId, WAD, emptyAgentData());
-        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
         agent.withdraw(makeAddr("receiver"), withdrawCred);
 
         vm.stopPrank();

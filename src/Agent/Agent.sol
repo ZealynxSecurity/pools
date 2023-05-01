@@ -30,7 +30,6 @@ contract Agent is IAgent, Operatable {
 
   error InsufficientFunds();
   error BadAgentState();
-  error InvalidVersion();
 
   address public immutable router;
 
@@ -98,7 +97,7 @@ contract Agent is IAgent, Operatable {
   }
 
   modifier checkVersion() {
-    if (GetRoute.agentDeployer(router).version() != version) revert InvalidVersion();
+    if (GetRoute.agentDeployer(router).version() != version) revert BadAgentState();
     _;
   }
 
