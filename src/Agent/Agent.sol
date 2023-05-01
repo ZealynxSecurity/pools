@@ -37,7 +37,6 @@ contract Agent is IAgent, Operatable {
   IWFIL private wFIL;
   IAgentPolice private agentPolice;
   IMinerRegistry private minerRegistry;
-  IPoolRegistry private poolRegistry;
 
   /// @notice `version` is the version of Agent that is deployed
   uint8 public immutable version;
@@ -116,7 +115,6 @@ contract Agent is IAgent, Operatable {
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);
     minerRegistry = GetRoute.minerRegistry(router);
-    poolRegistry = GetRoute.poolRegistry(router);
   }
 
   /*//////////////////////////////////////////////////
@@ -128,7 +126,7 @@ contract Agent is IAgent, Operatable {
    * @return count Returns the number of pools that an Agent has borrowed from
    */
   function borrowedPoolsCount() external view returns (uint256 count) {
-    return poolRegistry.poolIDs(id).length;
+    return GetRoute.poolRegistry(router).poolIDs(id).length;
   }
 
   /**
@@ -328,7 +326,6 @@ contract Agent is IAgent, Operatable {
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);
     minerRegistry = GetRoute.minerRegistry(router);
-    poolRegistry = GetRoute.poolRegistry(router);
   }
 
   /**
