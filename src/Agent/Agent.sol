@@ -29,6 +29,7 @@ contract Agent is IAgent, Operatable {
 
   error InsufficientFunds();
   error BadAgentState();
+  error InvalidVersion();
 
   address public immutable router;
 
@@ -91,6 +92,11 @@ contract Agent is IAgent, Operatable {
 
   modifier notPaused() {
     if (agentPolice.paused()) revert Unauthorized();
+    _;
+  }
+
+  modifier checkVersion() {
+    if (GetRoute.agentDeployer(router).version() != version) revert InvalidVersion();
     _;
   }
 
@@ -157,7 +163,7 @@ contract Agent is IAgent, Operatable {
    */
   function addMiner(
     SignedCredential memory sc
-  ) external onlyOwnerOperator validateAndBurnCred(sc) {
+  ) external onlyOwnerOperator validateAndBurnCred(sc) checkVersion {
     // confirm the miner is valid and can be added
     if (!sc.vc.target.configuredForTakeover()) revert Unauthorized();
     // change the owner address
@@ -179,6 +185,7 @@ contract Agent is IAgent, Operatable {
   )
     external
     onlyOwner
+    checkVersion
     notPaused
     notOnAdministration
     notInDefault
@@ -267,6 +274,7 @@ contract Agent is IAgent, Operatable {
     validateAndBurnCred(sc)
     notPaused
     notInDefault
+    checkVersion
   {
     agentPolice.confirmRmAdministration(sc.vc);
     faultySectorStartEpoch = 0;
@@ -286,7 +294,7 @@ contract Agent is IAgent, Operatable {
     uint64 miner,
     uint64 worker,
     uint64[] calldata controlAddresses
-  ) external {
+  ) external checkVersion {
     if (
       msg.sender != owner() &&
       msg.sender != administration
@@ -349,6 +357,7 @@ contract Agent is IAgent, Operatable {
     notPaused
     notInDefault
     notOnAdministration
+    checkVersion
     validateAndBurnCred(sc)
   {
     uint256 sendAmount = sc.vc.value;
@@ -373,6 +382,7 @@ contract Agent is IAgent, Operatable {
     external
     onlyOwnerOperator
     validateAndBurnCred(sc)
+    checkVersion
   {
     // revert if this agent does not own the underlying miner
     _checkMinerRegistered(sc.vc.target);
@@ -392,6 +402,7 @@ contract Agent is IAgent, Operatable {
     notOnAdministration
     notInDefault
     validateAndBurnCred(sc)
+    checkVersion
   {
     // revert if this agent does not own the underlying miner
     _checkMinerRegistered(sc.vc.target);
@@ -416,6 +427,7 @@ contract Agent is IAgent, Operatable {
     notPaused
     notInDefault
     validateAndBurnCred(sc)
+    checkVersion
   {
     GetRoute.pool(router, poolID).borrow(sc.vc);
     // transaction will revert if any of the pool's accounts reject the new agent's state
@@ -436,6 +448,7 @@ contract Agent is IAgent, Operatable {
   ) external
     onlyOwnerOperator
     validateAndBurnCred(sc)
+    checkVersion
     returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
   {
     // get the Pool address

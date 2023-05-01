@@ -1591,6 +1591,46 @@ contract AgentUpgradeTest is BaseTest {
         }
     }
 
+    function testDecommissionedAgentAction() public {
+        uint256 agentId = agent.id();
+        address agentOwner = _agentOwner(agent);
+        address agentOperator = _agentOperator(agent);
+        IAgentFactory agentFactory = GetRoute.agentFactory(router);
+        _upgradeAgentDeployer();
+        vm.prank(minerOwner);
+        IAgent newAgent = IAgent(agentFactory.upgradeAgent(prevAgentAddr));
+        assertEq(newAgent.id(), agentId);
+        assertEq(_agentOwner(newAgent), agentOwner);
+        assertEq(_agentOperator(newAgent), agentOperator);
+
+        uint256 poolId = pool.id();
+
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agentId, 1e18);
+
+        vm.startPrank(_agentOwner(agent));
+        // make sure the old agent can't do anything
+        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        agent.borrow(poolId, borrowCred);
+
+        SignedCredential memory addMinerCred = issueAddMinerCred(agentId, 0);
+        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        agent.addMiner(addMinerCred);
+
+        SignedCredential memory removeMinerCred = issueRemoveMinerCred(agentId, 0, emptyAgentData());
+        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        agent.removeMiner(makeAddr("newowner"), removeMinerCred);
+
+        SignedCredential memory payCred = issueGenericPayCred(agentId, WAD);
+        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        agent.pay(poolId, payCred);
+
+        SignedCredential memory withdrawCred = issueWithdrawCred(agentId, WAD, emptyAgentData());
+        vm.expectRevert(abi.encodeWithSelector(Agent.InvalidVersion.selector));
+        agent.withdraw(makeAddr("receiver"), withdrawCred);
+
+        vm.stopPrank();
+    }
+
     function testUpgradeBasic() public {
         uint256 agentId = agent.id();
         address agentOwner = _agentOwner(agent);
