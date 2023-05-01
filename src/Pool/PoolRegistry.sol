@@ -15,38 +15,69 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 contract PoolRegistry is IPoolRegistry, Ownable {
 
   error InvalidState();
+  error InvalidPoolID();
 
+  address public immutable router;
   /**
    * @notice The PoolRegistryAdmin can change the treasury fee up to the MAX_TREASURY_FEE
    * @dev treasury fee is denominated by 1e18, in other words, 1e17 is 10% fee
    */
   uint256 public constant MAX_TREASURY_FEE = 1e17;
+
   uint256 public treasuryFeeRate;
-  IERC20 public asset;
+
   address[] public allPools;
-  address public immutable router;
-  // poolExists
-  mapping(address => bool) internal exists;
+
+  /// @notice `_poolIDs` maps agentID to the pools they have actively borrowed from
+  mapping(uint256 => uint256[]) private _poolIDs;
 
   /*//////////////////////////////////////
                 MODIFIERS
   //////////////////////////////////////*/
 
+  // ensures that only the pool can change its own state in the agent police
+  modifier onlyPool(uint256 poolID) {
+    if (poolID > allPools.length) {
+      revert InvalidPoolID();
+    }
+
+    if (msg.sender != allPools[poolID]) {
+      revert Unauthorized();
+    }
+    _;
+  }
+
   constructor(
-    IERC20 _asset,
     uint256 _treasuryFeeRate,
     address _owner,
     address _router
   ) Ownable(_owner) {
-    asset = _asset;
     treasuryFeeRate = _treasuryFeeRate;
     router = _router;
   }
 
-  /// @notice allPoolsLength returns the number of registered pools
-  function allPoolsLength() public view returns (uint256) {
+  /*//////////////////////////////////////////////
+                      GETTERS
+  //////////////////////////////////////////////*/
+
+  /**
+   * @notice allPoolsLength returns the number of registered pools
+   */
+  function allPoolsLength() external view returns (uint256) {
     return allPools.length;
   }
+
+  /**
+   * @notice `poolIDs` returns the poolIDs of the pools that the agent has borrowed from
+   * @param agentID the agentID of the agent
+   */
+  function poolIDs(uint256 agentID) external view returns (uint256[] memory) {
+    return _poolIDs[agentID];
+  }
+
+  /*//////////////////////////////////////////////
+                  POOL REGISTERING
+  //////////////////////////////////////////////*/
 
   /**
    * @notice Creates a new pool
@@ -58,8 +89,6 @@ contract PoolRegistry is IPoolRegistry, Ownable {
   ) external onlyOwner {
     // add the pool to the list of all pools
     allPools.push(address(pool));
-    // cache the new pool in storage
-    exists[address(pool)] = true;
   }
 
   /**
@@ -79,21 +108,36 @@ contract PoolRegistry is IPoolRegistry, Ownable {
 
     // Update the pool to exist before we decomission the old pool so transfer checks will succeed
     allPools[poolID] = address(newPool);
-    exists[address(newPool)] = true;
+
     uint256 borrowedAmount = oldPool.decommissionPool(newPool);
-    // change update the pointer in factory storage
-    // reset pool mappings
-    exists[address(oldPool)] = false;
     // update the accounting in the new pool
     newPool.jumpStartTotalBorrowed(borrowedAmount);
   }
 
   /**
-   * @dev Returns if a Pool Accounting instance exists
-   * @param pool The address of the pool
+   * @notice `addPoolToList` adds a pool to an agent's list of pools its borrowed from
+   * @param pool the id of the pool to add
+   * @dev only an agent can add a pool to its list
+   * The agent itself ensures the pool is not a duplicate before calling this function
    */
-  function isPool(address pool) external view returns (bool) {
-    return exists[pool];
+  function addPoolToList(uint256 agentID, uint256 pool) external onlyPool(pool) {
+    _poolIDs[agentID].push(pool);
+  }
+
+  /**
+   * @notice `removePoolFromList` removes a pool from an agent's list of pools its borrowed from
+   * @param pool the id of the pool to add
+   * @dev only an agent can add a pool to its list
+   */
+  function removePoolFromList(uint256 agentID, uint256 pool) external onlyPool(pool) {
+    uint256[] storage pools = _poolIDs[agentID];
+    for (uint256 i = 0; i < pools.length; i++) {
+      if (pools[i] == pool) {
+        pools[i] = pools[pools.length - 1];
+        pools.pop();
+        break;
+      }
+    }
   }
 
   /**

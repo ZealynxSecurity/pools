@@ -351,7 +351,7 @@ contract AgentRmEquityTest is BaseTest {
       // set the account on the router and on the agent police
       vm.startPrank(address(pool));
       IRouter(router).setAccount(agent.id(), pool.id(), account);
-      GetRoute.agentPolice(router).addPoolToList(agent.id(), pool.id());
+      GetRoute.poolRegistry(router).addPoolToList(agent.id(), pool.id());
       vm.stopPrank();
 
       // create a withdraw credential
@@ -418,7 +418,7 @@ contract AgentRmEquityTest is BaseTest {
       // set the account on the router and on the agent police
       vm.startPrank(address(pool));
       IRouter(router).setAccount(agent.id(), pool.id(), account);
-      GetRoute.agentPolice(router).addPoolToList(agent.id(), pool.id());
+      GetRoute.poolRegistry(router).addPoolToList(agent.id(), pool.id());
       vm.stopPrank();
 
       withdrawAndAssertRevert(

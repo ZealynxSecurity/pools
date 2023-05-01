@@ -106,7 +106,7 @@ contract BaseTest is Test {
       address(new AgentFactory(router)),
       address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router)),
       // 1e17 = 10% treasury fee on yield
-      address(new PoolRegistry(IERC20(address(wFIL)), 10e16, systemAdmin, router)),
+      address(new PoolRegistry(10e16, systemAdmin, router)),
       vcIssuer,
       credParser,
       address(new AgentDeployer())
@@ -649,7 +649,7 @@ contract BaseTest is Test {
     police.liquidatedAgent(address(agent));
     vm.stopPrank();
 
-    assertTrue(police.liquidated(agent.id()), "Agent should be liquidated");
+    assertTrue(agent.liquidated(), "Agent should be liquidated");
   }
 
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {

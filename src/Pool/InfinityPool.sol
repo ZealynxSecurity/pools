@@ -322,7 +322,7 @@ contract InfinityPool is IPool, Ownable {
             uint256 currentEpoch = block.number;
             account.startEpoch = currentEpoch;
             account.epochsPaid = currentEpoch;
-            GetRoute.agentPolice(router).addPoolToList(vc.subject, id);
+            GetRoute.poolRegistry(router).addPoolToList(vc.subject, id);
         } else if (account.epochsPaid + maxEpochsOwedTolerance < block.number) {
           // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
           // this is to prevent the agent overpaying on previously borrowed amounts
@@ -352,7 +352,7 @@ contract InfinityPool is IPool, Ownable {
      */
     function pay(
         VerifiableCredential memory vc
-    ) external subjectIsAgentCaller(vc) returns (
+    ) external isOpen subjectIsAgentCaller(vc) returns (
         uint256 rate,
         uint256 epochsPaid,
         uint256 principalPaid,
@@ -404,7 +404,7 @@ contract InfinityPool is IPool, Ownable {
             // fully paid off
             if (principalPaid >= account.principal) {
                 // remove the account from the pool's list of accounts
-                GetRoute.agentPolice(router).removePoolFromList(vc.subject, id);
+                GetRoute.poolRegistry(router).removePoolFromList(vc.subject, id);
                 // return the amount of funds overpaid
                 refund = principalPaid - account.principal;
                 // reset the account
@@ -703,7 +703,7 @@ contract InfinityPool is IPool, Ownable {
         // save the account
         account.save(router, agentID, id);
         // add the pool to the agent's list of borrowed pools
-        GetRoute.agentPolice(router).addPoolToList(agentID, id);
+        GetRoute.poolRegistry(router).addPoolToList(agentID, id);
         // mint the iFIL to the receiver, using principal as the deposit amount
         liquidStakingToken.mint(receiver, convertToShares(accountPrincipal));
         // account for the new principal in the total borrowed of the pool

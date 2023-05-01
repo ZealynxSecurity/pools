@@ -31,6 +31,8 @@ interface IAgent {
 
   function defaulted() external view returns (bool);
 
+  function liquidated() external view returns (bool);
+
   function borrowedPoolsCount() external view returns (uint256);
 
   function liquidAssets() external view returns (uint256);
@@ -67,6 +69,8 @@ interface IAgent {
   function setAdministration(address administration) external;
 
   function prepareMinerForLiquidation(uint64 miner, address liquidator) external;
+
+  function setLiquidated() external;
 
   function setFaulty() external;
 

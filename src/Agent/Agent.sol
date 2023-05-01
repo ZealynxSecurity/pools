@@ -10,6 +10,7 @@ import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {Credentials, SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
@@ -37,6 +38,7 @@ contract Agent is IAgent, Operatable {
   IWFIL private wFIL;
   IAgentPolice private agentPolice;
   IMinerRegistry private minerRegistry;
+  IPoolRegistry private poolRegistry;
 
   /// @notice `version` is the version of Agent that is deployed
   uint8 public immutable version;
@@ -55,6 +57,9 @@ contract Agent is IAgent, Operatable {
 
   /// @notice `defaulted` returns true if the agent is in default
   bool public defaulted;
+
+  /// @notice `liquidated` returns true if the agent has been liquidated
+  bool public liquidated;
 
   /// @notice `publicKey` is a hashed key that the ado uses to validate requests from the agent
   bytes public publicKey;
@@ -115,6 +120,7 @@ contract Agent is IAgent, Operatable {
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);
     minerRegistry = GetRoute.minerRegistry(router);
+    poolRegistry = GetRoute.poolRegistry(router);
 
     publicKey = pubKey;
   }
@@ -128,7 +134,7 @@ contract Agent is IAgent, Operatable {
    * @return count Returns the number of pools that an Agent has borrowed from
    */
   function borrowedPoolsCount() external view returns (uint256 count) {
-    return agentPolice.poolIDs(id).length;
+    return poolRegistry.poolIDs(id).length;
   }
 
   /**
@@ -251,6 +257,13 @@ contract Agent is IAgent, Operatable {
   }
 
   /**
+   * @notice Gets called by the agentPolice after the liquidation has been completed
+   */
+  function setLiquidated() external onlyAgentPolice {
+    liquidated = true;
+  }
+
+  /**
    * @notice `setFaulty` Marks the agent as having faulty sectors at a particular epoch
    * @dev Can be called multiple times on the same Agent without getting the wrong result
    */
@@ -328,6 +341,7 @@ contract Agent is IAgent, Operatable {
     wFIL = GetRoute.wFIL(router);
     agentPolice = GetRoute.agentPolice(router);
     minerRegistry = GetRoute.minerRegistry(router);
+    poolRegistry = GetRoute.poolRegistry(router);
   }
 
   /**

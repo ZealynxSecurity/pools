@@ -51,12 +51,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /// @notice `paused` is a flag that determines whether the protocol is paused
   bool public paused = false;
 
-  /// @notice `_liquidated` maps agentID to whether the liquidation process has been completed
-  mapping(uint256 => bool) public liquidated;
-
-  /// @notice `_poolIDs` maps agentID to the pools they have actively borrowed from
-  mapping(uint256 => uint256[]) private _poolIDs;
-
   /// @notice `_credentialUseBlock` maps signature bytes to when a credential was used
   mapping(bytes32 => uint256) private _credentialUseBlock;
 
@@ -77,14 +71,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     _;
   }
 
-  // ensures that only the pool can change its own state in the agent police
-  modifier onlyPool(uint256 poolID) {
-    if (address(GetRoute.pool(router, poolID)) != msg.sender) {
-      revert Unauthorized();
-    }
-    _;
-  }
-
   modifier onlyWhenBehindTargetEpoch(address agent) {
     if (!_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) {
       revert Unauthorized();
@@ -97,18 +83,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
       revert Unauthorized();
     }
     _;
-  }
-
-  /*//////////////////////////////////////////////
-                      GETTERS
-  //////////////////////////////////////////////*/
-
-  /**
-   * @notice `poolIDs` returns the poolIDs of the pools that the agent has borrowed from
-   * @param agentID the agentID of the agent
-   */
-  function poolIDs(uint256 agentID) external view returns (uint256[] memory) {
-    return _poolIDs[agentID];
   }
 
   /*//////////////////////////////////////////////
@@ -210,7 +184,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function liquidatedAgent(address agent) external onlyOwner {
     if (!IAgent(agent).defaulted()) revert Unauthorized();
 
-    liquidated[IAgent(agent).id()] = true;
+    IAgent(agent).setLiquidated();
   }
 
   /**
@@ -220,7 +194,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function distributeLiquidatedFunds(address agent, uint256 amount) external onlyOwner {
     uint256 agentID = IAgent(agent).id();
-    if (!liquidated[agentID]) revert Unauthorized();
+    if (!IAgent(agent).liquidated()) revert Unauthorized();
 
     // transfer the assets into the pool
     GetRoute.wFIL(router).transferFrom(msg.sender, address(this), amount);
@@ -278,32 +252,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /*//////////////////////////////////////////////
                       POLICING
   //////////////////////////////////////////////*/
-
-  /**
-   * @notice `addPoolToList` adds a pool to an agent's list of pools its borrowed from
-   * @param pool the id of the pool to add
-   * @dev only an agent can add a pool to its list
-   * The agent itself ensures the pool is not a duplicate before calling this function
-   */
-  function addPoolToList(uint256 agentID, uint256 pool) external onlyPool(pool) {
-    _poolIDs[agentID].push(pool);
-  }
-
-  /**
-   * @notice `removePoolFromList` removes a pool from an agent's list of pools its borrowed from
-   * @param pool the id of the pool to add
-   * @dev only an agent can add a pool to its list
-   */
-  function removePoolFromList(uint256 agentID, uint256 pool) external onlyPool(pool) {
-    uint256[] storage pools = _poolIDs[agentID];
-    for (uint256 i = 0; i < pools.length; i++) {
-      if (pools[i] == pool) {
-        pools[i] = pools[pools.length - 1];
-        pools.pop();
-        break;
-      }
-    }
-  }
 
   /**
    * @notice `confirmRmEquity` checks to see if a withdrawal will bring the agent over maxDTE
@@ -420,7 +368,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 principal;
     IWFIL wFIL = GetRoute.wFIL(router);
 
-    uint256[] memory _pools = _poolIDs[_agentID];
+    uint256[] memory _pools = GetRoute.poolRegistry(router).poolIDs(_agentID);
     uint256 poolCount = _pools.length;
     uint256 totalOwed;
 
@@ -450,7 +398,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 _agentID,
     uint256 _targetEpoch
   ) internal view returns (bool) {
-    uint256[] memory pools = _poolIDs[_agentID];
+    uint256[] memory pools = GetRoute.poolRegistry(router).poolIDs(_agentID);
 
     for (uint256 i = 0; i < pools.length; ++i) {
       if (AccountHelpers.getAccount(router, _agentID, pools[i]).epochsPaid < block.number - _targetEpoch) {
@@ -473,7 +421,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   /// @dev loops through the pools and calls isApproved on each, reverting in the case of any non-approvals
   function _agentApproved(VerifiableCredential memory vc) internal view {
-    uint256[] memory pools = _poolIDs[vc.subject];
+    uint256[] memory pools = GetRoute.poolRegistry(router).poolIDs(vc.subject);
 
     for (uint256 i = 0; i < pools.length; ++i) {
       uint256 poolID = pools[i];

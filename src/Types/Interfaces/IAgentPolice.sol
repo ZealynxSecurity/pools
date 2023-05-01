@@ -20,15 +20,11 @@ interface IAgentPolice {
                       GETTERS
   //////////////////////////////////////////////*/
 
-  function poolIDs(uint256 agentID) external view returns (uint256[] memory);
-
   function defaultWindow() external view returns (uint256);
 
   function maxPoolsPerAgent() external view returns (uint256);
 
   function agentApproved(VerifiableCredential memory vc) external;
-
-  function liquidated(uint256 agentID) external view returns (bool);
 
   function paused() external view returns (bool);
 
@@ -57,10 +53,6 @@ interface IAgentPolice {
   /*//////////////////////////////////////////////
                       POLICING
   //////////////////////////////////////////////*/
-
-  function addPoolToList(uint256 agentID, uint256 pool) external;
-
-  function removePoolFromList(uint256 agentID, uint256 pool) external;
 
   function setAgentDefaulted(address agent) external;
 

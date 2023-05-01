@@ -937,8 +937,6 @@ contract PoolAdminTests is PoolTestState {
     assertEq(totalBorrowedNew, totalBorrowed, "Total borrowed should be the same");
     assertEq(agentBorrowedNew, agentBorrowed, "Agent borrowed should be the same");
     assertEq(assetBalanceNew, assetBalance - fees, "Asset balance should be the same");
-    assertTrue(poolRegistry.isPool(address(newPool)), "New pool should be registered");
-    assertFalse(poolRegistry.isPool(address(pool)), "Old pool should not be registered");
     assertEq(asset.balanceOf(treasury), treasuryBalance + fees, "Treasury should have received fees");
 
     assertNewPoolWorks(newPool, assetBalanceNew, agentBalanceNew);
