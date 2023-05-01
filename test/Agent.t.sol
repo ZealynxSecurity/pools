@@ -106,10 +106,10 @@ contract AgentBasicTest is BaseTest {
       assertEq(IRouterAware(address(agent)).router(), address(r));
     }
 
-    function testSetPublicKey(string calldata pubKey) public {
+    function testSetAdoRequestKey(address pubKey) public {
       vm.startPrank(agent.owner());
-      agent.setPublicKey(pubKey);
-      assertEq(agent.publicKey(), pubKey);
+      agent.setAdoRequestKey(pubKey);
+      assertEq(agent.adoRequestKey(), pubKey);
     }
 
     function testReceive() public {

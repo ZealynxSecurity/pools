@@ -50,6 +50,9 @@ contract Agent is IAgent, Operatable {
 
   /// @notice `administration` returns the address of an admin that can make payments on behalf of the agent, _only_ when the Agent falls behind on payments
   address public administration;
+  
+  /// @notice `publicKey` is a hashed key that the ado uses to validate requests from the agent
+  address public adoRequestKey;
 
   /// @notice `faultySectorStartEpoch` is the epoch that one of the Agent's miners began having faulty sectors
   uint256 public faultySectorStartEpoch;
@@ -57,8 +60,6 @@ contract Agent is IAgent, Operatable {
   /// @notice `defaulted` returns true if the agent is in default
   bool public defaulted;
 
-  /// @notice `publicKey` is a hashed key that the ado uses to validate requests from the agent
-  string public publicKey;
 
   /*//////////////////////////////////////
                 MODIFIERS
@@ -331,11 +332,11 @@ contract Agent is IAgent, Operatable {
   }
 
   /**
-   * @notice `setPublicKey` allows the owner or operator to update the public key in storage
-   * @param _publicKey The new public key
+   * @notice `setAdoRequestKey` allows the owner or operator to update the ado requester key in storage
+   * @param _newKey The new public key
    */
-  function setPublicKey(string calldata _publicKey) external onlyOwnerOperator {
-    publicKey = _publicKey;
+  function setAdoRequestKey(address _newKey) external onlyOwnerOperator {
+    adoRequestKey = _newKey;
   }
 
   /*//////////////////////////////////////////////

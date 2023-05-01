@@ -35,7 +35,7 @@ interface IAgent {
 
   function liquidAssets() external view returns (uint256);
 
-  function publicKey() external view returns (string memory);
+  function adoRequestKey() external view returns (address);
 
   function faultySectorStartEpoch() external view returns (uint256);
 
@@ -72,7 +72,7 @@ interface IAgent {
 
   function setRecovered(SignedCredential memory sc) external;
 
-  function setPublicKey(string calldata publicKey) external;
+  function setAdoRequestKey(address adoRequestKey) external;
 
   /*//////////////////////////////////////////////
                 FINANCIAL FUNCTIONS
