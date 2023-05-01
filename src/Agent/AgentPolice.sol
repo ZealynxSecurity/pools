@@ -109,6 +109,19 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /**
+   * @notice `agentLiquidated` checks if the agent has been liquidated
+   * @param agentID The address of the agent to check
+   */
+  function agentLiquidated(uint256 agentID) public view returns (bool) {
+    uint256[] memory pools = GetRoute.poolRegistry(router).poolIDs(agentID);
+
+    if (pools.length == 0) return false;
+    // once an Agent gets liquidated, all of their pools get written down, and accounts `defaulted` flag set to true
+    // we only need to check the Agent's account in the first pool to see if the agent has been liquidated
+    return (AccountHelpers.getAccount(router, agentID, pools[0]).defaulted);
+  }
+
+  /**
    * @notice `putAgentOnAdministration` puts the agent on administration, hopefully only temporarily
    * @param agent The address of the agent to put on administration
    * @param administration The address of the administration
@@ -178,24 +191,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /**
-   * @notice `liquidatedAgent` permanently sets the agent as liquidated in storage
-   * @param agent The address of the agent to set the state of
-   */
-  function liquidatedAgent(address agent) external onlyOwner {
-    if (!IAgent(agent).defaulted()) revert Unauthorized();
-
-    IAgent(agent).setLiquidated();
-  }
-
-  /**
    * @notice `distributeLiquidatedFunds` distributes liquidated funds to the pools
    * @param agent The address of the agent to set the state of
    * @param amount The amount of funds recovered from the liquidation
    */
   function distributeLiquidatedFunds(address agent, uint256 amount) external onlyOwner {
     uint256 agentID = IAgent(agent).id();
-    if (!IAgent(agent).liquidated()) revert Unauthorized();
-
+    // this call can only be called once per agent
+    if (agentLiquidated(agentID)) revert Unauthorized();
     // transfer the assets into the pool
     GetRoute.wFIL(router).transferFrom(msg.sender, address(this), amount);
     uint256 excessAmount = _writeOffPools(agentID, amount);

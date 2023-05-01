@@ -632,26 +632,6 @@ contract BaseTest is Test {
     assertTrue(agent.defaulted(), "Agent should be put into default");
   }
 
-  function setAgentLiquidated(
-    IAgent agent,
-    uint256 poolID
-  ) internal {
-    IAgentPolice police = GetRoute.agentPolice(router);
-
-    setAgentDefaulted(
-      agent,
-      police.defaultWindow() + 1,
-      1e18,
-      poolID
-    );
-
-    vm.startPrank(IAuth(address(police)).owner());
-    police.liquidatedAgent(address(agent));
-    vm.stopPrank();
-
-    assertTrue(agent.liquidated(), "Agent should be liquidated");
-  }
-
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
     IPoolToken liquidStakingToken = pool.liquidStakingToken();
     PoolToken iou = new PoolToken(systemAdmin);

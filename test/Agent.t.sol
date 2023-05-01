@@ -1311,14 +1311,6 @@ contract AgentPoliceTest is BaseTest {
       assertEq(IMockMiner(idStore.ids(miner)).proposed(), policeOwner, "Mock miner should have policeOwner as its proposed owner");
     }
 
-    function testSetAgentLiquidated() public {
-      // helper contains assertions
-      setAgentLiquidated(
-        agent,
-        pool.id()
-      );
-    }
-
     function testDistributeLiquidatedFundsNonAgentPolice() public {
       uint256 agentID = agent.id();
       agentBorrow(agent, pool.id(), issueGenericBorrowCred(agentID, WAD));
@@ -1327,8 +1319,6 @@ contract AgentPoliceTest is BaseTest {
       vm.startPrank(policeOwner);
       // set the agent in default
       police.setAgentDefaulted(address(agent));
-      // liquidate the agent
-      police.liquidatedAgent(address(agent));
       vm.stopPrank();
 
       address prankster = makeAddr("prankster");
@@ -1351,9 +1341,6 @@ contract AgentPoliceTest is BaseTest {
       vm.startPrank(policeOwner);
       // set the agent in default
       police.setAgentDefaulted(address(agent));
-      // liquidate the agent
-      police.liquidatedAgent(address(agent));
-
       // recover a tiny portion of the funds, but use a known amount for checks
       uint256 recoveredFunds = WAD;
 
@@ -1367,6 +1354,7 @@ contract AgentPoliceTest is BaseTest {
       uint256 borrowedAfter = pool.totalBorrowed();
       assertEq(borrowedBefore - borrowedAfter, account.principal, "Pool should have written down assets correctly");
       assertEq(wFIL.balanceOf(address(police)), 0, "Agent police should not have funds");
+      assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
     }
 
     function testDistributeLiquidatedFundsEvenSplit(
@@ -1409,8 +1397,6 @@ contract AgentPoliceTest is BaseTest {
       vm.startPrank(policeOwner);
       // set the agent in default
       police.setAgentDefaulted(address(agent));
-      // liquidate the agent
-      police.liquidatedAgent(address(agent));
 
       vm.deal(policeOwner, recoveredFunds);
       wFIL.deposit{value: recoveredFunds}();
@@ -1425,6 +1411,7 @@ contract AgentPoliceTest is BaseTest {
       // ensure the write down amount is correct:
       assertEq(balanceAfter - balanceBefore, recoveredFunds / numPools, "Pool should have received the correct amount of funds");
       assertEq(borrowedBefore - borrowedAfter, postBorrowAccount.principal, "Pool should have written down assets correctly");
+      assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
 
       Account memory account = AccountHelpers.getAccount(router, agent.id(), _pool.id());
       assertTrue(account.defaulted, "Agent should be defaulted");
@@ -1435,6 +1422,7 @@ contract AgentPoliceTest is BaseTest {
       vm.expectRevert(abi.encodeWithSelector(AlreadyDefaulted.selector));
       police.distributeLiquidatedFunds(address(agent), recoveredFunds);
       vm.stopPrank();
+      assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
     }
 
 
@@ -1482,8 +1470,6 @@ contract AgentPoliceTest is BaseTest {
       vm.startPrank(policeOwner);
       // set the agent in default
       police.setAgentDefaulted(address(agent));
-      // liquidate the agent
-      police.liquidatedAgent(address(agent));
       vm.stopPrank();
       vm.deal(policeOwner, recoveredFunds);
       vm.startPrank(policeOwner);
@@ -1499,6 +1485,8 @@ contract AgentPoliceTest is BaseTest {
         Account memory account = AccountHelpers.getAccount(router, agent.id(), poolArray[i].id());
         assertTrue(account.defaulted, "Agent should be defaulted");
       }
+
+      assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
     }
 
     function testDistributeLiquidatedFundsFullRecovery(
@@ -1526,8 +1514,6 @@ contract AgentPoliceTest is BaseTest {
       vm.startPrank(policeOwner);
       // set the agent in default
       police.setAgentDefaulted(address(agent));
-      // liquidate the agent
-      police.liquidatedAgent(address(agent));
       vm.stopPrank();
       vm.deal(policeOwner, recoveredFunds);
       vm.startPrank(policeOwner);
@@ -1541,6 +1527,7 @@ contract AgentPoliceTest is BaseTest {
       uint256 balanceChange = borrowAmount + interestOwed > recoveredFunds ? recoveredFunds : borrowAmount + interestOwed;
       assertEq(balanceAfter - balanceBefore, balanceChange,  "Pool should have received the correct amount of funds");
       assertEq(wFIL.balanceOf(IAuth(address(agent)).owner()), recoveredFunds - balanceChange,  "Police owner should only have paid the amount owed");
+      assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
     }
 
     function getPenaltyOwed(uint256 amount, uint256 rollFwdPeriod) public view returns (uint256) {

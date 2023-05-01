@@ -26,6 +26,8 @@ interface IAgentPolice {
 
   function agentApproved(VerifiableCredential memory vc) external;
 
+  function agentLiquidated(uint256 agentID) external view returns (bool);
+
   function paused() external view returns (bool);
 
   function maxDTE() external view returns (uint256);
@@ -71,8 +73,6 @@ interface IAgentPolice {
   function prepareMinerForLiquidation(address agent, uint64 miner) external;
 
   function distributeLiquidatedFunds(address agent, uint256 amount) external;
-
-  function liquidatedAgent(address agent) external;
 
   function confirmRmEquity(
     VerifiableCredential memory vc

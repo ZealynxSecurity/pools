@@ -58,9 +58,6 @@ contract Agent is IAgent, Operatable {
   /// @notice `defaulted` returns true if the agent is in default
   bool public defaulted;
 
-  /// @notice `liquidated` returns true if the agent has been liquidated
-  bool public liquidated;
-
   /// @notice `publicKey` is a hashed key that the ado uses to validate requests from the agent
   string public publicKey;
 
@@ -251,13 +248,6 @@ contract Agent is IAgent, Operatable {
   function prepareMinerForLiquidation(uint64 miner, address liquidator) external onlyAgentPolice {
   if (!defaulted) revert Unauthorized();
     miner.changeOwnerAddress(liquidator);
-  }
-
-  /**
-   * @notice Gets called by the agentPolice after the liquidation has been completed
-   */
-  function setLiquidated() external onlyAgentPolice {
-    liquidated = true;
   }
 
   /**
