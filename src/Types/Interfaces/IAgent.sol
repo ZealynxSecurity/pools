@@ -19,8 +19,6 @@ interface IAgent {
 
   function defaulted() external view returns (bool);
 
-  function borrowedPoolsCount() external view returns (uint256);
-
   function liquidAssets() external view returns (uint256);
 
   function adoRequestKey() external view returns (address);

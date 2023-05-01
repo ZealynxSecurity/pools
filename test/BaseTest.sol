@@ -660,6 +660,10 @@ contract BaseTest is Test {
     vm.stopPrank();
   }
 
+  function _borrowedPoolsCount(uint256 agentID) internal view returns (uint256) {
+    return GetRoute.poolRegistry(router).poolIDs(agentID).length;
+  }
+
   function _agentOwner(IAgent agent) internal view returns (address) {
     return IAuth(address(agent)).owner();
   }
@@ -674,7 +678,7 @@ contract BaseTest is Test {
     snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(router, poolID)));
     snapshot.agentBorrowed = account.principal;
     snapshot.accountEpochsPaid = account.epochsPaid;
-    snapshot.agentPoolBorrowCount = IAgent(agent).borrowedPoolsCount();
+    snapshot.agentPoolBorrowCount = _borrowedPoolsCount(IAgent(agent).id());
   }
 
   function _getAdjustedRate(uint256 gcred) internal view returns (uint256) {

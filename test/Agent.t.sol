@@ -920,8 +920,6 @@ contract AgentPayTest is BaseTest {
       agentBorrow(_agent, poolID, borrowCred);
 
       vm.roll(block.number + rollFwdAmt);
-      // uint256 prevAccountEpochsPaid = AccountHelpers.getAccount(router, agentID, poolID).epochsPaid;
-      // uint256 prevAgentPoolBorrowCount = agent.borrowedPoolsCount();
 
       (
         ,,
@@ -959,12 +957,12 @@ contract AgentPayTest is BaseTest {
         assertEq(postPaymentAccount.epochsPaid, 0, "epochs paid should be reset");
         assertEq(postPaymentAccount.startEpoch, 0, "start epoch should be reset");
 
-        assertEq(agent.borrowedPoolsCount() - 1, prePayState.agentPoolBorrowCount, "agent should have removed pool from borrowed list");
+        assertEq(_borrowedPoolsCount(agent.id()) - 1, prePayState.agentPoolBorrowCount, "agent should have removed pool from borrowed list");
       } else {
         // partial exit or interest only payment
         assertGt(postPaymentAccount.epochsPaid, prePayState.accountEpochsPaid, "epochs paid should have moved forward");
         assertLe(postPaymentAccount.epochsPaid, block.number, "epochs paid should not be in the future");
-        assertEq(newAgent.borrowedPoolsCount(), prePayState.agentPoolBorrowCount, "agent should not have removed pool from borrowed list");
+        assertEq(_borrowedPoolsCount(newAgent.id()), prePayState.agentPoolBorrowCount, "agent should not have removed pool from borrowed list");
 
       }
     }
@@ -1002,7 +1000,7 @@ contract AgentPoolsTest is BaseTest {
       pools[i] = createFundBorrowPool(borrowPerPool);
     }
 
-    assertEq(agent.borrowedPoolsCount(), poolCount, "agent should have correct pool count");
+    assertEq(_borrowedPoolsCount(agent.id()), poolCount, "agent should have correct pool count");
 
     for (uint256 i = 0; i < poolCount; i++) {
       SignedCredential memory sc = issueGenericPayCred(agent.id(), borrowPerPool*2);
@@ -1010,7 +1008,7 @@ contract AgentPoolsTest is BaseTest {
 
       agentPay(agent, pools[i], sc);
     }
-    assertEq(agent.borrowedPoolsCount(), 0, "agent should have correct pool count");
+    assertEq(_borrowedPoolsCount(agent.id()), 0, "agent should have correct pool count");
 
   }
 

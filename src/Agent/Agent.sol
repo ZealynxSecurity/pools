@@ -122,14 +122,6 @@ contract Agent is IAgent, Operatable {
   //////////////////////////////////////////////////*/
 
   /**
-   * @notice Get the number of pools that an Agent is actively borrowing from
-   * @return count Returns the number of pools that an Agent has borrowed from
-   */
-  function borrowedPoolsCount() external view returns (uint256 count) {
-    return GetRoute.poolRegistry(router).poolIDs(id).length;
-  }
-
-  /**
    * @notice Get the total liquid assets of the Agent, not including any liquid assets on any of its staked Miners
    * @return liquidAssets Returns the total liquid assets of the Agent in FIL and wFIL
    *
