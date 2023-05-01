@@ -14,6 +14,7 @@ import {AccountHelpers} from "src/Pool/Account.sol";
 
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
@@ -56,7 +57,12 @@ contract InfinityPool is IPool, Ownable {
 
     uint256 constant WAD = 1e18;
 
+    /// @dev cache the routes for gas efficiency
     address internal immutable router;
+    IPoolRegistry internal poolRegistry;
+    IAgentPolice internal agentPolice;
+    IAgentFactory internal agentFactory;
+    IWFIL internal wFIL;
 
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
@@ -153,6 +159,11 @@ contract InfinityPool is IPool, Ownable {
         id = _id;
         // deploy a new liquid staking token for the pool
         liquidStakingToken = IPoolToken(_liquidStakingToken);
+
+        poolRegistry = GetRoute.poolRegistry(router);
+        agentPolice = GetRoute.agentPolice(router);
+        agentFactory = GetRoute.agentFactory(router);
+        wFIL = GetRoute.wFIL(router);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -271,12 +282,8 @@ contract InfinityPool is IPool, Ownable {
             uint256 interestOwed = principalOwed.mulWadUp(rate).mulWadUp(epochsToPay);
             // compute the amount of interest to pay down
             interestPaid = interestOwed > remainder ? remainder : interestOwed;
-            // collect fees on the interest paid
-            feesCollected += GetRoute
-                .poolRegistry(router)
-                .treasuryFeeRate()
-                // only charge on the actual interest paid
-                .mulWadUp(interestPaid);
+            // collect fees on the interest paid - only charge on the actual interest paid
+            feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(interestPaid);
         }
 
         // whatever we couldn't pay back
@@ -322,7 +329,7 @@ contract InfinityPool is IPool, Ownable {
             uint256 currentEpoch = block.number;
             account.startEpoch = currentEpoch;
             account.epochsPaid = currentEpoch;
-            GetRoute.poolRegistry(router).addPoolToList(vc.subject, id);
+            poolRegistry.addPoolToList(vc.subject, id);
         } else if (account.epochsPaid + maxEpochsOwedTolerance < block.number) {
           // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
           // this is to prevent the agent overpaying on previously borrowed amounts
@@ -404,7 +411,7 @@ contract InfinityPool is IPool, Ownable {
             // fully paid off
             if (principalPaid >= account.principal) {
                 // remove the account from the pool's list of accounts
-                GetRoute.poolRegistry(router).removePoolFromList(vc.subject, id);
+                poolRegistry.removePoolFromList(vc.subject, id);
                 // return the amount of funds overpaid
                 refund = principalPaid - account.principal;
                 // reset the account
@@ -420,11 +427,7 @@ contract InfinityPool is IPool, Ownable {
         // update the account in storage
         account.save(router, vc.subject, id);
         // accrue treasury fee
-        feesCollected += GetRoute
-            .poolRegistry(router)
-            .treasuryFeeRate()
-            .mulWadUp(feeBasis);
-
+        feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(feeBasis);
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), vc.value - refund);
 
@@ -703,7 +706,7 @@ contract InfinityPool is IPool, Ownable {
         // save the account
         account.save(router, agentID, id);
         // add the pool to the agent's list of borrowed pools
-        GetRoute.poolRegistry(router).addPoolToList(agentID, id);
+        poolRegistry.addPoolToList(agentID, id);
         // mint the iFIL to the receiver, using principal as the deposit amount
         liquidStakingToken.mint(receiver, convertToShares(accountPrincipal));
         // account for the new principal in the total borrowed of the pool
@@ -748,6 +751,16 @@ contract InfinityPool is IPool, Ownable {
         asset.transferFrom(_preStake, address(this), _amount);
     }
 
+    /**
+     * @notice refreshRoutes refreshes the pool's cached routes
+     */
+    function refreshRoutes() external {
+        poolRegistry = GetRoute.poolRegistry(router);
+        agentPolice = GetRoute.agentPolice(router);
+        agentFactory = GetRoute.agentFactory(router);
+        wFIL = GetRoute.wFIL(router);
+    }
+
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
@@ -770,8 +783,6 @@ contract InfinityPool is IPool, Ownable {
 
     function _depositFIL(address receiver) internal returns (uint256 lstAmount) {
         if (msg.value == 0) revert InvalidParams();
-
-        IWFIL wFIL = GetRoute.wFIL(router);
 
         // handle FIL deposit
         wFIL.deposit{value: msg.value}();
