@@ -71,7 +71,7 @@ contract Agent is IAgent, Operatable {
   }
 
   /// @dev a modifier that checks and immediately burns a signed credential
-  modifier validateAndBurnCred(SignedCredential memory signedCredential) {
+  modifier validateAndBurnCred(SignedCredential calldata signedCredential) {
     _validateAndBurnCred(signedCredential);
     _;
   }
@@ -152,7 +152,7 @@ contract Agent is IAgent, Operatable {
    * This function can only be called by the Agent's owner or operator
    */
   function addMiner(
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external onlyOwnerOperator validateAndBurnCred(sc) checkVersion {
     // confirm the miner is valid and can be added
     if (!sc.vc.target.configuredForTakeover()) revert Unauthorized();
@@ -171,7 +171,7 @@ contract Agent is IAgent, Operatable {
    */
   function removeMiner(
     address newMinerOwner,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   )
     external
     onlyOwner
@@ -256,7 +256,7 @@ contract Agent is IAgent, Operatable {
    * @dev the Account must be paid up within the defaultWindow in order for this call to succeed
    * @dev if the Agent has recovered, administration gets removed
    */
-  function setRecovered(SignedCredential memory sc) 
+  function setRecovered(SignedCredential calldata sc) 
     external
     onlyOwnerOperator
     validateAndBurnCred(sc)
@@ -336,7 +336,7 @@ contract Agent is IAgent, Operatable {
    */
   function withdraw(
     address receiver,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external
     onlyOwner
     notPaused
@@ -361,7 +361,7 @@ contract Agent is IAgent, Operatable {
    *
    * This function adds a native FIL balance to the Agent
    */
-  function pullFunds(SignedCredential memory sc)
+  function pullFunds(SignedCredential calldata sc)
     external
     onlyOwnerOperator
     validateAndBurnCred(sc)
@@ -378,7 +378,7 @@ contract Agent is IAgent, Operatable {
    * @param sc The signed credential of the Agent attempting to push funds to a miner. The credential must contain a `pushFunds` action type with the `value` field set to the amount to push, and the `target` as the ID of the miner to push funds to
    * If the agents FIL balance is less than the total amount to push, the function will attempt to convert any wFIL into FIL before reverting
    */
-  function pushFunds(SignedCredential memory sc)
+  function pushFunds(SignedCredential calldata sc)
     external
     onlyOwnerOperator
     notPaused
@@ -404,7 +404,7 @@ contract Agent is IAgent, Operatable {
    */
   function borrow(
     uint256 poolID,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external
     onlyOwner
     notPaused
@@ -427,7 +427,7 @@ contract Agent is IAgent, Operatable {
    */
   function pay(
     uint256 poolID,
-    SignedCredential memory sc
+    SignedCredential calldata sc
   ) external
     onlyOwnerOperator
     validateAndBurnCred(sc)
@@ -476,7 +476,7 @@ contract Agent is IAgent, Operatable {
 
   /// @dev validates the credential, and then registers its signature with the agent police so it can't be used again
   function _validateAndBurnCred(
-    SignedCredential memory signedCredential
+    SignedCredential calldata signedCredential
   ) internal {
     agentPolice.isValidCredential(id, msg.sig, signedCredential);
     agentPolice.registerCredentialUseBlock(signedCredential);
