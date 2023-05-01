@@ -106,7 +106,7 @@ contract AgentBasicTest is BaseTest {
       assertEq(IRouterAware(address(agent)).router(), address(r));
     }
 
-    function testSetPublicKey(bytes calldata pubKey) public {
+    function testSetPublicKey(string calldata pubKey) public {
       vm.startPrank(agent.owner());
       agent.setPublicKey(pubKey);
       assertEq(agent.publicKey(), pubKey);
@@ -987,7 +987,7 @@ contract AgentPoolsTest is BaseTest {
     // We only need a single agent instance across all pools
     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
     // public key does not matter for these solidity unit tests as it is only relevant for ado integration/security
-    agent = IAgent(agentFactory.create(minerOwner, minerOwner, abi.encode("")));
+    agent = IAgent(agentFactory.create(minerOwner, minerOwner));
   }
 
   function testCreateRemoveMultiplePools(uint256 poolCount, uint256 totalBorrow) public {

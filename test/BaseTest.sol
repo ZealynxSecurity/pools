@@ -130,7 +130,7 @@ contract BaseTest is Test {
   function _configureAgent(address minerOwner, uint64 miner) public returns (Agent agent) {
     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
     vm.startPrank(minerOwner);
-    agent = Agent(payable(agentFactory.create(minerOwner, minerOwner, abi.encode(""))));
+    agent = Agent(payable(agentFactory.create(minerOwner, minerOwner)));
     assertTrue(
       miner.isOwner(minerOwner),
       "The mock miner's current owner should be set to the original owner"

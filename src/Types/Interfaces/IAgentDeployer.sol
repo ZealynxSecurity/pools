@@ -9,7 +9,6 @@ interface IAgentDeployer {
       address router,
       uint256 agentId,
       address owner,
-      address operator,
-      bytes calldata publicKey
+      address operator
     ) external returns (address agent);
 }

@@ -29,14 +29,13 @@ contract AgentFactory is IAgentFactory {
     router = _router;
   }
 
-  function create(address owner, address operator, bytes calldata publicKey) external returns (address agent) {
+  function create(address owner, address operator) external returns (address agent) {
     agentCount++;
     agent = GetRoute.agentDeployer(router).deploy(
       router,
       agentCount,
       owner,
-      operator,
-      publicKey
+      operator
     );
     agents[agent] = agentCount;
 
@@ -68,8 +67,7 @@ contract AgentFactory is IAgentFactory {
       router,
       agentId,
       owner,
-      IAuth(address(oldAgent)).operator(),
-      oldAgent.publicKey()
+      IAuth(address(oldAgent)).operator()
     );
     // Register the new agent and unregister the old agent
     agents[newAgent] = agentId;

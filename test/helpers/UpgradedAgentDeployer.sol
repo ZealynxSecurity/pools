@@ -12,9 +12,8 @@ contract UpgradedAgentDeployer {
     address router,
     uint256 agentId,
     address owner,
-    address operator,
-    bytes calldata publicKey
+    address operator
   ) external returns (IAgent agent) {
-    agent = new UpgradedAgent(version, agentId, router, owner, operator, publicKey);
+    agent = new UpgradedAgent(version, agentId, router, owner, operator);
   }
 }
