@@ -31,9 +31,8 @@ contract Agent is IAgent, Operatable {
   error InsufficientFunds();
   error BadAgentState();
 
-  address public immutable router;
-
   // cached routes to save on gas and code size
+  address private immutable router;
   IWFIL private wFIL;
   IAgentPolice private agentPolice;
   IMinerRegistry private minerRegistry;
