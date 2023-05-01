@@ -14,6 +14,6 @@ contract UpgradedAgentDeployer {
     address owner,
     address operator
   ) external returns (IAgent agent) {
-    agent = new UpgradedAgent(version, agentId, router, owner, operator);
+    agent = new UpgradedAgent(agentId, router, owner, operator);
   }
 }

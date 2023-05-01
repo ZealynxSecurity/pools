@@ -39,7 +39,7 @@ contract Agent is IAgent, Operatable {
   IMinerRegistry private minerRegistry;
 
   /// @notice `version` is the version of Agent that is deployed
-  uint8 public immutable version;
+  uint8 public constant version = 1;
 
   /// @notice `id` is the GLIF Pools ID address of the Agent (not to be confused with the evm actor's ID address)
   uint256 public immutable id;
@@ -102,13 +102,11 @@ contract Agent is IAgent, Operatable {
   }
 
   constructor(
-    uint8 agentVersion,
     uint256 agentID,
     address agentRouter,
     address owner,
     address operator
   ) Operatable(owner, operator) {
-    version = agentVersion;
     router = agentRouter;
     id = agentID;
 

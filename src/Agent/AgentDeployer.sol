@@ -15,6 +15,6 @@ contract AgentDeployer is IAgentDeployer {
     address owner,
     address operator
   ) external returns (address agent) {
-    agent = address(new Agent(version, agentId, router, owner, operator));
+    agent = address(new Agent(agentId, router, owner, operator));
   }
 }
