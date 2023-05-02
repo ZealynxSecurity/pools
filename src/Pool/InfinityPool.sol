@@ -782,10 +782,10 @@ contract InfinityPool is IPool, Ownable {
     function _depositFIL(address receiver) internal returns (uint256 lstAmount) {
         if (msg.value == 0) revert InvalidParams();
 
+        lstAmount = previewDeposit(msg.value);
+
         // handle FIL deposit
         wFIL.deposit{value: msg.value}();
-
-        lstAmount = previewDeposit(msg.value);
 
         liquidStakingToken.mint(receiver, lstAmount);
 

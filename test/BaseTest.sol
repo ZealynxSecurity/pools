@@ -491,7 +491,7 @@ contract BaseTest is Test {
     uint256 poolID,
     SignedCredential memory sc
   ) internal {
-    vm.startPrank(_agentOperator(agent));
+    vm.startPrank(_agentOwner(agent));
     // Establsh the state before the borrow
     StateSnapshot memory preBorrowState = _snapshot(address(agent), poolID);
     Account memory account = AccountHelpers.getAccount(router, address(agent), poolID);

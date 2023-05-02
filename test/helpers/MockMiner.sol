@@ -92,18 +92,13 @@ contract MockMiner is IMockMiner {
     // check
     require(msg.sender == owner);
     uint256 maxSend = address(this).balance;
-    require(amount <= maxSend);
-
-    // effect
-    if (amount == 0) {
-      amountWithdrawn = maxSend;
-    } else {
-      amountWithdrawn = amount;
-    }
+    if (maxSend < amount) amount = maxSend;
 
     // interact
-    (bool success, ) = payable(address(owner)).call{value: amountWithdrawn}("");
+    (bool success, ) = payable(address(owner)).call{value: amount}("");
     require(success, "transfer failed");
+
+    return amount;
   }
 
   function setID(uint64 _id) external {

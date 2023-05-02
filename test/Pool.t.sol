@@ -1155,6 +1155,40 @@ contract PoolUpgradeCredentialTest is PoolTestState {
     }
 }
 
+contract PoolStakingTest is BaseTest {
+    using Credentials for VerifiableCredential;
+    using AccountHelpers for Account;
+
+    IAgent agent;
+    uint64 miner;
+    IPool pool;
+    IPoolToken iFIL;
+
+    address investor = makeAddr("INVESTOR");
+    address minerOwner = makeAddr("MINER_OWNER");
+
+    function setUp() public {
+      pool = createPool();
+      iFIL = pool.liquidStakingToken();
+      (agent, miner) = configureAgent(minerOwner);
+    }
+
+    function testDepositTwice(uint256 stakeAmount) public {
+      stakeAmount = bound(stakeAmount, WAD, MAX_FIL);
+
+      vm.deal(investor, MAX_FIL);
+      vm.startPrank(investor);
+
+      // first we put WAD worth of FIL in the pool to block inflation attacks
+      uint256 sharesFromInitialDeposit = pool.deposit{value: WAD}(investor);
+      assertEq(sharesFromInitialDeposit, WAD, "Shares should be equal to WAD");
+
+      uint256 sharesFromSecondDeposit = pool.deposit{value: stakeAmount}(investor);
+      assertEq(sharesFromSecondDeposit, stakeAmount, "Shares should be equal to stakeAmount");
+      vm.stopPrank();
+    }
+}
+
 // // a value we use to test approximation of the cursor according to a window start/close
 // // TODO: investigate how to get this to 0 or 1
 // uint256 constant EPOCH_CURSOR_ACCEPTANCE_DELTA = 1;
@@ -1181,7 +1215,7 @@ contract PoolUpgradeCredentialTest is PoolTestState {
 //   string poolSymbol = "POOL1";
 
 //   function setUp() public {
-//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_REGISTRY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
@@ -1468,7 +1502,7 @@ contract PoolUpgradeCredentialTest is PoolTestState {
 //   string poolSymbol = "POOL1";
 
 //   function setUp() public {
-//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_REGISTRY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
@@ -1613,7 +1647,7 @@ contract PoolUpgradeCredentialTest is PoolTestState {
 //   uint256 borrowBlock;
 
 //   function setUp() public {
-//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_REGISTRY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
@@ -1710,7 +1744,7 @@ contract PoolUpgradeCredentialTest is PoolTestState {
 //   uint256 borrowBlock;
 
 //   function setUp() public {
-//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_REGISTRY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
@@ -1979,7 +2013,7 @@ contract PoolUpgradeCredentialTest is PoolTestState {
 //   uint256 borrowBlock;
 
 //   function setUp() public {
-//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_FACTORY));
+//     poolRegistry = IPoolRegistry(IRouter(router).getRoute(ROUTE_POOL_REGISTRY));
 //     powerToken = IPowerToken(IRouter(router).getRoute(ROUTE_POWER_TOKEN));
 //     treasury = IRouter(router).getRoute(ROUTE_TREASURY);
 //     pool = createPool(
