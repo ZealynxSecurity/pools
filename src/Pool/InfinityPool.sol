@@ -463,9 +463,9 @@ contract InfinityPool is IPool, Ownable {
      * @return assets Number of assets deposited
      */
     function mint(uint256 shares, address receiver) public isOpen returns (uint256 assets) {
-        if(shares == 0) revert InvalidParams();
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
+        if(assets == 0 || shares == 0) revert InvalidParams();
         asset.transferFrom(msg.sender, address(this), assets);
         liquidStakingToken.mint(receiver, shares);
 
@@ -516,7 +516,7 @@ contract InfinityPool is IPool, Ownable {
     function convertToShares(uint256 assets) public view returns (uint256) {
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? assets : assets * supply / totalAssets();
+        return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
     }
 
     /**
@@ -527,7 +527,7 @@ contract InfinityPool is IPool, Ownable {
     function convertToAssets(uint256 shares) public view returns (uint256) {
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? shares : shares * totalAssets() / supply;
+        return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
     }
 
     /**
@@ -547,7 +547,7 @@ contract InfinityPool is IPool, Ownable {
     function previewMint(uint256 shares) public view returns (uint256) {
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return supply == 0 ? shares : shares * totalAssets() / supply;
+        return supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
     }
 
     /**
@@ -767,9 +767,10 @@ contract InfinityPool is IPool, Ownable {
     }
 
     function _deposit(uint256 assets, address receiver) internal returns (uint256 lstAmount) {
-        if (assets == 0) revert InvalidParams();
         // get the number of iFIL tokens to mint
         lstAmount = previewDeposit(assets);
+        // Check for rounding error since we round down in previewDeposit.
+        if (assets == 0 || lstAmount == 0) revert InvalidParams();
         // pull in the assets
         asset.transferFrom(msg.sender, address(this), assets);
         // mint the iFIL tokens
