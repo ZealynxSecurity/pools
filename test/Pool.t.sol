@@ -1155,6 +1155,59 @@ contract PoolUpgradeCredentialTest is PoolTestState {
     }
 }
 
+contract PoolAccountingTest is BaseTest {
+    using Credentials for VerifiableCredential;
+    using AccountHelpers for Account;
+
+    IAgent agent;
+    uint64 miner;
+    IPool pool;
+    IPoolToken iFIL;
+
+    address investor = makeAddr("INVESTOR");
+    address minerOwner = makeAddr("MINER_OWNER");
+
+    function setUp() public {
+      pool = createPool();
+      iFIL = pool.liquidStakingToken();
+      (agent, miner) = configureAgent(minerOwner);
+    }
+
+    function testOverPayUnderTotalBorrowed() public {
+      vm.startPrank(systemAdmin);
+      GetRoute.poolRegistry(router).setTreasuryFeeRate(0);
+      vm.stopPrank();
+
+      (IAgent agent2,) = configureAgent(minerOwner);
+      uint256 borrowAmountAgent1 = 10e18;
+      uint256 payAmount = 20e18;
+      uint256 borrowAmountAgent2 = 100e18;
+
+      depositFundsIntoPool(pool, MAX_FIL, investor);
+
+      // totalBorrowed should be a large number for this assertion
+      agentBorrow(agent2, pool.id(), issueGenericBorrowCred(agent2.id(), borrowAmountAgent2));
+
+      Account memory account2 = AccountHelpers.getAccount(router, agent2.id(), pool.id());
+      assertEq(account2.principal, borrowAmountAgent2, "Account should have borrowed amount");
+      _invPrincipalEqualsTotalBorrowed(pool, "test over pay under total borrowed 1");
+
+      assertPegInTact(pool);
+
+      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), borrowAmountAgent1));
+
+      _invPrincipalEqualsTotalBorrowed(pool, "test over pay under total borrowed 1.5");
+
+      agentPay(agent, pool, issueGenericPayCred(agent.id(), payAmount));
+
+      Account memory postPayAccount1 = AccountHelpers.getAccount(router, agent.id(), pool.id());
+      Account memory postPayAccount2 = AccountHelpers.getAccount(router, agent2.id(), pool.id());
+      assertEq(postPayAccount1.principal, 0, "Account should have been paid off");
+      assertEq(postPayAccount2.principal, pool.totalBorrowed(), "Agent2 principal should equal pool's total borrowed");
+      _invPrincipalEqualsTotalBorrowed(pool, "test over pay under total borrowed 2");
+    }
+}
+
 contract PoolStakingTest is BaseTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;

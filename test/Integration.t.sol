@@ -85,7 +85,7 @@ contract IntegrationTest is BaseTest {
       uint256 investorIFILBalStart = iFIL.balanceOf(investor);
       uint256 poolWFILBalStart = wFIL.balanceOf(address(pool));
 
-      assertPegInTact();
+      assertPegInTact(pool);
 
       // check wFIL invariant
       assertEq(investorWFILBalStart + poolWFILBalStart, wFIL.totalSupply(), "Investor + pool should hold all WFIL at start");
@@ -133,12 +133,15 @@ contract IntegrationTest is BaseTest {
       uint256 investorIFILBalEnd = iFIL.balanceOf(investor);
       assertEq(pool.convertToAssets(investorIFILBalEnd), (stakeAmount * 2) + investorIFILBalStart, "Investor should have stakeAmount worth of shares");
       assertEq(pool.convertToShares(stakeAmount * 2), investorIFILBalEnd - investorIFILBalStart, "Investor should have stakeAmount worth of shares 2");
-      assertPegInTact();
+      assertPegInTact(pool);
+      // _invPrincipalEqualsTotalBorrowed(pool, "depositAndAssert");
       vm.stopPrank();
     }
 
     function borrowAndAssert(uint256 borrowAmount) internal {
       vm.startPrank(_agentOwner(agent));
+
+      // _invPrincipalEqualsTotalBorrowed(pool, "pre borrow assertion");
 
       uint256 investorIFILBalStart = iFIL.balanceOf(investor);
       uint256 agentWFILBalStart = wFIL.balanceOf(address(agent));
@@ -160,7 +163,8 @@ contract IntegrationTest is BaseTest {
       }
 
       // make sure the investor's iFIL balance and value is correct
-      assertPegInTact();
+      assertPegInTact(pool);
+      _invPrincipalEqualsTotalBorrowed(pool, "post borrow assertion");
       assertEq(investorIFILBalStart, iFIL.balanceOf(investor), "Investor should have same iFIL balance");
       assertEq(pool.convertToAssets(investorIFILBalStart), investorIFILBalStart, "Investor's iFIL should still be worth the same amount as before");
       // wfil invariant
@@ -198,7 +202,8 @@ contract IntegrationTest is BaseTest {
         assertEq(agentWFILBalStart - pushAmount, wFIL.balanceOf(address(agent)), "Agent should have same WFIL balance");
       }
 
-      assertPegInTact();
+      assertPegInTact(pool);
+      _invPrincipalEqualsTotalBorrowed(pool, "pushAndAssert");
 
       vm.stopPrank();
     }
@@ -224,7 +229,8 @@ contract IntegrationTest is BaseTest {
 
       assertEq(agentWFILBalStart, wFIL.balanceOf(address(agent)), "Agent should have same WFIL balance");
       assertEq(wFIL.balanceOf(minerAddr), 0, "Miner should not have any WFIL");
-      assertPegInTact();
+      assertPegInTact(pool);
+      _invPrincipalEqualsTotalBorrowed(pool, "pullAndAssert");
 
       vm.stopPrank();
     }
@@ -281,7 +287,8 @@ contract IntegrationTest is BaseTest {
         assertEq(poolFILBalStart, address(pool).balance, "Pool's FIL balance should not changed");
         assertEq(poolWFILBalStart, wFIL.balanceOf(address(pool)), "Pool should have same WFIL balance");
 
-        assertPegInTact();
+        assertPegInTact(pool);
+        _invPrincipalEqualsTotalBorrowed(pool, "assertInvalidPayment");
     }
 
     function assertValidPayment(
@@ -325,6 +332,7 @@ contract IntegrationTest is BaseTest {
         assertEq(agentLiquidAssets - payAmount, agent.liquidAssets(), "Agent's liquid assets should have been reduced by pay amount");
         assertEq(poolWFILBalStart + payAmount, wFIL.balanceOf(address(pool)), "Pool's WFIL bal should increase by payment");
         assertEq(poolFILBalStart, 0, "Pool's FIL bal should not change");
+        _invPrincipalEqualsTotalBorrowed(pool, "assertValidPayment");
     }
 
     function assertInterestOnlyPayment(
@@ -336,6 +344,7 @@ contract IntegrationTest is BaseTest {
         assertEq(payAmount.divWadDown(interestPerEpoch) + prePayAccount.epochsPaid, postPayAccount.epochsPaid, "Account epochsPaid should have been updated properly");
         assertLt(postPayAccount.epochsPaid, block.number, "Epochs paid should not be more than current for a partial interest payment");
         assertGt(postPayAccount.epochsPaid, prePayAccount.epochsPaid, "Epochs paid should have moved up");
+        _invPrincipalEqualsTotalBorrowed(pool, "assertInterestOnlyPayment");
 
         // here we should assume that the entire payAmount should be realized by the investor's IFIL minus treasury fees
         // so feeBasis and expIFILAppreciation are both applied on the full payAmount
@@ -359,16 +368,10 @@ contract IntegrationTest is BaseTest {
           assertEq(postPayAccount.epochsPaid, block.number, "Epochs paid should have been updated");
         }
 
+        _invPrincipalEqualsTotalBorrowed(pool, "assert principal and interest payment");
+
         // here we should assume that the entire interestOwed should be realized by the investor's IFIL minus treasury fees
         // so feeBasis and expIFILAppreciation are both applied on the full interestOwed
         return (interestOwed, interestOwed);
-    }
-
-    function assertPegInTact() internal {
-      uint256 FILtoIFIL = pool.convertToShares(WAD);
-      uint256 IFILtoFIL = pool.convertToAssets(WAD);
-      assertEq(FILtoIFIL, IFILtoFIL, "Peg should be 1:1");
-      assertEq(FILtoIFIL, WAD, "Peg should be 1:1");
-      assertEq(IFILtoFIL, WAD, "Peg should be 1:1");
     }
 }

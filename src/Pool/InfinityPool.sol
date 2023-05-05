@@ -399,27 +399,33 @@ contract InfinityPool is IPool, Ownable {
             // since the entire payment is interest, the entire payment is used to compute the fee (principal payments are fee-free)
             feeBasis = vc.value;
         } else {
-            // pay interest and principal
-            principalPaid = vc.value - interestOwed;
+            // the portion of the payment that will go towards principal
+            uint256 principalPayment = vc.value - interestOwed;
             // the fee basis only applies to the interest payment
             feeBasis = interestOwed;
-            // protect against underflow
-            totalBorrowed -= (principalPaid > totalBorrowed) ? totalBorrowed : principalPaid;
             // fully paid off
-            if (principalPaid >= account.principal) {
+            if (principalPayment >= account.principal) {
+                // the amount paid is account.principal
+                principalPaid = account.principal;
+                // write down totalBorrowed by the account.principal
+                totalBorrowed -= principalPaid;
                 // remove the account from the pool's list of accounts
                 poolRegistry.removePoolFromList(vc.subject, id);
                 // return the amount of funds overpaid
-                refund = principalPaid - account.principal;
+                refund = principalPayment - account.principal;
                 // reset the account
                 account.reset();
             } else {
+                // partial principal payment, the principalPayment is the amount paid
+                principalPaid = principalPayment;
+                // write down totalBorrowed by the principalPayment
+                totalBorrowed -= principalPayment;
                 // interest and partial principal payment
-                account.principal -= principalPaid;
+                account.principal -= principalPayment;
                 // move the `epochsPaid` cursor to mark the account as "current"
                 account.epochsPaid = block.number;
             }
-
+          
         }
         // update the account in storage
         account.save(router, vc.subject, id);

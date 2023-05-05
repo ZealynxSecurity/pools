@@ -572,6 +572,14 @@ contract BaseTest is Test {
     }
   }
 
+  function assertPegInTact(IPool pool) internal {
+    uint256 FILtoIFIL = pool.convertToShares(WAD);
+    uint256 IFILtoFIL = pool.convertToAssets(WAD);
+    assertEq(FILtoIFIL, IFILtoFIL, "Peg should be 1:1");
+    assertEq(FILtoIFIL, WAD, "Peg should be 1:1");
+    assertEq(IFILtoFIL, WAD, "Peg should be 1:1");
+  }
+
   function calculateInterestOwed(
     IPool pool,
     VerifiableCredential memory vc,
@@ -686,6 +694,18 @@ contract BaseTest is Test {
 
   function _getAdjustedRate(uint256 gcred) internal view returns (uint256) {
     return DEFAULT_BASE_RATE.mulWadUp(rateArray[gcred - 40]);
+  }
+
+  function _invPrincipalEqualsTotalBorrowed(IPool pool, string memory label) internal {
+    uint256 agentCount = GetRoute.agentFactory(router).agentCount();
+
+    uint256 totalBorrowedFromAccounts = 0;
+
+    for (uint256 i = 1; i <= agentCount; i++) {
+      totalBorrowedFromAccounts += pool.getAgentBorrowed(i);
+    }
+
+    assertEq(pool.totalBorrowed(), totalBorrowedFromAccounts, label);
   }
 
   uint256[61] rateArray = [
