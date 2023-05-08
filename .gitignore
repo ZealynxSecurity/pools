@@ -2,6 +2,7 @@
 cache/
 out/
 out-fevm/
+solc-output/
 
 # Ignores development broadcast logs
 !/broadcast

@@ -110,7 +110,7 @@ library MinerHelper {
     uint64 target,
     uint64 workerAddr,
     uint64[] calldata controllerAddrs
-  ) external {
+  ) internal {
     CommonTypes.FilActorId minerId = _getMinerId(target);
     // resolve the controllers
     CommonTypes.FilAddress[] memory controllers;
