@@ -46,6 +46,8 @@ interface IAgent {
     uint64[] calldata controlAddresses
   ) external;
 
+  function confirmChangeMinerWorker(uint64 miner) external;
+
   function decommissionAgent(address newAgent) external;
 
   function setInDefault() external;

@@ -49,12 +49,28 @@ library MinerHelper {
     return IMockMiner(MockIDAddrStore(ID_STORE_ADDR).ids(target)).getBeneficiary();
   }
 
+  /**
+   * @notice Changes the worker address for a miner
+   * @param target The miner actor id you want to interact with
+   * @param workerAddr The new worker address
+   * @param controllerAddrs The new controllers for the worker
+   */
   function changeWorkerAddress(
     uint64 target,
-    uint64 worker,
-    uint64[] memory controlAddrs
+    uint64 workerAddr,
+    uint64[] memory controllerAddrs
   ) internal {
   }
+
+  /**
+   * @notice Confirms changing the worker address for a miner
+   * @param target The miner actor id you want to interact with
+   */
+  function confirmChangeWorkerAddress(
+    uint64 target
+  ) internal {
+  }
+
 
   /// @param target The miner actor id you want to interact with
   /// @param amount the amount you want to withdraw

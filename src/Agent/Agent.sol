@@ -291,6 +291,22 @@ contract Agent is IAgent, Operatable {
   }
 
   /**
+   * @notice Confirms changing the worker address associated with a miner
+   * @param miner The address of the miner whose worker address will be changed
+   * @dev miner must be owned by this Agent in order for this call to execute
+   */
+  function confirmChangeMinerWorker(
+    uint64 miner
+  ) external checkVersion {
+    if (
+      msg.sender != owner &&
+      msg.sender != administration
+    ) revert Unauthorized();
+
+    miner.confirmChangeWorkerAddress();
+  }
+
+  /**
    * @notice Sets the Agent in default to prepare for a liquidation
    * @dev This process is irreversible
    */

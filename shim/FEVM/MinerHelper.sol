@@ -25,8 +25,7 @@ library MinerHelper {
    * @return isOwner - Returns true if the contract is the owner of the miner
    */
   function isOwner(uint64 target, address addr) internal returns (bool) {
-    CommonTypes.FilActorId minerId = _getMinerId(target);
-    return _getOwner(minerId) == PrecompilesAPI.resolveEthAddress(addr);
+    return _getOwner(_getMinerId(target)) == PrecompilesAPI.resolveEthAddress(addr);
   }
 
   /**
@@ -35,9 +34,8 @@ library MinerHelper {
    * @return balance - The FIL balance of the miner actor
    */
   function balance(uint64 target) internal returns (uint256) {
-    CommonTypes.FilActorId minerId = _getMinerId(target);
     // here we do not check the success boolean because the available balance cannot overflow max uint256
-    return _toUint256(MinerAPI.getAvailableBalance(minerId));
+    return _toUint256(MinerAPI.getAvailableBalance(_getMinerId(target)));
   }
 
   /**
@@ -46,8 +44,7 @@ library MinerHelper {
    * @param amount The amount of attofil to send
    */
   function transfer(uint64 target, uint256 amount) internal {
-    CommonTypes.FilActorId minerId = _getMinerId(target);
-    SendAPI.send(minerId, amount);
+    SendAPI.send(_getMinerId(target), amount);
   }
 
   /**
@@ -92,9 +89,8 @@ library MinerHelper {
    * @notice If invoked by the current owner, proposes a new owner address for confirmation. If the proposed address is the current owner address, revokes any existing proposal that proposed address.
    */
   function changeOwnerAddress(uint64 target, address addr) internal {
-    CommonTypes.FilActorId minerId = _getMinerId(target);
     MinerAPI.changeOwnerAddress(
-      minerId,
+      _getMinerId(target),
       FilAddresses.fromActorID(PrecompilesAPI.resolveEthAddress(addr))
     );
   }
@@ -111,7 +107,6 @@ library MinerHelper {
     uint64 workerAddr,
     uint64[] calldata controllerAddrs
   ) internal {
-    CommonTypes.FilActorId minerId = _getMinerId(target);
     // resolve the controllers
     CommonTypes.FilAddress[] memory controllers;
     for (uint256 i = 0; i < controllerAddrs.length; i++) {
@@ -119,12 +114,22 @@ library MinerHelper {
     }
 
     MinerAPI.changeWorkerAddress(
-      minerId,
+      _getMinerId(target),
       MinerTypes.ChangeWorkerAddressParams(
         FilAddresses.fromActorID(workerAddr),
         controllers
       )
     );
+  }
+
+  /**
+   * @notice Confirms changing the worker address for a miner
+   * @param target The miner actor id you want to interact with
+   */
+  function confirmChangeWorkerAddress(
+    uint64 target
+  ) internal {
+    MinerAPI.confirmChangeWorkerAddress(_getMinerId(target));
   }
 
   /**
@@ -136,9 +141,8 @@ library MinerHelper {
   function withdrawBalance(uint64 target, uint256 amount)
     internal
   {
-    CommonTypes.FilActorId minerId = _getMinerId(target);
     MinerAPI.withdrawBalance(
-      minerId,
+      _getMinerId(target),
       BigInts.fromUint256(amount)
     );
   }

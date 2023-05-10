@@ -87,7 +87,7 @@ fevm:
 		--overwrite \
 		-o $(OUTPUT_FEVM) \
 		--bin --abi --hashes \
-		--optimize --optimize-runs 10000 --no-optimize-yul \
+		--optimize --optimize-runs 5000 --no-optimize-yul \
 		"@ensdomains/buffer/=lib/buffer/" \
 		"@openzeppelin/=lib/openzeppelin-contracts/" \
 		"@zondax/solidity-bignumber/=lib/filecoin-solidity/lib/solidity-bignumber/" \
