@@ -3,8 +3,10 @@ OUTPUT_FEVM=solc-output/fevm
 OUTPUT_MOCK=solc-output/mock
 
 SRC=\
+  src/Agent/AgentFactory.sol \
 	src/Router/Router.sol \
   src/Credentials/CredParser.sol \
+  src/Pool/InfinityPool.sol \
   src/Pool/RateModule.sol \
   src/Pool/PoolRegistry.sol \
   src/Types/Interfaces/IERC4626.sol \
@@ -17,9 +19,7 @@ SRC_MOCK=\
 
 SHIMMED_SRC=\
 	src/Ping.sol \
-  src/Pool/InfinityPool.sol \
 	src/Agent/Agent.sol \
-  src/Agent/AgentFactory.sol \
   src/Agent/AgentDeployer.sol
 
 

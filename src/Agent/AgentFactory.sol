@@ -2,14 +2,12 @@
 pragma solidity 0.8.17;
 
 import {AuthController} from "src/Auth/AuthController.sol";
-import {Agent} from "src/Agent/Agent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IAgentDeployer} from "src/Types/Interfaces/IAgentDeployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
-import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import {
   ROUTE_VC_ISSUER,
   ROUTE_MINER_REGISTRY

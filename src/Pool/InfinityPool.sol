@@ -5,10 +5,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 
-import {AgentFactory} from "src/Agent/AgentFactory.sol";
-import {Agent} from "src/Agent/Agent.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
-import {AuthController} from "src/Auth/AuthController.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 
@@ -25,10 +22,8 @@ import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPreStake} from "src/Types/Interfaces/IPreStake.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {AccountHelpers} from "src/Pool/Account.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {ROUTE_CRED_PARSER} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
 /**
