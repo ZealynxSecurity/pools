@@ -34,7 +34,7 @@ interface IAgent {
   ) external;
 
   function removeMiner(
-    address newMinerOwner,
+    uint64 newMinerOwner,
     SignedCredential calldata sc
   ) external;
 

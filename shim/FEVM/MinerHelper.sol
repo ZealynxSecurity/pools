@@ -89,12 +89,21 @@ library MinerHelper {
    * @notice If invoked by the current owner, proposes a new owner address for confirmation. If the proposed address is the current owner address, revokes any existing proposal that proposed address.
    */
   function changeOwnerAddress(uint64 target, address addr) internal {
-    MinerAPI.changeOwnerAddress(
-      _getMinerId(target),
-      FilAddresses.fromActorID(PrecompilesAPI.resolveEthAddress(addr))
-    );
+    changeOwnerID(target, PrecompilesAPI.resolveEthAddress(addr));
   }
 
+  /**
+   * @param target The miner actor id you want to interact with
+   * @param newOwner New owner ID address
+   * @notice Proposes or confirms a change of owner address.
+   * @notice If invoked by the current owner, proposes a new owner address for confirmation. If the proposed address is the current owner address, revokes any existing proposal that proposed address.
+   */
+  function changeOwnerID(uint64 target, uint64 newOwner) internal {
+    MinerAPI.changeOwnerAddress(
+      _getMinerId(target),
+      FilAddresses.fromActorID(newOwner)
+    );
+  }
 
   /**
    * @notice Changes the worker address for a miner

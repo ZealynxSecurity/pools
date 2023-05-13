@@ -494,7 +494,7 @@ contract AgentRmEquityTest is BaseTest {
     // no matter what statistics come in the credential, if no loans, can remove miner
     function testRemoveMinerWithNoLoans() public {
       (
-        address newMinerOwner,
+        uint64 newMinerOwner,
         SignedCredential memory removeMinerCred
       ) = customRemoveMinerCred(
         // balance doesn't matter in this test
@@ -526,7 +526,7 @@ contract AgentRmEquityTest is BaseTest {
       agentValue = bound(agentValue, principal, MAX_FIL);
 
       (
-        address newMinerOwner,
+        uint64 newMinerOwner,
         SignedCredential memory removeMinerCred
       ) = customRemoveMinerCred(
         // balance doesn't matter in this test
@@ -566,10 +566,12 @@ contract AgentRmEquityTest is BaseTest {
       uint256 collateralValue,
       uint256 edr
     ) internal returns (
-      address newMinerOwner,
+      uint64 newMinerOwnerId,
       SignedCredential memory rmMinerCred
     ) {
-      newMinerOwner = makeAddr("NEW_MINER_OWNER");
+      address newMinerOwner = makeAddr("NEW_MINER_OWNER");
+
+      newMinerOwnerId = idStore.addAddr(newMinerOwner);
 
       AgentData memory agentData = AgentData(
         agentValue,
@@ -628,7 +630,7 @@ contract AgentRmEquityTest is BaseTest {
 
     function removeMinerAndAssertSuccess(
       uint64 removedMiner,
-      address newMinerOwner,
+      uint64 newMinerOwner,
       SignedCredential memory rmMinerCred
     ) internal {
       vm.startPrank(minerOwner);
@@ -637,12 +639,12 @@ contract AgentRmEquityTest is BaseTest {
 
       assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 0, "Agent should have no miners registered");
       assertFalse(GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner), "Miner should not be registered after removing");
-      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), newMinerOwner, "Miner should have new propsed owner");
+      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), idStore.ids(newMinerOwner), "Miner should have new proposed owner");
     }
 
     function removeMinerAndAssertRevert(
       uint64 removedMiner,
-      address newMinerOwner,
+      uint64 newMinerOwner,
       SignedCredential memory rmMinerCred,
       bytes4 errorSelectorValue
     ) internal {
@@ -653,7 +655,7 @@ contract AgentRmEquityTest is BaseTest {
 
       assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 1, "Agent should have 1 miner registered");
       assertTrue(GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner), "Miner should be registered");
-      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), address(0), "Miner should not have new propsed owner");
+      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), address(0), "Miner should not have new proposed owner");
     }
 }
 
@@ -1598,7 +1600,7 @@ contract AgentUpgradeTest is BaseTest {
 
         SignedCredential memory removeMinerCred = issueRemoveMinerCred(agentId, 0, emptyAgentData());
         vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
-        agent.removeMiner(makeAddr("newowner"), removeMinerCred);
+        agent.removeMiner(1234, removeMinerCred);
 
         SignedCredential memory payCred = issueGenericPayCred(agentId, WAD);
         vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));

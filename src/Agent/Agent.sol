@@ -165,13 +165,13 @@ contract Agent is IAgent, Operatable {
 
   /**
    * @notice Removes a miner from the Agent. The Agent must have sufficient equity in order to execute this action.
-   * @param newMinerOwner The address that will become the new owner of the miner
+   * @param newMinerOwner The ID address that will become the new owner of the miner
    * @param sc The signed credential of the agent attempting to remove the miner. The `target` will be the uint64 miner ID to remove and the `value` will be the value of assets that would be removed along with this particular miner.
    * @dev Under the hood this function calls `changeOwnerAddress` on the underlying Miner Actor to propose an ownership claim. The new owner must then call `changeOwnerAddress` on the Miner Actor to claim ownership.
    * @dev The Agent must maintain a DTE < 1 in order to remove a miner.
    */
   function removeMiner(
-    address newMinerOwner,
+    uint64 newMinerOwner,
     SignedCredential calldata sc
   )
     external
@@ -187,7 +187,7 @@ contract Agent is IAgent, Operatable {
     // remove the miner from the central registry
     minerRegistry.removeMiner(id, sc.vc.target);
     // change the owner address of the miner to the new miner owner
-    sc.vc.target.changeOwnerAddress(newMinerOwner);
+    sc.vc.target.changeOwnerID(newMinerOwner);
   }
 
   /**

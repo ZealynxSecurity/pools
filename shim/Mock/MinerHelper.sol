@@ -43,6 +43,13 @@ library MinerHelper {
   }
 
   /// @param target The miner actor id you want to interact with
+  /// @notice Proposes or confirms a change of owner address.
+  /// @notice If invoked by the current owner, proposes a new owner address for confirmation. If the proposed address is the current owner address, revokes any existing proposal that proposed address.
+  function changeOwnerID(uint64 target, uint64 newMinerOwnerID) internal {
+    IMockMiner(MockIDAddrStore(ID_STORE_ADDR).ids(target)).changeOwnerAddress(MockIDAddrStore(ID_STORE_ADDR).ids(newMinerOwnerID));
+  }
+
+  /// @param target The miner actor id you want to interact with
   /// @notice This method is for use by other actors (such as those acting as beneficiaries), and to abstract the state representation for clients.
   /// @notice Retrieves the currently active and proposed beneficiary information.
   function getBeneficiary(uint64 target) internal view returns (GetBeneficiaryReturn memory) {
