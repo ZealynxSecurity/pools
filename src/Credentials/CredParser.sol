@@ -27,7 +27,7 @@ contract CredParser {
   function getLiveSectors(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(_agentData, (AgentData)).liveSectors;
   }
-  function getGreenScore(bytes memory _agentData) external pure returns (uint32) {
+  function getGreenScore(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(_agentData, (AgentData)).greenScore;
   }
 }

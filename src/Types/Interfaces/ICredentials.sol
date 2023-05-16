@@ -11,5 +11,5 @@ interface ICredentials {
   function getLockedFunds(bytes memory _agentData) external pure returns (uint256);
   function getFaultySectors(bytes memory _agentData) external pure returns (uint256);
   function getLiveSectors(bytes memory _agentData) external pure returns (uint256);
-  function getGreenScore(bytes memory _agentData) external pure returns (uint32);
+  function getGreenScore(bytes memory _agentData) external pure returns (uint256);
 }

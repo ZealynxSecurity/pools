@@ -49,7 +49,7 @@ struct AgentData {
   /**
    * @dev An energy efficiency score computed by the Filecoin Green API
    */
-  uint32 greenScore;
+  uint256 greenScore;
 }
 
 struct VerifiableCredential {
@@ -159,7 +159,7 @@ library Credentials {
   function getGreenScore(
     VerifiableCredential memory vc,
     address credParser
-  ) internal pure returns (uint32) {
+  ) internal pure returns (uint256) {
     return ICredentials(credParser).getGreenScore(vc.claim);
   }
 
