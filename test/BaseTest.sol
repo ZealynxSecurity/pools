@@ -491,6 +491,9 @@ contract BaseTest is Test {
     uint256 poolID,
     SignedCredential memory sc
   ) internal {
+    IPool pool = GetRoute.pool(GetRoute.poolRegistry(router), poolID);
+    uint256 preTotalBorrowed = pool.totalBorrowed();
+    testInvariants(pool, "agentBorrow Start");
     vm.startPrank(_agentOwner(agent));
     // Establsh the state before the borrow
     StateSnapshot memory preBorrowState = _snapshot(address(agent), poolID);
@@ -502,18 +505,23 @@ contract BaseTest is Test {
     // Check the state after the borrow
     uint256 currentAgentBal = wFIL.balanceOf(address(agent));
     uint256 currentPoolBal = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
-    assertEq(currentAgentBal, preBorrowState.agentBalanceWFIL + sc.vc.value);
-    assertEq(currentPoolBal, preBorrowState.poolBalanceWFIL - sc.vc.value);
+    assertEq(currentAgentBal, preBorrowState.agentBalanceWFIL + sc.vc.value, "Agent's balance should increase");
+    assertEq(currentPoolBal, preBorrowState.poolBalanceWFIL - sc.vc.value, "Pool's balance should decrease");
 
     account = AccountHelpers.getAccount(router, address(agent), poolID);
 
     // first time borrowing, check the startEpoch
     if (preBorrowState.agentBorrowed == 0) {
-      assertEq(account.startEpoch, borrowBlock);
-      assertEq(account.epochsPaid, borrowBlock);
+      assertEq(account.startEpoch, borrowBlock, "Account startEpoch should be correct");
+      assertEq(account.epochsPaid, borrowBlock, "Account epochsPaid should be correct");
     }
 
-    assertEq(account.principal, preBorrowState.agentBorrowed + sc.vc.value);
+    if (!account.defaulted) {
+      assertEq(account.principal, preBorrowState.agentBorrowed + sc.vc.value, "Account principal should be correct");
+      assertEq(pool.getAgentBorrowed(agent.id()) - preBorrowState.agentBorrowed, currentAgentBal - preBorrowState.agentBalanceWFIL, "Pool agentBorrowed should increase by the right amount");
+      assertEq(pool.totalBorrowed(), preTotalBorrowed + currentAgentBal - preBorrowState.agentBalanceWFIL, "Pool totalBorrowed should be correct");
+    }
+    testInvariants(pool, "agentBorrow End");
   }
 
   function agentPay(
@@ -527,6 +535,7 @@ contract BaseTest is Test {
     uint256 refund,
     StateSnapshot memory prePayState
   ) {
+    testInvariants(pool, "agentPay Start");
     vm.startPrank(address(agent));
     vm.deal(address(agent), sc.vc.value);
     wFIL.deposit{value: sc.vc.value}();
@@ -570,6 +579,8 @@ contract BaseTest is Test {
       assertGt(account.principal, 0, "Should have some principal left");
       assertGt(account.epochsPaid, prePayEpochsPaid, "Should have paid more epochs");
     }
+
+    testInvariants(pool, "agentPay End");
   }
 
   function assertPegInTact(IPool pool) internal {
@@ -640,6 +651,9 @@ contract BaseTest is Test {
     police.setAgentDefaulted(address(agent));
     vm.stopPrank();
 
+    IPool pool = GetRoute.pool(GetRoute.poolRegistry(router), poolID);
+    testInvariants(pool, "setAgentDefaulted");
+
     assertTrue(agent.defaulted(), "Agent should be put into default");
   }
 
@@ -697,15 +711,34 @@ contract BaseTest is Test {
     return DEFAULT_BASE_RATE.mulWadUp(rateArray[gcred - 40]);
   }
 
-  function _invPrincipalEqualsTotalBorrowed(IPool pool, string memory label) internal {
+  function testInvariants(IPool pool, string memory label) internal {
+    _invIFILWorthAssetsOfPool(pool, label);
+  }
+
+  function _invIFILWorthAssetsOfPool(IPool pool, string memory label) internal {
+    // this invariant knows that iFIL should represent the total value of the pool, which is composed of:
+    // 1. all funds given to miners + agents
+    // 2. balance of wfil held by the pool
+    // 3. minus any fees held temporarily by the pool
     uint256 agentCount = GetRoute.agentFactory(router).agentCount();
 
     uint256 totalBorrowedFromAccounts = 0;
 
     for (uint256 i = 1; i <= agentCount; i++) {
-      totalBorrowedFromAccounts += pool.getAgentBorrowed(i);
+      Account memory account = AccountHelpers.getAccount(router, i, pool.id());
+      // the invariant breaks when an account is in default, we no longer expect to get that amount back
+      if (!account.defaulted) {
+        totalBorrowedFromAccounts += pool.getAgentBorrowed(i);
+      }
     }
 
+    uint256 poolAssets = wFIL.balanceOf(address(pool)) - pool.feesCollected();
+
+    // if we take the total supply of iFIL and convert it to assets, we should get the total pools assets + lent out funds
+    uint256 totalIFILSupply = pool.liquidStakingToken().totalSupply();
+
+    assertEq(poolAssets + totalBorrowedFromAccounts, pool.totalAssets(), label);
+    assertEq(pool.convertToAssets(totalIFILSupply), poolAssets + totalBorrowedFromAccounts, label);
     assertEq(pool.totalBorrowed(), totalBorrowedFromAccounts, label);
   }
 

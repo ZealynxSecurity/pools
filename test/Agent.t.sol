@@ -342,15 +342,8 @@ contract AgentRmEquityTest is BaseTest {
     function testWithdrawIntoUnapprovedLTV(uint256 principal, uint256 collateralValue) public {
       collateralValue = bound(collateralValue, WAD, MAX_FIL);
       principal = bound(principal, collateralValue + DUST, MAX_FIL);
-
-      // create an account to act as if a pool was created and the agent borrowed
-      Account memory account = createAccount(principal);
-
-      // set the account on the router and on the agent police
-      vm.startPrank(address(pool));
-      IRouter(router).setAccount(agent.id(), pool.id(), account);
-      GetRoute.poolRegistry(router).addPoolToList(agent.id(), pool.id());
-      vm.stopPrank();
+      depositFundsIntoPool(pool, principal, investor1);
+      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), principal));
 
       // create a withdraw credential
       (
@@ -378,6 +371,8 @@ contract AgentRmEquityTest is BaseTest {
     function testWithdrawIntoUnapprovedDTI(uint256 principal, uint256 badEDR) public {
       // in this test, we want EDR to be > maxDTI, so we set the principal to be
       principal = bound(principal, WAD, MAX_FIL);
+      depositFundsIntoPool(pool, principal, investor1);
+      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), principal));
 
       IRateModule rateModule = IRateModule(pool.rateModule());
 
@@ -409,15 +404,6 @@ contract AgentRmEquityTest is BaseTest {
         // EDR does not matter for this test
         badEDR
       );
-
-      // create an account to act as if a pool was created and the agent borrowed
-      Account memory account = createAccount(principal);
-
-      // set the account on the router and on the agent police
-      vm.startPrank(address(pool));
-      IRouter(router).setAccount(agent.id(), pool.id(), account);
-      GetRoute.poolRegistry(router).addPoolToList(agent.id(), pool.id());
-      vm.stopPrank();
 
       withdrawAndAssertRevert(
         receiver,
@@ -641,6 +627,8 @@ contract AgentRmEquityTest is BaseTest {
 
       uint256 buffer = GetRoute.agentPolice(router).maxEpochsOwedTolerance();
 
+      testInvariants(pool, "withdrawAndAssertSuccess - pre");
+
       Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
       // action should not be allowed
       if (account.epochsPaid > 0 && account.epochsPaid + buffer < block.number) {
@@ -659,6 +647,8 @@ contract AgentRmEquityTest is BaseTest {
         assertEq(agent.liquidAssets(), preAgentLiquidFunds - withdrawAmount);
         assertEq(receiver.balance, withdrawAmount);
       }
+
+      testInvariants(pool, "withdrawAndAssertSuccess - post");
     }
 
     function withdrawAndAssertRevert(
@@ -678,6 +668,7 @@ contract AgentRmEquityTest is BaseTest {
         preAgentLiquidFunds,
         "No funds should have been withdrawn"
       );
+      testInvariants(pool, "withdrawAndAssertRevert");
     }
 
     function removeMinerAndAssertSuccess(
@@ -691,6 +682,7 @@ contract AgentRmEquityTest is BaseTest {
 
       assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 0, "Agent should have no miners registered");
       assertFalse(GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner), "Miner should not be registered after removing");
+      testInvariants(pool, "removeMinerAndAssertSuccess");
       assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), idStore.ids(newMinerOwner), "Miner should have new proposed owner");
     }
 
@@ -707,7 +699,8 @@ contract AgentRmEquityTest is BaseTest {
 
       assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 1, "Agent should have 1 miner registered");
       assertTrue(GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner), "Miner should be registered");
-      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), address(0), "Miner should not have new proposed owner");
+      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), address(0), "Miner should not have new propsed owner");
+      testInvariants(pool, "removeMinerAndAssertRevert");
     }
 }
 
@@ -763,6 +756,7 @@ contract AgentBorrowingTest is BaseTest {
       assertEq(account.principal, borrowAmount * 2);
       assertEq(account.startEpoch, borrowBlock);
       assertEq(account.epochsPaid, borrowBlock);
+      testInvariants(pool, "testBorrowTwice");
     }
 
     function testBorrowMoreThanLiquid(uint256 borrowAmount) public {
@@ -778,6 +772,7 @@ contract AgentBorrowingTest is BaseTest {
       }
 
       vm.stopPrank();
+      testInvariants(pool, "testBorrowMoreThanLiquid");
     }
 
     function testBorrowNothing() public {
@@ -791,6 +786,7 @@ contract AgentBorrowingTest is BaseTest {
       }
 
       vm.stopPrank();
+      testInvariants(pool, "testBorrowNothing");
     }
 
     function testBorrowNonOwnerOperator() public {
@@ -804,6 +800,7 @@ contract AgentBorrowingTest is BaseTest {
       }
 
       vm.stopPrank();
+      testInvariants(pool, "testBorrowNonOwnerOperator");
     }
 
     function testBorrowWrongCred() public {
@@ -817,6 +814,7 @@ contract AgentBorrowingTest is BaseTest {
       }
 
       vm.stopPrank();
+      testInvariants(pool, "testBorrowWrongCred");
     }
 }
 
@@ -869,7 +867,7 @@ contract AgentPayTest is BaseTest {
       vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
       agent.pay(poolId, payCred);
       vm.stopPrank();
-
+      testInvariants(pool, "testNonAgentCannotPay");
     }
 
     function testCannotPayOnNonExistentAccount() public {
@@ -892,7 +890,7 @@ contract AgentPayTest is BaseTest {
       vm.expectRevert(abi.encodeWithSelector(AccountDNE.selector));
       agent.pay(poolId, payCred);
       vm.stopPrank();
-
+      testInvariants(pool, "testCannotPayOnNonExistentAccount");
     }
 
     function testPayInterestOnly(uint256 borrowAmount, uint256 payAmount, uint256 rollFwdAmt) public {
@@ -918,6 +916,7 @@ contract AgentPayTest is BaseTest {
         AccountHelpers.getAccount(router, agent.id(), pool.id()).principal,
         "principal should not change"
       );
+      testInvariants(pool, "testPayInterestOnly");
     }
 
     function testPayInterestAndPartialPrincipal(uint256 borrowAmount, uint256 payAmount, uint256 rollFwdAmt) public {
@@ -949,6 +948,7 @@ contract AgentPayTest is BaseTest {
         "account should have decreased principal"
       );
       assertEq(postPaymentAccount.epochsPaid, block.number, "epochs paid should be current");
+      testInvariants(pool, "testPayInterestAndPartialPrincipal");
     }
 
     function testPayFullExit(uint256 payAmount) public {}
@@ -1014,6 +1014,7 @@ contract AgentPayTest is BaseTest {
         assertEq(_borrowedPoolsCount(newAgent.id()), prePayState.agentPoolBorrowCount, "agent should not have removed pool from borrowed list");
 
       }
+      testInvariants(pool, "assertPaySuccess");
     }
 }
 
@@ -1059,6 +1060,9 @@ contract AgentPoolsTest is BaseTest {
     }
     assertEq(_borrowedPoolsCount(agent.id()), 0, "agent should have correct pool count");
 
+    for (uint256 i = 0; i < poolCount; i++) {
+      testInvariants(GetRoute.pool(GetRoute.poolRegistry(router), i), "testCreateRemoveMultiplePools");
+    }
   }
 
 
@@ -1122,6 +1126,7 @@ contract AgentPoliceTest is BaseTest {
         borrowAmount,
         pool.id()
       );
+      testInvariants(pool, "testPutAgentOnAdministration");
     }
 
     function testPutAgentOnAdministrationNoLoans() public {
@@ -1131,6 +1136,7 @@ contract AgentPoliceTest is BaseTest {
       } catch (bytes memory e) {
         assertEq(errorSelector(e), Unauthorized.selector);
       }
+      testInvariants(pool, "testPutAgentOnAdministrationNoLoans");
     }
 
     function testTakeActionFaultySectors(uint256 consecutiveEpochsOfFaults) public {
@@ -1184,6 +1190,8 @@ contract AgentPoliceTest is BaseTest {
         police.setAgentDefaultDueToFaultySectorDays(address(agent));
         assertEq(agent.defaulted(), true, "Agent should be defaulted");
       }
+
+      testInvariants(pool, "testTakeActionFaultySectors");
     }
 
     function testRmAgentFromAdministrationAgentRecovered(uint256 consecutiveEpochsOfFaults, uint256 faultySectors, uint256 liveSectors) public {
@@ -1225,6 +1233,8 @@ contract AgentPoliceTest is BaseTest {
           assertEq(errorSelector(e), AgentPolice.AgentStateRejected.selector);
         }
       }
+
+      testInvariants(pool, "testRmAgentFromAdministrationAgentRecovered");
     }
 
     function testInvalidPutAgentOnAdministration() public {
@@ -1272,6 +1282,7 @@ contract AgentPoliceTest is BaseTest {
       vm.stopPrank();
 
       assertEq(agent.administration(), address(0), "Agent Should not be on administration after paying up");
+      testInvariants(pool, "testRmAgentFromAdministration");
     }
 
     function testSetAgentDefaulted(uint256 rollFwdPeriod, uint256 borrowAmount) public {
@@ -1356,6 +1367,7 @@ contract AgentPoliceTest is BaseTest {
       vm.stopPrank();
       // get the miner actor to ensure that the proposed owner on the miner is the policeOwner
       assertEq(IMockMiner(idStore.ids(miner)).proposed(), policeOwner, "Mock miner should have policeOwner as its proposed owner");
+      testInvariants(pool, "testPrepareMinerForLiquidation");
     }
 
     function testDistributeLiquidatedFundsNonAgentPolice() public {
@@ -1372,6 +1384,7 @@ contract AgentPoliceTest is BaseTest {
       vm.startPrank(prankster);
       vm.expectRevert(Unauthorized.selector);
       police.distributeLiquidatedFunds(address(agent), 0);
+      testInvariants(pool, "testDistributeLiquidatedFundsNonAgentPolice");
     }
 
     function testDistributeLiquidatedFunds() public {
@@ -1402,6 +1415,7 @@ contract AgentPoliceTest is BaseTest {
       assertEq(borrowedBefore - borrowedAfter, account.principal, "Pool should have written down assets correctly");
       assertEq(wFIL.balanceOf(address(police)), 0, "Agent police should not have funds");
       assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
+      testInvariants(pool, "testDistributeLiquidatedFunds");
     }
 
     function testDistributeLiquidatedFundsEvenSplit(
@@ -1431,6 +1445,7 @@ contract AgentPoliceTest is BaseTest {
         // borrow from the pool
         SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, borrowAmount / numPools);
         agentBorrow(agent, _pool.id(), borrowCred);
+        testInvariants(_pool, "testDistributeLiquidatedFundsEvenSplit");
       }
 
       Account memory postBorrowAccount = AccountHelpers.getAccount(router, agent.id(), _pool.id());
@@ -1470,6 +1485,9 @@ contract AgentPoliceTest is BaseTest {
       police.distributeLiquidatedFunds(address(agent), recoveredFunds);
       vm.stopPrank();
       assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
+      for (uint8 i = 0; i < numPools; i++) {
+        testInvariants(GetRoute.pool(GetRoute.poolRegistry(router), i), "testDistributeLiquidatedFundsEvenSplit2");
+      }
     }
 
 
@@ -1511,6 +1529,7 @@ contract AgentPoliceTest is BaseTest {
         SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), _borrowAmount);
         agentBorrow(agent, poolArray[i].id(), borrowCred);
         balanceArray[i] = wFIL.balanceOf(address(poolArray[i]));
+        testInvariants(poolArray[i], "testDistributeLiquidatedFundsThreePools");
       }
       // roll forward to the default window
       vm.roll(block.number + rollFwdPeriod);
@@ -1531,6 +1550,7 @@ contract AgentPoliceTest is BaseTest {
         assertApproxEqAbs(balanceAfter - balanceArray[i], recoveredFunds * percentArray[i] / WAD, 5,  "Pool should have received the correct amount of funds");
         Account memory account = AccountHelpers.getAccount(router, agent.id(), poolArray[i].id());
         assertTrue(account.defaulted, "Agent should be defaulted");
+        testInvariants(poolArray[i], "testDistributeLiquidatedFundsThreePools2");
       }
 
       assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
@@ -1575,6 +1595,7 @@ contract AgentPoliceTest is BaseTest {
       assertEq(balanceAfter - balanceBefore, balanceChange,  "Pool should have received the correct amount of funds");
       assertEq(wFIL.balanceOf(IAuth(address(agent)).owner()), recoveredFunds - balanceChange,  "Police owner should only have paid the amount owed");
       assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
+      testInvariants(pool, "testDistributeLiquidatedFundsFullRecovery");
     }
 
     function getPenaltyOwed(uint256 amount, uint256 rollFwdPeriod) public view returns (uint256) {
