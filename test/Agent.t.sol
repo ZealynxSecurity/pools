@@ -9,6 +9,7 @@ import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
+import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {WFIL} from "shim/WFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -280,7 +281,7 @@ contract AgentRmEquityTest is BaseTest {
         0
       );
 
-      withdrawAndAssertSuccess(
+      withdrawAndAssert(
         receiver,
         withdrawAmount,
         withdrawCred
@@ -299,6 +300,7 @@ contract AgentRmEquityTest is BaseTest {
       principal = bound(principal, WAD, MAX_FIL);
       // agentValue includes principal, so it should never be less than principal
       agentValue = bound(agentValue, principal, MAX_FIL);
+      uint256 collateralValue = agentValue / 2;
 
       (
         address receiver,
@@ -308,7 +310,7 @@ contract AgentRmEquityTest is BaseTest {
         withdrawAmount,
         principal,
         agentValue,
-        agentValue / 10,
+        collateralValue,
         // EDR does not matter for this test
         WAD
       );
@@ -318,8 +320,9 @@ contract AgentRmEquityTest is BaseTest {
       uint256 equity = agentValue - principal;
 
       uint256 maxPoliceDTE = GetRoute.agentPolice(router).maxDTE();
+      uint256 maxPoliceLTV = GetRoute.agentPolice(router).maxLTV();
 
-      if (principal > (equity * maxPoliceDTE / WAD)) {
+      if (principal > (equity * maxPoliceDTE / WAD) || principal > (collateralValue * maxPoliceLTV / WAD)) {
         // DTE > 1 -> no go
         withdrawAndAssertRevert(
           receiver,
@@ -328,7 +331,7 @@ contract AgentRmEquityTest is BaseTest {
         );
       } else {
         // DTE <= 1
-        withdrawAndAssertSuccess(
+        withdrawAndAssert(
           receiver,
           withdrawAmount,
           withdrawCred
@@ -423,6 +426,39 @@ contract AgentRmEquityTest is BaseTest {
       );
     }
 
+    function testWithdrawOverEpochsOwedThreshold(uint256 rollFwdEpochs) public {
+      vm.assume(rollFwdEpochs < EPOCHS_IN_YEAR);
+      uint256 borrowAmount = WAD;
+      uint256 agentValue = WAD * 10;
+
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+
+      agentBorrow(agent, pool.id(), borrowCred);
+
+      vm.roll(block.number + rollFwdEpochs);
+
+      (
+        address receiver,
+        SignedCredential memory withdrawCred
+      ) = customWithdrawCred(
+        // balance
+        10e18,
+        // withdrawAmount 1
+        WAD,
+        WAD,
+        agentValue,
+        agentValue / 10,
+        // great EDR
+        WAD
+      );
+
+      withdrawAndAssert(
+        receiver,
+        WAD,
+        withdrawCred
+      );
+    }
+
     function testWithdrawMoreThanLiquid(
       uint256 bal,
       uint256 withdrawAmount,
@@ -444,7 +480,7 @@ contract AgentRmEquityTest is BaseTest {
         withdrawAmount,
         principal,
         agentValue,
-        agentValue / 10,
+        agentValue / 2,
         // great EDR
         WAD
       );
@@ -525,6 +561,8 @@ contract AgentRmEquityTest is BaseTest {
       // agentValue includes principal, so it should never be less than principal
       agentValue = bound(agentValue, principal, MAX_FIL);
 
+      uint256 collateralValue = agentValue / 2;
+
       (
         uint64 newMinerOwner,
         SignedCredential memory removeMinerCred
@@ -534,14 +572,14 @@ contract AgentRmEquityTest is BaseTest {
         principal,
         agentValue,
         // collateral value
-        agentValue / 10,
+        collateralValue,
         // EDR does not matter for this test
         WAD
       );
 
       uint256 equity = agentValue - principal;
 
-      if (principal > equity) {
+      if (principal > equity || principal > collateralValue) {
         // DTE > 1 -> no go
         removeMinerAndAssertRevert(
           miner,
@@ -594,19 +632,33 @@ contract AgentRmEquityTest is BaseTest {
       );
     }
 
-    function withdrawAndAssertSuccess(
+    function withdrawAndAssert(
       address receiver,
       uint256 withdrawAmount,
       SignedCredential memory withdrawCred
     ) internal {
       uint256 preAgentLiquidFunds = agent.liquidAssets();
 
-      vm.startPrank(minerOwner);
-      agent.withdraw(receiver, withdrawCred);
-      vm.stopPrank();
+      uint256 buffer = GetRoute.agentPolice(router).maxEpochsOwedTolerance();
 
-      assertEq(agent.liquidAssets(), preAgentLiquidFunds - withdrawAmount);
-      assertEq(receiver.balance, withdrawAmount);
+      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+      // action should not be allowed
+      if (account.epochsPaid > 0 && account.epochsPaid + buffer < block.number) {
+        vm.startPrank(_agentOwner(agent));
+        vm.expectRevert(AgentPolice.AgentStateRejected.selector);
+        agent.withdraw(receiver, withdrawCred);
+        vm.stopPrank();
+
+        assertEq(agent.liquidAssets(), preAgentLiquidFunds);
+        assertEq(receiver.balance, 0);
+      } else {
+        vm.startPrank(minerOwner);
+        agent.withdraw(receiver, withdrawCred);
+        vm.stopPrank();
+
+        assertEq(agent.liquidAssets(), preAgentLiquidFunds - withdrawAmount);
+        assertEq(receiver.balance, withdrawAmount);
+      }
     }
 
     function withdrawAndAssertRevert(

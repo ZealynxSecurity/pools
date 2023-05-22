@@ -666,8 +666,9 @@ contract BaseTest is Test {
 
   function _bumpMaxEpochsOwedTolerance(uint256 epochs, address pool) internal {
     vm.startPrank((IAuth(pool)).owner());
-    // temporarily up the buffer of the pool to get past the epochs paid borrow buffer so we can borrow the rest
+    // temporarily up the buffer of the pool and agent police to get past the epochs paid borrow buffer so we can borrow the rest
     IInfinityPool(pool).setMaxEpochsOwedTolerance(epochs);
+    IAgentPolice(GetRoute.agentPolice(router)).setMaxEpochsOwedTolerance(epochs);
     vm.stopPrank();
   }
 

@@ -46,8 +46,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
   uint256 public maxDTE = 1e18;
 
+  /// @notice `maxLTV` is the maximum amount of principal to collateral value ratio before withdrawals are prohibited
+  /// NOTE this is separate LTV for withdrawing than any LTV that the Infinity Pool relies on
+  uint256 public maxLTV = 1e18;
+
   /// @notice `maxConsecutiveFaultEpochs` is the number of epochs of consecutive faults that are required in order to put an agent on administration or into default
   uint256 public maxConsecutiveFaultEpochs = 3 * EPOCHS_IN_DAY;
+
+  /// @dev `maxEpochsOwedTolerance` - an agent's account must be paid up within this epoch buffer in order to borrow again
+  uint256 public maxEpochsOwedTolerance = EPOCHS_IN_DAY * 1;
 
   /// @notice `sectorFaultyTolerancePercent` is the percentage of sectors that can be faulty before an agent is considered in a faulty state. 1e18 = 100%
   uint256 public sectorFaultyTolerancePercent = 1e15;
@@ -217,6 +224,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /**
+  * @notice setMaxEpochsOwedTolerance sets epochsPaidBorrowBuffer in storage
+  * @param _maxEpochsOwedTolerance The new value for maxEpochsOwedTolerance
+  */
+  function setMaxEpochsOwedTolerance(uint256 _maxEpochsOwedTolerance) external onlyOwner {
+    maxEpochsOwedTolerance = _maxEpochsOwedTolerance;
+  }
+
+  /**
    * @notice `isValidCredential` returns true if the credential is valid
    * @param agent the ID of the agent
    * @param action the 4 byte function signature of the function the Agent is aiming to execute
@@ -282,18 +297,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     if (principal == 0) return;
 
     uint256 agentTotalValue = vc.getAgentValue(credParser);
+
     // since agentTotalValue includes borrowed funds (principal),
     // agentTotalValue should always be greater than principal
-    // however, this could happen if the agent is severely slashed over long durations
-    // in this case, they're definitely over the maxDTE, regardless of what it's set to
-    if (agentTotalValue <= principal) {
-      revert AgentStateRejected();
-    }
-
+    if (agentTotalValue <= principal) revert AgentStateRejected();
     // if the DTE is greater than maxDTE, revert
-    if ((principal * WAD) / (agentTotalValue - principal) > maxDTE) {
-      revert AgentStateRejected();
-    }
+    if (principal.divWadDown(agentTotalValue - principal) > maxDTE) revert AgentStateRejected();
+    // if the LTV is greater than maxLTV, revert
+    if (principal.divWadDown(vc.getCollateralValue(credParser)) > maxLTV) revert AgentStateRejected();
   }
 
   /**
@@ -333,6 +344,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function setMaxDTE(uint256 _maxDTE) external onlyOwner {
     maxDTE = _maxDTE;
+  }
+
+  /**
+   * @notice `setMaxLTV` sets the maximum LTV for withdrawals and removing miners
+   */
+  function setMaxLTV(uint256 _maxLTV) external onlyOwner {
+    maxLTV = _maxLTV;
   }
 
   /**
@@ -435,19 +453,21 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     return block.number >= faultyStart + maxConsecutiveFaultEpochs;
   }
 
-  /// @dev loops through the pools and calls isApproved on each, reverting in the case of any non-approvals
+  /// @dev loops through the pools and calls isApproved on each, 
+  /// reverting in the case of any non-approvals,
+  /// or in the case that an account owes payments over the acceptable threshold
   function _agentApproved(VerifiableCredential calldata vc) internal view {
     uint256[] memory pools = poolRegistry.poolIDs(vc.subject);
 
     for (uint256 i = 0; i < pools.length; ++i) {
       uint256 poolID = pools[i];
       IPool pool = GetRoute.pool(poolRegistry, poolID);
-      if (!pool.isApproved(
-        AccountHelpers.getAccount(router, vc.subject, poolID),
-        vc
-      )) {
-        revert AgentStateRejected();
-      }
+      Account memory account = AccountHelpers.getAccount(router, vc.subject, poolID);
+
+      if (!pool.isApproved(account, vc)) revert AgentStateRejected();
+      // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
+      // this is to prevent the agent from doing an action before paying up
+      if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert AgentStateRejected();
     }
   }
 

@@ -269,7 +269,7 @@ contract PoolIsOverLeveragedTest is PoolTestState {
       principal
     );
     // overwrite agent value to avoid DTE errors
-    agentData.agentValue = (principal.mulWadUp(rateModule.maxDTE())) + DUST;
+    agentData.agentValue = principal * 3;
     vcBasic.claim = abi.encode(agentData);
 
     Account memory account = createAccount(principal);
@@ -290,6 +290,21 @@ contract PoolIsOverLeveragedTest is PoolTestState {
     assertTrue(
       rateModule.computeDTE(principal, agentData.agentValue) < rateModule.maxDTE(), "Should be under DTE"
     );
+  }
+
+  function testDTECalcNoFuzz() public {
+    uint256 agentTotalValue = 1000000000000010000;
+    uint256 principal = 1000000000000000000;
+
+    // this DTE is known to be way over 100%
+    uint256 dte = pool.rateModule().computeDTE(principal, agentTotalValue);
+    assertGt(dte, 1e18, "DTE should be around 100%");
+
+    // this DTE is known to be 50%
+    agentTotalValue = 3e18;
+    principal = 1e18;
+    dte = pool.rateModule().computeDTE(principal, agentTotalValue);
+    assertEq(dte, 5e17, "DTE should be 50%");
   }
 
   function testIsApprovedOverDTI(
@@ -337,6 +352,13 @@ contract PoolIsOverLeveragedTest is PoolTestState {
     assertTrue(
       rateModule.computeDTE(principal, agentData.agentValue) < rateModule.maxDTE(), "Should be under DTE"
     );
+  }
+
+  function testKnownLTV() public {
+    uint256 principal = 1e18;
+    uint256 collateralValue = 2e18;
+    uint256 ltv = pool.rateModule().computeLTV(principal, collateralValue);
+    assertEq(ltv, 5e17, "LTV should be 50%");
   }
 
   function testIsApprovedOverDTE(
