@@ -112,7 +112,7 @@ fevm:
 sizes:
 	@echo ">>> Largest contract sizes (Max: 24576)"
 	@for f in `find solc-output -name '*.bin'`; do \
-		echo $$f $$(($$(stat -f %z $$f) / 2)); \
+		echo $$f $$(($$(cat $$f | wc -c) / 2)); \
 	 done | sort -nk2 | tail -10
 
 clean:
