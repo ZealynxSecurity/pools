@@ -59,8 +59,8 @@ contract AgentFactory is IAgentFactory {
 
     address owner = IAuth(address(oldAgent)).owner();
     uint256 agentId = agents[agent];
-    // only the Agent's owner can upgrade, and only a registered agent can be upgraded
-    if (owner != msg.sender || agentId == 0) revert Unauthorized();
+    // only the Agent's owner can upgrade (unless on administration), and only a registered agent can be upgraded
+    if ((owner != msg.sender && oldAgent.administration() != msg.sender) || agentId == 0) revert Unauthorized();
     // deploy a new instance of Agent with the same ID and auth
     newAgent = agDeployer.deploy(
       router,

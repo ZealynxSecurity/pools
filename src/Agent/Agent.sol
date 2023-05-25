@@ -234,9 +234,9 @@ contract Agent is IAgent, Operatable {
    * @param miner The ID of the miner to be liquidated
    * @param liquidator The address of the liquidator
    */
-  function prepareMinerForLiquidation(uint64 miner, address liquidator) external onlyAgentPolice {
+  function prepareMinerForLiquidation(uint64 miner, uint64 liquidator) external onlyAgentPolice {
     if (!defaulted) revert Unauthorized();
-    miner.changeOwnerAddress(liquidator);
+    miner.changeOwnerID(liquidator);
   }
 
   /**

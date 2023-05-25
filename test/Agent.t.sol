@@ -1362,11 +1362,14 @@ contract AgentPoliceTest is BaseTest {
         pool.id()
       );
 
+      address terminator = makeAddr("liquidator");
+      uint64 liquidatorID = idStore.addAddr(terminator);
+
       vm.startPrank(policeOwner);
-      police.prepareMinerForLiquidation(address(agent), miner);
+      police.prepareMinerForLiquidation(address(agent), miner, liquidatorID);
       vm.stopPrank();
       // get the miner actor to ensure that the proposed owner on the miner is the policeOwner
-      assertEq(IMockMiner(idStore.ids(miner)).proposed(), policeOwner, "Mock miner should have policeOwner as its proposed owner");
+      assertEq(IMockMiner(idStore.ids(miner)).proposed(), terminator, "Mock miner should have terminator as its proposed owner");
       testInvariants(pool, "testPrepareMinerForLiquidation");
     }
 
@@ -1697,6 +1700,63 @@ contract AgentUpgradeTest is BaseTest {
         assertEq(newAgent.id(), agentId);
         assertEq(_agentOwner(newAgent), agentOwner);
         assertEq(_agentOperator(newAgent), agentOperator);
+    }
+
+    function testUpgradeFromAdministration() public {
+        address administration = makeAddr("ADMINISTRATION");
+        uint256 agentId = agent.id();
+        address agentOwner = _agentOwner(agent);
+        address agentOperator = _agentOperator(agent);
+
+        // put the agent into default
+        agentBorrow(agent, pool.id(), issueGenericBorrowCred(agentId, 1e18));
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        IAgentFactory agentFactory = GetRoute.agentFactory(router);
+        _upgradeAgentDeployer();
+
+        vm.startPrank(systemAdmin);
+        GetRoute.agentPolice(router).putAgentOnAdministration(address(agent), administration);
+        vm.stopPrank();
+        vm.startPrank(administration);
+        IAgent newAgent = IAgent(agentFactory.upgradeAgent(prevAgentAddr));
+        assertEq(newAgent.id(), agentId);
+        assertEq(_agentOwner(newAgent), agentOwner);
+        assertEq(_agentOperator(newAgent), agentOperator);
+    }
+
+    function testUpgradeFromAdministrationInvalid() public {
+        address administration = makeAddr("ADMINISTRATION");
+
+        IAgentFactory agentFactory = GetRoute.agentFactory(router);
+        _upgradeAgentDeployer();
+
+        vm.startPrank(administration);
+        vm.expectRevert(Unauthorized.selector);
+        IAgent(agentFactory.upgradeAgent(prevAgentAddr));
+    }
+
+    function testAccountPersistsThroughUpdate() public {
+        uint256 agentId = agent.id();
+        address agentOwner = _agentOwner(agent);
+
+        // put the agent into default
+        agentBorrow(agent, pool.id(), issueGenericBorrowCred(agentId, 1e18));
+
+        Account memory preUpgradeAcc = AccountHelpers.getAccount(router, agentId, pool.id());
+
+        IAgentFactory agentFactory = GetRoute.agentFactory(router);
+        _upgradeAgentDeployer();
+
+        Account memory postUpgradeAcc = AccountHelpers.getAccount(router, agentId, pool.id());
+
+        vm.startPrank(agentOwner);
+        agentFactory.upgradeAgent(prevAgentAddr);
+        
+        assertEq(preUpgradeAcc.epochsPaid, postUpgradeAcc.epochsPaid);
+        assertEq(preUpgradeAcc.principal, postUpgradeAcc.principal);
+        assertEq(preUpgradeAcc.defaulted, postUpgradeAcc.defaulted);
+        assertEq(preUpgradeAcc.startEpoch, postUpgradeAcc.startEpoch);
     }
 
     function testDecommissionAgentNoAuth() public {

@@ -80,7 +80,7 @@ interface IAgentPolice {
 
   function setMaxLTV(uint256 ltv) external;
 
-  function prepareMinerForLiquidation(address agent, uint64 miner) external;
+  function prepareMinerForLiquidation(address agent, uint64 miner, uint64 liquidator) external;
 
   function distributeLiquidatedFunds(address agent, uint256 amount) external;
 

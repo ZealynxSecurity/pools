@@ -197,13 +197,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `prepareMinerForLiquidation` changes the owner address of `miner` on `agent` to be `owner` of Agent Police
    * @param agent The address of the agent to set the state of
    * @param miner The ID of the miner to change owner to liquidator
+   * @param liquidator The ID of the liquidator
    * @dev After calling this function and the liquidation completes, call `liquidatedAgent` next to proceed with the liquidation
    */
   function prepareMinerForLiquidation(
     address agent,
-    uint64 miner
+    uint64 miner,
+    uint64 liquidator
   ) external onlyOwner {
-    IAgent(agent).prepareMinerForLiquidation(miner, owner);
+    IAgent(agent).prepareMinerForLiquidation(miner, liquidator);
   }
 
   /**

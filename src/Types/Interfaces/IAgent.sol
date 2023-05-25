@@ -54,7 +54,7 @@ interface IAgent {
 
   function setAdministration(address administration) external;
 
-  function prepareMinerForLiquidation(uint64 miner, address liquidator) external;
+  function prepareMinerForLiquidation(uint64 miner, uint64 liquidator) external;
 
   function setFaulty() external;
 
