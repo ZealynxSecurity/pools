@@ -117,7 +117,7 @@ library MinerHelper {
     uint64[] calldata controllerAddrs
   ) internal {
     // resolve the controllers
-    CommonTypes.FilAddress[] memory controllers;
+    CommonTypes.FilAddress[] memory controllers = new CommonTypes.FilAddress[](controllerAddrs.length);
     for (uint256 i = 0; i < controllerAddrs.length; i++) {
       controllers[i] = FilAddresses.fromActorID(controllerAddrs[i]);
     }
