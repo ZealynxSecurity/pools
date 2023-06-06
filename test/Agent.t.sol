@@ -1390,35 +1390,55 @@ contract AgentPoliceTest is BaseTest {
       testInvariants(pool, "testDistributeLiquidatedFundsNonAgentPolice");
     }
 
-    function testDistributeLiquidatedFunds() public {
+    function testDistributeLiquidatedFunds(uint256 borrowAmount, uint256 recoveredFunds) public {
+      borrowAmount = bound(borrowAmount, WAD, stakeAmount);
+      recoveredFunds = bound(recoveredFunds, 0, borrowAmount);
+
       uint256 agentID = agent.id();
       // borrow half the stake amount
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, stakeAmount / 2);
+      SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, borrowAmount);
       agentBorrow(agent, pool.id(), borrowCred);
       Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
       uint256 borrowedBefore = pool.totalBorrowed();
+      uint256 totalAssetsBefore = pool.totalAssets();
       // roll forward to the default window
       vm.roll(block.number + police.defaultWindow() + 1);
 
       vm.startPrank(policeOwner);
       // set the agent in default
       police.setAgentDefaulted(address(agent));
-      // recover a tiny portion of the funds, but use a known amount for checks
-      uint256 recoveredFunds = WAD;
 
       vm.deal(policeOwner, recoveredFunds);
       wFIL.deposit{value: recoveredFunds}();
       wFIL.approve(address(police), recoveredFunds);
 
+      assertPegInTact(pool);
       // distribute the recovered funds
       police.distributeLiquidatedFunds(address(agent), recoveredFunds);
 
       uint256 borrowedAfter = pool.totalBorrowed();
+      uint256 totalAssetsAfter = pool.totalAssets();
+
+      uint256 lostAmount = totalAssetsBefore - pool.totalAssets();
+      uint256 recoverPercent = (totalAssetsBefore - lostAmount) * WAD / totalAssetsBefore;
+
+      uint256 poolTokenSupply = pool.liquidStakingToken().totalSupply();
+      uint256 tokenPrice = poolTokenSupply * WAD / (totalAssetsBefore - lostAmount);
+
+      // by checking converting 1 poolToken to its asset equivalent should mirror the recoverPercent
+      assertEq(pool.convertToAssets(WAD), recoverPercent , "IFILtoFIL should be 1");
+      assertEq(pool.convertToShares(WAD), tokenPrice, "FILtoIFIL should be 1");
+      assertEq(totalAssetsBefore + recoveredFunds - borrowAmount, totalAssetsAfter, "Pool should have recovered funds");
+      assertEq(lostAmount, borrowAmount - recoveredFunds, "lost amount should be correct");
+
       assertEq(borrowedBefore - borrowedAfter, account.principal, "Pool should have written down assets correctly");
       assertEq(wFIL.balanceOf(address(police)), 0, "Agent police should not have funds");
       assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
       testInvariants(pool, "testDistributeLiquidatedFunds");
+      if (lostAmount == 0) {
+        assertPegInTact(pool);
+      }
     }
 
     function testDistributeLiquidatedFundsEvenSplit(
@@ -1575,10 +1595,11 @@ contract AgentPoliceTest is BaseTest {
 
       uint256 balanceAfter;
       uint256 balanceBefore;
-      uint256 interestOwed= getPenaltyOwed(borrowAmount, rollFwdPeriod);
+      uint256 interestOwed = getPenaltyOwed(borrowAmount, rollFwdPeriod);
       recoveredFunds = bound(recoveredFunds, borrowAmount, stakeAmount);
       agentBorrow(agent, pool.id(), borrowCred);
       balanceBefore = wFIL.balanceOf(address(pool));
+      uint256 totalAssetsBefore = pool.totalAssets();
       // roll forward to the default window
       vm.roll(block.number + rollFwdPeriod);
       vm.startPrank(policeOwner);
@@ -1599,6 +1620,15 @@ contract AgentPoliceTest is BaseTest {
       assertEq(wFIL.balanceOf(IAuth(address(agent)).owner()), recoveredFunds - balanceChange,  "Police owner should only have paid the amount owed");
       assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
       testInvariants(pool, "testDistributeLiquidatedFundsFullRecovery");
+      
+      uint256 gainAmount = pool.totalAssets() - totalAssetsBefore;
+      uint256 gainPercent = (totalAssetsBefore + gainAmount) * WAD / totalAssetsBefore;
+
+      uint256 poolTokenSupply = pool.liquidStakingToken().totalSupply();
+      uint256 tokenPrice = poolTokenSupply * WAD / (totalAssetsBefore + gainAmount);
+      // by checking converting 1 poolToken to its asset equivalent should mirror the recoverPercent
+      assertEq(pool.convertToAssets(WAD), gainPercent , "IFILtoFIL should increase by the fees pay on top of the recovery amount");
+      assertEq(pool.convertToShares(WAD), tokenPrice, "FILtoIFIL should be 1");
     }
 
     function getPenaltyOwed(uint256 amount, uint256 rollFwdPeriod) public view returns (uint256) {
@@ -1607,7 +1637,6 @@ contract AgentPoliceTest is BaseTest {
       uint256 _interestOwedPerEpoch = amount.mulWadUp(rate);
       // _interestOwedPerEpoch is mulWadUp by epochs (not WAD based), which cancels the WAD out for interestOwed
       return _interestOwedPerEpoch.mulWadUp(rollFwdPeriod);
-
     }
 }
 
