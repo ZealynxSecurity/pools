@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.17;
 import {INewCredentials} from "test/helpers/INewCredentials.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";

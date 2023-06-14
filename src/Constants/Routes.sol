@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.17;
 
 bytes4 constant ROUTE_AGENT_FACTORY = bytes4(keccak256(bytes("ROUTER_AGENT_FACTORY")));
