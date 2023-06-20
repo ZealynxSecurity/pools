@@ -1198,8 +1198,8 @@ contract AgentPoliceTest is BaseTest {
       // consecutiveEpochsOfFaults should be more than maxConsecutiveFaultDays days of faults
       uint256 limitBeforeActionAllowed = police.maxConsecutiveFaultEpochs();
       consecutiveEpochsOfFaults = bound(consecutiveEpochsOfFaults, limitBeforeActionAllowed, 42 * EPOCHS_IN_DAY);
-      liveSectors = bound(liveSectors, 1, 1e27);
       faultySectors = bound(faultySectors, 0, 1e27);
+      liveSectors = bound(liveSectors, faultySectors + 1, 1e27);
       vm.startPrank(IAuth(address(police)).owner());
 
       IAgent[] memory agents = new IAgent[](1);
