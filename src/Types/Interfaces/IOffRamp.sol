@@ -6,6 +6,14 @@ import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 
 interface IOffRamp {
+    event Withdraw(
+        address indexed caller,
+        address indexed receiver,
+        address indexed owner,
+        uint256 assets,
+        uint256 shares
+    );
+
     function pool() external view returns (IPool);
 
     function iFIL() external view returns (IPoolToken);

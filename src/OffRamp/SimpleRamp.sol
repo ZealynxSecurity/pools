@@ -23,8 +23,8 @@ contract InfPoolSimpleRamp is IOffRamp {
 
     uint256 internal tmpExitDemand = 0;
 
-    modifier receiverMatchesOwner(address receiver, address owner) {
-        if (receiver != owner) revert Unauthorized();
+    modifier ownerIsCaller(address owner) {
+        if (msg.sender != owner) revert Unauthorized();
         _;
     }
 
@@ -97,9 +97,9 @@ contract InfPoolSimpleRamp is IOffRamp {
         address receiver,
         address owner,
         uint256
-    ) public receiverMatchesOwner(receiver, owner) returns (uint256 shares) {
+    ) public ownerIsCaller(owner) returns (uint256 shares) {
         shares = pool.convertToShares(assets);
-        _processExit(receiver, shares, assets);
+        _processExit(owner, receiver, shares, assets);
     }
 
     /**
@@ -114,13 +114,14 @@ contract InfPoolSimpleRamp is IOffRamp {
         address receiver,
         address owner,
         uint256
-    ) public receiverMatchesOwner(receiver, owner) returns (uint256 assets) {
+    ) public ownerIsCaller(owner) returns (uint256 assets) {
         assets = pool.convertToAssets(shares);
-        _processExit(receiver, shares, assets);
+        _processExit(owner, receiver, shares, assets);
     }
 
     function _processExit(
-        address exiter,
+        address owner,
+        address receiver,
         uint256 iFILToBurn,
         uint256 assetsToReceive
     ) internal {
@@ -130,7 +131,7 @@ contract InfPoolSimpleRamp is IOffRamp {
         // this contract will burn any excess iFIL it has (this shouldn't happen, but in case it does, we dont have accounting issues)
         uint256 balanceOfBefore = iFIL.balanceOf(address(this));
         // pull in the iFIL from the iFIL holder, which will decrease the allowance of this ramp to spend on behalf of the iFIL holder
-        iFIL.transferFrom(exiter, address(this), iFILToBurn);
+        iFIL.transferFrom(owner, address(this), iFILToBurn);
         // burn the exiter's iFIL tokens (and any additional iFIL tokens that somehow ended up here)
         iFIL.burn(
             address(this),
@@ -145,18 +146,18 @@ contract InfPoolSimpleRamp is IOffRamp {
         // and gets written down to 0 in the `distribute` function (which pulls the assets into the ramp)
         pool.harvestToRamp();
         // send WFIL back to the exiter (instead of FIL, better for downstream contracts)
-        wFIL.transfer(exiter, assetsToReceive);
-        // in the event that WFIL exists in this contract, we forward any remaining balances back to the pool
-        wFIL.transfer(address(pool), wFIL.balanceOf(address(this)));
+        wFIL.transfer(receiver, assetsToReceive);
+
+        emit Withdraw(owner, receiver, owner, assetsToReceive, iFILToBurn);
     }
 
     /**
-     * @notice recoverFIL takes any FIL in this contract, wraps it, and transfers it to the Infinity Pool
+     * @notice recoverFIL takes any WFIL and FIL in this contract, wraps it, and transfers it to the Infinity Pool
      */
     function recoverFIL() external {
         uint256 value = address(this).balance;
         wFIL.deposit{value: value}();
-        wFIL.transfer(address(pool), value);
+        wFIL.transfer(address(pool), wFIL.balanceOf(address(this)));
     }
 
     /**

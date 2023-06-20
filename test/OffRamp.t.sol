@@ -54,6 +54,63 @@ contract OffRampTest is BaseTest {
     borrowFromPool(borrowAmount, stakeAmount);
   }
 
+  function testWithdrawRedeemThroughPool() public {
+    fundPoolByInvestor(100e18, investor1);
+
+    vm.startPrank(investor1);
+    uint256 maxWithdraw = pool.maxWithdraw(investor1);
+    uint256 maxRedeem = pool.maxRedeem(investor1);
+    vm.expectRevert(Unauthorized.selector);
+    pool.withdraw(maxWithdraw, investor1, investor1);
+
+    vm.expectRevert(Unauthorized.selector);
+    pool.redeem(maxRedeem, investor1, investor1);
+  }
+
+  function testWithdrawAlternativeRecipient(uint256 stakeAmount, uint256 withdrawAmount, string memory addressSeed) public {
+    stakeAmount = bound(stakeAmount, WAD, MAX_FIL);
+    withdrawAmount = bound(withdrawAmount, WAD, stakeAmount);
+
+    address receiver = makeAddr(addressSeed);
+
+    fundPoolByInvestor(stakeAmount, investor1);
+
+    vm.startPrank(investor1);
+    uint256 iFILSupply = iFIL.totalSupply();
+    uint256 sharesToBurn = pool.convertToShares(withdrawAmount);
+    iFIL.approve(address(ramp), sharesToBurn);
+    ramp.withdraw(withdrawAmount, receiver, investor1, 0);
+
+    assertEq(wFIL.balanceOf(receiver), withdrawAmount, "Receiver should have received assets");
+    assertEq(wFIL.balanceOf(investor1), 0, "Investor1 should not have received assets");
+    vm.stopPrank();
+
+    assertEq(iFILSupply - iFIL.totalSupply(), sharesToBurn, "iFIL should have been burned");
+
+    assertPegInTact(pool);
+  }
+
+  function testRedeemAlternativeRecipient(uint256 stakeAmount, uint256 redeemAmount, string memory addressSeed) public {
+    stakeAmount = bound(stakeAmount, WAD, MAX_FIL);
+    redeemAmount = bound(redeemAmount, WAD, stakeAmount);
+
+    address receiver = makeAddr(addressSeed);
+
+    fundPoolByInvestor(stakeAmount, investor1);
+    uint256 iFILSupply = iFIL.totalSupply();
+    vm.startPrank(investor1);
+    iFIL.approve(address(ramp), redeemAmount);
+    ramp.redeem(redeemAmount, receiver, investor1, 0);
+
+    assertEq(wFIL.balanceOf(receiver), pool.convertToAssets(redeemAmount), "Receiver should have received assets");
+    assertEq(wFIL.balanceOf(investor1), 0, "Investor1 should not have received assets");
+    vm.stopPrank();
+
+    assertEq(iFILSupply - iFIL.totalSupply(), redeemAmount, "iFIL should have been burned");
+
+    assertPegInTact(pool);
+  }
+
   function testSingleDepositWithdrawNoEarnings(uint256 exitReservePercent, uint256 stakeAmount, uint256 borrowAmount, uint256 withdrawAmount) public {
     // bound between 0 exit reserves and 100% exit reserves
     exitReservePercent = bound(exitReservePercent, 0, 1e18);
@@ -76,7 +133,6 @@ contract OffRampTest is BaseTest {
     uint256 exitLiquidity = pool.getLiquidAssets();
     vm.startPrank(investor1);
     iFIL.approve(address(ramp), pool.convertToAssets(investorIFIL));
-    vm.stopPrank();
 
     // preview withdraw should revert 
     if (exitLiquidity < withdrawAmount) {
@@ -84,10 +140,10 @@ contract OffRampTest is BaseTest {
       pool.previewWithdraw(withdrawAmount);
 
       vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
-      pool.withdraw(withdrawAmount, investor1, investor1);
+      ramp.withdraw(withdrawAmount, investor1, investor1, 0);
     } else {
       assertEq(pool.previewWithdraw(withdrawAmount), withdrawAmount, "Wrong preview withdraw");
-      uint256 sharesBurned = pool.withdraw(withdrawAmount, investor1, investor1);
+      uint256 sharesBurned = ramp.withdraw(withdrawAmount, investor1, investor1, 0);
       assertEq(sharesBurned, withdrawAmount, "Burn == redeem amount when iFIL still pegged");
       assertEq(wFIL.balanceOf(investor1), withdrawAmount, "Investor should have withdrawAmount wFIL");
       assertEq(iFIL.balanceOf(investor1), stakeAmount - withdrawAmount, "Investor should have stakeAmount - withdrawAmount iFIL");
@@ -95,6 +151,7 @@ contract OffRampTest is BaseTest {
       assertEq(iFILSupply - withdrawAmount, iFIL.totalSupply(), "IFIL supply should have decreased by the withdraw amount");
       assertEq(wFIL.balanceOf(investor1), withdrawAmount, "Investor should have received withdrawAmount of wFIL");
     }
+    vm.stopPrank();
 
     // since this is the only investor in the pool, they will always be able to withdraw the max liquidity
     assertEq(pool.maxWithdraw(investor1), pool.getLiquidAssets(), "Max withdraw incorrect");
@@ -124,7 +181,6 @@ contract OffRampTest is BaseTest {
     uint256 exitLiquidity = pool.getLiquidAssets();
     vm.startPrank(investor1);
     iFIL.approve(address(ramp), pool.convertToAssets(investorIFIL));
-    vm.stopPrank();
 
     // preview withdraw should revert 
     if (exitLiquidity < redeemAmount) {
@@ -132,10 +188,10 @@ contract OffRampTest is BaseTest {
       pool.previewRedeem(redeemAmount);
 
       vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
-      pool.redeem(redeemAmount, investor1, investor1);
+      ramp.redeem(redeemAmount, investor1, investor1, 0);
     } else {
       assertEq(pool.previewRedeem(redeemAmount), redeemAmount, "Wrong preview redeem");
-      uint256 assetsReceived = pool.redeem(redeemAmount, investor1, investor1);
+      uint256 assetsReceived = ramp.redeem(redeemAmount, investor1, investor1, 0);
       assertEq(assetsReceived, redeemAmount, "assets received == redeem amount when iFIL still pegged");
       assertEq(wFIL.balanceOf(investor1), redeemAmount, "Investor should have redeemAmount wFIL");
       assertEq(iFIL.balanceOf(investor1), stakeAmount - redeemAmount, "Investor should have stakeAmount - redeemAmount iFIL");
@@ -143,6 +199,7 @@ contract OffRampTest is BaseTest {
       assertEq(iFILSupply - redeemAmount, iFIL.totalSupply(), "IFIL supply should have decreased by the redeem amount");
       assertEq(wFIL.balanceOf(investor1), redeemAmount, "Investor should have received redeemAmount of wFIL");
     }
+    vm.stopPrank();
 
     // since this is the only investor in the pool, they will always be able to redeem the max liquidity
     assertEq(pool.maxRedeem(investor1), pool.getLiquidAssets(), "Max redeem incorrect");
@@ -171,8 +228,8 @@ contract OffRampTest is BaseTest {
     uint256 investorIFIL = iFIL.balanceOf(investor1);
     vm.startPrank(investor1);
     iFIL.approve(address(ramp), sharesToBurn);
+    uint256 sharesBurned = ramp.withdraw(withdrawAmount, investor1, investor1, 0);
     vm.stopPrank();
-    uint256 sharesBurned = pool.withdraw(withdrawAmount, investor1, investor1);
     assertEq(sharesBurned, sharesToBurn, "Incorrect burn amount");
     assertGt(withdrawAmount, sharesToBurn, "Withdraw amount should have been greater than shares burned after earnings");
     assertEq(investorIFIL - iFIL.balanceOf(investor1), sharesToBurn, "Investor should have burned sharesToBurn iFIL");
@@ -184,9 +241,9 @@ contract OffRampTest is BaseTest {
     uint256 iFILBal = iFIL.balanceOf(investor1);
     vm.startPrank(investor1);
     iFIL.approve(address(ramp), iFILBal);
+    sharesBurned = ramp.withdraw(maxWithdraw, investor1, investor1, 0);
     vm.stopPrank();
 
-    sharesBurned = pool.withdraw(maxWithdraw, investor1, investor1);
     assertEq(sharesBurned, iFILBal, "maxWithdraw should have burned rest of investors iFIL bal");
     assertEq(wFIL.balanceOf(investor1), stakeAmount + earningsAmount, "investor should have all the earnings");
     assertCompleteExit();
@@ -215,8 +272,8 @@ contract OffRampTest is BaseTest {
     uint256 investorIFIL = iFIL.balanceOf(investor1);
     vm.startPrank(investor1);
     iFIL.approve(address(ramp), redeemAmount);
+    uint256 assetsReceived = ramp.redeem(redeemAmount, investor1, investor1, 0);
     vm.stopPrank();
-    uint256 assetsReceived = pool.redeem(redeemAmount, investor1, investor1);
     assertEq(assetsReceived, assetsToReceive, "Incorrect burn amount");
     // here we add 1 to the assetsToReceive in tiny amounts due to rounding, creating equivolency 
     assertGt(assetsToReceive + 1, redeemAmount, "Assets received amount should have been greater than redeem amount after earnings");
@@ -229,10 +286,10 @@ contract OffRampTest is BaseTest {
     uint256 iFILBal = iFIL.balanceOf(investor1);
     vm.startPrank(investor1);
     iFIL.approve(address(ramp), iFILBal);
-    vm.stopPrank();
     assertEq(maxRedeem, iFILBal, "Max redeem should return the rest of the investors iFIL");
+    uint256 assetsReceivedAfterFullExit = ramp.redeem(maxRedeem, investor1, investor1, 0);
+    vm.stopPrank();
 
-    uint256 assetsReceivedAfterFullExit = pool.redeem(maxRedeem, investor1, investor1);
     assertEq(assetsReceivedAfterFullExit, stakeAmount + earningsAmount - assetsReceived, "maxRedeem should have returned investors full amount");
     assertEq(wFIL.balanceOf(investor1), stakeAmount + earningsAmount, "investor should have all the earnings");
     assertCompleteExit();
@@ -256,21 +313,21 @@ contract OffRampTest is BaseTest {
     vm.startPrank(depositor1);
     uint256 maxWithdraw = pool.maxWithdraw(depositor1);
     iFIL.approve(address(ramp), pool.convertToShares(maxWithdraw));
-    pool.withdraw(maxWithdraw, depositor1, depositor1);
+    ramp.withdraw(maxWithdraw, depositor1, depositor1, 0);
     vm.stopPrank();
 
     assertEq(wFIL.balanceOf(depositor2), 0, "Depositor should not have wFIL");
     vm.startPrank(depositor2);
     maxWithdraw = pool.maxWithdraw(depositor2);
     iFIL.approve(address(ramp), pool.convertToShares(maxWithdraw));
-    pool.withdraw(maxWithdraw, depositor2, depositor2);
+    ramp.withdraw(maxWithdraw, depositor2, depositor2, 0);
     vm.stopPrank();
 
     assertCompleteExit();
   }
 
   function testMultiDepositWithdraw(uint256 numDepositors, uint256 earningsAmount) public {
-    numDepositors = bound(numDepositors, 1, 1000);
+    numDepositors = bound(numDepositors, 1, 500);
     earningsAmount = bound(earningsAmount, 1, MAX_FIL);
 
     // every depositor stakes stake amount
@@ -297,7 +354,7 @@ contract OffRampTest is BaseTest {
       // add one for rounding dust
       assertApproxEqRel(maxWithdraw, stakeAmount + (earningsAmount / numDepositors), 1e2, "Max withdraw should be greater than amount staked after earnings");
       iFIL.approve(address(ramp), pool.convertToShares(maxWithdraw));
-      uint256 sharesBurnt = pool.withdraw(maxWithdraw, depositor, depositor);
+      uint256 sharesBurnt = ramp.withdraw(maxWithdraw, depositor, depositor, 0);
       assertApproxEqAbs(sharesBurnt, iFILBal, 1, "Max withdraw should burn all of the investors iFIL");
       assertApproxEqRel(wFIL.balanceOf(depositor), stakeAmount + (earningsAmount) / numDepositors, 1e2, "Depositor should have earned rewards");
       vm.stopPrank();
@@ -307,7 +364,7 @@ contract OffRampTest is BaseTest {
   }
 
   function testMultiDepositRedeem(uint256 numDepositors, uint256 earningsAmount) public {
-    numDepositors = bound(numDepositors, 1, 100);
+    numDepositors = bound(numDepositors, 1, 500);
     earningsAmount = bound(earningsAmount, 1, MAX_FIL);
 
     // every depositor stakes stake amount
@@ -334,13 +391,39 @@ contract OffRampTest is BaseTest {
       // add one for rounding dust
       assertEq(maxRedeem, iFILBal, "Max redeem should equal depositor ifil bal");
       iFIL.approve(address(ramp), maxRedeem);
-      uint256 assetsReceived = pool.redeem(maxRedeem, depositor, depositor);
+      uint256 assetsReceived = ramp.redeem(maxRedeem, depositor, depositor, 0);
       assertApproxEqAbs(assetsReceived, stakeAmount + (earningsAmount / numDepositors), 1, "Max redeem should net depositor correct assets");
       assertApproxEqRel(wFIL.balanceOf(depositor), stakeAmount + (earningsAmount) / numDepositors, 1e2, "Depositor should have earned rewards");
       vm.stopPrank();
     }
 
     assertCompleteExit();
+  }
+
+  function testRecoverFIL(uint256 recoverAmount) public {
+    vm.assume(recoverAmount < MAX_FIL);
+
+    address donator = makeAddr("DONATOR");
+
+    vm.deal(donator, recoverAmount);
+    vm.startPrank(donator);
+    wFIL.deposit{value: recoverAmount}();
+    wFIL.transfer(address(ramp), recoverAmount);
+    // transfer FIL to ramp
+    vm.deal(address(ramp), recoverAmount);
+
+    assertEq(wFIL.balanceOf(address(ramp)), recoverAmount, "Ramp should have received recoverAmount/2 of wFIL");
+    assertEq(address(ramp).balance, recoverAmount, "Ramp should have received recoverAmount/2 of FIL");
+    assertEq(wFIL.balanceOf(address(pool)), 0, "Pool should not have WFIL");
+    assertEq(address(pool).balance, 0, "Pool should not have FIL");
+
+    ramp.recoverFIL();
+
+    assertEq(wFIL.balanceOf(address(ramp)), 0, "Ramp should not have WFIL after recovery");
+    assertEq(address(pool).balance, 0, "Ramp should not have FIL after recovery");
+    // we recovered FIL and wFIL in recoverAmount, which is why we multiply by 2 here
+    assertEq(wFIL.balanceOf(address(pool)), recoverAmount * 2, "Pool should have assets");
+    assertEq(address(pool).balance, 0, "Pool should have 0 FIL after recovery");
   }
 
   function setMinLiquidity(uint256 minLiquidity) internal {

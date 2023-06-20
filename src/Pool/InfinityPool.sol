@@ -479,6 +479,8 @@ contract InfinityPool is IPool, Ownable {
      * @param receiver The address to receive the assets
      * @param owner The owner of the shares
      * @return shares - the number of shares burned
+     *
+     * @dev this function is not currently used - exits happen directly through the ramp for more flexibility and better security
      */
     function withdraw(
         uint256 assets,
@@ -495,6 +497,8 @@ contract InfinityPool is IPool, Ownable {
      * @param receiver The address to receive the assets
      * @param owner The owner of the shares
      * @return assets The assets received from burning the shares
+     *
+     * @dev this function is not currently used - exits happen directly through the ramp for more flexibility and better security
      */
     function redeem(
         uint256 shares,
