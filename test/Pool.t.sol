@@ -33,7 +33,6 @@ contract PoolTestState is BaseTest {
   uint256 agentID;
   uint256 poolID;
   IOffRamp ramp;
-  IPoolToken iou;
   address newCredParser;
 
   function setUp() public virtual {
@@ -68,7 +67,6 @@ contract PoolTestState is BaseTest {
     assertEq(asset.balanceOf(address(ramp)), 0);
     vm.prank(systemAdmin);
     pool.setRamp(IOffRamp(ramp));
-    iou = IPoolToken(ramp.iouToken());
   }
 
   function _updateCredParser() internal {
@@ -80,25 +78,11 @@ contract PoolTestState is BaseTest {
     vm.stopPrank();
   }
 
-
-  function _mintApproveIOU(uint256 amount, address target, address spender) internal {
-    vm.prank(address(ramp));
-    iou.mint(target, amount);
-    vm.prank(target);
-    iou.approve(address(spender), amount);
-  }
-
   function _mintApproveLST(uint256 amount, address target, address spender) internal {
     vm.prank(address(pool));
     liquidStakingToken.mint(target, amount);
     vm.prank(target);
     liquidStakingToken.approve(address(spender), amount);
-  }
-
-  function _stakeToRamp(uint256 amount, address staker) internal {
-    vm.startPrank(staker);
-    // Finally, we can stake & harvest after setup
-    ramp.stake(amount);
   }
 
   function _generateFees(uint256 paymentAmt, uint256 initialBorrow) internal {
@@ -402,30 +386,6 @@ contract PoolIsOverLeveragedTest is PoolTestState {
 }
 
 contract PoolFeeTests is PoolTestState {
-  function testHarvestToRamp() public {
-    // Test setup
-    uint256 amount = WAD;
-    _setupRamp();
-    _mintApproveIOU(amount, investor1, address(ramp));
-    _stakeToRamp(amount, investor1);
-    // Main test call
-    pool.harvestToRamp();
-    // The balance on the ramp is has been updated from the harvest
-    assertEq(asset.balanceOf(address(ramp)), amount);
-  }
-
-  function testHarvestToRampNoDemand() public {
-    _setupRamp();
-    loadWFIL(WAD, address(ramp));
-    uint256 exitDemand = ramp.totalIOUStaked();
-    uint256 balanceBefore = asset.balanceOf(address(ramp));
-    assertEq(balanceBefore, WAD, "Ramp should have WAD balance");
-    assertEq(exitDemand, 0);
-    // Main test call
-    pool.harvestToRamp();
-    assertEq(balanceBefore, asset.balanceOf(address(ramp)));
-  }
-
   function testHarvestFees() public {
     uint256 amount = WAD;
     agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, borrowAmount));
@@ -783,38 +743,6 @@ contract Pool4626Tests is PoolTestState {
     pool.mint(shares, investor1);
     uint256 balanceAfter = asset.balanceOf(address(pool));
     assertEq(balanceAfter - balanceBefore, assets);
-  }
-
-  function testPoolWithdraw(uint256 amount) public {
-    uint256 upperBound = pool.previewWithdraw(liquidStakingToken.balanceOf(address(investor1)));
-    assertEq(upperBound, pool.maxWithdraw(investor1), "Expected withdraw should be equal to amount");
-    amount = bound(amount, 1, upperBound);
-    uint256 expectedWithdraw = pool.previewWithdraw(amount);
-    uint256 balanceBeforeIOU = iou.balanceOf(address(ramp));
-    uint256 balanceBeforeLST = liquidStakingToken.balanceOf(address(investor1));
-    vm.prank(address(investor1));
-    pool.withdraw(amount, investor1, investor1);
-    uint256 balanceAfterIOU = iou.balanceOf(address(ramp));
-    uint256 balanceAfterLST = liquidStakingToken.balanceOf(address(investor1));
-    assertEq(balanceAfterIOU - balanceBeforeIOU, amount, "IOU balance should be updated");
-    assertEq(balanceBeforeLST - balanceAfterLST, expectedWithdraw, "LST balance should be updated");
-
-   }
-
-  function testPoolRedeem(uint256 shares) public {
-    uint256 assets = liquidStakingToken.balanceOf(address(investor1));
-    uint256 upperBound = pool.convertToShares(assets);
-    assertEq(upperBound, pool.maxRedeem(investor1), "Expected withdraw should be equal to amount");
-    shares = bound(shares, 1, upperBound);
-    uint256 expectedRedeem = pool.previewRedeem(shares);
-    uint256 balanceBeforeIOU = iou.balanceOf(address(ramp));
-    uint256 balanceBeforeLST = liquidStakingToken.balanceOf(address(investor1));
-    vm.prank(address(investor1));
-    pool.redeem(shares, investor1, investor1);
-    uint256 balanceAfterIOU = iou.balanceOf(address(ramp));
-    uint256 balanceAfterLST = liquidStakingToken.balanceOf(address(investor1));
-    assertEq(balanceAfterIOU - balanceBeforeIOU, expectedRedeem, "IOU balance should be updated");
-    assertEq(balanceBeforeLST - balanceAfterLST, shares, "LST balance should be updated");
   }
 
   function testMaxDeposit() public {

@@ -19,7 +19,7 @@ import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {PoolRegistry} from "src/Pool/PoolRegistry.sol";
 import {Router} from "src/Router/Router.sol";
-import {OffRamp} from "src/OffRamp/OffRamp.sol";
+import {InfPoolSimpleRamp} from "src/OffRamp/SimpleRamp.sol";
 import {RateModule} from "src/Pool/RateModule.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
@@ -660,12 +660,8 @@ contract BaseTest is Test {
   function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
     IPoolToken liquidStakingToken = pool.liquidStakingToken();
     PoolToken iou = new PoolToken(systemAdmin);
-    ramp = IOffRamp(new OffRamp(
+    ramp = IOffRamp(new InfPoolSimpleRamp(
       router,
-      address(iou),
-      address(pool.asset()),
-      address(liquidStakingToken),
-      systemAdmin,
       pool.id()
     ));
     vm.startPrank(systemAdmin);
