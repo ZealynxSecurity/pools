@@ -56,24 +56,20 @@ contract InfPoolSimpleRamp is IOffRamp {
     /// @notice Returns an onchain simulation of how many shares would be burn to withdraw assets, will revert if not enough assets to exit
     function previewWithdraw(
         uint256 assets
-    ) external view returns (uint256 maxAssets) {
-        if (assets > pool.getLiquidAssets()) revert InsufficientLiquidity();
+    ) external view returns (uint256 shares) {
+        if (assets > pool.getLiquidAssets()) return 0;
         return pool.convertToShares(assets);
     }
 
-    function maxRedeem(
-        address account
-    ) external view returns (uint256 maxShares) {
-        uint256 accountShares = iFIL.balanceOf(account);
-        uint256 filValOfShares = pool.convertToAssets(iFIL.balanceOf(account));
+    function maxRedeem(address account) external view returns (uint256 shares) {
+        shares = iFIL.balanceOf(account);
+        uint256 filValOfShares = pool.convertToAssets(shares);
 
         // if the fil value of the account's shares is bigger than the available exit liquidity
         // return the share equivalent of the pool's total liquid assets
         if (filValOfShares > pool.getLiquidAssets()) {
             return pool.convertToShares(pool.getLiquidAssets());
         }
-
-        return accountShares;
     }
 
     function previewRedeem(
@@ -82,7 +78,7 @@ contract InfPoolSimpleRamp is IOffRamp {
         assets = pool.convertToAssets(shares);
 
         // revert if the fil value of the account's shares is bigger than the available exit liquidity
-        if (assets > pool.getLiquidAssets()) revert InsufficientLiquidity();
+        if (assets > pool.getLiquidAssets()) return 0;
     }
 
     /**

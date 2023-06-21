@@ -136,8 +136,7 @@ contract OffRampTest is BaseTest {
 
     // preview withdraw should revert 
     if (exitLiquidity < withdrawAmount) {
-      vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
-      pool.previewWithdraw(withdrawAmount);
+      assertEq(pool.previewWithdraw(withdrawAmount), 0, "preview withdraw should return 0");
 
       vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
       ramp.withdraw(withdrawAmount, investor1, investor1, 0);
@@ -184,8 +183,7 @@ contract OffRampTest is BaseTest {
 
     // preview withdraw should revert 
     if (exitLiquidity < redeemAmount) {
-      vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
-      pool.previewRedeem(redeemAmount);
+      assertEq(pool.previewRedeem(redeemAmount), 0, "Preview redeem should return 0");
 
       vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
       ramp.redeem(redeemAmount, investor1, investor1, 0);
