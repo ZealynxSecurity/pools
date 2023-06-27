@@ -24,10 +24,10 @@ contract RateModule is IRateModule, Ownable {
     using FixedPointMathLib for uint256;
 
     /// @dev `maxDTI` is the maximum ratio of expected daily interest payments to expected daily rewards
-    uint256 public maxDTI = 0.5e18;
+    uint256 public maxDTI = 0.25e18;
 
     /// @dev `maxDTE` is the maximum ratio of principal to equity (principal / (agentValue - principal))
-    uint256 public maxDTE = 3e18;
+    uint256 public maxDTE = 1e18;
 
     /// @dev `maxLTV` is the maximum ratio of principal to collateral
     uint256 public maxLTV = 1e18;
