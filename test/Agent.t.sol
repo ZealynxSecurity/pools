@@ -1530,7 +1530,7 @@ contract AgentPoliceTest is BaseTest {
         police.defaultWindow() + 1,
         police.defaultWindow() * 10
       );
-      poolOnePercent = bound(poolOnePercent, 1, WAD);
+      poolOnePercent = bound(poolOnePercent, 1, WAD - 2);
       poolTwoPercent = bound(poolTwoPercent, 1, WAD - poolOnePercent);
       poolThreePercent = WAD - poolOnePercent - poolTwoPercent;
 
