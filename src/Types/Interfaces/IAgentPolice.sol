@@ -50,7 +50,7 @@ interface IAgentPolice {
     SignedCredential calldata signedCredential
   ) external;
 
-  function credentialUsed(uint8 v, bytes32 r, bytes32 s) external view returns (bool);
+  function credentialUsed(VerifiableCredential calldata vc) external view returns (bool);
 
   function registerCredentialUseBlock(
     SignedCredential calldata signedCredential

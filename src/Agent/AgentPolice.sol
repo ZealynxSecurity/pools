@@ -257,14 +257,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     );
 
     // check to see if this credential has been used for
-    if (credentialUsed(sc.v, sc.r, sc.s)) revert InvalidCredential();
+    if (credentialUsed(sc.vc)) revert InvalidCredential();
   }
 
   /**
    * @notice `credentialUsed` returns true if the credential has been used before
    */
-  function credentialUsed(uint8 v, bytes32 r, bytes32 s) public view returns (bool) {
-    return _credentialUseBlock[createSigKey(v, r, s)] > 0;
+  function credentialUsed(VerifiableCredential calldata vc) public view returns (bool) {
+    return _credentialUseBlock[digest(vc)] > 0;
   }
 
   /**
@@ -275,7 +275,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     SignedCredential memory sc
   ) external {
     if (IAgent(msg.sender).id() != sc.vc.subject) revert Unauthorized();
-    _credentialUseBlock[createSigKey(sc.v, sc.r, sc.s)] = block.number;
+    _credentialUseBlock[digest(sc.vc)] = block.number;
   }
 
   /*//////////////////////////////////////////////
@@ -471,9 +471,5 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
       // this is to prevent the agent from doing an action before paying up
       if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert AgentStateRejected();
     }
-  }
-
-  function createSigKey(uint8 v, bytes32 r, bytes32 s) internal pure returns (bytes32){
-    return keccak256(abi.encode(v, r, s));
   }
 }

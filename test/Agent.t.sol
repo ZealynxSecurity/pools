@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "test/helpers/MockMiner.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
@@ -27,6 +28,7 @@ import {UpgradedAgentDeployer} from "test/helpers/UpgradedAgentDeployer.sol";
 import {UpgradedAgent} from "test/helpers/UpgradedAgent.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 import {errorSelector} from "test/helpers/Utils.sol";
+import {FlipSig} from "test/helpers/FlipSig.sol";
 
 import "./BaseTest.sol";
 
@@ -1108,6 +1110,29 @@ contract AgentPoliceTest is BaseTest {
       vm.startPrank(address(agent));
       vm.expectRevert(Unauthorized.selector);
       police.registerCredentialUseBlock(sc);
+    }
+
+    function testReplaySignature() public {
+      SignedCredential memory sc = issueGenericBorrowCred(agent.id(), WAD);
+      agentBorrow(agent, pool.id(), sc);
+
+      FlipSig flipSig = new FlipSig();
+
+      (uint8 flippedV, bytes32 flippedR, bytes32 flippedS) = flipSig.reuseSignature(sc.v, sc.r, sc.s);
+
+      SignedCredential memory replayedCred = SignedCredential(
+        sc.vc,
+        flippedV,
+        flippedR,
+        flippedS
+      );
+
+      vm.startPrank(minerOwner);
+      uint256 poolID = pool.id();
+      vm.expectRevert("ECDSA: invalid signature 's' value");
+      agent.borrow(poolID, replayedCred);
+
+      vm.stopPrank();
     }
 
     function testPutAgentOnAdministration(uint256 rollFwdPeriod, uint256 borrowAmount) public {
