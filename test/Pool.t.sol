@@ -952,11 +952,12 @@ contract PoolErrorBranches is PoolTestState {
   }
 
   function testLiquidAssetsOnShutdown() public {
-    assertGt(pool.getLiquidAssets(), 0, "Liquid assets should be greater than zero before pool is shut down");
+    uint256 liquidAssets = pool.getLiquidAssets();
+    assertGt(liquidAssets, 0, "Liquid assets should be greater than zero before pool is shut down");
     vm.prank(address(systemAdmin));
     pool.shutDown();
     assertTrue(pool.isShuttingDown(), "Pool should be shut down");
-    assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when pool is shutting down");
+    assertEq(pool.getLiquidAssets(), liquidAssets, "Liquid assets should be the same when pool is shutting down");
   }
 
   function testPayUpBeforeBorrow(uint256 borrowAmount, uint256 rollFwdAmount) public {

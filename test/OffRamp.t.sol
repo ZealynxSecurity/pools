@@ -424,6 +424,28 @@ contract OffRampTest is BaseTest {
     assertEq(address(pool).balance, 0, "Pool should have 0 FIL after recovery");
   }
 
+  function testExitDuringShutdown() public {
+    uint256 stakeAmount = 100e18;
+    fundPoolByInvestor(stakeAmount, investor1);
+    // shut down the pool
+    vm.prank(systemAdmin);
+    pool.shutDown();
+
+    vm.startPrank(investor1);
+    uint256 maxWithdraw = pool.maxWithdraw(investor1);
+    uint256 investorIFIL = iFIL.balanceOf(investor1);
+    assertEq(maxWithdraw, stakeAmount, "Max withdraw incorrect");
+    assertEq(maxWithdraw, investorIFIL, "Max withdraw should equal investor iFIL balance");
+    // pool should have no liquid assets when shutting down
+    assertEq(pool.getLiquidAssets(), stakeAmount, "Pool should have stakeAmount liquid assets when shutting down");
+    assertEq(wFIL.balanceOf(investor1), 0, "Investor should not have any wFIL");
+    
+    iFIL.approve(address(ramp), pool.convertToAssets(investorIFIL));
+    ramp.withdraw(maxWithdraw, investor1, investor1, 0);
+    assertEq(iFIL.balanceOf(investor1), 0, "Investor should have no more iFIL after withdrawing");
+    assertEq(wFIL.balanceOf(investor1), stakeAmount, "Investor should have stakeAmount of wFIL");
+  }
+
   function setMinLiquidity(uint256 minLiquidity) internal {
     vm.prank(systemAdmin);
     pool.setMinimumLiquidity(minLiquidity);

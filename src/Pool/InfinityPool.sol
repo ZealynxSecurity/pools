@@ -205,8 +205,6 @@ contract InfinityPool is IPool, Ownable {
      * @return liquidFunds The amount of total liquid assets held in the Pool
      */
     function getLiquidAssets() public view returns (uint256) {
-        if(isShuttingDown) return 0;
-
         uint256 balance = asset.balanceOf(address(this));
         // ensure we dont pay out treasury fees
         if (balance <= feesCollected) return 0;
@@ -723,7 +721,7 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
-     * @notice shutDown sets the isShuttingDown variable to true, effectively halting all
+     * @notice shutDown sets the isShuttingDown variable to true, effectively halting all deposits and borrows
      */
     function shutDown() external onlyOwner {
         isShuttingDown = true;
