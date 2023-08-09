@@ -276,7 +276,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function registerCredentialUseBlock(
     SignedCredential memory sc
-  ) external {
+  ) external onlyAgent {
     if (IAgent(msg.sender).id() != sc.vc.subject) revert Unauthorized();
     _credentialUseBlock[digest(sc.vc)] = block.number;
   }

@@ -176,11 +176,11 @@ contract Agent is IAgent, Operatable {
   )
     external
     onlyOwner
-    checkVersion
     notPaused
     notOnAdministration
     notInDefault
     validateAndBurnCred(sc)
+    checkVersion
   {
     // checks to see if Agent has enough equity to remove miner
     agentPolice.confirmRmEquity(sc.vc);
@@ -360,8 +360,8 @@ contract Agent is IAgent, Operatable {
     notPaused
     notInDefault
     notOnAdministration
-    checkVersion
     validateAndBurnCred(sc)
+    checkVersion
   {
     uint256 sendAmount = sc.vc.value;
     // Regardless of sender if the agent is overleveraged they cannot withdraw

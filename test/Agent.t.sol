@@ -1721,23 +1721,23 @@ contract AgentUpgradeTest is BaseTest {
 
         vm.startPrank(_agentOwner(agent));
         // make sure the old agent can't do anything
-        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
+        vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
         agent.borrow(poolId, borrowCred);
 
         SignedCredential memory addMinerCred = issueAddMinerCred(agentId, 0);
-        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
+        vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
         agent.addMiner(addMinerCred);
 
         SignedCredential memory removeMinerCred = issueRemoveMinerCred(agentId, 0, emptyAgentData());
-        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
+        vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
         agent.removeMiner(1234, removeMinerCred);
 
         SignedCredential memory payCred = issueGenericPayCred(agentId, WAD);
-        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
+        vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
         agent.pay(poolId, payCred);
 
         SignedCredential memory withdrawCred = issueWithdrawCred(agentId, WAD, emptyAgentData());
-        vm.expectRevert(abi.encodeWithSelector(Agent.BadAgentState.selector));
+        vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
         agent.withdraw(makeAddr("receiver"), withdrawCred);
 
         vm.stopPrank();
