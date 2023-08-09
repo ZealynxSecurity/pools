@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.17;
 
-import "forge-std/Test.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
 import {errorSelector} from "test/helpers/Utils.sol";
-error Unauthorized();
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IAuth} from "src/Types/Interfaces/IAuth.sol";
+import "test/BaseTest.sol";
 
 contract OwnableMock is Ownable {
   uint256 public protectedCounter = 0;
@@ -121,7 +122,7 @@ contract OperatableTest is Test {
 
   function testTransferOperator() public {
     address newOperator = makeAddr("NEW_OPERATOR");
-    vm.prank(operator);
+    vm.prank(owner);
     operatable.transferOperator(newOperator);
     assertEq(operatable.pendingOperator(), newOperator);
     assertEq(operatable.operator(), operator);
@@ -129,7 +130,7 @@ contract OperatableTest is Test {
 
   function testAcceptOperator() public {
     address newOperator = makeAddr("NEW_OPERATOR");
-    vm.prank(operator);
+    vm.prank(owner);
     operatable.transferOperator(newOperator);
     vm.prank(newOperator);
     operatable.acceptOperator();
@@ -139,7 +140,7 @@ contract OperatableTest is Test {
 
   function testAcceptOperatorNonPendingOperator() public {
     address newOperator = makeAddr("NEW_OPERATOR");
-    vm.prank(operator);
+    vm.prank(owner);
     operatable.transferOperator(newOperator);
     vm.startPrank(makeAddr("NOT_PENDING_OPERATOR"));
     try operatable.acceptOperator() {
@@ -150,4 +151,96 @@ contract OperatableTest is Test {
 
     vm.stopPrank();
   }
+
+
+}
+
+contract AgentOwnershipTest is BaseTest {
+    IAgent agent;
+    IAuth auth;
+    uint64 miner;
+
+    function setUp() public {
+        address owner = makeAddr("OWNER");
+        (agent, miner) = configureAgent(owner);
+        auth = IAuth(address(agent));
+
+        // change the operator to a different address than the owner for these tests
+        address operator = makeAddr("OPERATOR");
+        vm.prank(owner);
+        auth.transferOperator(operator);
+        vm.prank(operator);
+        auth.acceptOperator();
+    }
+
+    function testSetChangeOwner() public {
+        address currentOwner = _agentOwner(agent);
+        address newOwner = makeAddr("NEW_OWNER");
+        vm.startPrank(currentOwner);
+        auth.transferOwnership(newOwner);
+        vm.stopPrank();
+
+        assertEq(_agentOwner(agent), currentOwner, "Agent owner should not be changed");
+
+        vm.startPrank(newOwner);
+        auth.acceptOwnership();
+        vm.stopPrank();
+
+        assertEq(_agentOwner(agent), newOwner, "Agent owner should be changed");
+    }
+
+    function testSetChangeOwnerNonOwner() public {
+        address newOwner = makeAddr("NEW_OWNER");
+
+        vm.expectRevert(Unauthorized.selector);
+        auth.transferOwnership(newOwner);
+
+        vm.startPrank(newOwner);
+        vm.expectRevert(Unauthorized.selector);
+        auth.acceptOwnership();
+    }
+
+    function testSetChangeOperatorAsOwner() public {
+        address currentOwner = _agentOwner(agent);
+        address currentOperator = _agentOperator(agent);
+        address newOperator = makeAddr("NEW_OPERATOR");
+
+        vm.startPrank(currentOwner);
+        auth.transferOperator(newOperator);
+        vm.stopPrank();
+
+        assertEq(_agentOperator(agent), currentOperator, "Agent operator should not be changed");
+
+        vm.startPrank(newOperator);
+        auth.acceptOperator();
+        vm.stopPrank();
+
+        assertEq(_agentOperator(agent), newOperator, "Agent operator should be changed");
+    }
+
+    function testSetChangeOwnerAsOperator() public {
+        address currentOwner = _agentOwner(agent);
+        address currentOperator = _agentOperator(agent);
+        address newOperator = makeAddr("NEW_OPERATOR");
+
+        vm.startPrank(currentOperator);
+        vm.expectRevert(Unauthorized.selector);
+        auth.transferOwnership(newOperator);
+        vm.stopPrank();
+
+        assertEq(_agentOperator(agent), currentOperator, "Agent operator should not be changed");
+        assertEq(_agentOwner(agent), currentOwner, "Agent owner should not be changed");
+    }
+
+    function testChangeOperatorAsOperator() public {
+        address currentOperator = _agentOperator(agent);
+        address newOperator = makeAddr("NEW_OPERATOR");
+
+        vm.startPrank(currentOperator);
+        vm.expectRevert(Unauthorized.selector);
+        auth.transferOperator(newOperator);
+        vm.stopPrank();
+
+        assertEq(_agentOperator(agent), currentOperator, "Agent operator should not be changed");
+    }
 }

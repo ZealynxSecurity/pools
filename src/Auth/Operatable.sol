@@ -53,7 +53,7 @@ abstract contract Operatable is Ownable {
      * @dev Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one.
      * Can only be called by the current owner or operator.
      */
-    function transferOperator(address newOperator) public virtual onlyOwnerOperator {
+    function transferOperator(address newOperator) public virtual onlyOwner {
         pendingOperator = newOperator;
     }
 
