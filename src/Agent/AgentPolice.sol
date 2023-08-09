@@ -461,6 +461,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function _agentApproved(VerifiableCredential calldata vc) internal view {
     uint256[] memory pools = poolRegistry.poolIDs(vc.subject);
 
+    if (pools.length > maxPoolsPerAgent) revert AgentStateRejected();
+
     for (uint256 i = 0; i < pools.length; ++i) {
       uint256 poolID = pools[i];
       IPool pool = GetRoute.pool(poolRegistry, poolID);
