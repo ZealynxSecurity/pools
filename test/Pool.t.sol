@@ -1039,8 +1039,6 @@ contract PoolErrorBranches is PoolTestState {
 }
 
 contract PoolPreStakeIntegrationTest is BaseTest {
-  address preStake = makeAddr("PRE_STAKE");
-
   IInfinityPool pool;
 
   function setUp() public {
@@ -1048,10 +1046,11 @@ contract PoolPreStakeIntegrationTest is BaseTest {
   }
 
   function testTransferFromPreStake(uint256 preStakeBal, uint256 transferFromAmt) public {
+    address preStake = address(IInfinityPool(address(pool)).preStake());
     vm.assume(transferFromAmt < preStakeBal);
-    vm.deal(address(preStake), preStakeBal);
+    vm.deal(preStake, preStakeBal);
 
-    vm.startPrank(address(preStake));
+    vm.startPrank(preStake);
     wFIL.deposit{value: preStakeBal}();
     wFIL.approve(address(pool), preStakeBal);
     vm.stopPrank();
@@ -1060,7 +1059,7 @@ contract PoolPreStakeIntegrationTest is BaseTest {
     uint256 poolSharesIssued = pool.liquidStakingToken().totalSupply();
 
     vm.startPrank(IAuth(address(pool)).owner());
-    pool.transferFromPreStake(preStake, transferFromAmt);
+    pool.transferFromPreStake(transferFromAmt);
 
     assertEq(wFIL.balanceOf(address(pool)), wFILPoolBal + transferFromAmt);
     assertEq(pool.liquidStakingToken().totalSupply(), poolSharesIssued);

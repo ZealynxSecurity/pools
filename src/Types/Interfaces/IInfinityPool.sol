@@ -8,6 +8,7 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
+import {IPreStake} from "src/Types/Interfaces/IPreStake.sol";
 
 interface IInfinityPool {
 
@@ -50,6 +51,8 @@ interface IInfinityPool {
     ////////////////////////////////////////////////////////*/
 
     function asset() external view returns (IERC20);
+
+    function preStake() external view returns (IPreStake);
 
     function liquidStakingToken() external view returns (IPoolToken);
 
@@ -176,7 +179,7 @@ interface IInfinityPool {
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 
-    function transferFromPreStake(address preStake, uint256 amount) external;
+    function transferFromPreStake(uint256 amount) external;
 
     function recoverFIL(address receiver) external;
 

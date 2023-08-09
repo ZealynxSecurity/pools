@@ -744,11 +744,10 @@ contract InfinityPool is IPool, Ownable {
 
     /**
      * @notice Transfers assets from the pre-stake contract to the pool, without minting new iFIL
-     * @param _preStake The address of the pre-stake contract
      * @param _amount The amount of WFIL to transfer
      */
-    function transferFromPreStake(address _preStake, uint256 _amount) external onlyOwner {
-        asset.transferFrom(_preStake, address(this), _amount);
+    function transferFromPreStake(uint256 _amount) external onlyOwner {
+        asset.transferFrom(address(preStake), address(this), _amount);
     }
 
     /**
