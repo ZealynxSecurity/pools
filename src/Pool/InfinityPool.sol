@@ -54,10 +54,10 @@ contract InfinityPool is IPool, Ownable {
 
     /// @dev cache the routes for gas efficiency
     address internal immutable router;
+    IWFIL internal immutable wFIL;
     IPoolRegistry internal poolRegistry;
     IAgentPolice internal agentPolice;
     IAgentFactory internal agentFactory;
-    IWFIL internal wFIL;
 
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
@@ -772,7 +772,6 @@ contract InfinityPool is IPool, Ownable {
         poolRegistry = GetRoute.poolRegistry(router);
         agentPolice = GetRoute.agentPolice(router);
         agentFactory = GetRoute.agentFactory(router);
-        wFIL = GetRoute.wFIL(router);
     }
 
     /*//////////////////////////////////////////////////////////////
