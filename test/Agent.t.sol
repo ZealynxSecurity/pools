@@ -1112,6 +1112,12 @@ contract AgentPoliceTest is BaseTest {
       police.registerCredentialUseBlock(sc);
     }
 
+    function testSetAdministrationWindow(uint256 newAdminWindow) public {
+      vm.prank(systemAdmin);
+      police.setAdministrationWindow(newAdminWindow);
+      assertEq(police.administrationWindow(), newAdminWindow, "administration window should be set");
+    }
+
     function testReplaySignature() public {
       SignedCredential memory sc = issueGenericBorrowCred(agent.id(), WAD);
       agentBorrow(agent, pool.id(), sc);
@@ -1138,8 +1144,8 @@ contract AgentPoliceTest is BaseTest {
     function testPutAgentOnAdministration(uint256 rollFwdPeriod, uint256 borrowAmount) public {
       rollFwdPeriod = bound(
         rollFwdPeriod,
-        police.defaultWindow() + 1,
-        police.defaultWindow() * 10
+        police.administrationWindow() + 1,
+        police.administrationWindow() * 10
       );
 
       borrowAmount = bound(borrowAmount, WAD, stakeAmount);
@@ -1278,7 +1284,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testRmAgentFromAdministration() public {
-      uint256 rollFwdPeriod = police.defaultWindow() + 100;
+      uint256 rollFwdPeriod = police.administrationWindow() + 100;
       uint256 borrowAmount = WAD;
 
       putAgentOnAdministration(
@@ -1330,8 +1336,8 @@ contract AgentPoliceTest is BaseTest {
     function testSetAdministrationNonAgentPolice(uint256 rollFwdPeriod) public {
       rollFwdPeriod = bound(
         rollFwdPeriod,
-        police.defaultWindow() + 1,
-        police.defaultWindow() * 10
+        police.administrationWindow() + 1,
+        police.administrationWindow() * 10
       );
 
       uint256 borrowAmount = WAD;

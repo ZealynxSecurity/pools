@@ -945,10 +945,10 @@ contract PoolAdminTests is PoolTestState {
       "Pool should have received new stake amount"
     );
 
-    // exit the position from the new pool this time, and then borrow again
-    Account memory account = AccountHelpers.getAccount(router, agentID, newPool.id());
-
+    // Make a payment to get the account's epochsPaid current
+    Account memory account = AccountHelpers.getAccount(router, agent.id(), newPool.id());
     vm.deal(address(agent), account.principal);
+
     agentPay(agent, newPool, issueGenericPayCred(agentID, account.principal));
 
     uint256 newBorrowAmount = newPool.totalBorrowableAssets();

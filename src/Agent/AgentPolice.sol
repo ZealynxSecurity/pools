@@ -20,7 +20,7 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
+import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
@@ -36,8 +36,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   uint256 constant WAD = 1e18;
 
-  /// @notice `defaultLookback` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
+  /// @notice `defaultWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
   uint256 public defaultWindow;
+
+  /// @notice `administrationWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is eligible for administration
+  uint256 public administrationWindow;
 
   /// @notice `maxPoolsPoerAgent`
   uint256 public maxPoolsPerAgent;
@@ -76,6 +79,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     IWFIL _wFIL
   ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
     defaultWindow = _defaultWindow;
+    administrationWindow = EPOCHS_IN_WEEK;
     maxPoolsPerAgent = 10;
 
     poolRegistry = _poolRegistry;
@@ -87,8 +91,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     _;
   }
 
-  modifier onlyWhenBehindTargetEpoch(address agent) {
-    if (!_epochsPaidBehindTarget(IAgent(agent).id(), defaultWindow)) {
+  modifier onlyWhenBehindTargetEpoch(address agent, uint256 lookback) {
+    if (!_epochsPaidBehindTarget(IAgent(agent).id(), lookback)) {
       revert Unauthorized();
     }
     _;
@@ -119,7 +123,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `setAgentDefaulted` puts the agent in default permanently
    * @param agent The address of the agent to put in default
    */
-  function setAgentDefaulted(address agent) external onlyOwner onlyWhenBehindTargetEpoch(agent) {
+  function setAgentDefaulted(address agent) external onlyOwner onlyWhenBehindTargetEpoch(agent, defaultWindow) {
     IAgent(agent).setInDefault();
     emit Defaulted(agent);
   }
@@ -147,7 +151,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     address administration
   ) external
     onlyOwner
-    onlyWhenBehindTargetEpoch(agent)
+    onlyWhenBehindTargetEpoch(agent, administrationWindow)
   {
     IAgent(agent).setAdministration(administration.normalize());
     emit OnAdministration(agent);
@@ -323,7 +327,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
       vc.getFaultySectors(credParser).divWadDown(vc.getLiveSectors(credParser)) > sectorFaultyTolerancePercent
     ) revert AgentStateRejected();
 
-    if (_epochsPaidBehindTarget(vc.subject, defaultWindow)) revert AgentStateRejected();
+    if (_epochsPaidBehindTarget(vc.subject, administrationWindow)) revert AgentStateRejected();
   }
 
   /*//////////////////////////////////////////////
@@ -335,6 +339,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function setDefaultWindow(uint256 _defaultWindow) external onlyOwner {
     defaultWindow = _defaultWindow;
+  }
+
+  /**
+   * @notice `setAdministrationWindow` changes the administration window epochs
+   */
+  function setAdministrationWindow(uint256 _administrationWindow) external onlyOwner {
+    administrationWindow = _administrationWindow;
   }
 
   /**

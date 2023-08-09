@@ -22,6 +22,8 @@ interface IAgentPolice {
 
   function defaultWindow() external view returns (uint256);
 
+  function administrationWindow() external view returns (uint256);
+
   function maxPoolsPerAgent() external view returns (uint256);
 
   function agentApproved(VerifiableCredential calldata vc) external;
@@ -97,6 +99,8 @@ interface IAgentPolice {
   //////////////////////////////////////////////*/
 
   function setDefaultWindow(uint256 defaultWindow) external;
+
+  function setAdministrationWindow(uint256 administrationWindow) external;
 
   function pause() external;
 
