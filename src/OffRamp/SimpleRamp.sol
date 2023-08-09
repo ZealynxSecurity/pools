@@ -10,7 +10,7 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 
-contract InfPoolSimpleRamp is IOffRamp {
+contract SimpleRamp is IOffRamp {
     error Unauthorized();
     error InsufficientLiquidity();
 

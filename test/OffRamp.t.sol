@@ -31,7 +31,7 @@ contract OffRampTest is BaseTest {
     (agent, miner) = configureAgent(minerOwner);
 
     // configure the offramp
-    ramp = new InfPoolSimpleRamp(router, pool.id());
+    ramp = new SimpleRamp(router, pool.id());
 
     vm.startPrank(systemAdmin);
     pool.setRamp(ramp);
@@ -138,7 +138,7 @@ contract OffRampTest is BaseTest {
     if (exitLiquidity < withdrawAmount) {
       assertEq(pool.previewWithdraw(withdrawAmount), 0, "preview withdraw should return 0");
 
-      vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
+      vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
       ramp.withdraw(withdrawAmount, investor1, investor1, 0);
     } else {
       assertEq(pool.previewWithdraw(withdrawAmount), withdrawAmount, "Wrong preview withdraw");
@@ -185,7 +185,7 @@ contract OffRampTest is BaseTest {
     if (exitLiquidity < redeemAmount) {
       assertEq(pool.previewRedeem(redeemAmount), 0, "Preview redeem should return 0");
 
-      vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
+      vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
       ramp.redeem(redeemAmount, investor1, investor1, 0);
     } else {
       assertEq(pool.previewRedeem(redeemAmount), redeemAmount, "Wrong preview redeem");

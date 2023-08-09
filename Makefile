@@ -12,6 +12,7 @@ SRC=\
   src/Types/Interfaces/IERC4626.sol \
   src/Agent/AgentPolice.sol \
   src/Agent/MinerRegistry.sol \
+  src/OffRamp/SimpleRamp.sol \
   test/helpers/MockMiner.sol
 
 SRC_MOCK=\
