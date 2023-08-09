@@ -739,6 +739,9 @@ contract InfinityPool is IPool, Ownable {
      * @param _maxEpochsOwedTolerance The new value for maxEpochsOwedTolerance
      */
     function setMaxEpochsOwedTolerance(uint256 _maxEpochsOwedTolerance) external onlyOwner {
+        // if maxEpochsOwedTolerance is greater than 1 day, Agents can over pay interest
+        if (_maxEpochsOwedTolerance > EPOCHS_IN_DAY) revert InvalidParams();
+
         maxEpochsOwedTolerance = _maxEpochsOwedTolerance;
     }
 

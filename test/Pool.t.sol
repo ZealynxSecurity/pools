@@ -894,6 +894,21 @@ contract PoolAdminTests is PoolTestState {
     assertNewPoolWorks(newPool, assetBalanceNew, agentBalanceNew);
   }
 
+  function testSetMaxEpochsOwedTolerance(uint256 epochsOwedTolerance) public {
+    vm.assume(epochsOwedTolerance < EPOCHS_IN_YEAR);
+
+    IInfinityPool infpool = IInfinityPool(address(pool));
+
+    vm.startPrank(systemAdmin);
+    if (epochsOwedTolerance > EPOCHS_IN_DAY) {
+      vm.expectRevert(InvalidParams.selector);
+      infpool.setMaxEpochsOwedTolerance(epochsOwedTolerance);
+    } else {
+      infpool.setMaxEpochsOwedTolerance(epochsOwedTolerance);
+      assertEq(infpool.maxEpochsOwedTolerance(), epochsOwedTolerance);
+    }
+  }
+
   function assertNewPoolWorks(IPool newPool, uint256 assetBalanceNew, uint256 agentWFILBal) internal {
     // deposit into the pool again
     address newInvestor = makeAddr("NEW_INVESTOR");
@@ -912,12 +927,15 @@ contract PoolAdminTests is PoolTestState {
       "Pool should have received new stake amount"
     );
 
-    // Temporarily bump the epochsPaidBorrowBuffer so we can borrow
-    _bumpMaxEpochsOwedTolerance(EPOCHS_IN_DAY*25, address(newPool));
+    // exit the position from the new pool this time, and then borrow again
+    Account memory account = AccountHelpers.getAccount(router, agentID, newPool.id());
+
+    vm.deal(address(agent), account.principal);
+    agentPay(agent, newPool, issueGenericPayCred(agentID, account.principal));
 
     uint256 newBorrowAmount = newPool.totalBorrowableAssets();
     // Test that the new pool can be used to borrow
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, newPool.totalBorrowableAssets()));
+    agentBorrow(agent, newPool.id(), issueGenericBorrowCred(agentID, newPool.totalBorrowableAssets()));
 
     assertEq(wFIL.balanceOf(address(agent)), newBorrowAmount + agentWFILBal, "Agent should have received new borrow amount");
   }
@@ -1006,11 +1024,13 @@ contract PoolErrorBranches is PoolTestState {
       vm.prank(investor);
       pool.deposit{value: WAD}(investor);
     }
-    // temporarily bump the epochsPaidBorrowBuffer so we can borrow again
-    _bumpMaxEpochsOwedTolerance(EPOCHS_IN_DAY*25, address(pool));
+    // pay back principal so we can borrow again
+    Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
+    agentPay(agent, pool, issueGenericPayCred(agentID, account.principal));
     // borrow the rest of the assets
     agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
-    assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when pool is shutting down");
+    assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when liquid assets less than fees");
+    assertGt(pool.feesCollected(), 0, "Pool should have generated fees");
   }
 
   function testMintZeroShares() public {
