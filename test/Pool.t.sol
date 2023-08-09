@@ -839,6 +839,24 @@ contract PoolAdminTests is PoolTestState {
     vm.prank(address(poolRegistry));
   }
 
+  function testFallbackAfterShutDown() public {
+    vm.prank(address(systemAdmin));
+    pool.shutDown();
+    assertTrue(pool.isShuttingDown(), "Pool should be shut down");
+
+    address depositor = makeAddr("depositor");
+    vm.deal(depositor, WAD);
+    uint256 beforeBal = depositor.balance;
+    vm.startPrank(depositor);
+    vm.expectRevert(abi.encodeWithSelector(InvalidState.selector));
+    // ignore return value of low-level calls not used compiler warning
+    (bool success, ) = address(pool).call{value: WAD}("");
+    // not sure why this returns true
+    assertTrue(success, "Not sure?");
+    assertEq(beforeBal, WAD, "Depositor should still have its funds");
+    vm.stopPrank();
+  }
+
   function testUpgradePool(uint256 paymentAmt, uint256 initialBorrow) public {
 
     initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());

@@ -121,11 +121,11 @@ contract InfinityPool is IPool, Ownable {
                       Payable Fallbacks
     ////////////////////////////////////////////////////////*/
 
-    receive() external payable {
+    receive() isOpen external payable {
         _depositFIL(msg.sender);
     }
 
-    fallback() external payable {
+    fallback() isOpen external payable {
         _depositFIL(msg.sender);
     }
 
