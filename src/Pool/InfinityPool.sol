@@ -368,6 +368,18 @@ contract InfinityPool is IPool, Ownable {
         // the amount of interest paid on this payment, used for computing the treasury fee
         uint256 feeBasis;
 
+        // if the account is "defaulted", we treat everything as interest
+        if (account.defaulted) {
+            // accrue treasury fee
+            feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(vc.value);
+            // transfer the assets into the pool
+            asset.transferFrom(msg.sender, address(this), vc.value);
+
+            emit Pay(vc.subject, rate, 0, 0, 0);
+
+            return (rate, account.epochsPaid, 0, 0);
+        }
+
         // if the account is not "current", compute the amount of interest owed based on the new rate
         if (account.epochsPaid < block.number) {
             // compute the number of epochs that are owed to get current

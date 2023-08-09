@@ -1166,6 +1166,7 @@ contract PoolUpgradeCredentialTest is PoolTestState {
 contract PoolAccountingTest is BaseTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
+    using FixedPointMathLib for uint256;
 
     IAgent agent;
     uint64 miner;
@@ -1213,6 +1214,60 @@ contract PoolAccountingTest is BaseTest {
       assertEq(postPayAccount1.principal, 0, "Account should have been paid off");
       assertEq(postPayAccount2.principal, pool.totalBorrowed(), "Agent2 principal should equal pool's total borrowed");
       testInvariants(pool, "test over pay under total borrowed 2");
+    }
+
+    function testPayAfterLiquidation(uint256 payAmount) public {
+      payAmount = bound(payAmount, 1, MAX_FIL);
+      uint256 stakeAmount = 100e18;
+      uint64 liquidatorID = 1;
+      depositFundsIntoPool(pool, stakeAmount, investor);
+
+      // borrow half the pool's assets, default, then pay everything back to the pool (as interest)
+      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), stakeAmount / 2));
+
+      vm.roll(block.number + EPOCHS_IN_YEAR);
+
+      uint256 toAssets = pool.convertToAssets(WAD);
+      uint256 toShares = pool.convertToShares(WAD);
+
+      IAgentPolice police = GetRoute.agentPolice(router);
+      vm.startPrank(systemAdmin);
+      police.setAgentDefaulted(address(agent));
+      police.prepareMinerForLiquidation(address(agent), miner, liquidatorID);
+      police.distributeLiquidatedFunds(address(agent), 0);
+      vm.stopPrank();
+
+      uint256 toAssetsAfterLiquidating = pool.convertToAssets(WAD);
+      uint256 toSharesAfterLiquidating = pool.convertToShares(WAD);
+
+      assertEq(agent.defaulted(), true, "Agent should be defaulted");
+      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+      assertEq(account.defaulted, true, "Account should be defaulted");
+
+      assertEq(pool.totalBorrowed(), 0, "Pool should have no total borrowed");
+      assertEq(pool.getLiquidAssets(), stakeAmount / 2, "Pool should have half its liquid assets after losing everything else");
+      assertEq(toAssetsAfterLiquidating, toAssets / 2, "iFIL should be worth half");
+      assertEq(toSharesAfterLiquidating, toShares * 2, "iFIL should be worth half");
+      assertEq(pool.totalBorrowableAssets(), stakeAmount / 2, "Pool should have half as many total borrowable assets");
+
+      vm.deal(address(agent), payAmount);
+      vm.startPrank(_agentOperator(agent));
+      agent.pay(pool.id(), issueGenericPayCred(agent.id(), payAmount));
+      vm.stopPrank();
+      console.log(payAmount);
+
+      assertEq(pool.totalBorrowed(), 0, "Pool should still have no total borrowed");
+
+      uint256 fee = GetRoute.poolRegistry(router).treasuryFeeRate().mulWadUp(payAmount);
+      uint256 payAmountLessFee = payAmount - fee;
+
+      assertApproxEqAbs(pool.getLiquidAssets(), (stakeAmount / 2) + payAmountLessFee, 1e16, "Pool should have payAmount added to its liquid assets");
+      assertApproxEqAbs(pool.totalBorrowableAssets(), (stakeAmount / 2) + payAmountLessFee, 1e16, "Pool should have payAmount added to total borrowable assets");
+      // if pay amount is greater than 1e16, then the iFIL should be worth more (bc of treasury fees)
+      if (payAmount > 1e16) {
+        assertGt(pool.convertToAssets(WAD), toAssetsAfterLiquidating, "iFIL should be worth more");
+        assertGt(toSharesAfterLiquidating, pool.convertToShares(WAD), "iFIL should be worth more");
+      }
     }
 }
 
