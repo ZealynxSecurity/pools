@@ -424,26 +424,59 @@ contract OffRampTest is BaseTest {
     assertEq(address(pool).balance, 0, "Pool should have 0 FIL after recovery");
   }
 
-  function testExitDuringShutdown() public {
+  function testBurnExcessIFIL() public {
     uint256 stakeAmount = 100e18;
-    fundPoolByInvestor(stakeAmount, investor1);
-    // shut down the pool
-    vm.prank(systemAdmin);
-    pool.shutDown();
+    address donator = makeAddr("DONATOR");
+
+    fundPoolByInvestor(stakeAmount, donator);
+
+    vm.startPrank(donator);
+    iFIL.transfer(address(ramp), iFIL.balanceOf(donator));
+    vm.stopPrank();
+
+    uint256 iFILSupply = iFIL.totalSupply();
+    assertEq(iFILSupply, stakeAmount, "iFIL supply should be double stake amount");
 
     vm.startPrank(investor1);
-    uint256 maxWithdraw = pool.maxWithdraw(investor1);
-    uint256 investorIFIL = iFIL.balanceOf(investor1);
-    assertEq(maxWithdraw, stakeAmount, "Max withdraw incorrect");
-    assertEq(maxWithdraw, investorIFIL, "Max withdraw should equal investor iFIL balance");
-    // pool should have no liquid assets when shutting down
-    assertEq(pool.getLiquidAssets(), stakeAmount, "Pool should have stakeAmount liquid assets when shutting down");
-    assertEq(wFIL.balanceOf(investor1), 0, "Investor should not have any wFIL");
-    
-    iFIL.approve(address(ramp), pool.convertToAssets(investorIFIL));
-    ramp.withdraw(maxWithdraw, investor1, investor1, 0);
-    assertEq(iFIL.balanceOf(investor1), 0, "Investor should have no more iFIL after withdrawing");
-    assertEq(wFIL.balanceOf(investor1), stakeAmount, "Investor should have stakeAmount of wFIL");
+    ramp.burnIFIL();
+    vm.stopPrank();
+
+    assertEq(iFIL.totalSupply(), 0, "All iFIL should be burnt");
+  }
+
+  function testLiquidAssetsTooLow() public {
+    uint256 agentID = agent.id();
+    uint256 stakeAmount = 1000e18;
+    fundPoolByInvestor(stakeAmount, investor1);
+
+    // ensure we have enough money to make a payment that generates fees
+    vm.deal(address(agent), stakeAmount * 2);
+    // Borrow to generate fees
+    agentBorrow(agent, pool.id(), issueGenericBorrowCred(agentID, stakeAmount));
+    // Roll foward enough that at least _some_ payment is interest
+    vm.roll(block.number + EPOCHS_IN_YEAR);
+    // generate some fees for the pool
+    agentPay(agent, pool, issueGenericPayCred(agentID, stakeAmount));
+
+    // if we dont have enough to borrow, deposit enough to borrow the rest
+    if (pool.totalBorrowableAssets() < WAD) {
+      address investor = makeAddr("steadylad");
+      vm.deal(investor, WAD);
+      vm.prank(investor);
+      pool.deposit{value: WAD}(investor);
+    }
+
+    // borrow the rest of the assets
+    agentBorrow(agent, pool.id(), issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
+
+    assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero");
+
+    // now we try to exit our full amount when the pool has no liquid assets, should revert
+    uint256 iFILBal = iFIL.balanceOf(investor1);
+    vm.startPrank(investor1);
+    iFIL.approve(address(ramp), iFILBal);
+    vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
+    ramp.withdraw(iFILBal, investor1, investor1, 0);
   }
 
   function setMinLiquidity(uint256 minLiquidity) internal {

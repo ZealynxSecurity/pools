@@ -124,15 +124,10 @@ contract SimpleRamp is IOffRamp {
         // if the pool can't process the entire exit, it reverts
         if (assetsToReceive > pool.getLiquidAssets())
             revert InsufficientLiquidity();
-        // this contract will burn any excess iFIL it has (this shouldn't happen, but in case it does, we dont have accounting issues)
-        uint256 balanceOfBefore = iFIL.balanceOf(address(this));
         // pull in the iFIL from the iFIL holder, which will decrease the allowance of this ramp to spend on behalf of the iFIL holder
         iFIL.transferFrom(owner, address(this), iFILToBurn);
-        // burn the exiter's iFIL tokens (and any additional iFIL tokens that somehow ended up here)
-        iFIL.burn(
-            address(this),
-            iFIL.balanceOf(address(this)) - balanceOfBefore
-        );
+        // burn the exiter's iFIL tokens
+        iFIL.burn(address(this), iFILToBurn);
 
         // mark tmpExitDemand such that `ramp.totalExitDemand` returns the amount of FIL this ramp needs
         // in order to process the entire exit
@@ -154,6 +149,13 @@ contract SimpleRamp is IOffRamp {
         uint256 value = address(this).balance;
         wFIL.deposit{value: value}();
         wFIL.transfer(address(pool), wFIL.balanceOf(address(this)));
+    }
+
+    /**
+     * @notice burnIFIL burns all the iFIL in this contract (this should never happen, but just in case, this fixes any accounting issues)
+     */
+    function burnIFIL() external {
+        iFIL.burn(address(this), iFIL.balanceOf(address(this)));
     }
 
     /**

@@ -47,4 +47,6 @@ interface IOffRamp {
     function distribute(address receiver, uint256 amount) external;
 
     function recoverFIL() external;
+
+    function burnIFIL() external;
 }
