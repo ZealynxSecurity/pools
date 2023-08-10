@@ -53,9 +53,6 @@ library MinerHelper {
    * @return configuredForTakeover - Returns true if the miner is ready for takeover
    *
    * @dev beneficiaries: https://github.com/filecoin-project/builtin-actors/blob/6e09044f2514e1dfd92f41cc604812843eed2976/actors/miner/src/beneficiary.rs#L36
-   * available to withdraw by beneficiary:
-   * 0 when `expired`
-   * otherwise beneficiary can withdraw, is not configuredForTakeover
    *
    * Note we do not check any quota here for a few reasons:
    * 1. Quota can overflow max uint256
@@ -73,11 +70,6 @@ library MinerHelper {
     if (_getOwner(minerId) == PrecompilesAPI.resolveAddress(ret.active.beneficiary)) {
       return true;
     }
-
-    // if the beneficiary address is expired, then Agent will be ok to take ownership
-    MinerTypes.BeneficiaryTerm memory term = ret.active.term;
-    uint256 expiration = uint256(uint64(CommonTypes.ChainEpoch.unwrap(term.expiration)));
-    if (expiration < block.number) return true;
 
     return false;
   }
