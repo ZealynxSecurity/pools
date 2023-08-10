@@ -398,6 +398,101 @@ contract OffRampTest is BaseTest {
     assertCompleteExit();
   }
 
+  function testWithdrawWithFundsInOffRamp() public {
+    address investor2 = makeAddr("INVESTOR2");
+    uint256 stakeAmount = 100e18;
+
+    fundPoolByInvestor(stakeAmount, investor1);
+    fundPoolByInvestor(stakeAmount, investor2);
+    assertPegInTact(pool);
+    uint256 initialPeg = pool.convertToAssets(1e18);
+
+    assertEq(wFIL.balanceOf(investor1), 0);
+    assertEq(wFIL.balanceOf(investor2), 0);
+
+    // send some WFIL manually to the offramp
+    address donator = makeAddr("DONATOR");
+    uint256 rampFunds = 10e18;
+    vm.deal(donator, rampFunds);
+    vm.startPrank(donator);
+    wFIL.deposit{value: rampFunds}();
+    wFIL.transfer(address(ramp), rampFunds);
+    vm.stopPrank();
+
+    assertPegInTact(pool);
+
+    vm.startPrank(investor1);
+    iFIL.approve(address(ramp), stakeAmount);
+    ramp.withdraw(stakeAmount, investor1, investor1, 0);
+    vm.stopPrank();
+
+    // here since we know the peg is in tact to start, the peg should change since we essentially got rampFunds of free assets
+    assertGt(pool.convertToAssets(1e18), initialPeg, "Peg should have changed");
+
+    vm.startPrank(investor2);
+    iFIL.approve(address(ramp), stakeAmount);
+    ramp.withdraw(stakeAmount, investor2, investor2, 0);
+    vm.stopPrank();
+
+    assertEq(wFIL.balanceOf(investor1), stakeAmount, "Investor1 should have stake amount back");
+    assertEq(wFIL.balanceOf(investor2), stakeAmount, "Investor2 should have stake amount back");
+
+    assertEq(wFIL.balanceOf(address(pool)), rampFunds, "Pool should have ramp funds");
+
+    assertEq(iFIL.balanceOf(investor1), 0, "Investor1 should have no iFIL");
+    assertGt(iFIL.balanceOf(investor2), 0, "Investor2 should have iFIL after price changed");
+  }
+
+  function testRedeemWithFundsInOffRamp() public {
+    address investor2 = makeAddr("INVESTOR2");
+    uint256 stakeAmount = 100e18;
+
+    fundPoolByInvestor(stakeAmount, investor1);
+    fundPoolByInvestor(stakeAmount, investor2);
+    assertPegInTact(pool);
+    uint256 initialPeg = pool.convertToAssets(1e18);
+
+    assertEq(wFIL.balanceOf(investor1), 0);
+    assertEq(wFIL.balanceOf(investor2), 0);
+
+    // send some WFIL manually to the offramp
+    address donator = makeAddr("DONATOR");
+    uint256 rampFunds = 10e18;
+    vm.deal(donator, rampFunds);
+    vm.startPrank(donator);
+    wFIL.deposit{value: rampFunds}();
+    wFIL.transfer(address(ramp), rampFunds);
+    vm.stopPrank();
+
+    assertPegInTact(pool);
+
+    vm.startPrank(investor1);
+    iFIL.approve(address(ramp), stakeAmount);
+    ramp.redeem(stakeAmount, investor1, investor1, 0);
+    vm.stopPrank();
+
+    // here since we know the peg is in tact to start, the peg should change since we essentially got rampFunds of free assets
+    assertGt(pool.convertToAssets(1e18), initialPeg, "Peg should have changed");
+
+    uint256 poolBalAfterPegBreaks = wFIL.balanceOf(address(pool));
+    uint256 expAssetsAfterRedeem = pool.convertToAssets(stakeAmount);
+
+    vm.startPrank(investor2);
+    iFIL.approve(address(ramp), stakeAmount);
+    ramp.redeem(stakeAmount, investor2, investor2, 0);
+    vm.stopPrank();
+
+    assertEq(wFIL.balanceOf(investor1), stakeAmount, "Investor1 should have stake amount back");
+    // here, since we redeem a number of iFIL and the price of iFIL increased 
+    assertEq(wFIL.balanceOf(investor2), poolBalAfterPegBreaks, "Investor2 should have the rest of the pool's assets back");
+    assertEq(wFIL.balanceOf(investor2), expAssetsAfterRedeem, "Investor2 should have the expected amount received");
+
+    assertEq(wFIL.balanceOf(address(pool)), 0, "Pool should have ramp funds");
+
+    assertEq(iFIL.balanceOf(investor1), 0, "Investor1 should have no iFIL");
+    assertEq(iFIL.balanceOf(investor2), 0, "Investor2 should have no iFIL");
+  }
+
   function testRecoverFIL(uint256 recoverAmount) public {
     vm.assume(recoverAmount < MAX_FIL);
 
