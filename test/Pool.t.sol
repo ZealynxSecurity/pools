@@ -839,6 +839,37 @@ contract PoolAdminTests is PoolTestState {
     vm.prank(address(poolRegistry));
   }
 
+  function testPayAfterShutDown() public {
+    uint256 stakeAmount = 100e18;
+    uint256 initialPoolAssets = pool.totalAssets();
+    uint256 initialPoolTotalBorrowableAssets = pool.totalBorrowableAssets();
+
+    vm.deal(investor1, stakeAmount);
+    vm.prank(investor1);
+    pool.deposit{value: stakeAmount}(investor1);
+
+    uint256 totalBorrowable = pool.totalBorrowableAssets();
+
+    assertEq(pool.totalAssets(), stakeAmount + initialPoolAssets, "pool should have assets");
+    assertEq(initialPoolTotalBorrowableAssets + stakeAmount, totalBorrowable, "pool should have borrowable assets");
+
+    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, totalBorrowable));
+    assertEq(agent.liquidAssets(), totalBorrowable, "Agent should have stakeAmount assets after borrowing");
+    assertEq(pool.totalAssets(), stakeAmount + initialPoolAssets, "pool should have assets");
+    assertEq(pool.totalBorrowableAssets(), 0, "pool should have no borrowable assets");
+
+    vm.prank(systemAdmin);
+    pool.shutDown();
+
+    assertEq(agent.liquidAssets(), totalBorrowable, "Agent should have stakeAmount assets after borrowing");
+
+    uint256 prePayBal = wFIL.balanceOf(address(pool));
+    agentPay(agent, pool, issueGenericPayCred(agentID, stakeAmount));
+    assertApproxEqAbs(pool.totalAssets(), initialPoolAssets + stakeAmount, 1e18, "pool should have assets");
+    assertEq(pool.totalBorrowableAssets(), 0, "pool should have no borrowable assets after shutdown payment");
+    assertEq(wFIL.balanceOf(address(pool)), prePayBal + stakeAmount, "pool should have received payment");
+  }
+
   function testFallbackAfterShutDown() public {
     vm.prank(address(systemAdmin));
     pool.shutDown();

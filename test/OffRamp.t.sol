@@ -475,7 +475,7 @@ contract OffRampTest is BaseTest {
     uint256 iFILBal = iFIL.balanceOf(investor1);
     vm.startPrank(investor1);
     iFIL.approve(address(ramp), iFILBal);
-    vm.expectRevert(InfPoolSimpleRamp.InsufficientLiquidity.selector);
+    vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
     ramp.withdraw(iFILBal, investor1, investor1, 0);
   }
 

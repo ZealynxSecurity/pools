@@ -349,7 +349,7 @@ contract InfinityPool is IPool, Ownable {
      */
     function pay(
         VerifiableCredential calldata vc
-    ) external isOpen subjectIsAgentCaller(vc) returns (
+    ) external subjectIsAgentCaller(vc) returns (
         uint256 rate,
         uint256 epochsPaid,
         uint256 principalPaid,
