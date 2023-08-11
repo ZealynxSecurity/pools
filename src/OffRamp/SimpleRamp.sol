@@ -3,6 +3,7 @@ pragma solidity 0.8.17;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
@@ -11,6 +12,8 @@ import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 
 contract SimpleRamp is IOffRamp {
+    using FixedPointMathLib for uint256;
+
     error Unauthorized();
     error InsufficientLiquidity();
 
@@ -68,9 +71,14 @@ contract SimpleRamp is IOffRamp {
     /// @notice Returns an onchain simulation of how many shares would be burn to withdraw assets, will revert if not enough assets to exit
     function previewWithdraw(
         uint256 assets
-    ) external view poolNotUpgraded returns (uint256 shares) {
+    ) public view poolNotUpgraded returns (uint256 shares) {
         if (assets > pool.getLiquidAssets()) return 0;
-        return pool.convertToShares(assets);
+
+        uint256 supply = iFIL.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        shares = supply == 0
+            ? assets
+            : assets.mulDivUp(supply, pool.totalAssets());
     }
 
     function maxRedeem(
@@ -82,15 +90,18 @@ contract SimpleRamp is IOffRamp {
         // if the fil value of the account's shares is bigger than the available exit liquidity
         // return the share equivalent of the pool's total liquid assets
         if (filValOfShares > pool.getLiquidAssets()) {
-            return pool.convertToShares(pool.getLiquidAssets());
+            return previewRedeem(pool.getLiquidAssets());
         }
     }
 
     function previewRedeem(
         uint256 shares
-    ) external view poolNotUpgraded returns (uint256 assets) {
-        assets = pool.convertToAssets(shares);
+    ) public view poolNotUpgraded returns (uint256 assets) {
+        uint256 supply = iFIL.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
+        assets = supply == 0
+            ? shares
+            : shares.mulDivUp(pool.totalAssets(), supply);
         // revert if the fil value of the account's shares is bigger than the available exit liquidity
         if (assets > pool.getLiquidAssets()) return 0;
     }
@@ -108,7 +119,7 @@ contract SimpleRamp is IOffRamp {
         address owner,
         uint256
     ) public poolNotUpgraded ownerIsCaller(owner) returns (uint256 shares) {
-        shares = pool.convertToShares(assets);
+        shares = previewWithdraw(assets);
         _processExit(owner, receiver, shares, assets);
     }
 
@@ -125,7 +136,7 @@ contract SimpleRamp is IOffRamp {
         address owner,
         uint256
     ) public poolNotUpgraded ownerIsCaller(owner) returns (uint256 assets) {
-        assets = pool.convertToAssets(shares);
+        assets = previewRedeem(shares);
         _processExit(owner, receiver, shares, assets);
     }
 

@@ -78,7 +78,7 @@ contract OffRampTest is BaseTest {
 
     vm.startPrank(investor1);
     uint256 iFILSupply = iFIL.totalSupply();
-    uint256 sharesToBurn = pool.convertToShares(withdrawAmount);
+    uint256 sharesToBurn = ramp.previewWithdraw(withdrawAmount);
     iFIL.approve(address(ramp), sharesToBurn);
     ramp.withdraw(withdrawAmount, receiver, investor1, 0);
 
@@ -99,11 +99,12 @@ contract OffRampTest is BaseTest {
 
     fundPoolByInvestor(stakeAmount, investor1);
     uint256 iFILSupply = iFIL.totalSupply();
+    uint256 expectedReceivedAssets = ramp.previewWithdraw(redeemAmount);
     vm.startPrank(investor1);
     iFIL.approve(address(ramp), redeemAmount);
     ramp.redeem(redeemAmount, receiver, investor1, 0);
 
-    assertEq(wFIL.balanceOf(receiver), pool.convertToAssets(redeemAmount), "Receiver should have received assets");
+    assertEq(wFIL.balanceOf(receiver), expectedReceivedAssets, "Receiver should have received assets");
     assertEq(wFIL.balanceOf(investor1), 0, "Investor1 should not have received assets");
     vm.stopPrank();
 
@@ -133,23 +134,26 @@ contract OffRampTest is BaseTest {
 
     uint256 exitLiquidity = pool.getLiquidAssets();
     vm.startPrank(investor1);
-    iFIL.approve(address(ramp), pool.convertToAssets(investorIFIL));
+    iFIL.approve(address(ramp), ramp.previewRedeem(investorIFIL));
 
-    // preview withdraw should revert 
-    if (exitLiquidity < withdrawAmount) {
-      assertEq(pool.previewWithdraw(withdrawAmount), 0, "preview withdraw should return 0");
+    // with low numbers and rounding, previewRedeem can return 1 (burn 1 share) while previewWithdraw returns 0 (to receive 0 assets)
+    if (ramp.previewRedeem(investorIFIL) > 0) {
+      // preview withdraw should revert 
+      if (exitLiquidity < withdrawAmount) {
+        assertEq(pool.previewWithdraw(withdrawAmount), 0, "preview withdraw should return 0");
 
-      vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
-      ramp.withdraw(withdrawAmount, investor1, investor1, 0);
-    } else {
-      assertEq(pool.previewWithdraw(withdrawAmount), withdrawAmount, "Wrong preview withdraw");
-      uint256 sharesBurned = ramp.withdraw(withdrawAmount, investor1, investor1, 0);
-      assertEq(sharesBurned, withdrawAmount, "Burn == redeem amount when iFIL still pegged");
-      assertEq(wFIL.balanceOf(investor1), withdrawAmount, "Investor should have withdrawAmount wFIL");
-      assertEq(iFIL.balanceOf(investor1), stakeAmount - withdrawAmount, "Investor should have stakeAmount - withdrawAmount iFIL");
-      assertEq(investorIFIL - iFIL.balanceOf(investor1), sharesBurned, "Investor should have burned sharesBurned iFIL");
-      assertEq(iFILSupply - withdrawAmount, iFIL.totalSupply(), "IFIL supply should have decreased by the withdraw amount");
-      assertEq(wFIL.balanceOf(investor1), withdrawAmount, "Investor should have received withdrawAmount of wFIL");
+        vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
+        ramp.withdraw(withdrawAmount, investor1, investor1, 0);
+      } else {
+        assertEq(pool.previewWithdraw(withdrawAmount), withdrawAmount, "Wrong preview withdraw");
+        uint256 sharesBurned = ramp.withdraw(withdrawAmount, investor1, investor1, 0);
+        assertEq(sharesBurned, withdrawAmount, "Burn == redeem amount when iFIL still pegged");
+        assertEq(wFIL.balanceOf(investor1), withdrawAmount, "Investor should have withdrawAmount wFIL");
+        assertEq(iFIL.balanceOf(investor1), stakeAmount - withdrawAmount, "Investor should have stakeAmount - withdrawAmount iFIL");
+        assertEq(investorIFIL - iFIL.balanceOf(investor1), sharesBurned, "Investor should have burned sharesBurned iFIL");
+        assertEq(iFILSupply - withdrawAmount, iFIL.totalSupply(), "IFIL supply should have decreased by the withdraw amount");
+        assertEq(wFIL.balanceOf(investor1), withdrawAmount, "Investor should have received withdrawAmount of wFIL");
+      }
     }
     vm.stopPrank();
 
@@ -180,23 +184,26 @@ contract OffRampTest is BaseTest {
 
     uint256 exitLiquidity = pool.getLiquidAssets();
     vm.startPrank(investor1);
-    iFIL.approve(address(ramp), pool.convertToAssets(investorIFIL));
+    iFIL.approve(address(ramp), redeemAmount);
 
-    // preview withdraw should revert 
-    if (exitLiquidity < redeemAmount) {
-      assertEq(pool.previewRedeem(redeemAmount), 0, "Preview redeem should return 0");
+    uint256 assetsToReceive = ramp.previewRedeem(redeemAmount);
+    if (assetsToReceive > 0) {
+      if (exitLiquidity < assetsToReceive) {
+        assertEq(pool.previewRedeem(redeemAmount), 0, "Preview redeem should return 0");
 
-      vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
-      ramp.redeem(redeemAmount, investor1, investor1, 0);
-    } else {
-      assertEq(pool.previewRedeem(redeemAmount), redeemAmount, "Wrong preview redeem");
-      uint256 assetsReceived = ramp.redeem(redeemAmount, investor1, investor1, 0);
-      assertEq(assetsReceived, redeemAmount, "assets received == redeem amount when iFIL still pegged");
-      assertEq(wFIL.balanceOf(investor1), redeemAmount, "Investor should have redeemAmount wFIL");
-      assertEq(iFIL.balanceOf(investor1), stakeAmount - redeemAmount, "Investor should have stakeAmount - redeemAmount iFIL");
-      assertEq(investorIFIL - iFIL.balanceOf(investor1), assetsReceived, "Investor should have burned sharesBurned iFIL");
-      assertEq(iFILSupply - redeemAmount, iFIL.totalSupply(), "IFIL supply should have decreased by the redeem amount");
-      assertEq(wFIL.balanceOf(investor1), redeemAmount, "Investor should have received redeemAmount of wFIL");
+        vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
+        ramp.redeem(redeemAmount, investor1, investor1, 0);
+      } else {
+        // handle rounding
+        assertApproxEqAbs(pool.previewRedeem(redeemAmount), redeemAmount, 1, "Wrong preview redeem");
+        uint256 assetsReceived = ramp.redeem(redeemAmount, investor1, investor1, 0);
+        assertEq(assetsReceived, redeemAmount, "assets received == redeem amount when iFIL still pegged");
+        assertEq(wFIL.balanceOf(investor1), redeemAmount, "Investor should have redeemAmount wFIL");
+        assertEq(iFIL.balanceOf(investor1), stakeAmount - redeemAmount, "Investor should have stakeAmount - redeemAmount iFIL");
+        assertEq(investorIFIL - iFIL.balanceOf(investor1), assetsReceived, "Investor should have burned sharesBurned iFIL");
+        assertEq(iFILSupply - redeemAmount, iFIL.totalSupply(), "IFIL supply should have decreased by the redeem amount");
+        assertEq(wFIL.balanceOf(investor1), redeemAmount, "Investor should have received redeemAmount of wFIL");
+      }
     }
     vm.stopPrank();
 
@@ -222,7 +229,7 @@ contract OffRampTest is BaseTest {
     assertEq(pool.maxWithdraw(investor1), stakeAmount + earningsAmount, "Max withdraw incorrect");
     // previewWithdraw should incorporate the earnings
     // here the correct amount of shares to burn must use the correct asset price
-    uint256 sharesToBurn = pool.convertToShares(withdrawAmount);
+    uint256 sharesToBurn = ramp.previewWithdraw(withdrawAmount);
     assertEq(pool.previewWithdraw(withdrawAmount), sharesToBurn, "preview withdraw incorrect after earnings");
     uint256 investorIFIL = iFIL.balanceOf(investor1);
     vm.startPrank(investor1);
@@ -230,7 +237,8 @@ contract OffRampTest is BaseTest {
     uint256 sharesBurned = ramp.withdraw(withdrawAmount, investor1, investor1, 0);
     vm.stopPrank();
     assertEq(sharesBurned, sharesToBurn, "Incorrect burn amount");
-    assertGt(withdrawAmount, sharesToBurn, "Withdraw amount should have been greater than shares burned after earnings");
+    // here we add 1 for the rounding dust
+    assertGt(withdrawAmount + 1, sharesToBurn, "Withdraw amount should have been greater than shares burned after earnings");
     assertEq(investorIFIL - iFIL.balanceOf(investor1), sharesToBurn, "Investor should have burned sharesToBurn iFIL");
     assertEq(totalIFIL - iFIL.totalSupply(), sharesBurned);
     assertEq(wFIL.balanceOf(investor1), withdrawAmount, "Investor should have received withdrawAmount of wFIL");
@@ -266,7 +274,7 @@ contract OffRampTest is BaseTest {
     assertEq(pool.maxRedeem(investor1), totalIFIL, "Max redeem incorrect");
     // previewRedeem should incorporate the earnings
     // here the correct amount of shares to burn must use the correct asset price
-    uint256 assetsToReceive = pool.convertToAssets(redeemAmount);
+    uint256 assetsToReceive = ramp.previewRedeem(redeemAmount);
     assertEq(pool.previewRedeem(redeemAmount), assetsToReceive, "preview redeem incorrect after earnings");
     uint256 investorIFIL = iFIL.balanceOf(investor1);
     vm.startPrank(investor1);
@@ -311,14 +319,14 @@ contract OffRampTest is BaseTest {
     assertEq(wFIL.balanceOf(depositor1), 0, "Depositor should not have wFIL");
     vm.startPrank(depositor1);
     uint256 maxWithdraw = pool.maxWithdraw(depositor1);
-    iFIL.approve(address(ramp), pool.convertToShares(maxWithdraw));
+    iFIL.approve(address(ramp), ramp.previewWithdraw(maxWithdraw));
     ramp.withdraw(maxWithdraw, depositor1, depositor1, 0);
     vm.stopPrank();
 
     assertEq(wFIL.balanceOf(depositor2), 0, "Depositor should not have wFIL");
     vm.startPrank(depositor2);
     maxWithdraw = pool.maxWithdraw(depositor2);
-    iFIL.approve(address(ramp), pool.convertToShares(maxWithdraw));
+    iFIL.approve(address(ramp), ramp.previewWithdraw(maxWithdraw));
     ramp.withdraw(maxWithdraw, depositor2, depositor2, 0);
     vm.stopPrank();
 
@@ -352,7 +360,7 @@ contract OffRampTest is BaseTest {
       uint256 iFILBal = iFIL.balanceOf(depositor);
       // add one for rounding dust
       assertApproxEqRel(maxWithdraw, stakeAmount + (earningsAmount / numDepositors), 1e2, "Max withdraw should be greater than amount staked after earnings");
-      iFIL.approve(address(ramp), pool.convertToShares(maxWithdraw));
+      iFIL.approve(address(ramp), ramp.previewWithdraw(maxWithdraw));
       uint256 sharesBurnt = ramp.withdraw(maxWithdraw, depositor, depositor, 0);
       assertApproxEqAbs(sharesBurnt, iFILBal, 1, "Max withdraw should burn all of the investors iFIL");
       assertApproxEqRel(wFIL.balanceOf(depositor), stakeAmount + (earningsAmount) / numDepositors, 1e2, "Depositor should have earned rewards");
@@ -406,7 +414,7 @@ contract OffRampTest is BaseTest {
     fundPoolByInvestor(stakeAmount, investor1);
     fundPoolByInvestor(stakeAmount, investor2);
     assertPegInTact(pool);
-    uint256 initialPeg = pool.convertToAssets(1e18);
+    uint256 initialPeg = ramp.previewRedeem(1e18);
 
     assertEq(wFIL.balanceOf(investor1), 0);
     assertEq(wFIL.balanceOf(investor2), 0);
@@ -428,7 +436,7 @@ contract OffRampTest is BaseTest {
     vm.stopPrank();
 
     // here since we know the peg is in tact to start, the peg should change since we essentially got rampFunds of free assets
-    assertGt(pool.convertToAssets(1e18), initialPeg, "Peg should have changed");
+    assertGt(ramp.previewRedeem(1e18), initialPeg, "Peg should have changed");
 
     vm.startPrank(investor2);
     iFIL.approve(address(ramp), stakeAmount);
@@ -451,7 +459,7 @@ contract OffRampTest is BaseTest {
     fundPoolByInvestor(stakeAmount, investor1);
     fundPoolByInvestor(stakeAmount, investor2);
     assertPegInTact(pool);
-    uint256 initialPeg = pool.convertToAssets(1e18);
+    uint256 initialPeg = ramp.previewRedeem(1e18);
 
     assertEq(wFIL.balanceOf(investor1), 0);
     assertEq(wFIL.balanceOf(investor2), 0);
@@ -473,10 +481,10 @@ contract OffRampTest is BaseTest {
     vm.stopPrank();
 
     // here since we know the peg is in tact to start, the peg should change since we essentially got rampFunds of free assets
-    assertGt(pool.convertToAssets(1e18), initialPeg, "Peg should have changed");
+    assertGt(ramp.previewRedeem(1e18), initialPeg, "Peg should have changed");
 
     uint256 poolBalAfterPegBreaks = wFIL.balanceOf(address(pool));
-    uint256 expAssetsAfterRedeem = pool.convertToAssets(stakeAmount);
+    uint256 expAssetsAfterRedeem = ramp.previewRedeem(stakeAmount);
 
     vm.startPrank(investor2);
     iFIL.approve(address(ramp), stakeAmount);

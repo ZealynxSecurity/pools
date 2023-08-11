@@ -560,9 +560,7 @@ contract InfinityPool is IPool, Ownable {
      * @return assets - The amount of assets that would be converted from shares
      */
     function previewMint(uint256 shares) public view returns (uint256) {
-        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
+        return convertToAssets(shares);
     }
 
     /**
