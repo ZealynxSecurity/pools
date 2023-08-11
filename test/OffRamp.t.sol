@@ -5,6 +5,7 @@ import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IInfinityPool} from "src/Types/Interfaces/IInfinityPool.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
@@ -572,6 +573,54 @@ contract OffRampTest is BaseTest {
     iFIL.approve(address(ramp), iFILBal);
     vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
     ramp.withdraw(iFILBal, investor1, investor1, 0);
+  }
+
+  function testExitAfterUpgrade(uint256 stakeAmount, uint256 withdrawAmount) public {
+    stakeAmount = bound(stakeAmount, WAD, MAX_FIL);
+    withdrawAmount = bound(withdrawAmount, WAD, stakeAmount);
+
+    fundPoolByInvestor(stakeAmount, investor1);
+
+    assertEq(wFIL.balanceOf(investor1), 0);
+    assertEq(iFIL.balanceOf(investor1), stakeAmount, "investor should have iFIL");
+
+    // upgrade the pool
+    IPool pool2 = IPool(new InfinityPool(
+      systemAdmin,
+      router,
+      address(wFIL),
+      address(pool.rateModule()),
+      // no min liquidity for test pool
+      address(pool.liquidStakingToken()),
+      address(IInfinityPool(address(pool)).preStake()),
+      0,
+      pool.id()
+    ));
+
+    vm.startPrank(systemAdmin);
+    pool.shutDown();
+    GetRoute.poolRegistry(router).upgradePool(pool2);
+    pool2.setRamp(ramp);
+    vm.stopPrank();
+
+    vm.startPrank(investor1);
+    iFIL.approve(address(ramp), withdrawAmount);
+
+    vm.expectRevert(SimpleRamp.Unauthorized.selector);
+    ramp.withdraw(WAD, investor1, investor1, 0);
+
+    ramp.refreshExtern();
+
+    uint256 iFILSupply = iFIL.totalSupply();
+    assertPegInTact(pool2);
+
+    ramp.withdraw(withdrawAmount / 2, investor1, investor1, 0);
+    ramp.redeem(withdrawAmount / 2, investor1, investor1, 0);
+    vm.stopPrank();
+
+    assertApproxEqAbs(wFIL.balanceOf(investor1), withdrawAmount, 1, "Receiver should have received assets");
+    assertApproxEqAbs(iFILSupply - iFIL.totalSupply(), withdrawAmount, 1, "iFIL should decrease by withdraw amount");
+    assertPegInTact(pool2);
   }
 
   function setMinLiquidity(uint256 minLiquidity) internal {

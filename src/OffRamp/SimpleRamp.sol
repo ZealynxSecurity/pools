@@ -33,6 +33,16 @@ contract SimpleRamp is IOffRamp {
         _;
     }
 
+    modifier poolNotUpgraded() {
+        if (pool.isShuttingDown()) {
+            if (
+                address(pool) !=
+                address(GetRoute.pool(GetRoute.poolRegistry(router), poolID))
+            ) revert Unauthorized();
+        }
+        _;
+    }
+
     constructor(address _router, uint256 _poolID) {
         router = _router;
         poolID = _poolID;
@@ -45,7 +55,9 @@ contract SimpleRamp is IOffRamp {
     }
 
     /// @notice Returns the maximum amount of assets (wFIL) that can be withdrawn from the ramp by `account`
-    function maxWithdraw(address account) external view returns (uint256) {
+    function maxWithdraw(
+        address account
+    ) external view poolNotUpgraded returns (uint256) {
         return
             Math.min(
                 pool.convertToAssets(iFIL.balanceOf(account)),
@@ -56,12 +68,14 @@ contract SimpleRamp is IOffRamp {
     /// @notice Returns an onchain simulation of how many shares would be burn to withdraw assets, will revert if not enough assets to exit
     function previewWithdraw(
         uint256 assets
-    ) external view returns (uint256 shares) {
+    ) external view poolNotUpgraded returns (uint256 shares) {
         if (assets > pool.getLiquidAssets()) return 0;
         return pool.convertToShares(assets);
     }
 
-    function maxRedeem(address account) external view returns (uint256 shares) {
+    function maxRedeem(
+        address account
+    ) external view poolNotUpgraded returns (uint256 shares) {
         shares = iFIL.balanceOf(account);
         uint256 filValOfShares = pool.convertToAssets(shares);
 
@@ -74,7 +88,7 @@ contract SimpleRamp is IOffRamp {
 
     function previewRedeem(
         uint256 shares
-    ) external view returns (uint256 assets) {
+    ) external view poolNotUpgraded returns (uint256 assets) {
         assets = pool.convertToAssets(shares);
 
         // revert if the fil value of the account's shares is bigger than the available exit liquidity
@@ -93,7 +107,7 @@ contract SimpleRamp is IOffRamp {
         address receiver,
         address owner,
         uint256
-    ) public ownerIsCaller(owner) returns (uint256 shares) {
+    ) public poolNotUpgraded ownerIsCaller(owner) returns (uint256 shares) {
         shares = pool.convertToShares(assets);
         _processExit(owner, receiver, shares, assets);
     }
@@ -110,7 +124,7 @@ contract SimpleRamp is IOffRamp {
         address receiver,
         address owner,
         uint256
-    ) public ownerIsCaller(owner) returns (uint256 assets) {
+    ) public poolNotUpgraded ownerIsCaller(owner) returns (uint256 assets) {
         assets = pool.convertToAssets(shares);
         _processExit(owner, receiver, shares, assets);
     }

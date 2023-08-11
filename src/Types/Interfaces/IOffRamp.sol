@@ -49,4 +49,6 @@ interface IOffRamp {
     function recoverFIL() external;
 
     function burnIFIL() external;
+
+    function refreshExtern() external;
 }
