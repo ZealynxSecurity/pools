@@ -27,3 +27,6 @@
 [submodule "lib/glifmate"]
 	path = lib/glifmate
 	url = https://github.com/glifio/glifmate
+[submodule "lib/openzeppelin-contracts"]
+	path = lib/openzeppelin-contracts
+	url = https://github.com/openzeppelin/openzeppelin-contracts
