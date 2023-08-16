@@ -113,6 +113,107 @@ contract OffRampTest is BaseTest {
     assertPegInTact(pool);
   }
 
+    function testSingleDepositWithdrawFNoEarnings(uint256 exitReservePercent, uint256 stakeAmount, uint256 borrowAmount, uint256 withdrawAmount) public {
+    // bound between 0 exit reserves and 100% exit reserves
+    exitReservePercent = bound(exitReservePercent, 0, 1e18);
+    stakeAmount = bound(stakeAmount, WAD, MAX_FIL);
+    borrowAmount = bound(borrowAmount, WAD, stakeAmount);
+    withdrawAmount = bound(withdrawAmount, 0, stakeAmount);
+
+    setMinLiquidity(exitReservePercent);
+    fundPoolByInvestor(stakeAmount, investor1);
+    assertEq(pool.maxWithdraw(investor1), stakeAmount, "Max withdraw incorrect");
+
+    uint256 investorIFIL = iFIL.balanceOf(investor1);
+    assertEq(investorIFIL, stakeAmount, "Investor has wrong iFIL amount");
+    assertEq(address(investor1).balance, 0, "Investor should have staked all balance");
+    assertEq(wFIL.balanceOf(investor1), 0, "Investor should not have any wFIL");
+    assertEq(investor1.balance, 0, "Investor should not have any FIL");
+    uint256 iFILSupply = iFIL.totalSupply();
+
+    borrowFromPool(borrowAmount, stakeAmount);
+
+    uint256 exitLiquidity = pool.getLiquidAssets();
+    vm.startPrank(investor1);
+    iFIL.approve(address(ramp), ramp.previewRedeem(investorIFIL));
+
+    // with low numbers and rounding, previewRedeem can return 1 (burn 1 share) while previewWithdraw returns 0 (to receive 0 assets)
+    if (ramp.previewRedeem(investorIFIL) > 0) {
+      // preview withdraw should revert 
+      if (exitLiquidity < withdrawAmount) {
+        assertEq(pool.previewWithdraw(withdrawAmount), 0, "preview withdraw should return 0");
+
+        vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
+        ramp.withdrawF(withdrawAmount, investor1, investor1, 0);
+      } else {
+        assertEq(pool.previewWithdraw(withdrawAmount), withdrawAmount, "Wrong preview withdraw");
+        uint256 sharesBurned = ramp.withdrawF(withdrawAmount, investor1, investor1, 0);
+        assertEq(sharesBurned, withdrawAmount, "Burn == redeem amount when iFIL still pegged");
+        assertEq(investor1.balance, withdrawAmount, "Investor should have withdrawAmount wFIL");
+        assertEq(iFIL.balanceOf(investor1), stakeAmount - withdrawAmount, "Investor should have stakeAmount - withdrawAmount iFIL");
+        assertEq(investorIFIL - iFIL.balanceOf(investor1), sharesBurned, "Investor should have burned sharesBurned iFIL");
+        assertEq(iFILSupply - withdrawAmount, iFIL.totalSupply(), "IFIL supply should have decreased by the withdraw amount");
+        assertEq(investor1.balance, withdrawAmount, "Investor should have received withdrawAmount of wFIL");
+      }
+    }
+    vm.stopPrank();
+
+    // since this is the only investor in the pool, they will always be able to withdraw the max liquidity
+    assertEq(pool.maxWithdraw(investor1), pool.getLiquidAssets(), "Max withdraw incorrect");
+    assertPegInTact(pool);
+  }
+
+  function testSingleDepositRedeemFNoEarnings(uint256 exitReservePercent, uint256 stakeAmount, uint256 borrowAmount, uint256 redeemAmount) public {
+    // bound between 0 exit reserves and 100% exit reserves
+    exitReservePercent = bound(exitReservePercent, 0, 1e18);
+    stakeAmount = bound(stakeAmount, WAD, MAX_FIL);
+    borrowAmount = bound(borrowAmount, WAD, stakeAmount);
+    redeemAmount = bound(redeemAmount, 0, stakeAmount);
+
+    setMinLiquidity(exitReservePercent);
+    fundPoolByInvestor(stakeAmount, investor1);
+    // before the borrow, the maxRedeem should be the total iFIL owned by investor
+    assertEq(pool.maxRedeem(investor1), stakeAmount, "Max redeem incorrect");
+
+    uint256 investorIFIL = iFIL.balanceOf(investor1);
+    assertEq(investorIFIL, stakeAmount, "Investor has wrong iFIL amount");
+    assertEq(address(investor1).balance, 0, "Investor should have staked all balance");
+    assertEq(wFIL.balanceOf(investor1), 0, "Investor should not have any wFIL");
+    assertEq(investor1.balance, 0, "Investor should not have any FIL");
+    uint256 iFILSupply = iFIL.totalSupply();
+
+    borrowFromPool(borrowAmount, stakeAmount);
+
+    uint256 exitLiquidity = pool.getLiquidAssets();
+    vm.startPrank(investor1);
+    iFIL.approve(address(ramp), redeemAmount);
+
+    uint256 assetsToReceive = ramp.previewRedeem(redeemAmount);
+    if (assetsToReceive > 0) {
+      if (exitLiquidity < assetsToReceive) {
+        assertEq(pool.previewRedeem(redeemAmount), 0, "Preview redeem should return 0");
+
+        vm.expectRevert(SimpleRamp.InsufficientLiquidity.selector);
+        ramp.redeemF(redeemAmount, investor1, investor1, 0);
+      } else {
+        // handle rounding
+        assertApproxEqAbs(pool.previewRedeem(redeemAmount), redeemAmount, 1, "Wrong preview redeem");
+        uint256 assetsReceived = ramp.redeemF(redeemAmount, investor1, investor1, 0);
+        assertEq(assetsReceived, redeemAmount, "assets received == redeem amount when iFIL still pegged");
+        assertEq(investor1.balance, redeemAmount, "Investor should have redeemAmount wFIL");
+        assertEq(iFIL.balanceOf(investor1), stakeAmount - redeemAmount, "Investor should have stakeAmount - redeemAmount iFIL");
+        assertEq(investorIFIL - iFIL.balanceOf(investor1), assetsReceived, "Investor should have burned sharesBurned iFIL");
+        assertEq(iFILSupply - redeemAmount, iFIL.totalSupply(), "IFIL supply should have decreased by the redeem amount");
+        assertEq(investor1.balance, redeemAmount, "Investor should have received redeemAmount of wFIL");
+      }
+    }
+    vm.stopPrank();
+
+    // since this is the only investor in the pool, they will always be able to redeem the max liquidity
+    assertEq(pool.maxRedeem(investor1), pool.getLiquidAssets(), "Max redeem incorrect");
+    assertPegInTact(pool);
+  }
+
   function testSingleDepositWithdrawNoEarnings(uint256 exitReservePercent, uint256 stakeAmount, uint256 borrowAmount, uint256 withdrawAmount) public {
     // bound between 0 exit reserves and 100% exit reserves
     exitReservePercent = bound(exitReservePercent, 0, 1e18);

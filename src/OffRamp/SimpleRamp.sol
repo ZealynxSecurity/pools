@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import {FilAddress} from "shim/FilAddress.sol";
 
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
@@ -13,6 +14,8 @@ import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 
 contract SimpleRamp is IOffRamp {
     using FixedPointMathLib for uint256;
+    using FilAddress for address;
+    using FilAddress for address payable;
 
     error Unauthorized();
     error InsufficientLiquidity();
@@ -27,12 +30,17 @@ contract SimpleRamp is IOffRamp {
     uint256 internal tmpExitDemand = 0;
 
     modifier ownerIsCaller(address owner) {
-        if (msg.sender != owner) revert Unauthorized();
+        if (msg.sender != owner.normalize()) revert Unauthorized();
         _;
     }
 
     modifier onlyPool() {
         if (msg.sender != address(pool)) revert Unauthorized();
+        _;
+    }
+
+    modifier onlyWFIL() {
+        if (msg.sender != address(wFIL)) revert Unauthorized();
         _;
     }
 
@@ -45,6 +53,11 @@ contract SimpleRamp is IOffRamp {
         }
         _;
     }
+
+    // these fallback and receiver hooks only exist to unwrap WFIL for processing exits
+    fallback() external payable onlyWFIL {}
+
+    receive() external payable onlyWFIL {}
 
     constructor(address _router, uint256 _poolID) {
         router = _router;
@@ -107,9 +120,9 @@ contract SimpleRamp is IOffRamp {
     }
 
     /**
-     * @notice Allows Staker to withdraw assets
+     * @notice Allows Staker to withdraw assets (WFIL)
      * @param assets The assets to withdraw
-     * @param receiver The address to receive the assets (this must be )
+     * @param receiver The address to receive the assets
      * @param owner The owner of the shares
      * @return shares - the number of shares burned
      */
@@ -120,11 +133,11 @@ contract SimpleRamp is IOffRamp {
         uint256
     ) public poolNotUpgraded ownerIsCaller(owner) returns (uint256 shares) {
         shares = previewWithdraw(assets);
-        _processExit(owner, receiver, shares, assets);
+        _processExit(owner, receiver, shares, assets, false);
     }
 
     /**
-     * @dev Allows the Staker to redeem their shares for assets
+     * @dev Allows the Staker to redeem their shares for assets (WFIL)
      * @param shares The number of shares to burn
      * @param receiver The address to receive the assets
      * @param owner The owner of the shares
@@ -137,15 +150,53 @@ contract SimpleRamp is IOffRamp {
         uint256
     ) public poolNotUpgraded ownerIsCaller(owner) returns (uint256 assets) {
         assets = previewRedeem(shares);
-        _processExit(owner, receiver, shares, assets);
+        _processExit(owner, receiver, shares, assets, false);
+    }
+
+    /**
+     * @notice Allows Staker to withdraw assets (FIL)
+     * @param assets The assets to withdraw
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     * @return shares - the number of shares burned
+     */
+    function withdrawF(
+        uint256 assets,
+        address receiver,
+        address owner,
+        uint256
+    ) public poolNotUpgraded ownerIsCaller(owner) returns (uint256 shares) {
+        shares = previewWithdraw(assets);
+        _processExit(owner, receiver, shares, assets, true);
+    }
+
+    /**
+     * @dev Allows the Staker to redeem their shares for assets (FIL)
+     * @param shares The number of shares to burn
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     * @return assets The assets received from burning the shares
+     */
+    function redeemF(
+        uint256 shares,
+        address receiver,
+        address owner,
+        uint256
+    ) public poolNotUpgraded ownerIsCaller(owner) returns (uint256 assets) {
+        assets = previewRedeem(shares);
+        _processExit(owner, receiver, shares, assets, true);
     }
 
     function _processExit(
         address owner,
         address receiver,
         uint256 iFILToBurn,
-        uint256 assetsToReceive
+        uint256 assetsToReceive,
+        bool shouldConvert
     ) internal {
+        // normalize to protect against sending to ID address of EVM actor
+        receiver = receiver.normalize();
+        owner = owner.normalize();
         // if the pool can't process the entire exit, it reverts
         if (assetsToReceive > pool.getLiquidAssets())
             revert InsufficientLiquidity();
@@ -161,8 +212,17 @@ contract SimpleRamp is IOffRamp {
         // note that `tmpExitDemand` is used by the pool to determine how much FIL to send to the ramp
         // and gets written down to 0 in the `distribute` function (which pulls the assets into the ramp)
         pool.harvestToRamp();
-        // send WFIL back to the exiter (instead of FIL, better for downstream contracts)
-        wFIL.transfer(receiver, assetsToReceive);
+
+        // here we unwrap the amount of WFIL and transfer native FIL to the receiver
+        if (shouldConvert) {
+            // unwrap the WFIL into FIL
+            wFIL.withdraw(assetsToReceive);
+            // send FIL to the receiver, normalize to protect against sending to ID address of EVM actor
+            payable(receiver).sendValue(assetsToReceive);
+        } else {
+            // send WFIL back to the receiver
+            wFIL.transfer(receiver, assetsToReceive);
+        }
 
         emit Withdraw(owner, receiver, owner, assetsToReceive, iFILToBurn);
     }

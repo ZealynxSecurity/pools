@@ -44,6 +44,20 @@ interface IOffRamp {
         uint256 totalAssets
     ) external returns (uint256 shares);
 
+    function redeemF(
+        uint256 shares,
+        address receiver,
+        address owner,
+        uint256 totalAssets
+    ) external returns (uint256 assets);
+
+    function withdrawF(
+        uint256 assets,
+        address receiver,
+        address owner,
+        uint256 totalAssets
+    ) external returns (uint256 shares);
+
     function distribute(address receiver, uint256 amount) external;
 
     function recoverFIL() external;
