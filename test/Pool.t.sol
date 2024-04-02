@@ -387,6 +387,310 @@ contract PoolIsOverLeveragedTest is PoolTestState {
   }
 }
 
+contract PoolWithLeverageTest is BaseTest {
+  using FixedPointMathLib for uint256;
+
+  uint256 maxBorrowDTE = 2e18; // 2x max leverage
+  uint256 maxBorrowLTCV = 8e17; // borrow 80% to liquidation value
+
+
+  address investor1 = makeAddr("INVESTOR_1");
+  address minerOwner = makeAddr("MINER_OWNER");
+  uint256 stakeAmount = 1000e18;
+
+  uint256 initialAgentTotalVal = 100e18; // total agents balance is 100 FIL to begin each test
+
+  IAgent agent;
+  uint64 miner;
+  IPool pool;
+  IRateModule rateModule;
+
+  function setUp() public {
+    pool = createAndFundPool(stakeAmount, investor1);
+    (agent, miner) = configureAgent(minerOwner);
+
+    rateModule = IRateModule(pool.rateModule());
+    vm.startPrank(systemAdmin);
+    rateModule.setMaxLTV(maxBorrowLTCV);
+    rateModule.setMaxDTE(maxBorrowDTE);
+    vm.stopPrank();
+  }
+
+  // tests borrowing 2x when the liquidation value supports it
+  function testBorrow2xLeverageValid() public {
+    // borrow 2x our initial value
+    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    // agent value increases by the borrow amount
+    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+    // ensure the liquidation value doesn't block the higher leverage
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+
+    AgentData memory agentData = AgentData(
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      borrowAmount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    SignedCredential memory sc = signCred(vc);
+
+    agentBorrow(agent, pool.id(), sc);
+
+    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+    assertEq(account.principal, borrowAmount, "Principal should be borrow amount");
+    assertEq(account.principal, initialAgentTotalVal * 2, "Principal should be 2x equity");
+  }
+
+  // tests borrowing 2x when the liquidation value does not support it
+  function testBorrow2xLeverageInvalid() public {
+    // borrow 2x our initial value
+    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    // agent value increases by the borrow amount
+    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+    // use a liquidation value _just_ under the approved loan to liquidation value (LTV)
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() + DUST);
+
+    AgentData memory agentData = AgentData(
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      borrowAmount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    SignedCredential memory sc = signCred(vc);
+
+    vm.startPrank(minerOwner);
+    try agent.borrow(pool.id(), sc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+    vm.stopPrank();
+
+    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+    assertEq(account.principal, 0, "Principal should be borrow amount");
+  }
+
+  // tests borrowing max liquidation value when liquidation value is less than 2x equity
+  // this test uses known values to ensure the math is correct
+  function testBorrowToLV() public {
+    // borrow an amount to max out the LV, below 2x leverage 
+    uint256 borrowAmount = 175e18;
+    // agent value increases by the borrow amount
+    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+    // get a liquidation value by discounting the agent value by the max loan to liquidation value ratio
+    // this amount is less than 2x the equity in this hardcoded example
+    uint256 postActionLiquidationValue = postActionAV.mulWadUp(rateModule.maxLTV());
+
+    AgentData memory agentData = AgentData(
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      borrowAmount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    SignedCredential memory sc = signCred(vc);
+
+    agentBorrow(agent, pool.id(), sc);
+
+    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+    assertEq(account.principal, borrowAmount, "Principal should be borrow amount");
+
+    uint256 equity = postActionAV - borrowAmount;
+    assertLt(account.principal, equity.mulWadUp(rateModule.maxDTE()), "Principal should be less than 2x equity");
+    assertGt(account.principal, equity, "Principal should be more than 1x equity");
+  }
+
+  // tests withdrawing when over DTE > 1
+  function testWithdrawOverDTE() public {
+    // borrow 2x our initial value
+    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    // agent value increases by the borrow amount
+    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+    // ensure the liquidation value doesn't block the higher leverage
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+
+    AgentData memory agentData = AgentData(
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      borrowAmount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    SignedCredential memory sc = signCred(vc);
+
+    agentBorrow(agent, pool.id(), sc);
+
+    vm.roll(block.number + 1);
+
+    uint256 withdrawAmount = 1e18;
+
+    // try to withdraw any amount while DTE>1 and withdrawing will fail
+    AgentData memory withdrawAgentData = AgentData(
+      // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      withdrawAmount,
+      Agent.withdraw.selector,
+      // minerID irrelevant for withdraw action
+      0,
+      abi.encode(withdrawAgentData)
+    );
+
+    sc = signCred(vc);
+
+    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+    assertTrue(rateModule.isApproved(account, sc.vc), "Pool should approve");
+
+    vm.startPrank(minerOwner);
+    // here we are over just DTE, LTV is under 1 (agent police's value for withdrawing)
+    try agent.withdraw(minerOwner, sc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+    vm.stopPrank();
+    
+    try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+  }
+
+  // computes an EDR that will not block the miner from borrowing
+  function getUnblockingEDR() internal pure returns (uint256) {
+    // dumb calculation for now
+    return 100e18;
+  }
+}
+
 contract PoolFeeTests is PoolTestState {
   function testHarvestFees() public {
     uint256 amount = WAD;
@@ -1515,3 +1819,5 @@ contract PoolStakingTest is BaseTest {
       testInvariants(pool, "testRecursiveDepositMintAfterDepeg");
     }
 }
+
+

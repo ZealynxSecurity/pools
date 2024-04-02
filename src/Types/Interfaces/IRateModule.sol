@@ -54,6 +54,8 @@ interface IRateModule {
 
   function setMaxLTV(uint256 _maxLTV) external;
 
+  function setMaxDTE(uint256 _maxDTE) external;
+
   function setMinGCRED(uint256 _minGCRED) external;
 
   function setRateLookup(uint256[61] calldata _rateLookup) external;
