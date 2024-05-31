@@ -347,7 +347,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     // check to ensure the withdrawal does not bring us over maxDTE, maxDTI, or maxDTL
     address credParser = address(GetRoute.credParser(router));
     // check to make sure the after the withdrawal, the DTE, DTI, DTL are all within the acceptable range
-    uint256 principal = vc.getPrincipal(credParser);
+    uint256 principal = account.principal;
     // nothing borrowed, good to go!
     if (principal == 0) return;
 
