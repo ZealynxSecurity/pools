@@ -322,9 +322,9 @@ contract AgentRmEquityTest is BaseTest {
       uint256 equity = agentValue - principal;
 
       uint256 maxPoliceDTE = GetRoute.agentPolice(router).maxDTE();
-      uint256 maxPoliceLTV = GetRoute.agentPolice(router).maxLTV();
+      uint256 maxPoliceDTL = GetRoute.agentPolice(router).maxDTL();
 
-      if (principal > (equity * maxPoliceDTE / WAD) || principal > (collateralValue * maxPoliceLTV / WAD)) {
+      if (principal > (equity * maxPoliceDTE / WAD) || principal > (collateralValue * maxPoliceDTL / WAD)) {
         // DTE > 1 -> no go
         withdrawAndAssertRevert(
           receiver,
