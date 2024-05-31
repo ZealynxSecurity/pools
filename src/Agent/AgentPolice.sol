@@ -17,6 +17,7 @@ import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
+import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
@@ -28,8 +29,6 @@ import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
  * - Liquidation value liquidation checks 
  * - Issue 547
  * - Issue - 545
- * - Derive LTV, DTI, DTE from existing Rate Module on deployment of AP
- * - Include DTI check on remove equity
  */
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
@@ -39,6 +38,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using FilAddress for address;
 
   error AgentStateRejected();
+  error OverLimitDTI();
+  error OverLimitDTE();
+  error OverLimitDTL();
+  error PayUp();
 
   event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
 
@@ -55,15 +58,18 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   /// @notice `maxDTE` is the maximum amount of principal to equity ratio before withdrawals are prohibited
   /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
-  uint256 public maxDTE;
+  /// This variable is populated on deployment and can be updated to match the rate module using an admin func
+  uint256 public maxDTE = 0;
 
   /// @notice `maxDTL` is the maximum amount of principal to collateral value ratio before withdrawals are prohibited
   /// NOTE this is separate DTL for withdrawing than any DTL that the Infinity Pool relies on
-  uint256 public maxDTL;
+  /// This variable is populated on deployment and can be updated to match the rate module using an admin func
+  uint256 public maxDTL = 0;
 
   /// @notice `maxDTI` is the maximum amount of debt to income ratio before withdrawals are prohibited
   /// NOTE this is separate DTI for withdrawing than any DTI that the Infinity Pool relies on
-  uint256 public maxDTI;
+  /// This variable is populated on deployment and can be updated to match the rate module using an admin func
+  uint256 public maxDTI = 0;
 
   /// @notice `maxConsecutiveFaultEpochs` is the number of epochs of consecutive faults that are required in order to put an agent on administration or into default
   uint256 public maxConsecutiveFaultEpochs = 3 * EPOCHS_IN_DAY;
@@ -92,6 +98,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
     defaultWindow = _defaultWindow;
     administrationWindow = EPOCHS_IN_WEEK;
+    // set the DTI, DTE, and DTL ratios to match the pool on deployment if a pool is passed
+    // if no pool is passed, you can update these values using the admin function matchRiskParams
+    if (_pool != address(0)) {
+      IRateModule rm = IPool(_pool).rateModule();
+      maxDTE = rm.maxDTE();
+      maxDTI = rm.maxDTI();
+      // confusing name: LTV == DTL, this is a variable rename
+      maxDTL = rm.maxLTV();
+    }
 
     POOL_ADDRESS = _pool;
     wFIL = _wFIL;
@@ -127,7 +142,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function agentApproved(
     VerifiableCredential calldata vc
   ) external view {
-    _agentApproved(vc);
+    _agentApproved(vc, _getAccount(vc.subject));
   }
 
   /**
@@ -308,24 +323,31 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function confirmRmEquity(
     VerifiableCredential calldata vc
   ) external view {
-    // check to ensure we can withdraw from this pool
-    _agentApproved(vc);
-    // check to ensure the withdrawal does not bring us over maxDTE
+    Account memory account = _getAccount(vc.subject);
+    // check to ensure we can withdraw equity from this pool
+    _agentApproved(vc, account);
+    // check to ensure the withdrawal does not bring us over maxDTE, maxDTI, or maxDTL
     address credParser = address(GetRoute.credParser(router));
-    // check to make sure the after the withdrawal, the DTE is under max
+    // check to make sure the after the withdrawal, the DTE, DTI, DTL are all within the acceptable range
     uint256 principal = vc.getPrincipal(credParser);
-    // nothing borrowed, so DTE is 0, good to go!
+    // nothing borrowed, good to go!
     if (principal == 0) return;
 
     uint256 agentTotalValue = vc.getAgentValue(credParser);
-
     // since agentTotalValue includes borrowed funds (principal),
     // agentTotalValue should always be greater than principal
-    if (agentTotalValue <= principal) revert AgentStateRejected();
+    if (agentTotalValue <= principal) revert OverLimitDTE();
+
+    // compute the interest owed on the principal to add to principal to get total debt
+    uint256 rate = IPool(POOL_ADDRESS).getRate(vc);
+    uint256 debt = principal + _interestOwed(account, rate);
     // if the DTE is greater than maxDTE, revert
-    if (principal.divWadDown(agentTotalValue - principal) > maxDTE) revert AgentStateRejected();
-    // if the LTV is greater than maxDTL, revert
-    if (principal.divWadDown(vc.getCollateralValue(credParser)) > maxDTL) revert AgentStateRejected();
+    if (debt.divWadDown(agentTotalValue - debt) > maxDTE) revert OverLimitDTE();
+    // if the DTL is greater than maxDTL, revert
+    if (debt.divWadDown(vc.getCollateralValue(credParser)) > maxDTL) revert OverLimitDTL();
+    // if the DTI is greater than maxDTI, revert
+    uint256 dailyRate = account.principal.mulWadUp(rate).mulWadUp(EPOCHS_IN_DAY);
+    if (dailyRate.divWadUp(vc.getExpectedDailyRewards(credParser)) > maxDTI) revert OverLimitDTI();
   }
 
   /**
@@ -379,6 +401,16 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function setMaxDTI(uint256 _maxDTI) external onlyOwner {
     maxDTI = _maxDTI;
+  }
+
+  /**
+   * @notice `setRiskParamsToMatchPool` is a convenience method for setting the risk parameters of the agent police to match the pool's rate module
+   */
+  function setRiskParamsToMatchPool() external onlyOwner {
+    IRateModule rm = IPool(POOL_ADDRESS).rateModule();
+    maxDTE = rm.maxDTE();
+    maxDTI = rm.maxDTI();
+    maxDTL = rm.maxLTV();
   }
 
   /**
@@ -456,13 +488,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /// @dev loops through the pools and calls isApproved on each, 
   /// reverting in the case of any non-approvals,
   /// or in the case that an account owes payments over the acceptable threshold
-  function _agentApproved(VerifiableCredential calldata vc) internal view {
-    Account memory account = _getAccount(vc.subject);
-
+  function _agentApproved(VerifiableCredential calldata vc, Account memory account) internal view {
     if (!IPool(POOL_ADDRESS).isApproved(account, vc)) revert AgentStateRejected();
     // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
     // this is to prevent the agent from doing an action before paying up
-    if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert AgentStateRejected();
+    if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert PayUp();
   }
 
   /// @dev returns the account of the agent
@@ -471,5 +501,17 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /// @dev the pool ID is hardcoded to 0, as this is a relic of our obsolete multipool architecture
   function _getAccount(uint256 agentID) internal view returns (Account memory) {
     return AccountHelpers.getAccount(router, agentID, 0);
+  }
+
+  /// @dev returns the interest owed of a particular Account struct given a VerifiableCredential
+  function _interestOwed(Account memory account, uint256 rate) internal view returns (uint256) {
+    // compute the number of epochs that are owed to get current
+    uint256 epochsToPay = block.number - account.epochsPaid;
+    // multiply the rate by the principal to get the per epoch interest rate
+    // the interestPerEpoch has an extra WAD to maintain precision
+    uint256 interestPerEpoch = account.principal.mulWadUp(rate);
+    // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
+    // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
+    return interestPerEpoch.mulWadUp(epochsToPay);
   }
 }
