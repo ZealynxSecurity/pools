@@ -13,7 +13,6 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
-import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -22,6 +21,18 @@ import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Str
 import {Account} from "src/Types/Structs/Account.sol";
 import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 
+/**
+ * TODO: 
+ * - Add events
+ * - Remove multipool
+ * - Get rid of faulty sector -> logic
+ * - Check faulty sectors on borrow, remove equity funcs
+ * - Liquidation value liquidation checks 
+ * - Issue 547
+ * - Issue - 545
+ * - Derive LTV, DTI, DTE from existing Rate Module on deployment of AP
+ * - Include DTI check on remove equity
+ */
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   using AccountHelpers for Account;
@@ -31,19 +42,18 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   error AgentStateRejected();
 
-  IPoolRegistry internal poolRegistry;
   IWFIL internal wFIL;
 
   uint256 constant WAD = 1e18;
+
+  /// @notice `POOL_ADDRESS` is the address of the single pool for GLIF, this is a temporary solution until we completely get rid of multipool architecture
+  address public POOL_ADDRESS;
 
   /// @notice `defaultWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
   uint256 public defaultWindow;
 
   /// @notice `administrationWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is eligible for administration
   uint256 public administrationWindow;
-
-  /// @notice `maxPoolsPoerAgent`
-  uint256 public maxPoolsPerAgent;
 
   /// @notice `maxDTE` is the maximum amount of principal to equity ratio before withdrawals are prohibited
   /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
@@ -75,14 +85,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     address _owner,
     address _operator,
     address _router,
-    IPoolRegistry _poolRegistry,
+    address _pool,
     IWFIL _wFIL
   ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
     defaultWindow = _defaultWindow;
     administrationWindow = EPOCHS_IN_WEEK;
-    maxPoolsPerAgent = 10;
 
-    poolRegistry = _poolRegistry;
+    POOL_ADDRESS = _pool;
     wFIL = _wFIL;
   }
 
@@ -133,12 +142,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param agentID The address of the agent to check
    */
   function agentLiquidated(uint256 agentID) public view returns (bool) {
-    uint256[] memory pools = poolRegistry.poolIDs(agentID);
-
-    if (pools.length == 0) return false;
-    // once an Agent gets liquidated, all of their pools get written down, and accounts `defaulted` flag set to true
-    // we only need to check the Agent's account in the first pool to see if the agent has been liquidated
-    return (AccountHelpers.getAccount(router, agentID, pools[0]).defaulted);
+    Account memory account = _getAccount(agentID);
+    // if the Agent is not actively borrowing from the pool, they are not liquidated
+    // TODO: is this check necessary?
+    if (account.principal == 0 && account.startEpoch == 0) return false;
+    return account.defaulted;
   }
 
   /**
@@ -221,7 +229,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 agentID = IAgent(agent).id();
     // this call can only be called once per agent
     if (agentLiquidated(agentID)) revert Unauthorized();
-    // transfer the assets into the pool
+    // transfer the assets into the agent police
     wFIL.transferFrom(msg.sender, address(this), amount);
     uint256 excessAmount = _writeOffPools(agentID, amount);
 
@@ -349,13 +357,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /**
-   * @notice `setMaxPoolsPerAgent` changes the maximum number of pools an agent can borrow from
-   */
-  function setMaxPoolsPerAgent(uint256 _maxPoolsPerAgent) external onlyOwner {
-    maxPoolsPerAgent = _maxPoolsPerAgent;
-  }
-
-  /**
    * @notice `setMaxDTE` sets the maximum DTE for withdrawals and removing miners
    */
   function setMaxDTE(uint256 _maxDTE) external onlyOwner {
@@ -397,8 +398,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     sectorFaultyTolerancePercent = _sectorFaultyTolerancePercent;
   }
 
+  /**
+   * @notice `setSectorFaultyTolerancePercent` sets the percentage of sectors that can be faulty before the agent is considered faulty
+   */
+  function setPoolAddress(address _pool) external onlyOwner {
+    POOL_ADDRESS = _pool;
+  }
+
   function refreshRoutes() external {
-    poolRegistry = GetRoute.poolRegistry(router);
     wFIL = GetRoute.wFIL(router);
   }
 
@@ -409,38 +416,12 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /// @dev computes the pro-rata split of a total amount based on principal
   function _writeOffPools(
     uint256 _agentID,
-    uint256 _totalAmount
+    uint256 _recoveredAmount
   ) internal returns (uint256 excessFunds) {
-    // Setup the variables we use in the loops here to save gas
-    uint256 totalPrincipal;
-    uint256 i;
-    uint256 poolID;
-    uint256 poolShare;
-    uint256 principal;
-
-    uint256[] memory _pools = poolRegistry.poolIDs(_agentID);
-    uint256 poolCount = _pools.length;
-    uint256 totalOwed;
-
-    uint256[] memory principalAmts = new uint256[](poolCount);
-    // add up total principal across pools, and cache the principal in each pool
-    for (i = 0; i < poolCount; ++i) {
-      principal = AccountHelpers.getAccount(router, _agentID, _pools[i]).principal;
-      principalAmts[i] = principal;
-      totalPrincipal += principal;
-    }
-
-    for (i = 0; i < poolCount; ++i) {
-      poolID = _pools[i];
-      // compute this pool's share of the total amount
-      poolShare = (principalAmts[i] * _totalAmount / totalPrincipal);
-      // approve the pool to pull in WFIL
-      IPool pool = GetRoute.pool(poolRegistry, poolID);
-      wFIL.approve(address(pool), poolShare);
-      // write off the pool's assets
-      totalOwed = pool.writeOff(_agentID, poolShare);
-      excessFunds += poolShare > totalOwed ? poolShare - totalOwed : 0;
-    }
+    wFIL.approve(POOL_ADDRESS, _recoveredAmount);
+    // write off the pool's assets
+    uint256 totalOwed = IPool(POOL_ADDRESS).writeOff(_agentID, _recoveredAmount);
+    return _recoveredAmount > totalOwed ? _recoveredAmount - totalOwed : 0;
   }
 
   /// @dev returns true if any pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid)
@@ -448,15 +429,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 _agentID,
     uint256 _targetEpoch
   ) internal view returns (bool) {
-    uint256[] memory pools = poolRegistry.poolIDs(_agentID);
-
-    for (uint256 i = 0; i < pools.length; ++i) {
-      if (AccountHelpers.getAccount(router, _agentID, pools[i]).epochsPaid < block.number - _targetEpoch) {
-        return true;
-      }
-    }
-
-    return false;
+    return _getAccount(_agentID).epochsPaid < block.number - _targetEpoch;
   }
 
   /// @dev returns true if the Agent has 
@@ -473,19 +446,19 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /// reverting in the case of any non-approvals,
   /// or in the case that an account owes payments over the acceptable threshold
   function _agentApproved(VerifiableCredential calldata vc) internal view {
-    uint256[] memory pools = poolRegistry.poolIDs(vc.subject);
+    Account memory account = _getAccount(vc.subject);
 
-    if (pools.length > maxPoolsPerAgent) revert AgentStateRejected();
+    if (!IPool(POOL_ADDRESS).isApproved(account, vc)) revert AgentStateRejected();
+    // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
+    // this is to prevent the agent from doing an action before paying up
+    if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert AgentStateRejected();
+  }
 
-    for (uint256 i = 0; i < pools.length; ++i) {
-      uint256 poolID = pools[i];
-      IPool pool = GetRoute.pool(poolRegistry, poolID);
-      Account memory account = AccountHelpers.getAccount(router, vc.subject, poolID);
-
-      if (!pool.isApproved(account, vc)) revert AgentStateRejected();
-      // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
-      // this is to prevent the agent from doing an action before paying up
-      if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert AgentStateRejected();
-    }
+  /// @dev returns the account of the agent
+  /// @param agentID the ID of the agent
+  /// @return the account of the agent
+  /// @dev the pool ID is hardcoded to 0, as this is a relic of our obsolete multipool architecture
+  function _getAccount(uint256 agentID) internal view returns (Account memory) {
+    return AccountHelpers.getAccount(router, agentID, 0);
   }
 }

@@ -24,8 +24,6 @@ interface IAgentPolice {
 
   function administrationWindow() external view returns (uint256);
 
-  function maxPoolsPerAgent() external view returns (uint256);
-
   function agentApproved(VerifiableCredential calldata vc) external;
 
   function agentLiquidated(uint256 agentID) external view returns (bool);
