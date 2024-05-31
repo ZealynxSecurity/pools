@@ -24,9 +24,7 @@ import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 
 /**
  * TODO: 
- * - Get rid of faulty sector -> logic
  * - Check faulty sectors on borrow, remove equity funcs
- * - Liquidation value liquidation checks 
  * - Issue 547
  * - Issue - 545
  */
@@ -65,6 +63,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /// NOTE this is separate DTL for withdrawing than any DTL that the Infinity Pool relies on
   /// This variable is populated on deployment and can be updated to match the rate module using an admin func
   uint256 public maxDTL = 0;
+
+  /// @notice `DTLLiquidationThreshold` is the DTL ratio threshold at which an agent is liquidated
+  /// initially set at 90%, so if the agent is >90% DTL, it is elligible for liquidation
+  uint256 public DTLLiquidationThreshold = 9e17;
 
   /// @notice `maxDTI` is the maximum amount of debt to income ratio before withdrawals are prohibited
   /// NOTE this is separate DTI for withdrawing than any DTI that the Infinity Pool relies on
@@ -218,6 +220,22 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     onlyOwner
     onlyWhenConsecutiveFaultyEpochsExceeded(agent)
   {
+    IAgent(agent).setInDefault();
+    emit Defaulted(agent);
+  }
+
+  function setAgentDefaultDTL(address agent, VerifiableCredential calldata vc) external onlyOwner {
+    address credParser = address(GetRoute.credParser(router));
+
+    Account memory account = _getAccount(vc.subject);
+    // compute the interest owed on the principal to add to principal to get total debt
+    uint256 rate = IPool(POOL_ADDRESS).getRate(vc);
+    uint256 debt = account.principal + _interestOwed(account, rate);
+
+    if (debt.divWadDown(vc.getCollateralValue(credParser)) < DTLLiquidationThreshold) {
+      revert Unauthorized();
+    }
+
     IAgent(agent).setInDefault();
     emit Defaulted(agent);
   }
@@ -394,6 +412,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function setMaxDTL(uint256 _maxDTL) external onlyOwner {
     maxDTL = _maxDTL;
+  }
+
+  /**
+   * @notice `setDTLLiquidationThreshold` sets the DTL ratio at which an agent can be liquidated
+   */
+  function setDTLLiquidationThreshold(uint256 _DTLLiquidationThreshold) external onlyOwner {
+    DTLLiquidationThreshold = _DTLLiquidationThreshold;
   }
 
   /**
