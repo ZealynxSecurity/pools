@@ -15,6 +15,7 @@ import {IRouter, IRouterAware} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
 import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import "src/Constants/Routes.sol";
@@ -43,7 +44,7 @@ contract Deploy is Script {
             new PoolRegistry(1e17, deployerAddr, router)
         );
         address agentPolice = address(
-            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router, address(0), IWFIL(wFIL))
+            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router, IPool(address(0)), IWFIL(wFIL))
         );
         address vcIssuer = vm.envAddress("VC_ISSUER_ADDR");
         address credParser = address(new CredParser());

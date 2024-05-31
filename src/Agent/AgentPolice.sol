@@ -40,8 +40,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   IWFIL internal wFIL;
 
-  /// @notice `POOL_ADDRESS` is the address of the single pool for GLIF, this is a temporary solution until we completely get rid of multipool architecture
-  address public POOL_ADDRESS;
+  /// @notice `POOL` is the address of the single pool for GLIF, this is a temporary solution until we completely get rid of multipool architecture
+  IPool public POOL;
 
   /// @notice `defaultWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
   uint256 public defaultWindow;
@@ -90,14 +90,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     address _owner,
     address _operator,
     address _router,
-    address _pool,
+    IPool _pool,
     IWFIL _wFIL
   ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
     defaultWindow = _defaultWindow;
     administrationWindow = EPOCHS_IN_WEEK;
     // set the DTI, DTE, and DTL ratios to match the pool on deployment if a pool is passed
     // if no pool is passed, you can update these values using the admin function matchRiskParams
-    if (_pool != address(0)) {
+    if (address(_pool) != address(0)) {
       IRateModule rm = IPool(_pool).rateModule();
       maxDTE = rm.maxDTE();
       maxDTI = rm.maxDTI();
@@ -105,7 +105,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
       maxDTL = rm.maxLTV();
     }
 
-    POOL_ADDRESS = _pool;
+    POOL = _pool;
     wFIL = _wFIL;
   }
 
@@ -228,7 +228,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function setAgentDefaultDTL(address agent, VerifiableCredential calldata vc) external onlyOwner {
     Account memory account = _getAccount(vc.subject);
     // compute the interest owed on the principal to add to principal to get total debt
-    uint256 rate = IPool(POOL_ADDRESS).getRate(vc);
+    uint256 rate = POOL.getRate(vc);
     uint256 debt = account.principal + _interestOwed(account, rate);
 
     if (debt.divWadDown(vc.getCollateralValue(address(GetRoute.credParser(router)))) < DTLLiquidationThreshold) {
@@ -356,7 +356,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     if (agentTotalValue <= principal) revert OverLimitDTE();
 
     // compute the interest owed on the principal to add to principal to get total debt
-    uint256 rate = IPool(POOL_ADDRESS).getRate(vc);
+    uint256 rate = POOL.getRate(vc);
     uint256 debt = principal + _interestOwed(account, rate);
     // if the DTE is greater than maxDTE, revert
     if (debt.divWadDown(agentTotalValue - debt) > maxDTE) revert OverLimitDTE();
@@ -376,7 +376,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
     address credParser = address(GetRoute.credParser(router));
     // if were above the DTL ratio, revert
-    if (_computeDTL(_getAccount(vc.subject), vc, credParser, IPool(POOL_ADDRESS).getRate(vc)) > maxDTL) revert AgentStateRejected();
+    if (_computeDTL(_getAccount(vc.subject), vc, credParser, POOL.getRate(vc)) > maxDTL) revert AgentStateRejected();
 
     if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
   }
@@ -431,7 +431,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `setRiskParamsToMatchPool` is a convenience method for setting the risk parameters of the agent police to match the pool's rate module
    */
   function setRiskParamsToMatchPool() external onlyOwner {
-    IRateModule rm = IPool(POOL_ADDRESS).rateModule();
+    IRateModule rm = POOL.rateModule();
     maxDTE = rm.maxDTE();
     maxDTI = rm.maxDTI();
     maxDTL = rm.maxLTV();
@@ -468,8 +468,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /**
    * @notice `setSectorFaultyTolerancePercent` sets the percentage of sectors that can be faulty before the agent is considered faulty
    */
-  function setPoolAddress(address _pool) external onlyOwner {
-    POOL_ADDRESS = _pool;
+  function setPoolAddress(IPool _pool) external onlyOwner {
+    POOL = _pool;
   }
 
   function refreshRoutes() external {
@@ -485,9 +485,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 _agentID,
     uint256 _recoveredAmount
   ) internal returns (uint256 excessFunds) {
-    wFIL.approve(POOL_ADDRESS, _recoveredAmount);
+    wFIL.approve(address(POOL), _recoveredAmount);
     // write off the pool's assets
-    uint256 totalOwed = IPool(POOL_ADDRESS).writeOff(_agentID, _recoveredAmount);
+    uint256 totalOwed = POOL.writeOff(_agentID, _recoveredAmount);
     return _recoveredAmount > totalOwed ? _recoveredAmount - totalOwed : 0;
   }
 
@@ -513,7 +513,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /// reverting in the case of any non-approvals,
   /// or in the case that an account owes payments over the acceptable threshold
   function _agentApproved(VerifiableCredential calldata vc, Account memory account) internal view {
-    if (!IPool(POOL_ADDRESS).isApproved(account, vc)) revert AgentStateRejected();
+    if (!POOL.isApproved(account, vc)) revert AgentStateRejected();
     // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
     // this is to prevent the agent from doing an action before paying up
     if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert PayUp();
