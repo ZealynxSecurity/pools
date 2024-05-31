@@ -226,14 +226,12 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param vc The VerifiableCredential of the agent
    */
   function setAgentDefaultDTL(address agent, VerifiableCredential calldata vc) external onlyOwner {
-    address credParser = address(GetRoute.credParser(router));
-
     Account memory account = _getAccount(vc.subject);
     // compute the interest owed on the principal to add to principal to get total debt
     uint256 rate = IPool(POOL_ADDRESS).getRate(vc);
     uint256 debt = account.principal + _interestOwed(account, rate);
 
-    if (debt.divWadDown(vc.getCollateralValue(credParser)) < DTLLiquidationThreshold) {
+    if (debt.divWadDown(vc.getCollateralValue(address(GetRoute.credParser(router)))) < DTLLiquidationThreshold) {
       revert Unauthorized();
     }
 
