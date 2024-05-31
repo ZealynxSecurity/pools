@@ -22,10 +22,6 @@ import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Str
 import {Account} from "src/Types/Structs/Account.sol";
 import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 
-/**
- * TODO: 
- * - Check faulty sectors on borrow, remove equity funcs
- */
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   using AccountHelpers for Account;
@@ -37,6 +33,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   error OverLimitDTI();
   error OverLimitDTE();
   error OverLimitDTL();
+  error OverFaultySectorLimit();
   error PayUp();
 
   event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
@@ -383,18 +380,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     // if were above the DTL ratio, revert
     if (_computeDTL(_getAccount(vc.subject), vc, credParser, IPool(POOL_ADDRESS).getRate(vc)) > maxDTL) revert AgentStateRejected();
 
-    // check to ensure the agent does not have too many faulty sectors
-    uint256 faultySectors = vc.getFaultySectors(credParser);
-    uint256 liveSectors = vc.getLiveSectors(credParser);
-    // TODO: review this faulty sector logic - is it possible to have faulty sectors and no live sectors? if not, we can simplify here
-    // if we have no sectors, we're good to go
-    if (liveSectors == 0 && faultySectors == 0) return;
-    // if we have no live sectors, but we have faulty sectors, revert
-    if (liveSectors == 0 && faultySectors > 0) revert AgentStateRejected();
-    // if were above the faulty sector ratio, revert
-    if (
-      vc.getFaultySectors(credParser).divWadDown(vc.getLiveSectors(credParser)) > sectorFaultyTolerancePercent
-    ) revert AgentStateRejected();
+    if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
   }
 
   /*//////////////////////////////////////////////
@@ -533,6 +519,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
     // this is to prevent the agent from doing an action before paying up
     if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert PayUp();
+    // check faulty sector limit
+    address credParser = address(GetRoute.credParser(router));
+    if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
   }
 
   /// @dev returns the account of the agent
@@ -566,5 +555,26 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     if (liquidationValue == 0) return type(uint256).max;
     // if liquidation value is 0 and there is no debt, the DTL ratio is also 0
     return debt.divWadDown(vc.getCollateralValue(credParser));
+  }
+
+  /**
+   * @notice `faultySectorsExceeded` checks to ensure an agent has not exceeded the faulty sector tolerance
+   * @return true if the agent has exceeded the faulty sector tolerance
+   * TODO: review this faulty sector logic - is it possible to have faulty sectors and no live sectors? if not, we can simplify here
+   */
+  function _faultySectorsExceeded(VerifiableCredential memory vc, address credParser) internal view returns (bool) {
+    // check to ensure the agent does not have too many faulty sectors
+    uint256 faultySectors = vc.getFaultySectors(credParser);
+    uint256 liveSectors = vc.getLiveSectors(credParser);
+    // if we have no sectors, we're good to go
+    if (liveSectors == 0 && faultySectors == 0) return false;
+    // if we have no live sectors, but we have faulty sectors, we exceeded the limit
+    if (liveSectors == 0 && faultySectors > 0) return true;
+    // if were above the faulty sector ratio, we exceeded the limit
+    if (
+      vc.getFaultySectors(credParser).divWadDown(vc.getLiveSectors(credParser)) > sectorFaultyTolerancePercent
+    ) return true;
+
+    return false;
   }
 }
