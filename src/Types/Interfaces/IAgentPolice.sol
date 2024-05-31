@@ -32,7 +32,9 @@ interface IAgentPolice {
 
   function maxDTE() external view returns (uint256);
 
-  function maxLTV() external view returns (uint256);
+  function maxDTL() external view returns (uint256);
+
+  function maxDTI() external view returns (uint256);
 
   function maxConsecutiveFaultEpochs() external view returns (uint256);
 
@@ -78,7 +80,9 @@ interface IAgentPolice {
 
   function setMaxDTE(uint256 dte) external;
 
-  function setMaxLTV(uint256 ltv) external;
+  function setMaxDTL(uint256 dtl) external;
+
+  function setMaxDTI(uint256 dti) external;
 
   function prepareMinerForLiquidation(address agent, uint64 miner, uint64 liquidator) external;
 

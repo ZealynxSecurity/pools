@@ -44,8 +44,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   IWFIL internal wFIL;
 
-  uint256 constant WAD = 1e18;
-
   /// @notice `POOL_ADDRESS` is the address of the single pool for GLIF, this is a temporary solution until we completely get rid of multipool architecture
   address public POOL_ADDRESS;
 
@@ -57,11 +55,15 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   /// @notice `maxDTE` is the maximum amount of principal to equity ratio before withdrawals are prohibited
   /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
-  uint256 public maxDTE = 1e18;
+  uint256 public maxDTE;
 
-  /// @notice `maxLTV` is the maximum amount of principal to collateral value ratio before withdrawals are prohibited
-  /// NOTE this is separate LTV for withdrawing than any LTV that the Infinity Pool relies on
-  uint256 public maxLTV = 1e18;
+  /// @notice `maxDTL` is the maximum amount of principal to collateral value ratio before withdrawals are prohibited
+  /// NOTE this is separate DTL for withdrawing than any DTL that the Infinity Pool relies on
+  uint256 public maxDTL;
+
+  /// @notice `maxDTI` is the maximum amount of debt to income ratio before withdrawals are prohibited
+  /// NOTE this is separate DTI for withdrawing than any DTI that the Infinity Pool relies on
+  uint256 public maxDTI;
 
   /// @notice `maxConsecutiveFaultEpochs` is the number of epochs of consecutive faults that are required in order to put an agent on administration or into default
   uint256 public maxConsecutiveFaultEpochs = 3 * EPOCHS_IN_DAY;
@@ -322,8 +324,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     if (agentTotalValue <= principal) revert AgentStateRejected();
     // if the DTE is greater than maxDTE, revert
     if (principal.divWadDown(agentTotalValue - principal) > maxDTE) revert AgentStateRejected();
-    // if the LTV is greater than maxLTV, revert
-    if (principal.divWadDown(vc.getCollateralValue(credParser)) > maxLTV) revert AgentStateRejected();
+    // if the LTV is greater than maxDTL, revert
+    if (principal.divWadDown(vc.getCollateralValue(credParser)) > maxDTL) revert AgentStateRejected();
   }
 
   /**
@@ -366,10 +368,17 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /**
-   * @notice `setMaxLTV` sets the maximum LTV for withdrawals and removing miners
+   * @notice `setMaxDTL` sets the maximum DTL for withdrawals and removing miners
    */
-  function setMaxLTV(uint256 _maxLTV) external onlyOwner {
-    maxLTV = _maxLTV;
+  function setMaxDTL(uint256 _maxDTL) external onlyOwner {
+    maxDTL = _maxDTL;
+  }
+
+  /**
+   * @notice `setMaxDTI` sets the maximum DTI for withdrawals and removing miners
+   */
+  function setMaxDTI(uint256 _maxDTI) external onlyOwner {
+    maxDTI = _maxDTI;
   }
 
   /**
