@@ -108,7 +108,7 @@ contract BaseTest is Test {
       address(wFIL),
       address(new MinerRegistry(router, IAgentFactory(agentFactory))),
       agentFactory,
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router, IPoolRegistry(poolRegistry), IWFIL(address(wFIL)))),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router, address(0), IWFIL(address(wFIL)))),
       poolRegistry,
       vcIssuer,
       credParser,

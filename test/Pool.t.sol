@@ -1391,24 +1391,6 @@ contract PoolErrorBranches is PoolTestState {
     vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
     pool.mint(0, investor1);
   }
-
-  function testBorrowTooManyPools() public {
-    address investor1 = makeAddr("investor1");
-    uint256 maxPools = GetRoute.agentPolice(router).maxPoolsPerAgent();
-    
-    for (uint256 i = 0; i < maxPools; i++) {
-      IPool _pool = createAndFundPool(1e18, investor1);
-      agentBorrow(agent, _pool.id(), issueGenericBorrowCred(agent.id(), WAD));
-    }
-
-    IPool oneTooManyPool = createAndFundPool(1e18, investor1);
-    uint256 poolID = oneTooManyPool.id();
-    SignedCredential memory sc = issueGenericBorrowCred(agent.id(), WAD);
-
-    vm.startPrank(minerOwner);
-    vm.expectRevert(AgentPolice.AgentStateRejected.selector);
-    agent.borrow(poolID, sc);
-  }
 }
 
 contract PoolPreStakeIntegrationTest is BaseTest {

@@ -43,7 +43,7 @@ contract Deploy is Script {
             new PoolRegistry(1e17, deployerAddr, router)
         );
         address agentPolice = address(
-            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router, IPoolRegistry(poolRegistry), IWFIL(wFIL))
+            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router, address(0), IWFIL(wFIL))
         );
         address vcIssuer = vm.envAddress("VC_ISSUER_ADDR");
         address credParser = address(new CredParser());
