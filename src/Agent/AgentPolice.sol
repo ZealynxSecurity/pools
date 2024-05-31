@@ -211,6 +211,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   /**
    * @notice `setAgentDefaultDueToFaultySectorDays` puts the agent on administration due to administrationFaultDays of consectutive faulty sector days
+   * @dev DEPRECATED: use setAgentDefaultDTL instead
    */
   function setAgentDefaultDueToFaultySectorDays(
     address agent
@@ -222,6 +223,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     emit Defaulted(agent);
   }
 
+  /**
+   * @notice `setAgentDefaultDTL` puts the agent in default if the DTL ratio is above the threshold
+   * @param agent The address of the agent to put in default
+   * @param vc The VerifiableCredential of the agent
+   */
   function setAgentDefaultDTL(address agent, VerifiableCredential calldata vc) external onlyOwner {
     address credParser = address(GetRoute.credParser(router));
 
