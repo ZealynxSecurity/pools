@@ -23,8 +23,6 @@ import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 
 /**
  * TODO: 
- * - Add events
- * - Remove multipool
  * - Get rid of faulty sector -> logic
  * - Check faulty sectors on borrow, remove equity funcs
  * - Liquidation value liquidation checks 
@@ -41,6 +39,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   using FilAddress for address;
 
   error AgentStateRejected();
+
+  event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
 
   IWFIL internal wFIL;
 
@@ -291,6 +291,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   ) external onlyAgent {
     if (IAgent(msg.sender).id() != sc.vc.subject) revert Unauthorized();
     _credentialUseBlock[digest(sc.vc)] = block.number;
+
+    emit CredentialUsed(sc.vc.subject, sc.vc);
   }
 
   /*//////////////////////////////////////////////
