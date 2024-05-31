@@ -25,8 +25,6 @@ import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 /**
  * TODO: 
  * - Check faulty sectors on borrow, remove equity funcs
- * - Issue 547
- * - Issue - 545
  */
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
@@ -362,7 +360,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     // if the DTE is greater than maxDTE, revert
     if (debt.divWadDown(agentTotalValue - debt) > maxDTE) revert OverLimitDTE();
     // if the DTL is greater than maxDTL, revert
-    if (debt.divWadDown(vc.getCollateralValue(credParser)) > maxDTL) revert OverLimitDTL();
+    if (_computeDTL(account, vc, credParser, rate) > maxDTL) revert OverLimitDTL();
     // if the DTI is greater than maxDTI, revert
     uint256 dailyRate = account.principal.mulWadUp(rate).mulWadUp(EPOCHS_IN_DAY);
     if (dailyRate.divWadUp(vc.getExpectedDailyRewards(credParser)) > maxDTI) revert OverLimitDTI();
@@ -373,13 +371,24 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @param vc the verifiable credential
    */
   function confirmRmAdministration(VerifiableCredential calldata vc) external view {
-    address credParser = address(GetRoute.credParser(router));
+    if (_epochsPaidBehindTarget(vc.subject, administrationWindow)) revert AgentStateRejected();
 
+    address credParser = address(GetRoute.credParser(router));
+    // if were above the DTL ratio, revert
+    if (_computeDTL(_getAccount(vc.subject), vc, credParser, IPool(POOL_ADDRESS).getRate(vc)) > maxDTL) revert AgentStateRejected();
+
+    // check to ensure the agent does not have too many faulty sectors
+    uint256 faultySectors = vc.getFaultySectors(credParser);
+    uint256 liveSectors = vc.getLiveSectors(credParser);
+    // TODO: review this faulty sector logic - is it possible to have faulty sectors and no live sectors? if not, we can simplify here
+    // if we have no sectors, we're good to go
+    if (liveSectors == 0 && faultySectors == 0) return;
+    // if we have no live sectors, but we have faulty sectors, revert
+    if (liveSectors == 0 && faultySectors > 0) revert AgentStateRejected();
+    // if were above the faulty sector ratio, revert
     if (
       vc.getFaultySectors(credParser).divWadDown(vc.getLiveSectors(credParser)) > sectorFaultyTolerancePercent
     ) revert AgentStateRejected();
-
-    if (_epochsPaidBehindTarget(vc.subject, administrationWindow)) revert AgentStateRejected();
   }
 
   /*//////////////////////////////////////////////
@@ -538,5 +547,18 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
     // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
     return interestPerEpoch.mulWadUp(epochsToPay);
+  }
+  
+  function _computeDTL(Account memory account, VerifiableCredential calldata vc, address credParser, uint256 rate) internal view returns (uint256) {
+    // compute the interest owed on the principal to add to principal to get total debt
+    uint256 debt = account.principal + _interestOwed(account, rate);
+    // confusing naming convention - "collateral value" == "liquidation value" in this context
+    uint256 liquidationValue = vc.getCollateralValue(credParser);
+    // if there is no debt, DTL is 0
+    if (debt == 0) return 0;
+    // if liquidation value is 0 (and there is debt), we return the max uint256 value to avoid dividing by 0
+    if (liquidationValue == 0) return type(uint256).max;
+    // if liquidation value is 0 and there is no debt, the DTL ratio is also 0
+    return debt.divWadDown(vc.getCollateralValue(credParser));
   }
 }
