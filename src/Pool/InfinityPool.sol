@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+    // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.17;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -24,7 +24,7 @@ import {IPreStake} from "src/Types/Interfaces/IPreStake.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
+import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
 /**
  * @title InfinityPool
@@ -86,8 +86,20 @@ contract InfinityPool is IPool, Ownable {
     /// @dev `minimumLiquidity` is the percentage of total assets that should be reserved for exits
     uint256 public minimumLiquidity = 0;
 
-    /// @dev `maxEpochsOwedTolerance` - an agent's account must be paid up within this epoch buffer in order to borrow again
-    uint256 public maxEpochsOwedTolerance = EPOCHS_IN_DAY * 1;
+    /// @dev `accruedRentalFees` tracks the amount of fees accrued based on borrowed FIL in the pool
+    uint256 public accruedRentalFees = 0;
+
+    /// @dev `paidRentalFees` tracks the amount of fees paid to this pool
+    uint256 public paidRentalFees = 0;
+
+    /// @dev `lostAssets` tracks the amount of assets that were lost as a result of a liquidation
+    uint256 public lostAssets = 0;
+
+    /// @dev `lastAccountingUpdatingEpoch` is the epoch at which the pool's accounting was last updated
+    uint256 public lastAccountingUpdatingEpoch = 0;
+
+    /// @dev `rentalFeesOwedPerEpoch` is the % of FIL charged to Agents on a per epoch basis
+    uint256 public rentalFeesOwedPerEpoch = FixedPointMathLib.divWadDown(15e16, EPOCHS_IN_YEAR*1e18);
 
     /// @dev `isShuttingDown` is a boolean that, when true, halts deposits and borrows. Once set, it cannot be unset.
     bool public isShuttingDown = false;
@@ -176,7 +188,19 @@ contract InfinityPool is IPool, Ownable {
      * @return totalBorrowed The total borrowed from the agent
      */
     function totalAssets() public view override returns (uint256) {
-        return asset.balanceOf(address(this)) + totalBorrowed + preStake.totalValueLocked() - feesCollected;
+        // using accrual basis accounting, the assets of the pool are:
+        // assets currently in the pool
+        // total borrowed from agents
+        // total accrued rental fees
+        // subtract total rental fees paid
+        // subtract lost assets from liquidations
+        // subtract total treasury fees collected
+        return asset.balanceOf(address(this)) 
+          + totalBorrowed 
+          + accruedRentalFees 
+          - paidRentalFees 
+          - lostAssets 
+          - feesCollected;
     }
 
     /**
@@ -214,14 +238,12 @@ contract InfinityPool is IPool, Ownable {
 
     /**
      * @notice getRate returns the rate for an Agent's current position within the Pool
-     * @param vc The Agent's VerifiableCredential
      * @return rate The rate for the Agent's current position and base rate
-     * @dev rate is determined by the `rateModule`
      */
     function getRate(
-        VerifiableCredential calldata vc
+        VerifiableCredential calldata
     ) public view returns (uint256 rate) {
-        return rateModule.getRate(vc);
+        return rentalFeesOwedPerEpoch;
     }
 
     /**
@@ -242,59 +264,73 @@ contract InfinityPool is IPool, Ownable {
      * @notice writeOff writes down the Agent's account and the Pool's borrowed amount after a liquidation
      * @param agentID The ID of the Agent
      * @param recoveredFunds The amount of funds recovered from the liquidation. This is the total amount the Police was able to recover from the Agent's Miner Actors
-     * @dev If `recoveredFunds` > `principal` owed on the Agent's account, then the remaining amount gets applied as interest according to a penalty rate
+     * @dev the treasury fees go unpaid on a writeOff
+     // TODO fix return value with agent police fix 
      */
-    function writeOff(uint256 agentID, uint256 recoveredFunds) external returns (uint256 totalOwed){
+    function writeOff(uint256 agentID, uint256 recoveredFunds) external returns (uint256) {
         // only the agent police can call this function
         _onlyAgentPolice();
+
+        updateAccounting();
 
         Account memory account = _getAccount(agentID);
 
         if (account.defaulted) revert AlreadyDefaulted();
         // set the account to defaulted
         account.defaulted = true;
-        // amount of principal owed to this pool
-        uint256 principalOwed = account.principal;
-        // compute the amount of funds > principal that can be applied towards interest
-        uint256 remainder = recoveredFunds > principalOwed ? recoveredFunds - principalOwed : 0;
-        // compute the amount of interest owed on the account, based on a penalty rate
-        uint256 interestPaid;
+
+        uint256 interestOwed = 0;
         // if the account is not "current", compute the amount of interest owed based on the penalty rate
-        if (remainder > 0 && account.epochsPaid < block.number) {
-            // compute a rate based on the agent's current financial situation
-            uint256 rate = rateModule.penaltyRate();
-            // compute the number of epochs that are owed to get current
-            uint256 epochsToPay = block.number - account.epochsPaid;
-            // multiply the rate by the principal to get the per epoch interest rate
-            // the interestPerEpoch has an extra WAD to maintain precision
-            // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
-            // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
-            uint256 interestOwed = principalOwed.mulWadUp(rate).mulWadUp(epochsToPay);
-            // compute the amount of interest to pay down
-            interestPaid = interestOwed > remainder ? remainder : interestOwed;
-            // collect fees on the interest paid - only charge on the actual interest paid
-            feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(interestPaid);
+        if (account.epochsPaid < block.number) {
+            interestOwed = account.principal.mulWadUp(rentalFeesOwedPerEpoch).mulWadUp(block.number - account.epochsPaid);
         }
 
-        // whatever we couldn't pay back
-        uint256 lostAmt = principalOwed > recoveredFunds ? principalOwed - recoveredFunds : 0;
+        // compute the amount of fees and principal we can pay off
+        uint256 totalOwed = interestOwed + account.principal;
+        // the amount of fees that will be paid
+        uint256 feeBasis = 0;
+        // the amount of principal that will be paid
+        uint256 principalPaid = 0;
+        // the amount of funds that will be refunded to the agent
+        uint256 remainder = 0;
+        // the amount of funds that was lost in this write-off
+        uint256 lost = 0;
+        if (recoveredFunds <= interestOwed) {
+          // if we can't cover the whole interest payment, we cover what we can
+          feeBasis = recoveredFunds;
+          // we lost the full principal + unpaid interest
+          lost = account.principal + interestOwed - recoveredFunds;
+        } else if (recoveredFunds <= totalOwed) {
+          // if we can't cover the whole total owed, we apply everything to interest first
+          feeBasis = interestOwed;
+          // cover any principal with the remainder
+          principalPaid = recoveredFunds - interestOwed;
+          // we lost the unpaid principal
+          lost = account.principal - principalPaid;
+        } else {
+          // we can cover everything
+          feeBasis = interestOwed;
+          principalPaid = account.principal;
+          remainder = recoveredFunds - totalOwed;
+          // we lost nothing
+        }
 
-        totalOwed = interestPaid + principalOwed;
-
-        // transfer the assets into the pool
-        asset.transferFrom(
-          msg.sender,
-          address(this),
-          totalOwed > recoveredFunds ? recoveredFunds : totalOwed
-        );
-        // write off the pool's account
+        // write off the pool's account so that the pool's total borrowed is accurate
         totalBorrowed -= account.principal;
-        // set the account with the funds the pool lost
-        account.principal = lostAmt;
+        // since this account's principal still accrues debt up to this point in time, we need to update the paidRentalFees one last time
+        paidRentalFees += feeBasis;
+        // add the lost assets to the pool's lost assets
+        lostAssets += lost;
+        // set the account with the funds the pool lost, this isn't used anywhere else in the protocol, just for querying later
+        account.principal = lost;
+        // pull in only the assets we need
+        asset.transferFrom(msg.sender, address(this), feeBasis + principalPaid);
 
         account.save(router, agentID, id);
 
-        emit WriteOff(agentID, recoveredFunds, lostAmt, interestPaid);
+        emit WriteOff(agentID, recoveredFunds, lost, feeBasis);
+        // TODO: Fixme
+        return 0;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -308,6 +344,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev the min borrow amount is 1 FIL
      */
     function borrow(VerifiableCredential calldata vc) external isOpen subjectIsAgentCaller(vc) {
+        updateAccounting();
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
         // can't borrow more than the pool has
@@ -320,10 +357,6 @@ contract InfinityPool is IPool, Ownable {
             account.startEpoch = currentEpoch;
             account.epochsPaid = currentEpoch;
             poolRegistry.addPoolToList(vc.subject, id);
-        } else if (account.epochsPaid + maxEpochsOwedTolerance < block.number) {
-          // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
-          // this is to prevent the agent overpaying on previously borrowed amounts
-          revert PayUp();
         }
 
         account.principal += vc.value;
@@ -355,12 +388,11 @@ contract InfinityPool is IPool, Ownable {
         uint256 principalPaid,
         uint256 refund
     ) {
+        updateAccounting();
         // grab this Agent's account from storage
         Account memory account = _getAccount(vc.subject);
         // ensure we're not making payments to a non-existent account
         if (!account.exists()) revert AccountDNE();
-        // compute a rate based on the agent's current financial situation
-        rate = getRate(vc);
         // the total interest amount owed to get the epochsPaid cursor to the current epoch
         uint256 interestOwed;
         // rate * principal, used for computing the interest owed and moving the epochsPaid cursor
@@ -372,12 +404,13 @@ contract InfinityPool is IPool, Ownable {
         if (account.defaulted) {
             // accrue treasury fee
             feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(vc.value);
+            // here we explicitly do not update the paidRentalFees 
             // transfer the assets into the pool
             asset.transferFrom(msg.sender, address(this), vc.value);
 
-            emit Pay(vc.subject, rate, 0, 0, 0);
+            emit Pay(vc.subject, rentalFeesOwedPerEpoch, 0, 0, 0);
 
-            return (rate, account.epochsPaid, 0, 0);
+            return (rentalFeesOwedPerEpoch, account.epochsPaid, 0, 0);
         }
 
         // if the account is not "current", compute the amount of interest owed based on the new rate
@@ -386,7 +419,7 @@ contract InfinityPool is IPool, Ownable {
             uint256 epochsToPay = block.number - account.epochsPaid;
             // multiply the rate by the principal to get the per epoch interest rate
             // the interestPerEpoch has an extra WAD to maintain precision
-            interestPerEpoch = account.principal.mulWadUp(rate);
+            interestPerEpoch = account.principal.mulWadUp(rentalFeesOwedPerEpoch);
             // ensure the payment is greater than or equal to at least 1 epochs worth of interest
             // NOTE - we multiply by WAD here because the interestPerEpoch has an extra WAD to maintain precision
             if (vc.value * WAD < interestPerEpoch) revert InvalidParams();
@@ -434,7 +467,9 @@ contract InfinityPool is IPool, Ownable {
         }
         // update the account in storage
         account.save(router, vc.subject, id);
-        // accrue treasury fee
+        // realize fees paid to the pool
+        paidRentalFees += feeBasis;
+        // accrue treasury fees
         feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(feeBasis);
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), vc.value - refund);
@@ -442,6 +477,30 @@ contract InfinityPool is IPool, Ownable {
         emit Pay(vc.subject, rate, account.epochsPaid, principalPaid, refund);
 
         return (rate, account.epochsPaid, principalPaid, refund);
+    }
+
+    /**
+     * @dev Updates the accrual basis accounting of the pool
+     */
+    function updateAccounting() public {
+      // only update the accounting if we're in a new epoch
+      if (block.number > lastAccountingUpdatingEpoch) {
+        accruedRentalFees += _computeNewFeesAccrued();
+        lastAccountingUpdatingEpoch = block.number;
+      }
+    }
+
+    function _computeNewFeesAccrued() internal view returns (uint256) {
+      // only update the accounting if we're in a new epoch
+      if (block.number > lastAccountingUpdatingEpoch) {
+        // calculate the number of blocks passed since the last upgrade
+        uint256 blocksPassed = block.number - lastAccountingUpdatingEpoch;
+        // calculate the total % owed to the pool
+        uint256 feeRateAccrued = rentalFeesOwedPerEpoch.mulWadUp(blocksPassed);
+        // calculate the total interest accrued during this period
+        return totalBorrowed.mulWadUp(feeRateAccrued);
+      }
+      return 0;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -474,6 +533,7 @@ contract InfinityPool is IPool, Ownable {
      * @return assets Number of assets deposited
      */
     function mint(uint256 shares, address receiver) public isOpen returns (uint256 assets) {
+        updateAccounting();
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
         if(assets == 0 || shares == 0) revert InvalidParams();
@@ -497,6 +557,7 @@ contract InfinityPool is IPool, Ownable {
         address receiver,
         address owner
     ) public requiresRamp returns (uint256 shares) {
+        updateAccounting();
         shares = ramp.withdraw(assets, receiver, owner, totalAssets());
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -515,6 +576,7 @@ contract InfinityPool is IPool, Ownable {
         address receiver,
         address owner
     ) public requiresRamp returns (uint256 assets) {
+        updateAccounting();
         assets = ramp.redeem(shares, receiver, owner, totalAssets());
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -618,6 +680,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev Distributes funds to the offramp when the liquid assets are below the liquidity threshold
      */
     function harvestToRamp() external requiresRamp {
+        updateAccounting();
         // distribute funds to the offramp when we are below the liquidity threshold
         uint256 exitDemand = ramp.totalExitDemand();
         uint256 rampAssets = asset.balanceOf(address(ramp));
@@ -639,6 +702,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev Distributes feesCollected to the treasury
      */
     function harvestFees(uint256 harvestAmount) public {
+        updateAccounting();
         feesCollected -= harvestAmount;
         asset.transfer(GetRoute.treasury(router), harvestAmount);
     }
@@ -706,6 +770,8 @@ contract InfinityPool is IPool, Ownable {
      * @param accountPrincipal The principal amount to create the account with
      */
     function jumpStartAccount(address receiver, uint256 agentID, uint256 accountPrincipal) external onlyOwner {
+        updateAccounting();
+
         Account memory account = _getAccount(agentID);
         // if the account is already initialized, revert
         if (account.principal != 0) revert InvalidState();
@@ -734,6 +800,7 @@ contract InfinityPool is IPool, Ownable {
      * @notice shutDown sets the isShuttingDown variable to true, effectively halting all deposits and borrows
      */
     function shutDown() external onlyOwner {
+        updateAccounting();
         isShuttingDown = true;
     }
 
@@ -742,17 +809,6 @@ contract InfinityPool is IPool, Ownable {
      */
     function setRateModule(IRateModule _rateModule) external onlyOwner {
         rateModule = _rateModule;
-    }
-
-    /**
-     * @notice setMaxEpochsOwedTolerance sets epochsPaidBorrowBuffer in storage
-     * @param _maxEpochsOwedTolerance The new value for maxEpochsOwedTolerance
-     */
-    function setMaxEpochsOwedTolerance(uint256 _maxEpochsOwedTolerance) external onlyOwner {
-        // if maxEpochsOwedTolerance is greater than 1 day, Agents can over pay interest
-        if (_maxEpochsOwedTolerance > EPOCHS_IN_DAY) revert InvalidParams();
-
-        maxEpochsOwedTolerance = _maxEpochsOwedTolerance;
     }
 
     /**
@@ -781,6 +837,7 @@ contract InfinityPool is IPool, Ownable {
     }
 
     function _deposit(uint256 assets, address receiver) internal returns (uint256 lstAmount) {
+        updateAccounting();
         // get the number of iFIL tokens to mint
         lstAmount = previewDeposit(assets);
         // Check for rounding error since we round down in previewDeposit.
@@ -794,6 +851,8 @@ contract InfinityPool is IPool, Ownable {
     }
 
     function _depositFIL(address receiver) internal returns (uint256 lstAmount) {
+        updateAccounting();
+
         if (msg.value == 0) revert InvalidParams();
 
         lstAmount = previewDeposit(msg.value);
