@@ -47,6 +47,9 @@ struct NewAgentData {
    */
   uint256 startEpoch;
 
+  uint256 faultySectors;
+  uint256 liveSectors;
+
   uint256 newVariable;
 }
 
@@ -112,6 +115,20 @@ library NewCredentials {
     address credParser
   ) internal pure returns (uint256) {
     return INewCredentials(credParser).getLockedFunds(vc.claim);
+  }
+
+  function getFaultySectors(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return INewCredentials(credParser).getFaultySectors(vc.claim);
+  }
+
+  function getLiveSectors(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return INewCredentials(credParser).getLiveSectors(vc.claim);
   }
   
   function getNewVariable(

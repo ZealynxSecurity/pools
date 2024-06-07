@@ -24,6 +24,12 @@ contract NewCredParser {
   function getQAPower(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(padBytes(_agentData), (NewAgentData)).qaPower;
   }
+  function getFaultySectors(bytes memory _agentData) external pure returns (uint256) {
+    return abi.decode(padBytes(_agentData), (NewAgentData)).faultySectors;
+  }
+  function getLiveSectors(bytes memory _agentData) external pure returns (uint256) {
+    return abi.decode(padBytes(_agentData), (NewAgentData)).liveSectors;
+  }
   function getNewVariable(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(padBytes(_agentData), (NewAgentData)).newVariable;
   }

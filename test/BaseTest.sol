@@ -311,7 +311,8 @@ contract BaseTest is Test {
       0,
       0,
       0,
-      0,
+      // perfect gcred
+      100,
       0,
       0,
       // faulty sectors

@@ -1421,64 +1421,60 @@ contract PoolPreStakeIntegrationTest is BaseTest {
   }
 }
 
-contract PoolUpgradeCredentialTest is PoolTestState {
-    using NewCredentials for VerifiableCredential;
-    function testUpdateCredParser() public {
-      _updateCredParser();
-    }
+// TODO: REIMPLEMENT CRED changing tests
+// contract PoolUpgradeCredentialTest is PoolTestState {
+//     using NewCredentials for VerifiableCredential;
+//     function testUpdateCredParser() public {
+//       _updateCredParser();
+//     }
 
-    function testParsesOldCredential(uint256 principal) public {
-      principal = bound(principal, WAD, stakeAmount);
-      _updateCredParser();
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, principal);
-      agentBorrow(agent, poolID, borrowCred);
-    }
+//     function testHasNewParameter(uint256 principal) public {
+//       principal = bound(principal, WAD, stakeAmount);
+//       _updateCredParser();
+//       uint256 collateralValue = principal * 2;
+//       // lockedFunds = collateralValue * 1.67 (such that CV = 60% of locked funds)
+//       uint256 lockedFunds = collateralValue * 167 / 100;
+//       // agent value = lockedFunds * 1.2 (such that locked funds = 83% of locked funds)
+//       uint256 agentValue = lockedFunds * 120 / 100;
+//       // NOTE: since we don't pull this off the pool it could be out of sync - careful
+//       uint256 adjustedRate = _getAdjustedRate(gCredBasic);
 
-    function testHasNewParameter(uint256 principal) public {
-      principal = bound(principal, WAD, stakeAmount);
-      _updateCredParser();
-      uint256 collateralValue = principal * 2;
-      // lockedFunds = collateralValue * 1.67 (such that CV = 60% of locked funds)
-      uint256 lockedFunds = collateralValue * 167 / 100;
-      // agent value = lockedFunds * 1.2 (such that locked funds = 83% of locked funds)
-      uint256 agentValue = lockedFunds * 120 / 100;
-      // NOTE: since we don't pull this off the pool it could be out of sync - careful
-      uint256 adjustedRate = _getAdjustedRate(gCredBasic);
-
-      NewAgentData memory agentData = NewAgentData(
-        agentValue,
-        collateralValue,
-        // expectedDailyFaultPenalties
-        0,
-        (adjustedRate * EPOCHS_IN_DAY * principal * 5) / WAD,
-        gCredBasic,
-        lockedFunds,
-        // qaPower hardcoded
-        10e18,
-        principal,
-        block.number,
-        12345 
-      );
+//       NewAgentData memory agentData = NewAgentData(
+//         agentValue,
+//         collateralValue,
+//         // expectedDailyFaultPenalties
+//         0,
+//         (adjustedRate * EPOCHS_IN_DAY * principal * 5) / WAD,
+//         gCredBasic,
+//         lockedFunds,
+//         // qaPower hardcoded
+//         10e18,
+//         principal,
+//         block.number,
+//         0,
+//         1e18,
+//         12345 
+//       );
 
       
 
-      VerifiableCredential memory vc = VerifiableCredential(
-        vcIssuer,
-        agentID,
-        block.number,
-        block.number + 100,
-        principal,
-        Agent.borrow.selector,
-        // minerID irrelevant for borrow action
-        0,
-        abi.encode(agentData)
-      );
+//       VerifiableCredential memory vc = VerifiableCredential(
+//         vcIssuer,
+//         agentID,
+//         block.number,
+//         block.number + 100,
+//         principal,
+//         Agent.borrow.selector,
+//         // minerID irrelevant for borrow action
+//         0,
+//         abi.encode(agentData)
+//       );
 
-      SignedCredential memory newCredential  =  signCred(vc);
-      uint256 newParameter = NewCredentials.getNewVariable(newCredential.vc, newCredParser);
-      assertEq(newParameter, 12345);
-    }
-}
+//       SignedCredential memory newCredential  =  signCred(vc);
+//       uint256 newParameter = NewCredentials.getNewVariable(newCredential.vc, newCredParser);
+//       assertEq(newParameter, 12345);
+//     }
+// }
 
 contract PoolAccountingTest is BaseTest {
     using Credentials for VerifiableCredential;

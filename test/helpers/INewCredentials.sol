@@ -9,5 +9,7 @@ interface INewCredentials {
   function getPrincipal(bytes memory _agentData) external pure returns (uint256);
   function getGCRED(bytes memory _agentData) external pure returns (uint256);
   function getLockedFunds(bytes memory _agentData) external pure returns (uint256);
+  function getFaultySectors(bytes memory _agentData) external pure returns (uint256);
+  function getLiveSectors(bytes memory _agentData) external pure returns (uint256);
   function getNewVariable(bytes memory _agentData) external pure returns (uint256);
 }

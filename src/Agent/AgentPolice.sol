@@ -93,7 +93,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     defaultWindow = _defaultWindow;
     administrationWindow = EPOCHS_IN_WEEK;
 
-    IPool pool = IPool(IRouter(_router).getRoute(ROUTE_INFINITY_POOL));
+    IPool pool;
+    try IRouter(_router).getRoute(ROUTE_INFINITY_POOL) returns (address poolAddress) {
+      pool = IPool(poolAddress);
+    } catch {
+      // noop
+    }
+
     // set the DTI, DTE, and DTL ratios to match the pool on deployment if a pool is passed
     // if no pool is passed, you can update these values using the admin function matchRiskParams
     if (address(pool) != address(0)) {
@@ -492,12 +498,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     return _recoveredAmount > totalOwed ? _recoveredAmount - totalOwed : 0;
   }
 
-  /// @dev returns true if any pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid)
+  /// @dev returns true if pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid). Account must have existing principal
   function _epochsPaidBehindTarget(
     uint256 _agentID,
     uint256 _targetEpoch
   ) internal view returns (bool) {
-    return _getAccount(_agentID).epochsPaid < block.number - _targetEpoch;
+    Account memory account = _getAccount(_agentID);
+    return account.principal > 0 && account.epochsPaid < block.number - _targetEpoch;
   }
 
   /// @dev returns true if the Agent has 
@@ -519,8 +526,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     // this is to prevent the agent from doing an action before paying up
     if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert PayUp();
     // check faulty sector limit
-    address credParser = address(GetRoute.credParser(router));
-    if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
+    if (_faultySectorsExceeded(vc, address(GetRoute.credParser(router)))) revert OverFaultySectorLimit();
   }
 
   /// @dev returns the account of the agent
