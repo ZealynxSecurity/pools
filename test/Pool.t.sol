@@ -418,7 +418,7 @@ contract PoolWithLeverageTest is BaseTest {
     rateModule.setMaxLTV(maxBorrowLTCV);
     rateModule.setMaxDTE(maxBorrowDTE);
     agentPolice.setMaxDTE(maxWithdrawDTE);
-    agentPolice.setMaxLTV(maxWithdrawLTCV);
+    agentPolice.setMaxDTL(maxWithdrawLTCV);
     vm.stopPrank();
   }
 
@@ -975,7 +975,7 @@ contract PoolWithLeverageTest is BaseTest {
     // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
     postActionAV = type(uint256).max;
     // postActionLiquidationValue is set to an amount that will result in an LTV over 0.8
-    postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxLTV() + DUST);
+    postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() + DUST);
 
     vm.roll(block.number + 1);
 
@@ -1045,7 +1045,7 @@ contract PoolWithLeverageTest is BaseTest {
     // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
     postActionAV = initialAgentTotalVal + agent.liquidAssets() - payAmount;
     // postActionLiquidationValue is set to an amount that will result in an LTV under 0.8
-    postActionLiquidationValue = postActionAV.divWadDown(agentPolice.maxLTV() - DUST);
+    postActionLiquidationValue = postActionAV.divWadDown(agentPolice.maxDTL() - DUST);
 
     // try to withdraw any amount while DTE<1.5 and LTV<0.8 should pass
     withdrawAgentData = AgentData(
