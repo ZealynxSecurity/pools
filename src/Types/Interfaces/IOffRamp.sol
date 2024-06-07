@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {DEPRECATED_IPool} from "src/Types/Interfaces/DEPRECATED_IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 
@@ -14,7 +14,7 @@ interface IOffRamp {
         uint256 shares
     );
 
-    function pool() external view returns (IPool);
+    function pool() external view returns (DEPRECATED_IPool);
 
     function iFIL() external view returns (IPoolToken);
 

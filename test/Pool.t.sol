@@ -63,13 +63,13 @@ contract PoolTestState is BaseTest {
     wFIL.approve(address(pool), amount);
   }
 
-  function _setupRamp() internal {
-    ramp = _configureOffRamp(pool);
-    // Confirm there's no balance on the ramp to begin with
-    assertEq(asset.balanceOf(address(ramp)), 0);
-    vm.prank(systemAdmin);
-    pool.setRamp(IOffRamp(ramp));
-  }
+  // function _setupRamp() internal {
+  //   ramp = _configureOffRamp(pool);
+  //   // Confirm there's no balance on the ramp to begin with
+  //   assertEq(asset.balanceOf(address(ramp)), 0);
+  //   vm.prank(systemAdmin);
+  //   pool.setRamp(IOffRamp(ramp));
+  // }
 
   function _updateCredParser() internal {
     newCredParser = address(new NewCredParser());
@@ -1419,7 +1419,6 @@ contract Pool4626Tests is PoolTestState {
 
   function setUp () public override{
     super.setUp();
-    _setupRamp();
   }
 
   function testPoolDepositAsset() public {
@@ -1500,12 +1499,12 @@ contract Pool4626Tests is PoolTestState {
 
 contract PoolAdminTests is PoolTestState {
 
-  function testSetRamp() public {
-    IOffRamp newRamp = IOffRamp(address(0x1));
-    vm.prank(address(systemAdmin));
-    pool.setRamp(newRamp);
-    assertEq(address(pool.ramp()), address(newRamp));
-  }
+  // function testSetRamp() public {
+  //   IOffRamp newRamp = IOffRamp(address(0x1));
+  //   vm.prank(address(systemAdmin));
+  //   pool.setRamp(newRamp);
+  //   assertEq(address(pool.ramp()), address(newRamp));
+  // }
 
   function testJumpStartTotalBorrowed() public {
     uint256 amount = WAD;
@@ -1551,12 +1550,12 @@ contract PoolAdminTests is PoolTestState {
     assertEq(pool.minimumLiquidity(), amount);
   }
 
-  function testSetRateModule() public {
-    IRateModule newRateModule = IRateModule(address(0x1));
-    vm.prank(address(systemAdmin));
-    pool.setRateModule(newRateModule);
-    assertEq(address(pool.rateModule()), address(newRateModule));
-  }
+  // function testSetRateModule() public {
+  //   IRateModule newRateModule = IRateModule(address(0x1));
+  //   vm.prank(address(systemAdmin));
+  //   pool.setRateModule(newRateModule);
+  //   assertEq(address(pool.rateModule()), address(newRateModule));
+  // }
 
   function testshutDownPool() public {
     assertEq(stakeAmount, asset.balanceOf(address(pool)));

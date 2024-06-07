@@ -8,7 +8,7 @@ import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
-interface IPool {
+interface DEPRECATED_IPool {
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -56,6 +56,8 @@ interface IPool {
     function asset() external view returns (IERC20);
 
     function liquidStakingToken() external view returns (IPoolToken);
+
+    function ramp() external view returns (IOffRamp);
 
     function rateModule() external view returns (IRateModule);
 
@@ -107,6 +109,8 @@ interface IPool {
 
     function harvestFees(uint256 harvestAmount) external;
 
+    function harvestToRamp() external;
+
     /*//////////////////////////////////////////////////////////////
                         4626 DEPOSIT/WITHDRAWAL LOGIC
     //////////////////////////////////////////////////////////////*/
@@ -157,13 +161,17 @@ interface IPool {
 
     function shutDown() external;
 
-    function decommissionPool(IPool newPool) external returns (uint256 borrowedAmount);
+    function decommissionPool(DEPRECATED_IPool newPool) external returns (uint256 borrowedAmount);
 
     function jumpStartAccount(address receiver, uint256 agentID, uint256 principal) external;
 
     function jumpStartTotalBorrowed(uint256 amount) external;
 
+    function setRamp(IOffRamp newRamp) external;
+
     function setMinimumLiquidity(uint256 minLiquidity) external;
+
+    function setRateModule(IRateModule newRateModule) external;
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external returns (uint256 totalOwed);
 }

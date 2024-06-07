@@ -14,7 +14,6 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
-import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
@@ -54,7 +53,6 @@ contract InfinityPool is IPool, Ownable {
 
     /// @dev cache the routes for gas efficiency
     address internal immutable router;
-    IWFIL internal immutable wFIL;
     IPoolRegistry internal poolRegistry;
     IAgentPolice internal agentPolice;
     IAgentFactory internal agentFactory;
@@ -62,7 +60,7 @@ contract InfinityPool is IPool, Ownable {
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
 
-    /// @dev `asset` is the token that is being borrowed in the pool
+    /// @dev `asset` is the token that is being borrowed in the pool (WFIL)
     IERC20 public immutable asset;
 
     /// @dev `liquidStakingToken` is the token that represents a liquidStakingToken in the pool
@@ -70,9 +68,6 @@ contract InfinityPool is IPool, Ownable {
 
     /// @dev `rateModule` is a separate module for computing rates and determining lending eligibility
     IRateModule public rateModule;
-
-    /// @dev `ramp` is the interface that handles off-ramping
-    IOffRamp public ramp;
 
     /// @dev `prestake` is the address of the prestake contract
     IPreStake public immutable preStake;
@@ -108,14 +103,14 @@ contract InfinityPool is IPool, Ownable {
                               MODIFIERs
     //////////////////////////////////////////////////////////////*/
 
-    modifier requiresRamp() {
-        _requiresRamp();
-        _;
-    }
-
     /// @dev a modifier that ensures the caller matches the `vc.subject` and that the caller is an agent
     modifier subjectIsAgentCaller(VerifiableCredential calldata vc) {
         _subjectIsAgentCaller(vc);
+        _;
+    }
+
+    modifier ownerIsCaller(address owner) {
+        if (msg.sender != owner.normalize()) revert Unauthorized();
         _;
     }
 
@@ -133,12 +128,15 @@ contract InfinityPool is IPool, Ownable {
                       Payable Fallbacks
     ////////////////////////////////////////////////////////*/
 
+    /// @dev the pool can receive FIL from the WFIL.Withdraw method,
+    /// so we make sure to not trigger a deposit in those cases
+    /// (when this contract unwraps FIL triggering a receive or fallback)
     receive() isOpen external payable {
-        _depositFIL(msg.sender);
+        if (msg.sender != address(asset)) _depositFIL(msg.sender);
     }
 
     fallback() isOpen external payable {
-        _depositFIL(msg.sender);
+        if (msg.sender != address(asset)) _depositFIL(msg.sender);
     }
 
     // The only things we need to pull into this contract are the ones unique to _each pool_
@@ -167,7 +165,6 @@ contract InfinityPool is IPool, Ownable {
         poolRegistry = GetRoute.poolRegistry(router);
         agentPolice = GetRoute.agentPolice(router);
         agentFactory = GetRoute.agentFactory(router);
-        wFIL = GetRoute.wFIL(router);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -544,41 +541,71 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
-     * @dev Allows Staker to withdraw assets
+     * @notice Allows Staker to withdraw assets
      * @param assets The assets to withdraw
      * @param receiver The address to receive the assets
      * @param owner The owner of the shares
      * @return shares - the number of shares burned
-     *
-     * @dev this function is not currently used - exits happen directly through the ramp for more flexibility and better security
      */
     function withdraw(
         uint256 assets,
         address receiver,
         address owner
-    ) public requiresRamp returns (uint256 shares) {
+    ) public isOpen returns (uint256 shares) {
         updateAccounting();
-        shares = ramp.withdraw(assets, receiver, owner, totalAssets());
+        shares = previewWithdraw(assets);
+        _processExit(owner, receiver, shares, assets, false);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
     /**
-     * @dev Allows the Staker to redeem their shares for assets
+     * @notice Allows the Staker to redeem their shares for assets
      * @param shares The number of shares to burn
      * @param receiver The address to receive the assets
      * @param owner The owner of the shares
      * @return assets The assets received from burning the shares
-     *
-     * @dev this function is not currently used - exits happen directly through the ramp for more flexibility and better security
      */
     function redeem(
         uint256 shares,
         address receiver,
         address owner
-    ) public requiresRamp returns (uint256 assets) {
+    ) public isOpen returns (uint256 assets) {
         updateAccounting();
-        assets = ramp.redeem(shares, receiver, owner, totalAssets());
+        assets = previewRedeem(shares);
+        _processExit(owner, receiver, shares, assets, false);
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
+    }
+
+    /**
+     * @notice Allows Staker to withdraw assets (FIL)
+     * @param assets The assets to withdraw
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     * @return shares - the number of shares burned
+     */
+    function withdrawF(
+        uint256 assets,
+        address receiver,
+        address owner
+    ) public isOpen ownerIsCaller(owner) returns (uint256 shares) {
+        shares = previewWithdraw(assets);
+        _processExit(owner, receiver, shares, assets, true);
+    }
+
+    /**
+     * @notice Allows the Staker to redeem their shares for assets (FIL)
+     * @param shares The number of shares to burn
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     * @return assets The assets received from burning the shares
+     */
+    function redeemF(
+        uint256 shares,
+        address receiver,
+        address owner
+    ) public isOpen ownerIsCaller(owner) returns (uint256 assets) {
+        assets = previewRedeem(shares);
+        _processExit(owner, receiver, shares, assets, true);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -608,95 +635,87 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
-     * @dev Previews an amount of shares that would be received for depositing `assets`
+     * @notice Previews an amount of shares that would be received for depositing `assets`
      * @param assets The amount of assets to preview deposit
      * @return shares - The amount of shares that would be converted from assets
+     * @dev Will revert if the pool is shutting down
      */
-    function previewDeposit(uint256 assets) public view returns (uint256) {
+    function previewDeposit(uint256 assets) public view isOpen returns (uint256) {
         return convertToShares(assets);
     }
 
     /**
-     * @dev Previews an amount of assets that would be needed to mint `shares`
+     * @notice Previews an amount of assets that would be needed to mint `shares`
      * @param shares The amount of shares to mint
      * @return assets - The amount of assets that would be converted from shares
+     * @dev Will revert if the pool is shutting down
      */
-    function previewMint(uint256 shares) public view returns (uint256) {
+    function previewMint(uint256 shares) public view isOpen returns (uint256) {
         return convertToAssets(shares);
     }
 
     /**
-     * @dev Previews the withdraw
+     * @notice Previews the withdraw
      * @param assets The amount of assets to withdraw
      * @return shares - The amount of shares to be converted from assets
      */
-    function previewWithdraw(uint256 assets) public view returns (uint256) {
-        if (address(ramp) == address(0)) return 0;
+    function previewWithdraw(uint256 assets) public view isOpen returns (uint256 shares) {
+        if (assets > getLiquidAssets()) return 0;
 
-        return ramp.previewWithdraw(assets);
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        shares = supply == 0
+            ? assets
+            : assets.mulDivUp(supply, totalAssets());
     }
 
     /**
-     * @dev Previews an amount of assets to redeem for a given number of `shares`
+     * @notice Previews an amount of assets to redeem for a given number of `shares`
      * @param shares The amount of shares to hypothetically burn
      * @return assets - The amount of assets that would be converted from shares
      */
-    function previewRedeem(uint256 shares) public view returns (uint256) {
-        if (address(ramp) == address(0)) return 0;
+    function previewRedeem(uint256 shares) public view isOpen returns (uint256 assets) {
+        uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return ramp.previewRedeem(shares);
+        assets = supply == 0
+            ? shares
+            : shares.mulDivUp(totalAssets(), supply);
+        // revert if the fil value of the account's shares is bigger than the available exit liquidity
+        if (assets > getLiquidAssets()) return 0;
     }
 
     /*//////////////////////////////////////////////////////////////
                      DEPOSIT/WITHDRAWAL LIMIT LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function maxDeposit(address) public pure returns (uint256) {
+    function maxDeposit(address) external pure returns (uint256) {
         return type(uint256).max;
     }
 
-    function maxMint(address) public pure returns (uint256) {
+    function maxMint(address) external pure returns (uint256) {
         return type(uint256).max;
     }
 
-    function maxWithdraw(address owner) public view returns (uint256) {
-        if (address(ramp) == address(0)) return 0;
-
-        return ramp.maxWithdraw(owner);
+    function maxWithdraw(address owner) external view returns (uint256) {
+        return Math.min(convertToAssets(liquidStakingToken.balanceOf(owner)), getLiquidAssets());
     }
 
-    function maxRedeem(address owner) public view returns (uint256) {
-        if (address(ramp) == address(0)) return 0;
+    function maxRedeem(address owner) external view returns (uint256 shares) {
+        shares = liquidStakingToken.balanceOf(owner);
+        uint256 filValOfShares = convertToAssets(shares);
 
-        return ramp.maxRedeem(owner);
+        // if the fil value of the owner's shares is bigger than the available exit liquidity
+        // return the share equivalent of the pool's total liquid assets
+        uint256 liquidAssets = getLiquidAssets();
+        if (filValOfShares > liquidAssets) {
+            return previewRedeem(liquidAssets);
+        }
     }
 
 
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC
     //////////////////////////////////////////////////////////////*/
-
-    /**
-     * @dev Distributes funds to the offramp when the liquid assets are below the liquidity threshold
-     */
-    function harvestToRamp() external requiresRamp {
-        updateAccounting();
-        // distribute funds to the offramp when we are below the liquidity threshold
-        uint256 exitDemand = ramp.totalExitDemand();
-        uint256 rampAssets = asset.balanceOf(address(ramp));
-
-        // only send funds to the offramp if our liquidityReserves are less than the min liquidity reserve requirement
-        if (rampAssets < exitDemand) {
-            // distribute the difference between the min liquidity reserve requirement and our liquidity reserves
-            // if our liquid funds are not enough to cover, send the max amount of funds
-            uint256 toDistribute = Math.min(
-                exitDemand - rampAssets,
-                getLiquidAssets()
-            );
-            asset.approve(address(ramp), toDistribute);
-            ramp.distribute(address(this), toDistribute);
-        }
-    }
 
     /**
      * @dev Distributes feesCollected to the treasury
@@ -711,12 +730,6 @@ contract InfinityPool is IPool, Ownable {
                             ADMIN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice setRamp sets the address of the ramp in storage
-     */
-    function setRamp(IOffRamp _ramp) external onlyOwner {
-        ramp = _ramp;
-    }
 
     /**
      * @notice decomissionPool shuts down the pool and transfers all assets to the new pool
@@ -858,15 +871,42 @@ contract InfinityPool is IPool, Ownable {
         lstAmount = previewDeposit(msg.value);
 
         // handle FIL deposit
-        wFIL.deposit{value: msg.value}();
+        IWFIL(address(asset)).deposit{value: msg.value}();
 
         liquidStakingToken.mint(receiver, lstAmount);
 
         emit Deposit(msg.sender, receiver.normalize(),  msg.value, lstAmount);
     }
 
-    function _requiresRamp() internal view {
-        if (address(ramp) == address(0)) revert InvalidState();
+    function _processExit(
+        address owner,
+        address receiver,
+        uint256 iFILToBurn,
+        uint256 assetsToReceive,
+        bool shouldConvert
+    ) internal {
+        // normalize to protect against sending to ID address of EVM actor
+        receiver = receiver.normalize();
+        owner = owner.normalize();
+        // if the pool can't process the entire exit, it reverts
+        if (assetsToReceive > getLiquidAssets()) revert InsufficientLiquidity();
+        // pull in the iFIL from the iFIL holder, which will decrease the allowance of this ramp to spend on behalf of the iFIL holder
+        liquidStakingToken.transferFrom(owner, address(this), iFILToBurn);
+        // burn the exiter's iFIL tokens
+        liquidStakingToken.burn(address(this), iFILToBurn);
+
+        // here we unwrap the amount of WFIL and transfer native FIL to the receiver
+        if (shouldConvert) {
+            // unwrap the WFIL into FIL
+            IWFIL(address(asset)).withdraw(assetsToReceive);
+            // send FIL to the receiver, normalize to protect against sending to ID address of EVM actor
+            payable(receiver).sendValue(assetsToReceive);
+        } else {
+            // send WFIL back to the receiver
+            asset.transfer(receiver, assetsToReceive);
+        }
+
+        emit Withdraw(owner, receiver, owner, assetsToReceive, iFILToBurn);
     }
 
     function _subjectIsAgentCaller(VerifiableCredential calldata vc) internal view {

@@ -8,7 +8,7 @@ import {FilAddress} from "shim/FilAddress.sol";
 
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
-import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {DEPRECATED_IPool} from "src/Types/Interfaces/DEPRECATED_IPool.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 
@@ -23,7 +23,7 @@ contract SimpleRamp is IOffRamp {
     address private immutable router;
     uint256 private immutable poolID;
 
-    IPool public pool;
+    DEPRECATED_IPool public pool;
     IPoolToken public iFIL;
     IWFIL public wFIL;
 
@@ -259,7 +259,7 @@ contract SimpleRamp is IOffRamp {
     }
 
     function _refreshExtern() internal {
-        pool = GetRoute.pool(GetRoute.poolRegistry(router), poolID);
+        pool = DEPRECATED_IPool(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
         iFIL = pool.liquidStakingToken();
         wFIL = IWFIL(address(pool.asset()));
     }

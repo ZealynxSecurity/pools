@@ -660,22 +660,22 @@ contract BaseTest is Test {
     assertTrue(agent.defaulted(), "Agent should be put into default");
   }
 
-  function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
-    IPoolToken liquidStakingToken = pool.liquidStakingToken();
-    PoolToken iou = new PoolToken(systemAdmin);
-    ramp = IOffRamp(new SimpleRamp(
-      router,
-      pool.id()
-    ));
-    vm.startPrank(systemAdmin);
-    iou.setMinter(address(ramp));
-    iou.setBurner(address(ramp));
-    liquidStakingToken.setBurner(address(ramp));
-    vm.stopPrank();
+  // function _configureOffRamp(IPool pool) internal returns (IOffRamp ramp) {
+  //   IPoolToken liquidStakingToken = pool.liquidStakingToken();
+  //   PoolToken iou = new PoolToken(systemAdmin);
+  //   ramp = IOffRamp(new SimpleRamp(
+  //     router,
+  //     pool.id()
+  //   ));
+  //   vm.startPrank(systemAdmin);
+  //   iou.setMinter(address(ramp));
+  //   iou.setBurner(address(ramp));
+  //   liquidStakingToken.setBurner(address(ramp));
+  //   vm.stopPrank();
 
-    vm.prank(IAuth(address(pool)).owner());
-    pool.setRamp(ramp);
-  }
+  //   vm.prank(IAuth(address(pool)).owner());
+  //   pool.setRamp(ramp);
+  // }
 
   function _bumpMaxEpochsOwedTolerance(uint256 epochs, address pool) internal {
     vm.startPrank((IAuth(pool)).owner());
