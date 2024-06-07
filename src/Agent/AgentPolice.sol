@@ -18,7 +18,6 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
-import {IAgentPoliceHook} from "src/Types/Interfaces/IAgentPoliceHook.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
@@ -41,9 +40,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
 
   IWFIL internal wFIL;
-
-  /// @notice `hook` is the hook that is called when a credential is used
-  IAgentPoliceHook public hook;
 
   /// @notice `defaultWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
   uint256 public defaultWindow;
@@ -92,8 +88,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     address _owner,
     address _operator,
     address _router,
-    IWFIL _wFIL,
-    IAgentPoliceHook _hook
+    IWFIL _wFIL
   ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
     defaultWindow = _defaultWindow;
     administrationWindow = EPOCHS_IN_WEEK;
@@ -110,7 +105,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     }
 
     wFIL = _wFIL;
-    hook = _hook;
   }
 
   modifier onlyAgent() {
@@ -331,8 +325,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     if (IAgent(msg.sender).id() != sc.vc.subject) revert Unauthorized();
     _credentialUseBlock[digest(sc.vc)] = block.number;
 
-    if (hook != IAgentPoliceHook(address(0))) hook.onCredentialUsed(msg.sender, sc.vc);
-
     emit CredentialUsed(sc.vc.subject, sc.vc);
   }
 
@@ -478,13 +470,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function setSectorFaultyTolerancePercent(uint256 _sectorFaultyTolerancePercent) external onlyOwner {
     sectorFaultyTolerancePercent = _sectorFaultyTolerancePercent;
-  }
-
-  /**
-   * @notice `setHook` sets the hook that is called when a credential is used
-   */
-  function setHook(IAgentPoliceHook _hook) external onlyOwner {
-    hook = _hook;
   }
 
   function refreshRoutes() external {

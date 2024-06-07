@@ -24,7 +24,6 @@ import {RateModule} from "src/Pool/RateModule.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
-import {IAgentPoliceHook} from "src/Types/Interfaces/IAgentPoliceHook.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
@@ -110,7 +109,7 @@ contract BaseTest is Test {
       address(wFIL),
       address(new MinerRegistry(router, IAgentFactory(agentFactory))),
       agentFactory,
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router, IWFIL(address(wFIL)), IAgentPoliceHook(address(0)))),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router, IWFIL(address(wFIL)))),
       poolRegistry,
       vcIssuer,
       credParser,
