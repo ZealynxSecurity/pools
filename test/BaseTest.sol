@@ -24,6 +24,7 @@ import {RateModule} from "src/Pool/RateModule.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
+import {IAgentPoliceHook} from "src/Types/Interfaces/IAgentPoliceHook.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
@@ -42,6 +43,7 @@ import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
+import {ROUTE_INFINITY_POOL} from "src/Constants/Routes.sol";
 import {EPOCHS_IN_WEEK, EPOCHS_IN_DAY,  EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 import {errorSelector} from "./helpers/Utils.sol";
 
@@ -108,7 +110,7 @@ contract BaseTest is Test {
       address(wFIL),
       address(new MinerRegistry(router, IAgentFactory(agentFactory))),
       agentFactory,
-      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router, IPool(address(0)), IWFIL(address(wFIL)))),
+      address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, DEFAULT_WINDOW, systemAdmin, systemAdmin, router, IWFIL(address(wFIL)), IAgentPoliceHook(address(0)))),
       poolRegistry,
       vcIssuer,
       credParser,
@@ -439,6 +441,7 @@ contract BaseTest is Test {
     liquidStakingToken.setMinter(address(pool));
     vm.startPrank(systemAdmin);
     poolRegistry.attachPool(pool);
+    IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(pool));
     vm.stopPrank();
   }
 
