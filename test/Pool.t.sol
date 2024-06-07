@@ -392,6 +392,8 @@ contract PoolWithLeverageTest is BaseTest {
 
   uint256 maxBorrowDTE = 2e18; // 2x max leverage
   uint256 maxBorrowLTCV = 8e17; // borrow 80% to liquidation value
+  uint256 maxWithdrawDTE = 15e17; // 1.5x max leverage for withdrawals
+  uint256 maxWithdrawLTCV = 8e17; // 80% to liquidation value for withdrawals
 
 
   address investor1 = makeAddr("INVESTOR_1");
@@ -404,19 +406,23 @@ contract PoolWithLeverageTest is BaseTest {
   uint64 miner;
   IPool pool;
   IRateModule rateModule;
+  IAgentPolice agentPolice;
 
   function setUp() public {
     pool = createAndFundPool(stakeAmount, investor1);
     (agent, miner) = configureAgent(minerOwner);
 
     rateModule = IRateModule(pool.rateModule());
+    agentPolice = IAgentPolice(GetRoute.agentPolice(router));
     vm.startPrank(systemAdmin);
     rateModule.setMaxLTV(maxBorrowLTCV);
     rateModule.setMaxDTE(maxBorrowDTE);
+    agentPolice.setMaxDTE(maxWithdrawDTE);
+    agentPolice.setMaxLTV(maxWithdrawLTCV);
     vm.stopPrank();
   }
 
-  // tests borrowing 2x when the liquidation value supports it
+  // tests borrowing 2x when the liquidation value and equity support it
   function testBorrow2xLeverageValid() public {
     // borrow 2x our initial value
     uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
@@ -520,6 +526,63 @@ contract PoolWithLeverageTest is BaseTest {
 
     Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
+    assertEq(account.principal, 0, "Principal should be 0");
+  }
+
+  // tests borrowing over 2x when the equity value does not support it
+  function testBorrow2xLeverageOverDTE() public {
+    // borrow 2x our initial value
+    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    // agent value increases by the borrow amount
+    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+    // ensure the liquidation value doesn't block the higher leverage
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+
+    AgentData memory agentData = AgentData(
+      // decrease equity to below 2x the borrow amount
+      postActionAV - DUST,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      borrowAmount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    SignedCredential memory sc = signCred(vc);
+
+    vm.startPrank(minerOwner);
+    try agent.borrow(pool.id(), sc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+    vm.stopPrank();
+
+    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
     assertEq(account.principal, 0, "Principal should be borrow amount");
   }
 
@@ -579,10 +642,10 @@ contract PoolWithLeverageTest is BaseTest {
     assertGt(account.principal, equity, "Principal should be more than 1x equity");
   }
 
-  // tests withdrawing when over DTE > 1
+  // tests withdrawing when over DTE > 1.5
   function testWithdrawOverDTE() public {
-    // borrow 2x our initial value
-    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    // borrow a little over 1.5x our initial value
+    uint256 borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
     // agent value increases by the borrow amount
     uint256 postActionAV = initialAgentTotalVal + borrowAmount;
     // ensure the liquidation value doesn't block the higher leverage
@@ -682,6 +745,366 @@ contract PoolWithLeverageTest is BaseTest {
     } catch (bytes memory b) {
       assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
     }
+  }
+
+  // this test uses hardcoded values to test the full spectrum of rules within the agent police and rate module
+  function testAllRulesHardcoded() public {
+    // attempt to borrow a little more than 2x our initial value
+    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
+    // agent value increases by the borrow amount
+    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+    // ensure the liquidation value doesn't block the higher leverage
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+
+    AgentData memory agentData = AgentData(
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    VerifiableCredential memory vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      borrowAmount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    SignedCredential memory sc = signCred(vc);
+
+    // first we attempt to borrow an amount that rate module will reject due to DTE
+    vm.startPrank(minerOwner);
+    try agent.borrow(pool.id(), sc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+    vm.stopPrank();
+
+    assertEq(AccountHelpers.getAccount(router, agent.id(), pool.id()).principal, 0, "Principal should be 0");
+
+    // next we attempt to borrow an amount that rate module will reject due to LTV 
+    borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    // postActionAV in this case is max uint256 to ensure it does not reject due to DTE
+    postActionAV = type(uint256).max;
+    // postActionLiquidationValue is set to be just under maxLTV 
+    postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() + DUST);
+
+    vm.roll(block.number + 1);
+
+    agentData = AgentData(
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      borrowAmount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    sc = signCred(vc);
+
+    vm.startPrank(minerOwner);
+    try agent.borrow(pool.id(), sc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+    vm.stopPrank();
+
+    assertEq(AccountHelpers.getAccount(router, agent.id(), pool.id()).principal, 0, "Principal should be 0");
+
+    // then we borrow a little less (by using withdrawal DTE) that is approved by rate module, but that will later reject on the agent police withdrawal for DTE and LTV
+    borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
+    // agent value increases by the borrow amount
+    postActionAV = initialAgentTotalVal + borrowAmount;
+    // ensure the liquidation value doesn't block the higher leverage
+    postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+
+    agentData = AgentData(
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      borrowAmount,
+      Agent.borrow.selector,
+      // minerID irrelevant for borrow action
+      0,
+      abi.encode(agentData)
+    );
+
+    sc = signCred(vc);
+
+    vm.startPrank(minerOwner);
+    agent.borrow(pool.id(), sc);
+    vm.stopPrank();
+
+    assertEq(AccountHelpers.getAccount(router, agent.id(), pool.id()).principal, borrowAmount, "Principal should be borrowAmount");
+    assertEq(agent.liquidAssets(), borrowAmount, "Agent balance should have borrowed amount");
+    // then we isolate agent police DTE withdrawal test (should fail DTE, pass LTV)
+    // attempt to withdraw any amount that results in DTE>1.5 and withdrawing will fail because of DTE (not LTV)
+    uint256 withdrawAmount = 1e18 + DUST;
+    // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
+    postActionAV = agent.liquidAssets() + initialAgentTotalVal - withdrawAmount;
+    // postActionLiquidationValue is set to max UINT256 to avoid LTV rejection in this case
+    postActionLiquidationValue = type(uint256).max;
+
+    vm.roll(block.number + 1);
+
+    // try to withdraw any amount while DTE>1 and withdrawing will fail
+    AgentData memory withdrawAgentData = AgentData(
+      // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      withdrawAmount,
+      Agent.withdraw.selector,
+      // minerID irrelevant for withdraw action
+      0,
+      abi.encode(withdrawAgentData)
+    );
+
+    sc = signCred(vc);
+
+    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+    // console.log(account);
+
+    // the pool should approve this withdrawal request because it is under the LTV and under borrow DTE
+    assertTrue(rateModule.isApproved(account, sc.vc), "Pool should approve");
+
+    // it should reject the withdrawal because of DTE
+    vm.startPrank(minerOwner);
+    // here we are over just DTE, LTV is under 0.8 (agent police's value for withdrawing)
+    try agent.withdraw(minerOwner, sc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+    vm.stopPrank();
+    
+    try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+
+    // then we isolate agent police LTV withdrawal test (should fail LTV, pass DTE)
+    // attempt to withdraw any amount that results in DTE<1.5, LTV > 0.8 and withdrawing will fail because of LTV (not DTE)
+    // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
+    postActionAV = type(uint256).max;
+    // postActionLiquidationValue is set to an amount that will result in an LTV over 0.8
+    postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxLTV() + DUST);
+
+    vm.roll(block.number + 1);
+
+    // try to withdraw any amount while DTE>1 and withdrawing will fail
+    withdrawAgentData = AgentData(
+      // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      borrowAmount,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      withdrawAmount,
+      Agent.withdraw.selector,
+      // minerID irrelevant for withdraw action
+      0,
+      abi.encode(withdrawAgentData)
+    );
+
+    sc = signCred(vc);
+
+    account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+    // the pool should not approve this withdrawal request because it is under the LTV (same as police) and under borrow DTE
+    assertFalse(rateModule.isApproved(account, sc.vc), "Pool should not approve");
+
+    // it should reject the withdrawal because of DTE
+    vm.startPrank(minerOwner);
+    // here we are over just LTV, DTE is under 1.5 (agent police's value for withdrawing)
+    try agent.withdraw(minerOwner, sc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+    vm.stopPrank();
+    
+    try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
+      revert("Should have failed");
+    } catch (bytes memory b) {
+      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    }
+    // then we pay back some principal and attempt to withdraw the same amount (should pass both DTE and LTV)
+    // use 2e18 to leave a little liquid fil on the agent for the payment
+    uint256 payAmount = borrowAmount - 2e18;
+    agentPay(agent, pool, issueGenericPayCred(agent.id(), payAmount));
+
+    vm.roll(block.number + 1);
+
+    // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
+    postActionAV = initialAgentTotalVal + agent.liquidAssets() - payAmount;
+    // postActionLiquidationValue is set to an amount that will result in an LTV under 0.8
+    postActionLiquidationValue = postActionAV.divWadDown(agentPolice.maxLTV() - DUST);
+
+    // try to withdraw any amount while DTE<1.5 and LTV<0.8 should pass
+    withdrawAgentData = AgentData(
+      // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
+      postActionAV,
+      postActionLiquidationValue,
+      // 0 expected daily fault penalties
+      0,
+      getUnblockingEDR(),
+      // perfect GCRED
+      100,
+      // QA power does not matter
+      0,
+      // principal
+      2e18,
+      // no faulty sectors
+      0,
+      // no live sectors (does not matter for these tests)
+      0,
+      // green score does not matter
+      0
+    );
+
+    vc = VerifiableCredential(
+      vcIssuer,
+      agent.id(),
+      block.number,
+      block.number + 100,
+      withdrawAmount,
+      Agent.withdraw.selector,
+      // minerID irrelevant for withdraw action
+      0,
+      abi.encode(withdrawAgentData)
+    );
+
+    sc = signCred(vc);
+
+    account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+    // the pool should not approve this withdrawal request because it is under the LTV (same as police) and under borrow DTE
+    assertTrue(rateModule.isApproved(account, sc.vc), "Pool should approve");
+
+    // it should reject the withdrawal because of DTE
+    vm.startPrank(minerOwner);
+    // here we are over just LTV, DTE is under 1.5 (agent police's value for withdrawing)
+    try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
+      // assert the withdrawal request is not denied
+      assertTrue(true);
+    } catch {
+      revert("Withdrawing should be approved by police");
+    }
+    
+    try agent.withdraw(minerOwner, sc) {
+      // assert the withdrawal request is not denied
+      assertTrue(true);
+    } catch {
+      revert("Should not have failed");
+    }
+    vm.stopPrank();
   }
 
   // computes an EDR that will not block the miner from borrowing
