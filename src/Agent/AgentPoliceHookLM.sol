@@ -164,7 +164,7 @@ contract AgentPoliceHook is IAgentPoliceHook, Ownable {
         // multiply the rate by the principal to get the per epoch interest rate
         // the interestPerEpoch has an extra WAD to maintain precision
         uint256 interestPerEpoch =
-            account.principal.mulWadUp(IPool(IRouter(_router).getRoute(ROUTE_INFINITY_POOL)).getRate(vc));
+            account.principal.mulWadUp(IPool(IRouter(_router).getRoute(ROUTE_INFINITY_POOL)).getRate());
         // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
         // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
         uint256 interestOwed = interestPerEpoch.mulWadUp(epochsToPay);

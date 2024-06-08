@@ -376,13 +376,11 @@ contract AgentRmEquityTest is BaseTest {
       depositFundsIntoPool(pool, principal, investor1);
       agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), principal));
 
-      IRateModule rateModule = IRateModule(pool.rateModule());
-
       uint256 badEDRUpper =
         _getAdjustedRate(GCRED)
         .mulWadUp(principal)
         .mulWadUp(EPOCHS_IN_DAY)
-        .divWadDown(rateModule.maxDTE());
+        .divWadDown(pool.maxDTE());
 
       badEDR = bound(badEDR, DUST, badEDRUpper - DUST);
       // collateral needs to result in LTV < 1
@@ -1525,8 +1523,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function getPenaltyOwed(uint256 amount, uint256 rollFwdPeriod) public view returns (uint256) {
-      IRateModule rateModule = IRateModule(pool.rateModule());
-      uint256 rate = rateModule.penaltyRate();
+      uint256 rate = pool.getRate();
       uint256 _interestOwedPerEpoch = amount.mulWadUp(rate);
       // _interestOwedPerEpoch is mulWadUp by epochs (not WAD based), which cancels the WAD out for interestOwed
       return _interestOwedPerEpoch.mulWadUp(rollFwdPeriod);

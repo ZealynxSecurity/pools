@@ -20,7 +20,6 @@ import {AuthController} from "src/Auth/AuthController.sol";
 import {PoolRegistry} from "src/Pool/PoolRegistry.sol";
 import {Router} from "src/Router/Router.sol";
 import {SimpleRamp} from "src/OffRamp/SimpleRamp.sol";
-import {RateModule} from "src/Pool/RateModule.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
@@ -430,7 +429,6 @@ contract BaseTest is Test {
       systemAdmin,
       router,
       address(wFIL),
-      address(new RateModule(systemAdmin, router, rateArray, levels)),
       // no min liquidity for test pool
       address(liquidStakingToken),
       address(new PreStake(systemAdmin, IWFIL(address(wFIL)), IPoolToken(address(liquidStakingToken)))),
@@ -605,7 +603,7 @@ contract BaseTest is Test {
   ) {
     // since gcred is hardcoded in the credential, we know the rate ahead of time (rate does not change if gcred does not change, even if other financial statistics change)
     // rate here is WAD based
-    uint256 rate = pool.getRate(vc);
+    uint256 rate = pool.getRate();
     // note we add 1 more bock of interest owed to account for the roll forward of 1 epoch inside agentBorrow helper
     // since borrowAmount is also WAD based, the _interestOwedPerEpoch is also WAD based (e18 * e18 / e18)
     uint256 _interestOwedPerEpoch = borrowAmount.mulWadUp(rate);

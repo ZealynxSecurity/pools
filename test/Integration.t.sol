@@ -243,9 +243,7 @@ contract IntegrationTest is BaseTest {
 
       uint256 epochsOwed = block.number - account.epochsPaid;
 
-      uint256 interestPerEpoch = account.principal.mulWadUp(
-        pool.getRate(payCred.vc)
-      );
+      uint256 interestPerEpoch = account.principal.mulWadUp(pool.getRate());
 
       bool underPaid = payAmount * WAD < interestPerEpoch;
       bool paidMoreThanAvail = payAmount > agent.liquidAssets();

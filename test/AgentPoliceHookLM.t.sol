@@ -116,7 +116,7 @@ contract AgentPoliceHookLMTest is Test {
         VerifiableCredential memory vc = VerifiableCredential(
             address(0), 1, block.number, block.number + 100, 1, Agent.pay.selector, 0, abi.encode(ad)
         );
-        uint256 rate = IPool(pool).getRate(vc);
+        uint256 rate = IPool(pool).getRate();
         assertEq(rate, fakeRate, "rate invalid");
 
         assertEq(IAgent(agent).id(), agentID, "agent id invalid");

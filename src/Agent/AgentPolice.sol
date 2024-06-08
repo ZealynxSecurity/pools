@@ -17,7 +17,6 @@ import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
-import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
@@ -103,11 +102,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     // set the DTI, DTE, and DTL ratios to match the pool on deployment if a pool is passed
     // if no pool is passed, you can update these values using the admin function matchRiskParams
     if (address(pool) != address(0)) {
-      IRateModule rm = pool.rateModule();
-      maxDTE = rm.maxDTE();
-      maxDTI = rm.maxDTI();
-      // confusing name: LTV == DTL, this is a variable rename
-      maxDTL = rm.maxLTV();
+      maxDTE = pool.maxDTE();
+      maxDTI = pool.maxDTI();
+      maxDTL = pool.maxDTL();
     }
 
     wFIL = _wFIL;
@@ -232,7 +229,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   function setAgentDefaultDTL(address agent, VerifiableCredential calldata vc) external onlyOwner {
     Account memory account = _getAccount(vc.subject);
     // compute the interest owed on the principal to add to principal to get total debt
-    uint256 rate = _pool().getRate(vc);
+    uint256 rate = _pool().getRate();
     uint256 debt = account.principal + _interestOwed(account, rate);
 
     if (debt.divWadDown(vc.getCollateralValue(address(GetRoute.credParser(router)))) < DTLLiquidationThreshold) {
@@ -362,7 +359,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     if (agentTotalValue <= principal) revert OverLimitDTE();
 
     // compute the interest owed on the principal to add to principal to get total debt
-    uint256 rate = pool.getRate(vc);
+    uint256 rate = pool.getRate();
     uint256 debt = principal + _interestOwed(account, rate);
     // if the DTE is greater than maxDTE, revert
     if (debt.divWadDown(agentTotalValue - debt) > maxDTE) revert OverLimitDTE();
@@ -387,7 +384,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
             _getAccount(vc.subject),
             vc,
             credParser,
-            _pool().getRate(vc)
+            _pool().getRate()
         ) > maxDTL
     ) revert AgentStateRejected();
 
@@ -444,10 +441,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    * @notice `setRiskParamsToMatchPool` is a convenience method for setting the risk parameters of the agent police to match the pool's rate module
    */
   function setRiskParamsToMatchPool() external onlyOwner {
-    IRateModule rm = _pool().rateModule();
-    maxDTE = rm.maxDTE();
-    maxDTI = rm.maxDTI();
-    maxDTL = rm.maxLTV();
+    IPool pool = _pool();
+    maxDTE = pool.maxDTE();
+    maxDTI = pool.maxDTI();
+    maxDTL = pool.maxDTL();
   }
 
   /**

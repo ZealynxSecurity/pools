@@ -698,7 +698,6 @@ contract OffRampTest is BaseTest {
       systemAdmin,
       router,
       address(wFIL),
-      address(pool.rateModule()),
       // no min liquidity for test pool
       address(pool.liquidStakingToken()),
       address(IInfinityPool(address(pool)).preStake()),

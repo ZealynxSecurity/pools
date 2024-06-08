@@ -13,17 +13,17 @@ import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
-import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
+import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
 import {IPreStake} from "src/Types/Interfaces/IPreStake.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
+import {EPOCHS_IN_DAY, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
 /**
  * @title InfinityPool
@@ -66,11 +66,25 @@ contract InfinityPool is IPool, Ownable {
     /// @dev `liquidStakingToken` is the token that represents a liquidStakingToken in the pool
     IPoolToken public immutable liquidStakingToken;
 
-    /// @dev `rateModule` is a separate module for computing rates and determining lending eligibility
-    IRateModule public rateModule;
-
     /// @dev `prestake` is the address of the prestake contract
     IPreStake public immutable preStake;
+
+    address public credParser;
+
+    /// @dev `maxDTI` is the max debt to income ratio
+    uint256 public maxDTI = 0.8e18;
+
+    /// @dev `maxDTE` is the max debt to equity ratio
+    uint256 public maxDTE = 3e18;
+
+    /// @dev `maxDTL` is the max debt to liquidation value ratio
+    uint256 public maxDTL = 8e17;
+
+    /// @dev `levels` is a leveling system that sets maximum borrow amounts on accounts
+    uint256[10] public levels;
+
+    /// @dev `accountLevel` is a mapping of agentID to level
+    mapping(uint256 => uint256) public accountLevel;
 
     /// @dev `feesCollected` is the total fees collected in this pool
     uint256 public feesCollected = 0;
@@ -93,11 +107,11 @@ contract InfinityPool is IPool, Ownable {
     /// @dev `lastAccountingUpdatingEpoch` is the epoch at which the pool's accounting was last updated
     uint256 public lastAccountingUpdatingEpoch = 0;
 
-    /// @dev `rentalFeesOwedPerEpoch` is the % of FIL charged to Agents on a per epoch basis
-    uint256 public rentalFeesOwedPerEpoch = FixedPointMathLib.divWadDown(15e16, EPOCHS_IN_YEAR*1e18);
-
     /// @dev `isShuttingDown` is a boolean that, when true, halts deposits and borrows. Once set, it cannot be unset.
     bool public isShuttingDown = false;
+
+    /// @dev `rentalFeesOwedPerEpoch` is the % of FIL charged to Agents on a per epoch basis
+    uint256 private _rentalFeesOwedPerEpoch = FixedPointMathLib.divWadDown(15e16, EPOCHS_IN_YEAR*1e18);
 
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
@@ -146,7 +160,6 @@ contract InfinityPool is IPool, Ownable {
         address _owner,
         address _router,
         address _asset,
-        address _rateModule,
         address _liquidStakingToken,
         address _preStake,
         uint256 _minimumLiquidity,
@@ -154,7 +167,6 @@ contract InfinityPool is IPool, Ownable {
     ) Ownable(_owner) {
         router = _router;
         asset = IERC20(_asset);
-        rateModule = IRateModule(_rateModule);
         preStake = IPreStake(_preStake);
         minimumLiquidity = _minimumLiquidity;
         // set the ID
@@ -165,6 +177,7 @@ contract InfinityPool is IPool, Ownable {
         poolRegistry = GetRoute.poolRegistry(router);
         agentPolice = GetRoute.agentPolice(router);
         agentFactory = GetRoute.agentFactory(router);
+        credParser = address(GetRoute.credParser(router));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -237,10 +250,8 @@ contract InfinityPool is IPool, Ownable {
      * @notice getRate returns the rate for an Agent's current position within the Pool
      * @return rate The rate for the Agent's current position and base rate
      */
-    function getRate(
-        VerifiableCredential calldata
-    ) public view returns (uint256 rate) {
-        return rentalFeesOwedPerEpoch;
+    function getRate() public view returns (uint256 rate) {
+        return _rentalFeesOwedPerEpoch;
     }
 
     /**
@@ -254,7 +265,29 @@ contract InfinityPool is IPool, Ownable {
         Account calldata account,
         VerifiableCredential calldata vc
     ) external view returns (bool approved) {
-        return rateModule.isApproved(account, vc);
+        uint256 principal = account.principal;
+        // if you're attempting to borrow above your level limit, you're not approved
+        if (principal > levels[accountLevel[vc.subject]]) {
+            return false;
+        }
+
+        // checks for zero to avoid dividing or multiplying by zero downstream
+        // if you have nothing borrowed, you're good no matter what
+        if (principal == 0) return true;
+        // if you have no liquidation value (used to be called collateral value), it's an automatic no
+        uint256 liquidationValue = vc.getCollateralValue(credParser);
+        if (liquidationValue == 0) return false;
+
+        // if DTL is greater than `maxDTL`, Agent is undercollateralized - danger zone!
+        if (principal.divWadDown(liquidationValue) > maxDTL) return false;
+        // if DTE is greater than `maxDTE`, Agent does not have sufficient skin in the game
+        uint256 agentTotalAssets = vc.getAgentValue(credParser);
+        uint256 dte = agentTotalAssets <= principal ? type(uint256).max : principal.divWadDown(agentTotalAssets - principal);
+        if (dte > maxDTE) return false;
+
+        // if DTI is greater than `maxDTI`, Agent cannot meet its payments solely from block rewards
+        uint256 dailyPayment = principal.mulWadUp(_rentalFeesOwedPerEpoch).mulWadUp(EPOCHS_IN_DAY);
+        return dailyPayment.divWadUp(vc.getExpectedDailyRewards(credParser)) <= maxDTI;
     }
 
     /**
@@ -279,7 +312,7 @@ contract InfinityPool is IPool, Ownable {
         uint256 interestOwed = 0;
         // if the account is not "current", compute the amount of interest owed based on the penalty rate
         if (account.epochsPaid < block.number) {
-            interestOwed = account.principal.mulWadUp(rentalFeesOwedPerEpoch).mulWadUp(block.number - account.epochsPaid);
+            interestOwed = account.principal.mulWadUp(_rentalFeesOwedPerEpoch).mulWadUp(block.number - account.epochsPaid);
         }
 
         // compute the amount of fees and principal we can pay off
@@ -405,9 +438,9 @@ contract InfinityPool is IPool, Ownable {
             // transfer the assets into the pool
             asset.transferFrom(msg.sender, address(this), vc.value);
 
-            emit Pay(vc.subject, rentalFeesOwedPerEpoch, 0, 0, 0);
+            emit Pay(vc.subject, _rentalFeesOwedPerEpoch, 0, 0, 0);
 
-            return (rentalFeesOwedPerEpoch, account.epochsPaid, 0, 0);
+            return (_rentalFeesOwedPerEpoch, account.epochsPaid, 0, 0);
         }
 
         // if the account is not "current", compute the amount of interest owed based on the new rate
@@ -416,7 +449,7 @@ contract InfinityPool is IPool, Ownable {
             uint256 epochsToPay = block.number - account.epochsPaid;
             // multiply the rate by the principal to get the per epoch interest rate
             // the interestPerEpoch has an extra WAD to maintain precision
-            interestPerEpoch = account.principal.mulWadUp(rentalFeesOwedPerEpoch);
+            interestPerEpoch = account.principal.mulWadUp(_rentalFeesOwedPerEpoch);
             // ensure the payment is greater than or equal to at least 1 epochs worth of interest
             // NOTE - we multiply by WAD here because the interestPerEpoch has an extra WAD to maintain precision
             if (vc.value * WAD < interestPerEpoch) revert InvalidParams();
@@ -493,7 +526,7 @@ contract InfinityPool is IPool, Ownable {
         // calculate the number of blocks passed since the last upgrade
         uint256 blocksPassed = block.number - lastAccountingUpdatingEpoch;
         // calculate the total % owed to the pool
-        uint256 feeRateAccrued = rentalFeesOwedPerEpoch.mulWadUp(blocksPassed);
+        uint256 feeRateAccrued = _rentalFeesOwedPerEpoch.mulWadUp(blocksPassed);
         // calculate the total interest accrued during this period
         return totalBorrowed.mulWadUp(feeRateAccrued);
       }
@@ -818,18 +851,49 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
-     * @notice setRateModule sets the address of the rate module in storage
-     */
-    function setRateModule(IRateModule _rateModule) external onlyOwner {
-        rateModule = _rateModule;
-    }
-
-    /**
      * @notice Transfers assets from the pre-stake contract to the pool, without minting new iFIL
      * @param _amount The amount of WFIL to transfer
      */
     function transferFromPreStake(uint256 _amount) external onlyOwner {
         asset.transferFrom(address(preStake), address(this), _amount);
+    }
+
+    /// @dev sets the max DTI score to be considered approved
+    function setMaxDTI(uint256 _maxDTI) external onlyOwner {
+        maxDTI = _maxDTI;
+    }
+
+    /// @dev sets the max DTE score to be considered approved
+    function setMaxDTE(uint256 _maxDTE) external onlyOwner {
+        maxDTE = _maxDTE;
+    }
+
+    /// @dev sets the max LTV to be considered approved
+    function setMaxDTL(uint256 _maxDTL) external onlyOwner {
+        maxDTL = _maxDTL;
+    }
+
+    function setRentalFeesOwedPerEpoch(uint256 rentalFeesOwedPerEpoch_) external onlyOwner {
+        _rentalFeesOwedPerEpoch = rentalFeesOwedPerEpoch_;
+    }
+
+    /// @dev sets the credentialParser in case we need to update a data type
+    function updateCredParser() external onlyOwner {
+        credParser = address(GetRoute.credParser(router));
+    }
+
+    /// @dev sets the array of max borrow amounts for each level
+    function setLevels(uint256[10] calldata _levels) external onlyOwner {
+        levels = _levels;
+    }
+    
+    /// @dev sets the array of max borrow amounts for each level
+    function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external onlyOwner {
+        if (agentIDs.length != level.length) revert InvalidParams();
+        uint256 i = 0;
+        for (; i < agentIDs.length; i++) {
+          accountLevel[agentIDs[i]] = level[i];
+        }
     }
 
     /**
@@ -839,6 +903,7 @@ contract InfinityPool is IPool, Ownable {
         poolRegistry = GetRoute.poolRegistry(router);
         agentPolice = GetRoute.agentPolice(router);
         agentFactory = GetRoute.agentFactory(router);
+        credParser = address(GetRoute.credParser(router));
     }
 
     /*//////////////////////////////////////////////////////////////

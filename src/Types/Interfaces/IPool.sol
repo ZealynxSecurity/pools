@@ -57,8 +57,6 @@ interface IPool {
 
     function liquidStakingToken() external view returns (IPoolToken);
 
-    function rateModule() external view returns (IRateModule);
-
     function id() external view returns (uint256);
 
     function minimumLiquidity() external view returns (uint256);
@@ -77,14 +75,22 @@ interface IPool {
 
     function feesCollected() external view returns (uint256);
 
-    function getRate(
-        VerifiableCredential calldata vc
-    ) external view returns (uint256);
+    function getRate() external view returns (uint256);
 
     function isApproved(
         Account calldata account,
         VerifiableCredential calldata vc
     ) external view returns (bool);
+
+    function maxDTI() external view returns (uint256);
+
+    function maxDTE() external view returns (uint256);
+
+    function maxDTL() external view returns (uint256);
+
+    function credParser() external view returns (address);
+
+    function accountLevel(uint256 agentID) external view returns (uint256);
 
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS
@@ -155,6 +161,8 @@ interface IPool {
                             ADMIN FUNCS
     //////////////////////////////////////////////////////////////*/
 
+    function refreshRoutes() external;
+
     function shutDown() external;
 
     function decommissionPool(IPool newPool) external returns (uint256 borrowedAmount);
@@ -166,5 +174,13 @@ interface IPool {
     function setMinimumLiquidity(uint256 minLiquidity) external;
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external returns (uint256 totalOwed);
+
+    function setMaxDTI(uint256 _maxDTI) external;
+
+    function setMaxDTL(uint256 _maxDTL) external;
+
+    function setMaxDTE(uint256 _maxDTE) external;
+
+    function setRentalFeesOwedPerEpoch(uint256 _rentalFeesOwedPerEpoch) external;
 }
 

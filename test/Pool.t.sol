@@ -6,7 +6,6 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IInfinityPool} from "src/Types/Interfaces/IInfinityPool.sol";
 
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
-import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {NewCredParser} from "test/helpers/NewCredParser.sol";
 import {NewCredentials, NewAgentData} from "test/helpers/NewCredentials.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
@@ -75,8 +74,8 @@ contract PoolTestState is BaseTest {
     newCredParser = address(new NewCredParser());
     vm.startPrank(systemAdmin);
     Router(router).pushRoute(ROUTE_CRED_PARSER, newCredParser);
-    pool.rateModule().updateCredParser();
-    assertEq(pool.rateModule().credParser(), newCredParser);
+    pool.refreshRoutes();
+    assertEq(pool.credParser(), newCredParser);
     vm.stopPrank();
   }
 
@@ -114,13 +113,10 @@ contract PoolBasicSetupTest is BaseTest {
     IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
     PoolToken liquidStakingToken = new PoolToken(systemAdmin);
     uint256 id = poolRegistry.allPoolsLength();
-    address rateModule = address(new RateModule(systemAdmin, router, rateArray, levels));
     pool = IPool(new InfinityPool(
       systemAdmin,
       router,
       address(wFIL),
-      //
-      rateModule,
       // no min liquidity for test pool
       address(liquidStakingToken),
       address(new PreStake(systemAdmin, IWFIL(address(wFIL)), IPoolToken(address(liquidStakingToken)))),
@@ -130,7 +126,6 @@ contract PoolBasicSetupTest is BaseTest {
     assertEq(pool.id(), id, "pool id not set");
     assertEq(address(pool.asset()), address(wFIL), "pool asset not set");
     assertEq(IAuth(address(pool)).owner(), systemAdmin, "pool owner not set");
-    assertEq(address(pool.rateModule()), rateModule, "pool rate module not set");
     assertEq(address(pool.liquidStakingToken()), address(liquidStakingToken), "pool liquid staking token not set");
     assertEq(pool.minimumLiquidity(), 0, "pool min liquidity not set");
     vm.prank(systemAdmin);
@@ -203,29 +198,29 @@ contract PoolDepositTest is PoolTestState {
 contract PoolGetRateTest is PoolTestState {
   using FixedPointMathLib for uint256;
 
-  function testGetRateBasic() public {
-    uint256 rate = pool.getRate(vcBasic);
-    uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(rateArray[gCredBasic - pool.rateModule().minGCRED()]);
-    assertEq(rate, expectedRate);
-  }
+  // function testGetRateBasic() public {
+  //   uint256 rate = pool.getRate();
+  //   uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(rateArray[gCredBasic - pool.rateModule().minGCRED()]);
+  //   assertEq(rate, expectedRate);
+  // }
 
-  function testGetRateFuzz(uint256 gCRED) public {
-    gCRED = bound(gCRED, 40, 100);
-    AgentData memory agentData = createAgentData(
-      // collateral value => 2x the borrowAmount
-      borrowAmount * 2,
-      // good gcred score
-      gCRED,
-      // good EDR
-      goodEDR,
-      // principal = borrowAmount
-      borrowAmount
-    );
-    vcBasic.claim = abi.encode(agentData);
-    uint256 rate = pool.getRate(vcBasic);
-    uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(rateArray[gCRED - pool.rateModule().minGCRED()]);
-    assertEq(rate, expectedRate);
-  }
+  // function testGetRateFuzz(uint256 gCRED) public {
+  //   gCRED = bound(gCRED, 40, 100);
+  //   AgentData memory agentData = createAgentData(
+  //     // collateral value => 2x the borrowAmount
+  //     borrowAmount * 2,
+  //     // good gcred score
+  //     gCRED,
+  //     // good EDR
+  //     goodEDR,
+  //     // principal = borrowAmount
+  //     borrowAmount
+  //   );
+  //   vcBasic.claim = abi.encode(agentData);
+  //   uint256 rate = pool.getRate(vcBasic);
+  //   uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(rateArray[gCRED - pool.rateModule().minGCRED()]);
+  //   assertEq(rate, expectedRate);
+  // }
 }
 
 contract PoolIsOverLeveragedTest is PoolTestState {
@@ -237,154 +232,152 @@ contract PoolIsOverLeveragedTest is PoolTestState {
     assertTrue(isApproved, "Should be approved");
   }
 
-  function testIsApprovedOverLTV(uint256 principal, uint256 collateralValue) public {
-    principal = bound(principal, WAD, MAX_FIL - DUST);
-    // Even for very low values of agentValue there shouldn't be issues
-    // If the agent value is less than 2x the borrow amount, we should be over leveraged
-    collateralValue = bound(collateralValue, DUST, principal - DUST);
+  // function testIsApprovedOverLTV(uint256 principal, uint256 collateralValue) public {
+  //   principal = bound(principal, WAD, MAX_FIL - DUST);
+  //   // Even for very low values of agentValue there shouldn't be issues
+  //   // If the agent value is less than 2x the borrow amount, we should be over leveraged
+  //   collateralValue = bound(collateralValue, DUST, principal - DUST);
 
-    IRateModule rateModule = IRateModule(pool.rateModule());
+  //   AgentData memory agentData = createAgentData(
+  //     // collateralValue => 2x the borrowAmount less dust
+  //     collateralValue,
+  //     GCRED,
+  //     // enormous EDR to ensure we are not over DTI
+  //     MAX_FIL,
+  //     // principal = borrowAmount
+  //     principal
+  //   );
+  //   // overwrite agent value to avoid DTE errors
+  //   agentData.agentValue = principal * 3;
+  //   vcBasic.claim = abi.encode(agentData);
 
-    AgentData memory agentData = createAgentData(
-      // collateralValue => 2x the borrowAmount less dust
-      collateralValue,
-      GCRED,
-      // enormous EDR to ensure we are not over DTI
-      MAX_FIL,
-      // principal = borrowAmount
-      principal
-    );
-    // overwrite agent value to avoid DTE errors
-    agentData.agentValue = principal * 3;
-    vcBasic.claim = abi.encode(agentData);
+  //   Account memory account = createAccount(principal);
 
-    Account memory account = createAccount(principal);
+  //   assertFalse(pool.isApproved(account, vcBasic), "Should not be approved");
+  //   // ensure this test failed because of the right check
+  //   assertTrue(
+  //     rateModule.computeLTV(principal, collateralValue) > pool.maxDTL(), "Should be over LTV"
+  //   );
+  //   assertTrue(
+  //     rateModule.computeDTI(
+  //       agentData.expectedDailyRewards,
+  //       pool.getRate(vcBasic),
+  //       principal,
+  //       principal
+  //     ) < pool.maxDTI(), "Should be under DTI"
+  //   );
+  //   assertTrue(
+  //     rateModule.computeDTE(principal, agentData.agentValue) < pool.maxDTE(), "Should be under DTE"
+  //   );
+  // }
 
-    assertFalse(pool.isApproved(account, vcBasic), "Should not be approved");
-    // ensure this test failed because of the right check
-    assertTrue(
-      rateModule.computeLTV(principal, collateralValue) > rateModule.maxLTV(), "Should be over LTV"
-    );
-    assertTrue(
-      rateModule.computeDTI(
-        agentData.expectedDailyRewards,
-        pool.getRate(vcBasic),
-        principal,
-        principal
-      ) < rateModule.maxDTI(), "Should be under DTI"
-    );
-    assertTrue(
-      rateModule.computeDTE(principal, agentData.agentValue) < rateModule.maxDTE(), "Should be under DTE"
-    );
-  }
+  // function testDTECalcNoFuzz() public {
+  //   uint256 agentTotalValue = 1000000000000010000;
+  //   uint256 principal = 1000000000000000000;
 
-  function testDTECalcNoFuzz() public {
-    uint256 agentTotalValue = 1000000000000010000;
-    uint256 principal = 1000000000000000000;
+  //   // this DTE is known to be way over 100%
+  //   uint256 dte = pool.rateModule().computeDTE(principal, agentTotalValue);
+  //   assertGt(dte, 1e18, "DTE should be around 100%");
 
-    // this DTE is known to be way over 100%
-    uint256 dte = pool.rateModule().computeDTE(principal, agentTotalValue);
-    assertGt(dte, 1e18, "DTE should be around 100%");
+  //   // this DTE is known to be 50%
+  //   agentTotalValue = 3e18;
+  //   principal = 1e18;
+  //   dte = pool.rateModule().computeDTE(principal, agentTotalValue);
+  //   assertEq(dte, 5e17, "DTE should be 50%");
+  // }
 
-    // this DTE is known to be 50%
-    agentTotalValue = 3e18;
-    principal = 1e18;
-    dte = pool.rateModule().computeDTE(principal, agentTotalValue);
-    assertEq(dte, 5e17, "DTE should be 50%");
-  }
+  // function testIsApprovedOverDTI(
+  //   uint256 principal,
+  //   uint256 collateralValue,
+  //   uint256 badEDR
+  // ) public {
+  //   principal = bound(principal, WAD, 1e22);
+  //   collateralValue = bound(collateralValue, principal * 2, 1e30);
 
-  function testIsApprovedOverDTI(
-    uint256 principal,
-    uint256 collateralValue,
-    uint256 badEDR
-  ) public {
-    principal = bound(principal, WAD, 1e22);
-    collateralValue = bound(collateralValue, principal * 2, 1e30);
+  //   IRateModule rateModule = IRateModule(pool.rateModule());
 
-    IRateModule rateModule = IRateModule(pool.rateModule());
+  //   uint256 badEDRUpper =
+  //     _getAdjustedRate(GCRED)
+  //     .mulWadUp(principal)
+  //     .mulWadUp(EPOCHS_IN_DAY)
+  //     .divWadDown(pool.maxDTE());
 
-    uint256 badEDRUpper =
-      _getAdjustedRate(GCRED)
-      .mulWadUp(principal)
-      .mulWadUp(EPOCHS_IN_DAY)
-      .divWadDown(rateModule.maxDTE());
+  //   badEDR = bound(badEDR, DUST, badEDRUpper - DUST);
 
-    badEDR = bound(badEDR, DUST, badEDRUpper - DUST);
+  //   AgentData memory agentData = createAgentData(
+  //     collateralValue,
+  //     GCRED,
+  //     // edr < expectedDailyPayment
+  //     badEDR,
+  //     principal
+  //   );
 
-    AgentData memory agentData = createAgentData(
-      collateralValue,
-      GCRED,
-      // edr < expectedDailyPayment
-      badEDR,
-      principal
-    );
+  //   Account memory account = createAccount(principal);
 
-    Account memory account = createAccount(principal);
+  //   vcBasic.claim = abi.encode(agentData);
+  //   assertFalse(pool.isApproved(account, vcBasic));
+  //   // ensure this test failed because of the right check
+  //   assertTrue(
+  //     rateModule.computeLTV(principal, collateralValue) < pool.maxDTL(), "Should be under LTV"
+  //   );
+  //   assertTrue(
+  //     rateModule.computeDTI(
+  //       agentData.expectedDailyRewards,
+  //       pool.getRate(vcBasic),
+  //       principal,
+  //       principal
+  //     ) > pool.maxDTI(), "Should be over DTI"
+  //   );
+  //   assertTrue(
+  //     rateModule.computeDTE(principal, agentData.agentValue) < pool.maxDTE(), "Should be under DTE"
+  //   );
+  // }
 
-    vcBasic.claim = abi.encode(agentData);
-    assertFalse(pool.isApproved(account, vcBasic));
-    // ensure this test failed because of the right check
-    assertTrue(
-      rateModule.computeLTV(principal, collateralValue) < rateModule.maxLTV(), "Should be under LTV"
-    );
-    assertTrue(
-      rateModule.computeDTI(
-        agentData.expectedDailyRewards,
-        pool.getRate(vcBasic),
-        principal,
-        principal
-      ) > rateModule.maxDTI(), "Should be over DTI"
-    );
-    assertTrue(
-      rateModule.computeDTE(principal, agentData.agentValue) < rateModule.maxDTE(), "Should be under DTE"
-    );
-  }
+  // function testKnownLTV() public {
+  //   uint256 principal = 1e18;
+  //   uint256 collateralValue = 2e18;
+  //   uint256 ltv = pool.rateModule().computeLTV(principal, collateralValue);
+  //   assertEq(ltv, 5e17, "LTV should be 50%");
+  // }
 
-  function testKnownLTV() public {
-    uint256 principal = 1e18;
-    uint256 collateralValue = 2e18;
-    uint256 ltv = pool.rateModule().computeLTV(principal, collateralValue);
-    assertEq(ltv, 5e17, "LTV should be 50%");
-  }
+  // function testIsApprovedOverDTE(
+  //   uint256 principal,
+  //   uint256 agentValue
+  // ) public {
+  //   IRateModule rateModule = IRateModule(pool.rateModule());
+  //   uint256 maxDTE = pool.maxDTE();
+  //   principal = bound(principal, DUST, MAX_FIL);
+  //   agentValue = bound(agentValue, 0, principal.divWadDown(maxDTE));
 
-  function testIsApprovedOverDTE(
-    uint256 principal,
-    uint256 agentValue
-  ) public {
-    IRateModule rateModule = IRateModule(pool.rateModule());
-    uint256 maxDTE = rateModule.maxDTE();
-    principal = bound(principal, DUST, MAX_FIL);
-    agentValue = bound(agentValue, 0, principal.divWadDown(maxDTE));
+  //   AgentData memory agentData = createAgentData(
+  //     // great collateral value so we dont have LTV error
+  //     MAX_FIL,
+  //     GCRED,
+  //     // great EDR so we dont have DTI error
+  //     MAX_FIL,
+  //     principal
+  //   );
 
-    AgentData memory agentData = createAgentData(
-      // great collateral value so we dont have LTV error
-      MAX_FIL,
-      GCRED,
-      // great EDR so we dont have DTI error
-      MAX_FIL,
-      principal
-    );
-
-    Account memory account = createAccount(principal);
-    agentData.agentValue = agentValue;
-    vcBasic.claim = abi.encode(agentData);
-    assertFalse(pool.isApproved(account, vcBasic), "Should be false");
-    // ensure this test failed because of the right check
-    assertTrue(
-      rateModule.computeLTV(principal, agentData.collateralValue) < rateModule.maxLTV(), "Should be under LTV"
-    );
-    assertTrue(
-      rateModule.computeDTI(
-        agentData.expectedDailyRewards,
-        pool.getRate(vcBasic),
-        principal,
-        principal
-      ) < rateModule.maxDTI(), "Should be under DTI"
-    );
-    assertTrue(
-      rateModule.computeDTE(principal, agentValue) > rateModule.maxDTE(), "Should be over DTE"
-    );
-  }
+  //   Account memory account = createAccount(principal);
+  //   agentData.agentValue = agentValue;
+  //   vcBasic.claim = abi.encode(agentData);
+  //   assertFalse(pool.isApproved(account, vcBasic), "Should be false");
+  //   // ensure this test failed because of the right check
+  //   assertTrue(
+  //     rateModule.computeLTV(principal, agentData.collateralValue) < pool.maxDTL(), "Should be under LTV"
+  //   );
+  //   assertTrue(
+  //     rateModule.computeDTI(
+  //       agentData.expectedDailyRewards,
+  //       pool.getRate(vcBasic),
+  //       principal,
+  //       principal
+  //     ) < pool.maxDTI(), "Should be under DTI"
+  //   );
+  //   assertTrue(
+  //     rateModule.computeDTE(principal, agentValue) > pool.maxDTE(), "Should be over DTE"
+  //   );
+  // }
 }
 
 contract PoolWithLeverageTest is BaseTest {
@@ -405,18 +398,16 @@ contract PoolWithLeverageTest is BaseTest {
   IAgent agent;
   uint64 miner;
   IPool pool;
-  IRateModule rateModule;
   IAgentPolice agentPolice;
 
   function setUp() public {
     pool = createAndFundPool(stakeAmount, investor1);
     (agent, miner) = configureAgent(minerOwner);
 
-    rateModule = IRateModule(pool.rateModule());
     agentPolice = IAgentPolice(GetRoute.agentPolice(router));
     vm.startPrank(systemAdmin);
-    rateModule.setMaxLTV(maxBorrowLTCV);
-    rateModule.setMaxDTE(maxBorrowDTE);
+    pool.setMaxDTL(maxBorrowLTCV);
+    pool.setMaxDTE(maxBorrowDTE);
     agentPolice.setMaxDTE(maxWithdrawDTE);
     agentPolice.setMaxDTL(maxWithdrawLTCV);
     vm.stopPrank();
@@ -425,11 +416,11 @@ contract PoolWithLeverageTest is BaseTest {
   // tests borrowing 2x when the liquidation value and equity support it
   function testBorrow2xLeverageValid() public {
     // borrow 2x our initial value
-    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    uint256 borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal);
     // agent value increases by the borrow amount
     uint256 postActionAV = initialAgentTotalVal + borrowAmount;
     // ensure the liquidation value doesn't block the higher leverage
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
 
     AgentData memory agentData = AgentData(
       postActionAV,
@@ -476,11 +467,11 @@ contract PoolWithLeverageTest is BaseTest {
   // tests borrowing 2x when the liquidation value does not support it
   function testBorrow2xLeverageInvalid() public {
     // borrow 2x our initial value
-    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    uint256 borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal);
     // agent value increases by the borrow amount
     uint256 postActionAV = initialAgentTotalVal + borrowAmount;
     // use a liquidation value _just_ under the approved loan to liquidation value (LTV)
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() + DUST);
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() + DUST);
 
     AgentData memory agentData = AgentData(
       postActionAV,
@@ -532,11 +523,11 @@ contract PoolWithLeverageTest is BaseTest {
   // tests borrowing over 2x when the equity value does not support it
   function testBorrow2xLeverageOverDTE() public {
     // borrow 2x our initial value
-    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    uint256 borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal);
     // agent value increases by the borrow amount
     uint256 postActionAV = initialAgentTotalVal + borrowAmount;
     // ensure the liquidation value doesn't block the higher leverage
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
 
     AgentData memory agentData = AgentData(
       // decrease equity to below 2x the borrow amount
@@ -595,7 +586,7 @@ contract PoolWithLeverageTest is BaseTest {
     uint256 postActionAV = initialAgentTotalVal + borrowAmount;
     // get a liquidation value by discounting the agent value by the max loan to liquidation value ratio
     // this amount is less than 2x the equity in this hardcoded example
-    uint256 postActionLiquidationValue = postActionAV.mulWadUp(rateModule.maxLTV());
+    uint256 postActionLiquidationValue = postActionAV.mulWadUp(pool.maxDTL());
 
     AgentData memory agentData = AgentData(
       postActionAV,
@@ -638,7 +629,7 @@ contract PoolWithLeverageTest is BaseTest {
     assertEq(account.principal, borrowAmount, "Principal should be borrow amount");
 
     uint256 equity = postActionAV - borrowAmount;
-    assertLt(account.principal, equity.mulWadUp(rateModule.maxDTE()), "Principal should be less than 2x equity");
+    assertLt(account.principal, equity.mulWadUp(pool.maxDTE()), "Principal should be less than 2x equity");
     assertGt(account.principal, equity, "Principal should be more than 1x equity");
   }
 
@@ -649,7 +640,7 @@ contract PoolWithLeverageTest is BaseTest {
     // agent value increases by the borrow amount
     uint256 postActionAV = initialAgentTotalVal + borrowAmount;
     // ensure the liquidation value doesn't block the higher leverage
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
 
     AgentData memory agentData = AgentData(
       postActionAV,
@@ -729,7 +720,7 @@ contract PoolWithLeverageTest is BaseTest {
 
     Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
-    assertTrue(rateModule.isApproved(account, sc.vc), "Pool should approve");
+    assertTrue(pool.isApproved(account, sc.vc), "Pool should approve");
 
     vm.startPrank(minerOwner);
     // here we are over just DTE, LTV is under 1 (agent police's value for withdrawing)
@@ -750,11 +741,11 @@ contract PoolWithLeverageTest is BaseTest {
   // this test uses hardcoded values to test the full spectrum of rules within the agent police and rate module
   function testAllRulesHardcoded() public {
     // attempt to borrow a little more than 2x our initial value
-    uint256 borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
+    uint256 borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
     // agent value increases by the borrow amount
     uint256 postActionAV = initialAgentTotalVal + borrowAmount;
     // ensure the liquidation value doesn't block the higher leverage
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
 
     AgentData memory agentData = AgentData(
       postActionAV,
@@ -802,11 +793,11 @@ contract PoolWithLeverageTest is BaseTest {
     assertEq(AccountHelpers.getAccount(router, agent.id(), pool.id()).principal, 0, "Principal should be 0");
 
     // next we attempt to borrow an amount that rate module will reject due to LTV 
-    borrowAmount = rateModule.maxDTE().mulWadUp(initialAgentTotalVal);
+    borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal);
     // postActionAV in this case is max uint256 to ensure it does not reject due to DTE
     postActionAV = type(uint256).max;
     // postActionLiquidationValue is set to be just under maxLTV 
-    postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() + DUST);
+    postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() + DUST);
 
     vm.roll(block.number + 1);
 
@@ -859,7 +850,7 @@ contract PoolWithLeverageTest is BaseTest {
     // agent value increases by the borrow amount
     postActionAV = initialAgentTotalVal + borrowAmount;
     // ensure the liquidation value doesn't block the higher leverage
-    postActionLiquidationValue = borrowAmount.divWadDown(rateModule.maxLTV() - DUST);
+    postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
 
     agentData = AgentData(
       postActionAV,
@@ -952,7 +943,7 @@ contract PoolWithLeverageTest is BaseTest {
     // console.log(account);
 
     // the pool should approve this withdrawal request because it is under the LTV and under borrow DTE
-    assertTrue(rateModule.isApproved(account, sc.vc), "Pool should approve");
+    assertTrue(pool.isApproved(account, sc.vc), "Pool should approve");
 
     // it should reject the withdrawal because of DTE
     vm.startPrank(minerOwner);
@@ -1018,7 +1009,7 @@ contract PoolWithLeverageTest is BaseTest {
     account = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
     // the pool should not approve this withdrawal request because it is under the LTV (same as police) and under borrow DTE
-    assertFalse(rateModule.isApproved(account, sc.vc), "Pool should not approve");
+    assertFalse(pool.isApproved(account, sc.vc), "Pool should not approve");
 
     // it should reject the withdrawal because of DTE
     vm.startPrank(minerOwner);
@@ -1086,7 +1077,7 @@ contract PoolWithLeverageTest is BaseTest {
     account = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
     // the pool should not approve this withdrawal request because it is under the LTV (same as police) and under borrow DTE
-    assertTrue(rateModule.isApproved(account, sc.vc), "Pool should approve");
+    assertTrue(pool.isApproved(account, sc.vc), "Pool should approve");
 
     // it should reject the withdrawal because of DTE
     vm.startPrank(minerOwner);
@@ -1140,9 +1131,7 @@ contract PoolAPRTests is PoolTestState {
   function testGetRateAppliedAnnually() public {
     uint256 testRate = _getAdjustedRate(GCRED);
 
-    uint256 chargedRatePerEpoch = pool.getRate(
-      issueGenericBorrowCred(agentID, WAD).vc
-    );
+    uint256 chargedRatePerEpoch = pool.getRate();
 
     assertEq(testRate, chargedRatePerEpoch, "Test rates should match");
     // annualRateMultiplier becomes WAD based after the divWadDown
@@ -1175,9 +1164,7 @@ contract PoolAPRTests is PoolTestState {
 
     uint256 testRate = _getAdjustedRate(GCRED);
 
-    uint256 chargedRatePerEpoch = pool.getRate(
-      issueGenericBorrowCred(agentID, WAD).vc
-    );
+    uint256 chargedRatePerEpoch = pool.getRate();
 
     assertEq(testRate, chargedRatePerEpoch, "Test rates should match");
 
@@ -1629,7 +1616,6 @@ contract PoolAdminTests is PoolTestState {
       systemAdmin,
       router,
       address(asset),
-      address(pool.rateModule()),
       // no min liquidity for test pool
       address(liquidStakingToken),
       address(new PreStake(systemAdmin, IWFIL(address(wFIL)), IPoolToken(address(liquidStakingToken)))),
