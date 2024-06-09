@@ -20,8 +20,6 @@ interface IAgentPolice {
                       GETTERS
   //////////////////////////////////////////////*/
 
-  function defaultWindow() external view returns (uint256);
-
   function administrationWindow() external view returns (uint256);
 
   function agentApproved(VerifiableCredential calldata vc) external;
@@ -37,8 +35,6 @@ interface IAgentPolice {
   function maxDTI() external view returns (uint256);
 
   function maxConsecutiveFaultEpochs() external view returns (uint256);
-
-  function maxEpochsOwedTolerance() external view returns (uint256);
 
   function sectorFaultyTolerancePercent() external view returns (uint256);
 
@@ -62,21 +58,11 @@ interface IAgentPolice {
                       POLICING
   //////////////////////////////////////////////*/
 
-  function setAgentDefaulted(address agent) external;
-
   function putAgentOnAdministration(address agent, address administration) external;
-
-  function markAsFaulty(IAgent[] calldata agents) external;
-
-  function putAgentOnAdministrationDueToFaultySectorDays(address agent, address administration) external;
-
-  function setAgentDefaultDueToFaultySectorDays(address agent) external;
 
   function setSectorFaultyTolerancePercent(uint256 percent) external;
 
-  function setMaxConsecutiveFaultEpochs(uint256 epochs) external;
-
-  function setMaxEpochsOwedTolerance(uint256 epochs) external;
+  function setDtlLiquidationThreshold(uint256 threshold) external;
 
   function setMaxDTE(uint256 dte) external;
 
@@ -99,8 +85,6 @@ interface IAgentPolice {
   /*//////////////////////////////////////////////
                   ADMIN CONTROLS
   //////////////////////////////////////////////*/
-
-  function setDefaultWindow(uint256 defaultWindow) external;
 
   function setAdministrationWindow(uint256 administrationWindow) external;
 

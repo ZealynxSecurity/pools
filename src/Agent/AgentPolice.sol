@@ -40,9 +40,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   IWFIL internal wFIL;
 
-  /// @notice `defaultWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is in default
-  uint256 public defaultWindow;
-
   /// @notice `administrationWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is eligible for administration
   uint256 public administrationWindow;
 
@@ -56,9 +53,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   /// This variable is populated on deployment and can be updated to match the rate module using an admin func
   uint256 public maxDTL = 0;
 
-  /// @notice `DTLLiquidationThreshold` is the DTL ratio threshold at which an agent is liquidated
+  /// @notice `dtlLiquidationThreshold` is the DTL ratio threshold at which an agent is liquidated
   /// initially set at 90%, so if the agent is >90% DTL, it is elligible for liquidation
-  uint256 public DTLLiquidationThreshold = 9e17;
+  uint256 public dtlLiquidationThreshold = 9e17;
 
   /// @notice `maxDTI` is the maximum amount of debt to income ratio before withdrawals are prohibited
   /// NOTE this is separate DTI for withdrawing than any DTI that the Infinity Pool relies on
@@ -67,9 +64,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
   /// @notice `maxConsecutiveFaultEpochs` is the number of epochs of consecutive faults that are required in order to put an agent on administration or into default
   uint256 public maxConsecutiveFaultEpochs = 3 * EPOCHS_IN_DAY;
-
-  /// @dev `maxEpochsOwedTolerance` - an agent's account must be paid up within this epoch buffer in order to borrow again
-  uint256 public maxEpochsOwedTolerance = EPOCHS_IN_DAY * 1;
 
   /// @notice `sectorFaultyTolerancePercent` is the percentage of sectors that can be faulty before an agent is considered in a faulty state. 1e18 = 100%
   uint256 public sectorFaultyTolerancePercent = 1e15;
@@ -83,13 +77,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   constructor(
     string memory _name,
     string memory _version,
-    uint256 _defaultWindow,
     address _owner,
     address _operator,
     address _router,
     IWFIL _wFIL
   ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
-    defaultWindow = _defaultWindow;
     administrationWindow = EPOCHS_IN_WEEK;
 
     IPool pool;
@@ -122,13 +114,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     _;
   }
 
-  modifier onlyWhenConsecutiveFaultyEpochsExceeded(address agent) {
-    if (!_consecutiveFaultyEpochsExceeded(agent)) {
-      revert Unauthorized();
-    }
-    _;
-  }
-
   /*//////////////////////////////////////////////
                       CHECKERS
   //////////////////////////////////////////////*/
@@ -141,15 +126,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     VerifiableCredential calldata vc
   ) external view {
     _agentApproved(vc, _getAccount(vc.subject), _pool());
-  }
-
-  /**
-   * @notice `setAgentDefaulted` puts the agent in default permanently
-   * @param agent The address of the agent to put in default
-   */
-  function setAgentDefaulted(address agent) external onlyOwner onlyWhenBehindTargetEpoch(agent, defaultWindow) {
-    IAgent(agent).setInDefault();
-    emit Defaulted(agent);
   }
 
   /**
@@ -181,47 +157,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /**
-   * @notice `markAsFaulty` marks the epoch height where one of an agent's miners began faulting
-   * @param agents The IDs of the agents to mark as having faulty sectors
-   */
-  function markAsFaulty(IAgent[] calldata agents) external onlyOwnerOperator {
-    IAgent agent;
-    for (uint256 i = 0; i < agents.length; i++) {
-      agent = agents[i];
-      agent.setFaulty();
-      emit FaultySectors(address(agent), block.number);
-    }
-  }
-
-  /**
-   * @notice `putAgentOnAdminstration` puts the agent on administration due to administrationFaultDays of consectutive faulty sector days
-   */
-  function putAgentOnAdministrationDueToFaultySectorDays(
-    address agent,
-    address administration
-  ) external
-    onlyOwner
-    onlyWhenConsecutiveFaultyEpochsExceeded(agent)
-  {
-    IAgent(agent).setAdministration(administration.normalize());
-    emit OnAdministration(agent);
-  }
-
-  /**
-   * @notice `setAgentDefaultDueToFaultySectorDays` puts the agent on administration due to administrationFaultDays of consectutive faulty sector days
-   * @dev DEPRECATED: use setAgentDefaultDTL instead
-   */
-  function setAgentDefaultDueToFaultySectorDays(
-    address agent
-  ) external
-    onlyOwner
-    onlyWhenConsecutiveFaultyEpochsExceeded(agent)
-  {
-    IAgent(agent).setInDefault();
-    emit Defaulted(agent);
-  }
-
-  /**
    * @notice `setAgentDefaultDTL` puts the agent in default if the DTL ratio is above the threshold
    * @param agent The address of the agent to put in default
    * @param vc The VerifiableCredential of the agent
@@ -232,7 +167,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     uint256 rate = _pool().getRate();
     uint256 debt = account.principal + _interestOwed(account, rate);
 
-    if (debt.divWadDown(vc.getCollateralValue(address(GetRoute.credParser(router)))) < DTLLiquidationThreshold) {
+    if (debt.divWadDown(vc.getCollateralValue(address(GetRoute.credParser(router)))) < dtlLiquidationThreshold) {
       revert Unauthorized();
     }
 
@@ -270,17 +205,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
     // transfer the excess assets to the Agent's owner
     wFIL.transfer(IAuth(agent).owner(), excessAmount);
-  }
-
-  /**
-  * @notice setMaxEpochsOwedTolerance sets epochsPaidBorrowBuffer in storage
-  * @param _maxEpochsOwedTolerance The new value for maxEpochsOwedTolerance
-  */
-  function setMaxEpochsOwedTolerance(uint256 _maxEpochsOwedTolerance) external onlyOwner {
-    // if maxEpochsOwedTolerance is greater than 1 day, Agents can over pay interest
-    if (_maxEpochsOwedTolerance > EPOCHS_IN_DAY) revert InvalidParams();
-
-    maxEpochsOwedTolerance = _maxEpochsOwedTolerance;
   }
 
   /**
@@ -396,13 +320,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   //////////////////////////////////////////////*/
 
   /**
-   * @notice `setDefaultWindow` changes the default window epochs
-   */
-  function setDefaultWindow(uint256 _defaultWindow) external onlyOwner {
-    defaultWindow = _defaultWindow;
-  }
-
-  /**
    * @notice `setAdministrationWindow` changes the administration window epochs
    */
   function setAdministrationWindow(uint256 _administrationWindow) external onlyOwner {
@@ -424,10 +341,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
   }
 
   /**
-   * @notice `setDTLLiquidationThreshold` sets the DTL ratio at which an agent can be liquidated
+   * @notice `setdtlLiquidationThreshold` sets the DTL ratio at which an agent can be liquidated
    */
-  function setDTLLiquidationThreshold(uint256 _DTLLiquidationThreshold) external onlyOwner {
-    DTLLiquidationThreshold = _DTLLiquidationThreshold;
+  function setDtlLiquidationThreshold(uint256 _dtlLiquidationThreshold) external onlyOwner {
+    dtlLiquidationThreshold = _dtlLiquidationThreshold;
   }
 
   /**
@@ -459,13 +376,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
    */
   function resume() external onlyOwner {
     paused = false;
-  }
-
-  /**
-   * @notice `setMaxConsecutiveFaultEpochs` sets the number of consecutive days of fault before the agent is put on administration or into default
-   */
-  function setMaxConsecutiveFaultEpochs(uint256 _maxConsecutiveFaultEpochs) external onlyOwner {
-    maxConsecutiveFaultEpochs = _maxConsecutiveFaultEpochs;
   }
 
   /**
@@ -504,24 +414,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     return account.principal > 0 && account.epochsPaid < block.number - _targetEpoch;
   }
 
-  /// @dev returns true if the Agent has 
-  function _consecutiveFaultyEpochsExceeded(address _agent) internal view returns (bool) {
-    uint256 faultyStart = IAgent(_agent).faultySectorStartEpoch();
-    // if the agent is not faulty, return false
-    if (faultyStart == 0) return false;
-
-    // must be faulty for maxConsecutiveFaultEpochs epochs before taking action
-    return block.number >= faultyStart + maxConsecutiveFaultEpochs;
-  }
-
   /// @dev loops through the pools and calls isApproved on each, 
   /// reverting in the case of any non-approvals,
   /// or in the case that an account owes payments over the acceptable threshold
   function _agentApproved(VerifiableCredential calldata vc, Account memory account, IPool pool) internal view {
     if (!pool.isApproved(account, vc)) revert AgentStateRejected();
-    // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
-    // this is to prevent the agent from doing an action before paying up
-    if (account.epochsPaid + maxEpochsOwedTolerance < block.number) revert PayUp();
     // check faulty sector limit
     if (_faultySectorsExceeded(vc, address(GetRoute.credParser(router)))) revert OverFaultySectorLimit();
   }
