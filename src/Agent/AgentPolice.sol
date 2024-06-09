@@ -45,21 +45,21 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     /// @notice `maxDTE` is the maximum amount of principal to equity ratio before withdrawals are prohibited
     /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
     /// This variable is populated on deployment and can be updated to match the rate module using an admin func
-    uint256 public maxDTE = 0;
+    uint256 public maxDTE;
 
     /// @notice `maxDTL` is the maximum amount of principal to collateral value ratio before withdrawals are prohibited
     /// NOTE this is separate DTL for withdrawing than any DTL that the Infinity Pool relies on
     /// This variable is populated on deployment and can be updated to match the rate module using an admin func
-    uint256 public maxDTL = 0;
+    uint256 public maxDTL;
 
     /// @notice `dtlLiquidationThreshold` is the DTL ratio threshold at which an agent is liquidated
-    /// initially set at 90%, so if the agent is >90% DTL, it is elligible for liquidation
-    uint256 public dtlLiquidationThreshold = 9e17;
+    /// initially set at 85%, so if the agent is >85% DTL, it is elligible for liquidation
+    uint256 public dtlLiquidationThreshold;
 
     /// @notice `maxDTI` is the maximum amount of debt to income ratio before withdrawals are prohibited
     /// NOTE this is separate DTI for withdrawing than any DTI that the Infinity Pool relies on
     /// This variable is populated on deployment and can be updated to match the rate module using an admin func
-    uint256 public maxDTI = 0;
+    uint256 public maxDTI;
 
     /// @notice `sectorFaultyTolerancePercent` is the percentage of sectors that can be faulty before an agent is considered in a faulty state. 1e18 = 100%
     uint256 public sectorFaultyTolerancePercent = 1e15;
@@ -70,16 +70,36 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     /// @notice `_credentialUseBlock` maps a credential's hash to when it was used
     mapping(bytes32 => uint256) private _credentialUseBlock;
 
+    /// @notice `levels` is a leveling system that sets maximum borrow amounts on accounts
+    uint256[10] public levels = [
+        100_000e18,
+        250_000e18,
+        500_000e18,
+        1_000_000e18,
+        2_000_000e18,
+        3_000_000e18,
+        4_000_000e18,
+        5_000_000e18,
+        6_000_000e18,
+        7_500_000e18
+    ];
+
+    /// @notice `accountLevel` is a mapping of agentID to level
+    mapping(uint256 => uint256) public accountLevel;
+
     constructor(string memory _name, string memory _version, address _owner, address _operator, address _router)
         VCVerifier(_name, _version, _router)
         Operatable(_owner, _operator)
     {
-        // set the DTI, DTE, and DTL ratios to match the pool on deployment if a pool is passed
-        // if no pool is passed, you can update these values using the admin function matchRiskParams
-        IPool pool = IPool(IRouter(_router).getRoute(ROUTE_INFINITY_POOL));
-        maxDTE = pool.maxDTE();
-        maxDTI = pool.maxDTI();
-        maxDTL = pool.maxDTL();
+        // default params:
+        // dte => 200%
+        maxDTE = 2e18;
+        // dti => 80%
+        maxDTI = 8e17;
+        // dtl => 80%
+        maxDTL = 8e17;
+        // max dtl before liquidation => 85%
+        dtlLiquidationThreshold = 85e16;
 
         administrationWindow = EPOCHS_IN_WEEK;
         _wFIL = IWFIL(IRouter(_router).getRoute(ROUTE_WFIL_TOKEN));
@@ -281,16 +301,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     }
 
     /**
-     * @notice `setRiskParamsToMatchPool` is a convenience method for setting the risk parameters of the agent police to match the pool's rate module
-     */
-    function setRiskParamsToMatchPool() external onlyOwner {
-        IPool pool = _pool();
-        maxDTE = pool.maxDTE();
-        maxDTI = pool.maxDTI();
-        maxDTL = pool.maxDTL();
-    }
-
-    /**
      * @notice `pause` sets this contract paused
      */
     function pause() external onlyOwner {
@@ -309,6 +319,24 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
      */
     function setSectorFaultyTolerancePercent(uint256 _sectorFaultyTolerancePercent) external onlyOwner {
         sectorFaultyTolerancePercent = _sectorFaultyTolerancePercent;
+    }
+
+    /**
+     * @notice sets the array of max borrow amounts for each level
+     */
+    function setLevels(uint256[10] calldata _levels) external onlyOwner {
+        levels = _levels;
+    }
+
+    /**
+     * @notice sets the array of max borrow amounts for each level
+     */
+    function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external onlyOwner {
+        if (agentIDs.length != level.length) revert InvalidParams();
+        uint256 i = 0;
+        for (; i < agentIDs.length; i++) {
+            accountLevel[agentIDs[i]] = level[i];
+        }
     }
 
     /*//////////////////////////////////////////////

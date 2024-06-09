@@ -37,6 +37,10 @@ interface IAgentPolice {
 
     function sectorFaultyTolerancePercent() external view returns (uint256);
 
+    function levels(uint256 index) external view returns (uint256);
+
+    function accountLevel(uint256 agentID) external view returns (uint256);
+
     /*//////////////////////////////////////////////
                     VC HANDLING
     //////////////////////////////////////////////*/
@@ -65,8 +69,6 @@ interface IAgentPolice {
 
     function setMaxDTI(uint256 dti) external;
 
-    function setRiskParamsToMatchPool() external;
-
     function prepareMinerForLiquidation(address agent, uint64 miner, uint64 liquidator) external;
 
     function distributeLiquidatedFunds(address agent, uint256 amount) external;
@@ -80,6 +82,10 @@ interface IAgentPolice {
     //////////////////////////////////////////////*/
 
     function setAdministrationWindow(uint256 administrationWindow) external;
+
+    function setLevels(uint256[10] calldata _levels) external;
+
+    function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external;
 
     function pause() external;
 
