@@ -18,46 +18,46 @@ library FinMath {
     function computeDTE(Account memory account, VerifiableCredential calldata vc, uint256 rate, address credParser)
         internal
         view
-        returns (uint256)
+        returns (uint256 dte, uint256 debt, uint256 equity)
     {
-        uint256 debt = computeDebt(account, rate);
+        debt = computeDebt(account, rate);
         uint256 agentTotalValue = vc.getAgentValue(credParser);
         // if the agent's debt is greater than the entire value of the agent, the DTE is infinite
-        if (debt >= agentTotalValue) return type(uint256).max;
-        uint256 equity = agentTotalValue - debt;
+        if (debt >= agentTotalValue) return (type(uint256).max, debt, 0);
+        equity = agentTotalValue - debt;
         // DTE = debt / equity
-        return debt.divWadDown(equity);
+        return (debt.divWadDown(equity), debt, equity);
     }
 
     function computeDTI(Account memory account, VerifiableCredential calldata vc, uint256 rate, address credParser)
         internal
         pure
-        returns (uint256)
+        returns (uint256 dti, uint256 dailyRate, uint256 dailyRewards)
     {
         // compute the daily expected payment owed by the agent based on current principal
-        uint256 dailyRate = account.principal.mulWadUp(rate).mulWadUp(EPOCHS_IN_DAY);
-        uint256 dailyRewards = vc.getExpectedDailyRewards(credParser);
+        dailyRate = account.principal.mulWadUp(rate).mulWadUp(EPOCHS_IN_DAY);
+        dailyRewards = vc.getExpectedDailyRewards(credParser);
         // if the agent's daily rewards are 0, the DTI is infinite
-        if (dailyRewards == 0) return type(uint256).max;
+        if (dailyRewards == 0) return (type(uint256).max, dailyRate, dailyRewards);
         // DTI = daily rate / daily rewards
-        return dailyRate.divWadUp(dailyRewards);
+        return (dailyRate.divWadUp(dailyRewards), dailyRate, dailyRewards);
     }
 
     function computeDTL(Account memory account, VerifiableCredential calldata vc, uint256 rate, address credParser)
         internal
         view
-        returns (uint256)
+        returns (uint256 dtl, uint256 debt, uint256 liquidationValue)
     {
         // compute the interest owed on the principal to add to principal to get total debt
-        uint256 debt = computeDebt(account, rate);
+        debt = computeDebt(account, rate);
         // confusing naming convention - "collateral value" == "liquidation value" in this context
-        uint256 liquidationValue = vc.getCollateralValue(credParser);
+        liquidationValue = vc.getCollateralValue(credParser);
         // if there is no debt, DTL is 0
-        if (debt == 0) return 0;
+        if (debt == 0) return (0, debt, liquidationValue);
         // if liquidation value is 0 (and there is debt), the DTL is infinite
-        if (liquidationValue == 0) return type(uint256).max;
+        if (liquidationValue == 0) return (type(uint256).max, debt, liquidationValue);
         // DTL = debt / liquidation value
-        return debt.divWadDown(liquidationValue);
+        return (debt.divWadDown(liquidationValue), debt, liquidationValue);
     }
 
     /// @dev returns the interest owed of a particular Account struct given a VerifiableCredential

@@ -33,6 +33,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     error OverLimitDTI();
     error OverLimitDTE();
     error OverLimitDTL();
+    error OverLimitQuota();
     error OverFaultySectorLimit();
 
     event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
@@ -91,7 +92,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         VCVerifier(_name, _version, _router)
         Operatable(_owner, _operator)
     {
-        // default params:
+        // default risk params:
         // dte => 200%
         maxDTE = 2e18;
         // dti => 80%
@@ -153,12 +154,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     function setAgentDefaultDTL(address agent, SignedCredential calldata sc) external onlyOwner {
         // ensure the credential is valid
         validateCred(IAgent(agent).id(), msg.sig, sc);
-
-        if (
-            FinMath.computeDTL(
-                _getAccount(sc.vc.subject), sc.vc, _pool().getRate(), address(GetRoute.credParser(router))
-            ) < dtlLiquidationThreshold
-        ) revert Unauthorized();
+        (uint256 dtl,,) = FinMath.computeDTL(
+            _getAccount(sc.vc.subject), sc.vc, _pool().getRate(), address(GetRoute.credParser(router))
+        );
+        if (dtl < dtlLiquidationThreshold) revert Unauthorized();
 
         IAgent(agent).setInDefault();
         emit Defaulted(agent);
@@ -253,11 +252,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         if (_epochsPaidBehindTarget(vc.subject, administrationWindow)) revert AgentStateRejected();
 
         address credParser = address(GetRoute.credParser(router));
+        (uint256 dtl,,) = FinMath.computeDTL(_getAccount(vc.subject), vc, _pool().getRate(), credParser);
         // if were above the DTL ratio, revert
-        if (FinMath.computeDTL(_getAccount(vc.subject), vc, _pool().getRate(), credParser) > maxDTL) {
-            revert AgentStateRejected();
-        }
-
+        if (dtl > maxDTL) revert AgentStateRejected();
+        // if were above faulty sector limit, revert
         if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
     }
 
@@ -370,9 +368,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         if (principal == 0) return;
 
         uint256 rate = pool.getRate();
-        uint256 dte = FinMath.computeDTE(account, vc, rate, credParser);
-        uint256 dti = FinMath.computeDTI(account, vc, rate, credParser);
-        uint256 dtl = FinMath.computeDTL(account, vc, rate, credParser);
+        (uint256 dte, uint256 debt,) = FinMath.computeDTE(account, vc, rate, credParser);
+        (uint256 dti,,) = FinMath.computeDTI(account, vc, rate, credParser);
+        (uint256 dtl,,) = FinMath.computeDTL(account, vc, rate, credParser);
 
         // compute the interest owed on the principal to add to principal to get total debt
         // if the DTE is greater than maxDTE, revert
@@ -383,6 +381,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         if (dti > maxDTI) revert OverLimitDTI();
         // check faulty sector limit
         if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
+        // check if accrued debt has exceeded this agent's quota level
+        if (debt > accountLevel[vc.subject]) revert OverLimitQuota();
     }
 
     /// @dev returns the account of the agent
