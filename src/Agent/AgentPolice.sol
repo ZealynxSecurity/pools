@@ -345,9 +345,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     function _writeOffPools(uint256 _agentID, uint256 _recoveredAmount) internal returns (uint256 excessFunds) {
         IPool pool = _pool();
         _wFIL.approve(address(pool), _recoveredAmount);
-        // write off the pool's assets
-        uint256 totalOwed = pool.writeOff(_agentID, _recoveredAmount);
-        return _recoveredAmount > totalOwed ? _recoveredAmount - totalOwed : 0;
+        // track balance of wFIL before and after liquidation to know how much of the recovered funds were used
+        // later we send any remainder to the Agent owner
+        uint256 preWriteOffBal = _wFIL.balanceOf(address(this));
+        pool.writeOff(_agentID, _recoveredAmount);
+        return _wFIL.balanceOf(address(this)) - preWriteOffBal;
     }
 
     /// @dev returns true if pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid). Account must have existing principal

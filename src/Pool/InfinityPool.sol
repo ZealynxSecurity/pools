@@ -228,9 +228,8 @@ contract InfinityPool is IPool, Ownable {
      * @param agentID The ID of the Agent
      * @param recoveredFunds The amount of funds recovered from the liquidation. This is the total amount the Police was able to recover from the Agent's Miner Actors
      * @dev the treasury fees go unpaid on a writeOff
-     *  // TODO fix return value with agent police fix
      */
-    function writeOff(uint256 agentID, uint256 recoveredFunds) external returns (uint256) {
+    function writeOff(uint256 agentID, uint256 recoveredFunds) external {
         // only the agent police can call this function
         _onlyAgentPolice();
 
@@ -293,8 +292,6 @@ contract InfinityPool is IPool, Ownable {
         account.save(_router, agentID, id);
 
         emit WriteOff(agentID, recoveredFunds, lost, feeBasis);
-        // TODO: Fixme
-        return 0;
     }
 
     /*//////////////////////////////////////////////////////////////

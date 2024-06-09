@@ -154,7 +154,7 @@ interface IPool {
 
     function setMinimumLiquidity(uint256 minLiquidity) external;
 
-    function writeOff(uint256 agentID, uint256 recoveredDebt) external returns (uint256 totalOwed);
+    function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 
     function setRentalFeesOwedPerEpoch(uint256 _rentalFeesOwedPerEpoch) external;
 }
