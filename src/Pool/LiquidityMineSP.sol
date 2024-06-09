@@ -17,6 +17,10 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
 
+interface ERC20Burnable is IERC20 {
+    function burn(uint256 amount) external;
+}
+
 contract LiquidityMineSP is ILiquidityMineSP, Ownable {
     using FixedPointMathLib for uint256;
     using FilAddress for address;
@@ -106,6 +110,9 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
         AgentLMInfo storage info = _agentInfo[agentID];
         // increase the amount of forfeited rewards
         uint256 toForfeit = info.unclaimedRewards;
+        // burn the forfeited rewards
+        ERC20Burnable(address(rewardToken)).burn(toForfeit);
+        // update accounting so its easy to track how many rewards have been forfeited
         rewardTokensForfeited += toForfeit;
         // set the unclaimed rewards to 0
         info.unclaimedRewards = 0;
@@ -142,6 +149,8 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
     function setRewardPerFIL(uint256 rewardPerFil_) external onlyOwner {
         rewardPerFIL = rewardPerFil_;
     }
+
+    /// @notice allows the owner of this contract to burn any forfeited rewards
 
     /// @notice allows the owner of this contract to set the pool address
     function setPool(address pool_) external onlyOwner {

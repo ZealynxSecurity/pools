@@ -19,6 +19,7 @@ import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
+import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
@@ -62,6 +63,9 @@ contract InfinityPool is IPool, Ownable {
 
     /// @dev `liquidStakingToken` is the token that represents a liquidStakingToken in the pool
     IPoolToken public immutable liquidStakingToken;
+
+    /// @dev `lm` is the LiquidityMineSP contract that is responsible for distributing rewards to Agents on payments
+    ILiquidityMineSP public lm;
 
     address public credParser;
 
@@ -138,9 +142,14 @@ contract InfinityPool is IPool, Ownable {
     // The only things we need to pull into this contract are the ones unique to _each pool_
     // This is just the approval module, and the treasury address
     // Everything else is accesible through the router (power token for example)
-    constructor(address owner_, address router_, address liquidStakingToken_, uint256 minimumLiquidity_, uint256 id_)
-        Ownable(owner_)
-    {
+    constructor(
+        address owner_,
+        address router_,
+        address liquidStakingToken_,
+        uint256 minimumLiquidity_,
+        uint256 id_,
+        ILiquidityMineSP lm_
+    ) Ownable(owner_) {
         _router = router_;
         asset = IERC20(IRouter(_router).getRoute(ROUTE_WFIL_TOKEN));
         minimumLiquidity = minimumLiquidity_;
@@ -151,6 +160,7 @@ contract InfinityPool is IPool, Ownable {
 
         _agentFactory = GetRoute.agentFactory(router_);
         credParser = address(GetRoute.credParser(router_));
+        lm = lm_;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -291,6 +301,11 @@ contract InfinityPool is IPool, Ownable {
 
         account.save(_router, agentID, id);
 
+        if (address(lm) != address(0)) {
+            // lm will burn this agent's rewards on a default
+            lm.onDefault(agentID);
+        }
+
         emit WriteOff(agentID, recoveredFunds, lost, feeBasis);
     }
 
@@ -356,6 +371,7 @@ contract InfinityPool is IPool, Ownable {
         uint256 refund;
 
         // if the account is "defaulted", we treat everything as interest
+        // here we would have already forfeited the agent's LM reward tokens, so we dont interact with the LM contract in this case
         if (account.defaulted) {
             // accrue treasury fee
             feesCollected += treasuryFeeRate.mulWadUp(vc.value);
@@ -425,6 +441,8 @@ contract InfinityPool is IPool, Ownable {
         feesCollected += treasuryFeeRate.mulWadUp(feeBasis);
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), vc.value - refund);
+        // call out to the LM hook to accrue rewards for this agent
+        if (address(lm) != address(0)) lm.onPaymentMade(vc.subject, feeBasis);
 
         emit Pay(vc.subject, vc.value, feeBasis, principalPaid, _rentalFeesOwedPerEpoch);
 
