@@ -9,45 +9,21 @@ import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
 interface IPool {
-
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event Borrow(
-        uint256 indexed agent,
-        uint256 amount
-    );
+    event Borrow(uint256 indexed agent, uint256 amount);
 
-    event Pay(
-        uint256 indexed agent,
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    );
+    event Pay(uint256 indexed agent, uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund);
 
-    event Deposit(
-        address indexed caller,
-        address indexed owner,
-        uint256 assets,
-        uint256 shares
-    );
+    event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
     event Withdraw(
-        address indexed caller,
-        address indexed receiver,
-        address indexed owner,
-        uint256 assets,
-        uint256 shares
+        address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares
     );
 
-    event WriteOff(
-      uint256 indexed agentID,
-      uint256 recoveredFunds,
-      uint256 lostFunds,
-      uint256 interestPaid
-    );
+    event WriteOff(uint256 indexed agentID, uint256 recoveredFunds, uint256 lostFunds, uint256 interestPaid);
 
     /*////////////////////////////////////////////////////////
                             GETTERS
@@ -77,20 +53,19 @@ interface IPool {
 
     function getRate() external view returns (uint256);
 
-    function isApproved(
-        Account calldata account,
-        VerifiableCredential calldata vc
-    ) external view returns (bool);
-
-    function maxDTI() external view returns (uint256);
-
-    function maxDTE() external view returns (uint256);
-
-    function maxDTL() external view returns (uint256);
-
     function credParser() external view returns (address);
 
     function accountLevel(uint256 agentID) external view returns (uint256);
+
+    function treasuryFeeRate() external view returns (uint256);
+
+    function accruedRentalFees() external view returns (uint256);
+
+    function paidRentalFees() external view returns (uint256);
+
+    function lostAssets() external view returns (uint256);
+
+    function lastAccountingUpdatingEpoch() external view returns (uint256);
 
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS
@@ -98,14 +73,9 @@ interface IPool {
 
     function borrow(VerifiableCredential calldata vc) external;
 
-    function pay(
-        VerifiableCredential calldata vc
-    ) external returns (
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    );
+    function pay(VerifiableCredential calldata vc)
+        external
+        returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund);
 
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC
@@ -124,8 +94,10 @@ interface IPool {
     function mint(uint256 shares, address receiver) external returns (uint256 assets);
 
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+    function withdrawF(uint256 assets, address receiver, address owner) external returns (uint256 shares);
 
     function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
+    function redeemF(uint256 shares, address receiver, address owner) external returns (uint256 assets);
 
     /*//////////////////////////////////////////////////////////////
                             ACCOUNTING LOGIC
@@ -144,6 +116,8 @@ interface IPool {
     function previewRedeem(uint256 shares) external view returns (uint256);
 
     function previewMint(uint256 shares) external view returns (uint256);
+
+    function updateAccounting() external;
 
     /*//////////////////////////////////////////////////////////////
                      DEPOSIT/WITHDRAWAL LIMIT LOGIC
@@ -175,12 +149,5 @@ interface IPool {
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external returns (uint256 totalOwed);
 
-    function setMaxDTI(uint256 _maxDTI) external;
-
-    function setMaxDTL(uint256 _maxDTL) external;
-
-    function setMaxDTE(uint256 _maxDTE) external;
-
     function setRentalFeesOwedPerEpoch(uint256 _rentalFeesOwedPerEpoch) external;
 }
-

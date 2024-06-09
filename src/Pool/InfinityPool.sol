@@ -19,11 +19,13 @@ import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
-import {IPreStake} from "src/Types/Interfaces/IPreStake.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {EPOCHS_IN_DAY, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
+import {ROUTE_WFIL_TOKEN} from "src/Constants/Routes.sol";
+
+uint256 constant WAD = 1e18;
 
 /**
  * @title InfinityPool
@@ -43,19 +45,14 @@ contract InfinityPool is IPool, Ownable {
     error InvalidState();
     error PoolShuttingDown();
     error AlreadyDefaulted();
-    error PayUp();
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    uint256 constant WAD = 1e18;
-
     /// @dev cache the routes for gas efficiency
-    address internal immutable router;
-    IPoolRegistry internal poolRegistry;
-    IAgentPolice internal agentPolice;
-    IAgentFactory internal agentFactory;
+    address internal immutable _router;
+    IAgentFactory internal _agentFactory;
 
     /// @dev `id` is a cache of the Pool's ID for gas efficiency
     uint256 public immutable id;
@@ -66,25 +63,16 @@ contract InfinityPool is IPool, Ownable {
     /// @dev `liquidStakingToken` is the token that represents a liquidStakingToken in the pool
     IPoolToken public immutable liquidStakingToken;
 
-    /// @dev `prestake` is the address of the prestake contract
-    IPreStake public immutable preStake;
-
     address public credParser;
-
-    /// @dev `maxDTI` is the max debt to income ratio
-    uint256 public maxDTI = 0.8e18;
-
-    /// @dev `maxDTE` is the max debt to equity ratio
-    uint256 public maxDTE = 3e18;
-
-    /// @dev `maxDTL` is the max debt to liquidation value ratio
-    uint256 public maxDTL = 8e17;
 
     /// @dev `levels` is a leveling system that sets maximum borrow amounts on accounts
     uint256[10] public levels;
 
     /// @dev `accountLevel` is a mapping of agentID to level
     mapping(uint256 => uint256) public accountLevel;
+
+    /// @dev `treasuryFeeRate` is the % of FIL charged to Agents on a per epoch basis (1e18 == 100%)
+    uint256 public treasuryFeeRate = 1e17;
 
     /// @dev `feesCollected` is the total fees collected in this pool
     uint256 public feesCollected = 0;
@@ -111,7 +99,7 @@ contract InfinityPool is IPool, Ownable {
     bool public isShuttingDown = false;
 
     /// @dev `rentalFeesOwedPerEpoch` is the % of FIL charged to Agents on a per epoch basis
-    uint256 private _rentalFeesOwedPerEpoch = FixedPointMathLib.divWadDown(15e16, EPOCHS_IN_YEAR*1e18);
+    uint256 private _rentalFeesOwedPerEpoch = FixedPointMathLib.divWadDown(15e16, EPOCHS_IN_YEAR * 1e18);
 
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
@@ -145,39 +133,30 @@ contract InfinityPool is IPool, Ownable {
     /// @dev the pool can receive FIL from the WFIL.Withdraw method,
     /// so we make sure to not trigger a deposit in those cases
     /// (when this contract unwraps FIL triggering a receive or fallback)
-    receive() isOpen external payable {
+    receive() external payable isOpen {
         if (msg.sender != address(asset)) _depositFIL(msg.sender);
     }
 
-    fallback() isOpen external payable {
+    fallback() external payable isOpen {
         if (msg.sender != address(asset)) _depositFIL(msg.sender);
     }
 
     // The only things we need to pull into this contract are the ones unique to _each pool_
     // This is just the approval module, and the treasury address
     // Everything else is accesible through the router (power token for example)
-    constructor(
-        address _owner,
-        address _router,
-        address _asset,
-        address _liquidStakingToken,
-        address _preStake,
-        uint256 _minimumLiquidity,
-        uint256 _id
-    ) Ownable(_owner) {
-        router = _router;
-        asset = IERC20(_asset);
-        preStake = IPreStake(_preStake);
-        minimumLiquidity = _minimumLiquidity;
+    constructor(address owner_, address router_, address liquidStakingToken_, uint256 minimumLiquidity_, uint256 id_)
+        Ownable(owner_)
+    {
+        _router = router_;
+        asset = IERC20(IRouter(_router).getRoute(ROUTE_WFIL_TOKEN));
+        minimumLiquidity = minimumLiquidity_;
         // set the ID
-        id = _id;
+        id = id_;
         // deploy a new liquid staking token for the pool
-        liquidStakingToken = IPoolToken(_liquidStakingToken);
+        liquidStakingToken = IPoolToken(liquidStakingToken_);
 
-        poolRegistry = GetRoute.poolRegistry(router);
-        agentPolice = GetRoute.agentPolice(router);
-        agentFactory = GetRoute.agentFactory(router);
-        credParser = address(GetRoute.credParser(router));
+        _agentFactory = GetRoute.agentFactory(router_);
+        credParser = address(GetRoute.credParser(router_));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -190,7 +169,7 @@ contract InfinityPool is IPool, Ownable {
      * @return totalBorrowed The total borrowed from the agent
      */
     function getAgentBorrowed(uint256 agentID) external view returns (uint256) {
-        return AccountHelpers.getAccount(router, agentID, id).principal;
+        return AccountHelpers.getAccount(_router, agentID, id).principal;
     }
 
     /**
@@ -205,12 +184,8 @@ contract InfinityPool is IPool, Ownable {
         // subtract total rental fees paid
         // subtract lost assets from liquidations
         // subtract total treasury fees collected
-        return asset.balanceOf(address(this)) 
-          + totalBorrowed 
-          + accruedRentalFees 
-          - paidRentalFees 
-          - lostAssets 
-          - feesCollected;
+        return asset.balanceOf(address(this)) + totalBorrowed + accruedRentalFees - paidRentalFees - lostAssets
+            - feesCollected;
     }
 
     /**
@@ -255,47 +230,11 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
-     * @notice isApproved returns false if the Agent is in an rejected state as determined by the rate module
-     * @param account The Agent's account
-     * @param vc The Agent's VerifiableCredential
-     * @return approved Whether the Agent is approved
-     * @dev approval criteria are determined by the `rateModule`
-     */
-    function isApproved(
-        Account calldata account,
-        VerifiableCredential calldata vc
-    ) external view returns (bool approved) {
-        uint256 principal = account.principal;
-        // if you're attempting to borrow above your level limit, you're not approved
-        if (principal > levels[accountLevel[vc.subject]]) {
-            return false;
-        }
-
-        // checks for zero to avoid dividing or multiplying by zero downstream
-        // if you have nothing borrowed, you're good no matter what
-        if (principal == 0) return true;
-        // if you have no liquidation value (used to be called collateral value), it's an automatic no
-        uint256 liquidationValue = vc.getCollateralValue(credParser);
-        if (liquidationValue == 0) return false;
-
-        // if DTL is greater than `maxDTL`, Agent is undercollateralized - danger zone!
-        if (principal.divWadDown(liquidationValue) > maxDTL) return false;
-        // if DTE is greater than `maxDTE`, Agent does not have sufficient skin in the game
-        uint256 agentTotalAssets = vc.getAgentValue(credParser);
-        uint256 dte = agentTotalAssets <= principal ? type(uint256).max : principal.divWadDown(agentTotalAssets - principal);
-        if (dte > maxDTE) return false;
-
-        // if DTI is greater than `maxDTI`, Agent cannot meet its payments solely from block rewards
-        uint256 dailyPayment = principal.mulWadUp(_rentalFeesOwedPerEpoch).mulWadUp(EPOCHS_IN_DAY);
-        return dailyPayment.divWadUp(vc.getExpectedDailyRewards(credParser)) <= maxDTI;
-    }
-
-    /**
      * @notice writeOff writes down the Agent's account and the Pool's borrowed amount after a liquidation
      * @param agentID The ID of the Agent
      * @param recoveredFunds The amount of funds recovered from the liquidation. This is the total amount the Police was able to recover from the Agent's Miner Actors
      * @dev the treasury fees go unpaid on a writeOff
-     // TODO fix return value with agent police fix 
+     *  // TODO fix return value with agent police fix
      */
     function writeOff(uint256 agentID, uint256 recoveredFunds) external returns (uint256) {
         // only the agent police can call this function
@@ -312,7 +251,8 @@ contract InfinityPool is IPool, Ownable {
         uint256 interestOwed = 0;
         // if the account is not "current", compute the amount of interest owed based on the penalty rate
         if (account.epochsPaid < block.number) {
-            interestOwed = account.principal.mulWadUp(_rentalFeesOwedPerEpoch).mulWadUp(block.number - account.epochsPaid);
+            interestOwed =
+                account.principal.mulWadUp(_rentalFeesOwedPerEpoch).mulWadUp(block.number - account.epochsPaid);
         }
 
         // compute the amount of fees and principal we can pay off
@@ -326,23 +266,23 @@ contract InfinityPool is IPool, Ownable {
         // the amount of funds that was lost in this write-off
         uint256 lost = 0;
         if (recoveredFunds <= interestOwed) {
-          // if we can't cover the whole interest payment, we cover what we can
-          feeBasis = recoveredFunds;
-          // we lost the full principal + unpaid interest
-          lost = account.principal + interestOwed - recoveredFunds;
+            // if we can't cover the whole interest payment, we cover what we can
+            feeBasis = recoveredFunds;
+            // we lost the full principal + unpaid interest
+            lost = account.principal + interestOwed - recoveredFunds;
         } else if (recoveredFunds <= totalOwed) {
-          // if we can't cover the whole total owed, we apply everything to interest first
-          feeBasis = interestOwed;
-          // cover any principal with the remainder
-          principalPaid = recoveredFunds - interestOwed;
-          // we lost the unpaid principal
-          lost = account.principal - principalPaid;
+            // if we can't cover the whole total owed, we apply everything to interest first
+            feeBasis = interestOwed;
+            // cover any principal with the remainder
+            principalPaid = recoveredFunds - interestOwed;
+            // we lost the unpaid principal
+            lost = account.principal - principalPaid;
         } else {
-          // we can cover everything
-          feeBasis = interestOwed;
-          principalPaid = account.principal;
-          remainder = recoveredFunds - totalOwed;
-          // we lost nothing
+            // we can cover everything
+            feeBasis = interestOwed;
+            principalPaid = account.principal;
+            remainder = recoveredFunds - totalOwed;
+            // we lost nothing
         }
 
         // write off the pool's account so that the pool's total borrowed is accurate
@@ -356,7 +296,7 @@ contract InfinityPool is IPool, Ownable {
         // pull in only the assets we need
         asset.transferFrom(msg.sender, address(this), feeBasis + principalPaid);
 
-        account.save(router, agentID, id);
+        account.save(_router, agentID, id);
 
         emit WriteOff(agentID, recoveredFunds, lost, feeBasis);
         // TODO: Fixme
@@ -386,11 +326,10 @@ contract InfinityPool is IPool, Ownable {
             uint256 currentEpoch = block.number;
             account.startEpoch = currentEpoch;
             account.epochsPaid = currentEpoch;
-            poolRegistry.addPoolToList(vc.subject, id);
         }
 
         account.principal += vc.value;
-        account.save(router, vc.subject, id);
+        account.save(_router, vc.subject, id);
 
         totalBorrowed += vc.value;
 
@@ -410,14 +349,11 @@ contract InfinityPool is IPool, Ownable {
      * @dev The pay function applies the payment amount to the interest owed on the account first. If the entire interest owed is paid off by the payment, then the remainder is applied to the principal owed on the account.
      * @dev Treasury fees only apply to interest payments, not principal payments
      */
-    function pay(
-        VerifiableCredential calldata vc
-    ) external subjectIsAgentCaller(vc) returns (
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    ) {
+    function pay(VerifiableCredential calldata vc)
+        external
+        subjectIsAgentCaller(vc)
+        returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
+    {
         updateAccounting();
         // grab this Agent's account from storage
         Account memory account = _getAccount(vc.subject);
@@ -433,8 +369,8 @@ contract InfinityPool is IPool, Ownable {
         // if the account is "defaulted", we treat everything as interest
         if (account.defaulted) {
             // accrue treasury fee
-            feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(vc.value);
-            // here we explicitly do not update the paidRentalFees 
+            feesCollected += treasuryFeeRate.mulWadUp(vc.value);
+            // here we explicitly do not update the paidRentalFees
             // transfer the assets into the pool
             asset.transferFrom(msg.sender, address(this), vc.value);
 
@@ -477,8 +413,6 @@ contract InfinityPool is IPool, Ownable {
                 principalPaid = account.principal;
                 // write down totalBorrowed by the account.principal
                 totalBorrowed -= principalPaid;
-                // remove the account from the pool's list of accounts
-                poolRegistry.removePoolFromList(vc.subject, id);
                 // return the amount of funds overpaid
                 refund = principalPayment - account.principal;
                 // reset the account
@@ -493,14 +427,13 @@ contract InfinityPool is IPool, Ownable {
                 // move the `epochsPaid` cursor to mark the account as "current"
                 account.epochsPaid = block.number;
             }
-          
         }
         // update the account in storage
-        account.save(router, vc.subject, id);
+        account.save(_router, vc.subject, id);
         // realize fees paid to the pool
         paidRentalFees += feeBasis;
         // accrue treasury fees
-        feesCollected += poolRegistry.treasuryFeeRate().mulWadUp(feeBasis);
+        feesCollected += treasuryFeeRate.mulWadUp(feeBasis);
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), vc.value - refund);
 
@@ -513,24 +446,24 @@ contract InfinityPool is IPool, Ownable {
      * @dev Updates the accrual basis accounting of the pool
      */
     function updateAccounting() public {
-      // only update the accounting if we're in a new epoch
-      if (block.number > lastAccountingUpdatingEpoch) {
-        accruedRentalFees += _computeNewFeesAccrued();
-        lastAccountingUpdatingEpoch = block.number;
-      }
+        // only update the accounting if we're in a new epoch
+        if (block.number > lastAccountingUpdatingEpoch) {
+            accruedRentalFees += _computeNewFeesAccrued();
+            lastAccountingUpdatingEpoch = block.number;
+        }
     }
 
     function _computeNewFeesAccrued() internal view returns (uint256) {
-      // only update the accounting if we're in a new epoch
-      if (block.number > lastAccountingUpdatingEpoch) {
-        // calculate the number of blocks passed since the last upgrade
-        uint256 blocksPassed = block.number - lastAccountingUpdatingEpoch;
-        // calculate the total % owed to the pool
-        uint256 feeRateAccrued = _rentalFeesOwedPerEpoch.mulWadUp(blocksPassed);
-        // calculate the total interest accrued during this period
-        return totalBorrowed.mulWadUp(feeRateAccrued);
-      }
-      return 0;
+        // only update the accounting if we're in a new epoch
+        if (block.number > lastAccountingUpdatingEpoch) {
+            // calculate the number of blocks passed since the last upgrade
+            uint256 blocksPassed = block.number - lastAccountingUpdatingEpoch;
+            // calculate the total % owed to the pool
+            uint256 feeRateAccrued = _rentalFeesOwedPerEpoch.mulWadUp(blocksPassed);
+            // calculate the total interest accrued during this period
+            return totalBorrowed.mulWadUp(feeRateAccrued);
+        }
+        return 0;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -566,7 +499,7 @@ contract InfinityPool is IPool, Ownable {
         updateAccounting();
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
-        if(assets == 0 || shares == 0) revert InvalidParams();
+        if (assets == 0 || shares == 0) revert InvalidParams();
         asset.transferFrom(msg.sender, address(this), assets);
         liquidStakingToken.mint(receiver, shares);
 
@@ -580,11 +513,7 @@ contract InfinityPool is IPool, Ownable {
      * @param owner The owner of the shares
      * @return shares - the number of shares burned
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public isOpen returns (uint256 shares) {
+    function withdraw(uint256 assets, address receiver, address owner) public isOpen returns (uint256 shares) {
         updateAccounting();
         shares = previewWithdraw(assets);
         _processExit(owner, receiver, shares, assets, false);
@@ -598,11 +527,7 @@ contract InfinityPool is IPool, Ownable {
      * @param owner The owner of the shares
      * @return assets The assets received from burning the shares
      */
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) public isOpen returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address owner) public isOpen returns (uint256 assets) {
         updateAccounting();
         assets = previewRedeem(shares);
         _processExit(owner, receiver, shares, assets, false);
@@ -616,11 +541,12 @@ contract InfinityPool is IPool, Ownable {
      * @param owner The owner of the shares
      * @return shares - the number of shares burned
      */
-    function withdrawF(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public isOpen ownerIsCaller(owner) returns (uint256 shares) {
+    function withdrawF(uint256 assets, address receiver, address owner)
+        public
+        isOpen
+        ownerIsCaller(owner)
+        returns (uint256 shares)
+    {
         shares = previewWithdraw(assets);
         _processExit(owner, receiver, shares, assets, true);
     }
@@ -632,11 +558,12 @@ contract InfinityPool is IPool, Ownable {
      * @param owner The owner of the shares
      * @return assets The assets received from burning the shares
      */
-    function redeemF(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) public isOpen ownerIsCaller(owner) returns (uint256 assets) {
+    function redeemF(uint256 shares, address receiver, address owner)
+        public
+        isOpen
+        ownerIsCaller(owner)
+        returns (uint256 assets)
+    {
         assets = previewRedeem(shares);
         _processExit(owner, receiver, shares, assets, true);
     }
@@ -697,9 +624,7 @@ contract InfinityPool is IPool, Ownable {
 
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        shares = supply == 0
-            ? assets
-            : assets.mulDivUp(supply, totalAssets());
+        shares = supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
     }
 
     /**
@@ -710,9 +635,7 @@ contract InfinityPool is IPool, Ownable {
     function previewRedeem(uint256 shares) public view isOpen returns (uint256 assets) {
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        assets = supply == 0
-            ? shares
-            : shares.mulDivUp(totalAssets(), supply);
+        assets = supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
         // revert if the fil value of the account's shares is bigger than the available exit liquidity
         if (assets > getLiquidAssets()) return 0;
     }
@@ -745,7 +668,6 @@ contract InfinityPool is IPool, Ownable {
         }
     }
 
-
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC
     //////////////////////////////////////////////////////////////*/
@@ -756,22 +678,19 @@ contract InfinityPool is IPool, Ownable {
     function harvestFees(uint256 harvestAmount) public {
         updateAccounting();
         feesCollected -= harvestAmount;
-        asset.transfer(GetRoute.treasury(router), harvestAmount);
+        asset.transfer(GetRoute.treasury(_router), harvestAmount);
     }
 
     /*//////////////////////////////////////////////////////////////
                             ADMIN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-
     /**
      * @notice decomissionPool shuts down the pool and transfers all assets to the new pool
      * @param newPool The address of new pool to transfer assets to
      */
-    function decommissionPool(
-        IPool newPool
-    ) external onlyPoolRegistry returns(uint256 borrowedAmount) {
-      if (newPool.id() != id || !isShuttingDown) revert InvalidState();
+    function decommissionPool(IPool newPool) external onlyPoolRegistry returns (uint256 borrowedAmount) {
+        if (newPool.id() != id || !isShuttingDown) revert InvalidState();
         // forward fees to the treasury
         harvestFees(feesCollected);
 
@@ -785,19 +704,19 @@ contract InfinityPool is IPool, Ownable {
      * @dev this can only occur on FEVM through a raw send to this actor
      */
     function recoverFIL(address receiver) external onlyOwner {
-      if (address(this).balance > 0) {
-        payable(receiver).sendValue(address(this).balance);
-      }
+        if (address(this).balance > 0) {
+            payable(receiver).sendValue(address(this).balance);
+        }
     }
 
     /**
      * @notice recoverERC20 recovers any ERC20 that was accidentally sent to this contract
      */
     function recoverERC20(address receiver, IERC20 token) external onlyOwner {
-      // cannot unstuck the Pool's native asset (wFIL)
-      if (token == asset) revert Unauthorized();
+        // cannot unstuck the Pool's native asset (wFIL)
+        if (token == asset) revert Unauthorized();
 
-      token.transfer(receiver.normalize(), token.balanceOf(address(this)));
+        token.transfer(receiver.normalize(), token.balanceOf(address(this)));
     }
 
     /**
@@ -826,9 +745,7 @@ contract InfinityPool is IPool, Ownable {
         account.startEpoch = block.number;
         account.epochsPaid = block.number;
         // save the account
-        account.save(router, agentID, id);
-        // add the pool to the agent's list of borrowed pools
-        poolRegistry.addPoolToList(agentID, id);
+        account.save(_router, agentID, id);
         // mint the iFIL to the receiver, using principal as the deposit amount
         liquidStakingToken.mint(receiver, convertToShares(accountPrincipal));
         // account for the new principal in the total borrowed of the pool
@@ -850,49 +767,26 @@ contract InfinityPool is IPool, Ownable {
         isShuttingDown = true;
     }
 
-    /**
-     * @notice Transfers assets from the pre-stake contract to the pool, without minting new iFIL
-     * @param _amount The amount of WFIL to transfer
-     */
-    function transferFromPreStake(uint256 _amount) external onlyOwner {
-        asset.transferFrom(address(preStake), address(this), _amount);
-    }
-
-    /// @dev sets the max DTI score to be considered approved
-    function setMaxDTI(uint256 _maxDTI) external onlyOwner {
-        maxDTI = _maxDTI;
-    }
-
-    /// @dev sets the max DTE score to be considered approved
-    function setMaxDTE(uint256 _maxDTE) external onlyOwner {
-        maxDTE = _maxDTE;
-    }
-
-    /// @dev sets the max LTV to be considered approved
-    function setMaxDTL(uint256 _maxDTL) external onlyOwner {
-        maxDTL = _maxDTL;
-    }
-
     function setRentalFeesOwedPerEpoch(uint256 rentalFeesOwedPerEpoch_) external onlyOwner {
         _rentalFeesOwedPerEpoch = rentalFeesOwedPerEpoch_;
     }
 
     /// @dev sets the credentialParser in case we need to update a data type
     function updateCredParser() external onlyOwner {
-        credParser = address(GetRoute.credParser(router));
+        credParser = address(GetRoute.credParser(_router));
     }
 
     /// @dev sets the array of max borrow amounts for each level
     function setLevels(uint256[10] calldata _levels) external onlyOwner {
         levels = _levels;
     }
-    
+
     /// @dev sets the array of max borrow amounts for each level
     function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external onlyOwner {
         if (agentIDs.length != level.length) revert InvalidParams();
         uint256 i = 0;
         for (; i < agentIDs.length; i++) {
-          accountLevel[agentIDs[i]] = level[i];
+            accountLevel[agentIDs[i]] = level[i];
         }
     }
 
@@ -900,10 +794,8 @@ contract InfinityPool is IPool, Ownable {
      * @notice refreshRoutes refreshes the pool's cached routes
      */
     function refreshRoutes() external {
-        poolRegistry = GetRoute.poolRegistry(router);
-        agentPolice = GetRoute.agentPolice(router);
-        agentFactory = GetRoute.agentFactory(router);
-        credParser = address(GetRoute.credParser(router));
+        _agentFactory = GetRoute.agentFactory(_router);
+        credParser = address(GetRoute.credParser(_router));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -911,7 +803,7 @@ contract InfinityPool is IPool, Ownable {
     //////////////////////////////////////////////////////////////*/
 
     function _getAccount(uint256 agent) internal view returns (Account memory) {
-        return AccountHelpers.getAccount(router, agent, id);
+        return AccountHelpers.getAccount(_router, agent, id);
     }
 
     function _deposit(uint256 assets, address receiver) internal returns (uint256 lstAmount) {
@@ -940,7 +832,7 @@ contract InfinityPool is IPool, Ownable {
 
         liquidStakingToken.mint(receiver, lstAmount);
 
-        emit Deposit(msg.sender, receiver.normalize(),  msg.value, lstAmount);
+        emit Deposit(msg.sender, receiver.normalize(), msg.value, lstAmount);
     }
 
     function _processExit(
@@ -975,10 +867,7 @@ contract InfinityPool is IPool, Ownable {
     }
 
     function _subjectIsAgentCaller(VerifiableCredential calldata vc) internal view {
-        if (
-            vc.subject == 0 ||
-            agentFactory.agents(msg.sender) != vc.subject
-        ) revert Unauthorized();
+        if (vc.subject == 0 || _agentFactory.agents(msg.sender) != vc.subject) revert Unauthorized();
     }
 
     function _isOpen() internal view {
@@ -986,11 +875,10 @@ contract InfinityPool is IPool, Ownable {
     }
 
     function _onlyPoolRegistry() internal view {
-        if (address(poolRegistry) != msg.sender) revert Unauthorized();
+        if (address(GetRoute.poolRegistry(_router)) != msg.sender) revert Unauthorized();
     }
 
     function _onlyAgentPolice() internal view {
-        if (address(agentPolice) != msg.sender) revert Unauthorized();
+        if (address(GetRoute.agentPolice(_router)) != msg.sender) revert Unauthorized();
     }
 }
-
