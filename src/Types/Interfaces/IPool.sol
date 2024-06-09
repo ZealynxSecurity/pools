@@ -15,7 +15,9 @@ interface IPool {
 
     event Borrow(uint256 indexed agent, uint256 amount);
 
-    event Pay(uint256 indexed agent, uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund);
+    event Pay(
+        uint256 indexed agent, uint256 amount, uint256 interest, uint256 principal, uint256 refund, uint256 iFILPrice
+    );
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
