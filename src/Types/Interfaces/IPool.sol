@@ -55,8 +55,6 @@ interface IPool {
 
     function credParser() external view returns (address);
 
-    function accountLevel(uint256 agentID) external view returns (uint256);
-
     function treasuryFeeRate() external view returns (uint256);
 
     function accruedRentalFees() external view returns (uint256);

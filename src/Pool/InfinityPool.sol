@@ -65,12 +65,6 @@ contract InfinityPool is IPool, Ownable {
 
     address public credParser;
 
-    /// @dev `levels` is a leveling system that sets maximum borrow amounts on accounts
-    uint256[10] public levels;
-
-    /// @dev `accountLevel` is a mapping of agentID to level
-    mapping(uint256 => uint256) public accountLevel;
-
     /// @dev `treasuryFeeRate` is the % of FIL charged to Agents on a per epoch basis (1e18 == 100%)
     uint256 public treasuryFeeRate = 1e17;
 
@@ -774,20 +768,6 @@ contract InfinityPool is IPool, Ownable {
     /// @dev sets the credentialParser in case we need to update a data type
     function updateCredParser() external onlyOwner {
         credParser = address(GetRoute.credParser(_router));
-    }
-
-    /// @dev sets the array of max borrow amounts for each level
-    function setLevels(uint256[10] calldata _levels) external onlyOwner {
-        levels = _levels;
-    }
-
-    /// @dev sets the array of max borrow amounts for each level
-    function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external onlyOwner {
-        if (agentIDs.length != level.length) revert InvalidParams();
-        uint256 i = 0;
-        for (; i < agentIDs.length; i++) {
-            accountLevel[agentIDs[i]] = level[i];
-        }
     }
 
     /**
