@@ -19,465 +19,409 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {SignedCredential, Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {EPOCHS_IN_DAY,EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
-import {ROUTE_INFINITY_POOL} from "src/Constants/Routes.sol";
+import {EPOCHS_IN_DAY, EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
+import {ROUTE_INFINITY_POOL, ROUTE_WFIL_TOKEN} from "src/Constants/Routes.sol";
 
 contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
+    using AccountHelpers for Account;
+    using FixedPointMathLib for uint256;
+    using Credentials for VerifiableCredential;
+    using FilAddress for address;
 
-  using AccountHelpers for Account;
-  using FixedPointMathLib for uint256;
-  using Credentials for VerifiableCredential;
-  using FilAddress for address;
+    error AgentStateRejected();
+    error OverLimitDTI();
+    error OverLimitDTE();
+    error OverLimitDTL();
+    error OverFaultySectorLimit();
 
-  error AgentStateRejected();
-  error OverLimitDTI();
-  error OverLimitDTE();
-  error OverLimitDTL();
-  error OverFaultySectorLimit();
-  error PayUp();
+    event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
 
-  event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
+    IWFIL internal _wFIL;
 
-  IWFIL internal wFIL;
+    /// @notice `administrationWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is eligible for administration
+    uint256 public administrationWindow;
 
-  /// @notice `administrationWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is eligible for administration
-  uint256 public administrationWindow;
+    /// @notice `maxDTE` is the maximum amount of principal to equity ratio before withdrawals are prohibited
+    /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
+    /// This variable is populated on deployment and can be updated to match the rate module using an admin func
+    uint256 public maxDTE = 0;
 
-  /// @notice `maxDTE` is the maximum amount of principal to equity ratio before withdrawals are prohibited
-  /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
-  /// This variable is populated on deployment and can be updated to match the rate module using an admin func
-  uint256 public maxDTE = 0;
+    /// @notice `maxDTL` is the maximum amount of principal to collateral value ratio before withdrawals are prohibited
+    /// NOTE this is separate DTL for withdrawing than any DTL that the Infinity Pool relies on
+    /// This variable is populated on deployment and can be updated to match the rate module using an admin func
+    uint256 public maxDTL = 0;
 
-  /// @notice `maxDTL` is the maximum amount of principal to collateral value ratio before withdrawals are prohibited
-  /// NOTE this is separate DTL for withdrawing than any DTL that the Infinity Pool relies on
-  /// This variable is populated on deployment and can be updated to match the rate module using an admin func
-  uint256 public maxDTL = 0;
+    /// @notice `dtlLiquidationThreshold` is the DTL ratio threshold at which an agent is liquidated
+    /// initially set at 90%, so if the agent is >90% DTL, it is elligible for liquidation
+    uint256 public dtlLiquidationThreshold = 9e17;
 
-  /// @notice `dtlLiquidationThreshold` is the DTL ratio threshold at which an agent is liquidated
-  /// initially set at 90%, so if the agent is >90% DTL, it is elligible for liquidation
-  uint256 public dtlLiquidationThreshold = 9e17;
+    /// @notice `maxDTI` is the maximum amount of debt to income ratio before withdrawals are prohibited
+    /// NOTE this is separate DTI for withdrawing than any DTI that the Infinity Pool relies on
+    /// This variable is populated on deployment and can be updated to match the rate module using an admin func
+    uint256 public maxDTI = 0;
 
-  /// @notice `maxDTI` is the maximum amount of debt to income ratio before withdrawals are prohibited
-  /// NOTE this is separate DTI for withdrawing than any DTI that the Infinity Pool relies on
-  /// This variable is populated on deployment and can be updated to match the rate module using an admin func
-  uint256 public maxDTI = 0;
+    /// @notice `sectorFaultyTolerancePercent` is the percentage of sectors that can be faulty before an agent is considered in a faulty state. 1e18 = 100%
+    uint256 public sectorFaultyTolerancePercent = 1e15;
 
-  /// @notice `maxConsecutiveFaultEpochs` is the number of epochs of consecutive faults that are required in order to put an agent on administration or into default
-  uint256 public maxConsecutiveFaultEpochs = 3 * EPOCHS_IN_DAY;
+    /// @notice `paused` is a flag that determines whether the protocol is paused
+    bool public paused = false;
 
-  /// @notice `sectorFaultyTolerancePercent` is the percentage of sectors that can be faulty before an agent is considered in a faulty state. 1e18 = 100%
-  uint256 public sectorFaultyTolerancePercent = 1e15;
+    /// @notice `_credentialUseBlock` maps a credential's hash to when it was used
+    mapping(bytes32 => uint256) private _credentialUseBlock;
 
-  /// @notice `paused` is a flag that determines whether the protocol is paused
-  bool public paused = false;
+    constructor(string memory _name, string memory _version, address _owner, address _operator, address _router)
+        VCVerifier(_name, _version, _router)
+        Operatable(_owner, _operator)
+    {
+        // set the DTI, DTE, and DTL ratios to match the pool on deployment if a pool is passed
+        // if no pool is passed, you can update these values using the admin function matchRiskParams
+        IPool pool = IPool(IRouter(_router).getRoute(ROUTE_INFINITY_POOL));
+        maxDTE = pool.maxDTE();
+        maxDTI = pool.maxDTI();
+        maxDTL = pool.maxDTL();
 
-  /// @notice `_credentialUseBlock` maps signature bytes to when a credential was used
-  mapping(bytes32 => uint256) private _credentialUseBlock;
-
-  constructor(
-    string memory _name,
-    string memory _version,
-    address _owner,
-    address _operator,
-    address _router,
-    IWFIL _wFIL
-  ) VCVerifier(_name, _version, _router) Operatable(_owner, _operator) {
-    administrationWindow = EPOCHS_IN_WEEK;
-
-    IPool pool;
-    try IRouter(_router).getRoute(ROUTE_INFINITY_POOL) returns (address poolAddress) {
-      pool = IPool(poolAddress);
-    } catch {
-      // noop
+        administrationWindow = EPOCHS_IN_WEEK;
+        _wFIL = IWFIL(IRouter(_router).getRoute(ROUTE_WFIL_TOKEN));
     }
 
-    // set the DTI, DTE, and DTL ratios to match the pool on deployment if a pool is passed
-    // if no pool is passed, you can update these values using the admin function matchRiskParams
-    if (address(pool) != address(0)) {
-      maxDTE = pool.maxDTE();
-      maxDTI = pool.maxDTI();
-      maxDTL = pool.maxDTL();
+    modifier onlyAgent() {
+        AuthController.onlyAgent(router, msg.sender);
+        _;
     }
 
-    wFIL = _wFIL;
-  }
-
-  modifier onlyAgent() {
-    AuthController.onlyAgent(router, msg.sender);
-    _;
-  }
-
-  modifier onlyWhenBehindTargetEpoch(address agent, uint256 lookback) {
-    if (!_epochsPaidBehindTarget(IAgent(agent).id(), lookback)) {
-      revert Unauthorized();
-    }
-    _;
-  }
-
-  /*//////////////////////////////////////////////
+    /*//////////////////////////////////////////////
                       CHECKERS
-  //////////////////////////////////////////////*/
+    //////////////////////////////////////////////*/
 
-  /**
-   * @notice `agentApproved` checks with each pool to see if the agent's position is approved and reverts if any pool returns false
-   * @param vc the VerifiableCredential of the agent
-   */
-  function agentApproved(
-    VerifiableCredential calldata vc
-  ) external view {
-    _agentApproved(vc, _getAccount(vc.subject), _pool());
-  }
-
-  /**
-   * @notice `agentLiquidated` checks if the agent has been liquidated
-   * @param agentID The address of the agent to check
-   */
-  function agentLiquidated(uint256 agentID) public view returns (bool) {
-    Account memory account = _getAccount(agentID);
-    // if the Agent is not actively borrowing from the pool, they are not liquidated
-    // TODO: is this check necessary?
-    if (account.principal == 0 && account.startEpoch == 0) return false;
-    return account.defaulted;
-  }
-
-  /**
-   * @notice `putAgentOnAdministration` puts the agent on administration, hopefully only temporarily
-   * @param agent The address of the agent to put on administration
-   * @param administration The address of the administration
-   */
-  function putAgentOnAdministration(
-    address agent,
-    address administration
-  ) external
-    onlyOwner
-    onlyWhenBehindTargetEpoch(agent, administrationWindow)
-  {
-    IAgent(agent).setAdministration(administration.normalize());
-    emit OnAdministration(agent);
-  }
-
-  /**
-   * @notice `setAgentDefaultDTL` puts the agent in default if the DTL ratio is above the threshold
-   * @param agent The address of the agent to put in default
-   * @param vc The VerifiableCredential of the agent
-   */
-  function setAgentDefaultDTL(address agent, VerifiableCredential calldata vc) external onlyOwner {
-    Account memory account = _getAccount(vc.subject);
-    // compute the interest owed on the principal to add to principal to get total debt
-    uint256 rate = _pool().getRate();
-    uint256 debt = account.principal + _interestOwed(account, rate);
-
-    if (debt.divWadDown(vc.getCollateralValue(address(GetRoute.credParser(router)))) < dtlLiquidationThreshold) {
-      revert Unauthorized();
+    /**
+     * @notice `agentApproved` checks with each pool to see if the agent's position is approved and reverts if any pool returns false
+     * @param vc the VerifiableCredential of the agent
+     */
+    function agentApproved(VerifiableCredential calldata vc) external view {
+        _agentApproved(vc, _getAccount(vc.subject), _pool());
     }
 
-    IAgent(agent).setInDefault();
-    emit Defaulted(agent);
-  }
+    /**
+     * @notice `agentLiquidated` checks if the agent has been liquidated
+     * @param agentID The address of the agent to check
+     */
+    function agentLiquidated(uint256 agentID) public view returns (bool) {
+        Account memory account = _getAccount(agentID);
+        // if the Agent is not actively borrowing from the pool, they are not liquidated
+        // TODO: is this check necessary?
+        if (account.principal == 0 && account.startEpoch == 0) return false;
+        return account.defaulted;
+    }
 
-  /**
-   * @notice `prepareMinerForLiquidation` changes the owner address of `miner` on `agent` to be `owner` of Agent Police
-   * @param agent The address of the agent to set the state of
-   * @param miner The ID of the miner to change owner to liquidator
-   * @param liquidator The ID of the liquidator
-   * @dev After calling this function and the liquidation completes, call `liquidatedAgent` next to proceed with the liquidation
-   */
-  function prepareMinerForLiquidation(
-    address agent,
-    uint64 miner,
-    uint64 liquidator
-  ) external onlyOwner {
-    IAgent(agent).prepareMinerForLiquidation(miner, liquidator);
-  }
+    /**
+     * @notice `putAgentOnAdministration` puts the agent on administration, hopefully only temporarily
+     * @param agent The address of the agent to put on administration
+     * @param administration The address of the administration
+     */
+    function putAgentOnAdministration(address agent, address administration) external onlyOwner {
+        if (!_epochsPaidBehindTarget(IAgent(agent).id(), administrationWindow)) revert Unauthorized();
+        IAgent(agent).setAdministration(administration.normalize());
+        emit OnAdministration(agent);
+    }
 
-  /**
-   * @notice `distributeLiquidatedFunds` distributes liquidated funds to the pools
-   * @param agent The address of the agent to set the state of
-   * @param amount The amount of funds recovered from the liquidation
-   */
-  function distributeLiquidatedFunds(address agent, uint256 amount) external onlyOwner {
-    uint256 agentID = IAgent(agent).id();
-    // this call can only be called once per agent
-    if (agentLiquidated(agentID)) revert Unauthorized();
-    // transfer the assets into the agent police
-    wFIL.transferFrom(msg.sender, address(this), amount);
-    uint256 excessAmount = _writeOffPools(agentID, amount);
+    /**
+     * @notice `setAgentDefaultDTL` puts the agent in default if the DTL ratio is above the threshold
+     * @param agent The address of the agent to put in default
+     * @param sc a SignedCredential of the agent
+     */
+    function setAgentDefaultDTL(address agent, SignedCredential calldata sc) external onlyOwner {
+        // ensure the credential is valid
+        validateCred(IAgent(agent).id(), msg.sig, sc);
 
-    // transfer the excess assets to the Agent's owner
-    wFIL.transfer(IAuth(agent).owner(), excessAmount);
-  }
+        Account memory account = _getAccount(sc.vc.subject);
+        // compute the interest owed on the principal to add to principal to get total debt
+        uint256 rate = _pool().getRate();
+        uint256 debt = account.principal + _interestOwed(account, rate);
 
-  /**
-   * @notice `isValidCredential` returns true if the credential is valid
-   * @param agent the ID of the agent
-   * @param action the 4 byte function signature of the function the Agent is aiming to execute
-   * @param sc the signed credential of the agent
-   * @dev a credential is valid if it meets the following criteria:
-   *      1. the credential is signed by the known issuer
-   *      2. the credential is not expired
-   *      3. the credential has not been used before
-   *      4. the credential's `subject` is the `agent`
-   */
-  function isValidCredential(
-    uint256 agent,
-    bytes4 action,
-    SignedCredential calldata sc
-  ) external view {
-    // reverts if the credential isn't valid
-    validateCred(
-      agent,
-      action,
-      sc
-    );
+        if (debt.divWadDown(sc.vc.getCollateralValue(address(GetRoute.credParser(router)))) < dtlLiquidationThreshold) {
+            revert Unauthorized();
+        }
 
-    // check to see if this credential has been used for
-    if (credentialUsed(sc.vc)) revert InvalidCredential();
-  }
+        IAgent(agent).setInDefault();
+        emit Defaulted(agent);
+    }
 
-  /**
-   * @notice `credentialUsed` returns true if the credential has been used before
-   */
-  function credentialUsed(VerifiableCredential calldata vc) public view returns (bool) {
-    return _credentialUseBlock[digest(vc)] > 0;
-  }
+    /**
+     * @notice `prepareMinerForLiquidation` changes the owner address of `miner` on `agent` to be `owner` of Agent Police
+     * @param agent The address of the agent to set the state of
+     * @param miner The ID of the miner to change owner to liquidator
+     * @param liquidator The ID of the liquidator
+     * @dev After calling this function and the liquidation completes, call `liquidatedAgent` next to proceed with the liquidation
+     */
+    function prepareMinerForLiquidation(address agent, uint64 miner, uint64 liquidator) external onlyOwner {
+        IAgent(agent).prepareMinerForLiquidation(miner, liquidator);
+    }
 
-  /**
-   * @notice registerCredentialUseBlock burns a credential by storing a hash of the VC
-   * @dev only an Agent can burn its own credential
-   * @dev the computed digest includes a block number in it, so nonces are not necessary because only 1 valid credential can exist at one time
-   */
-  function registerCredentialUseBlock(
-    SignedCredential memory sc
-  ) external onlyAgent {
-    if (IAgent(msg.sender).id() != sc.vc.subject) revert Unauthorized();
-    _credentialUseBlock[digest(sc.vc)] = block.number;
+    /**
+     * @notice `distributeLiquidatedFunds` distributes liquidated funds to the pools
+     * @param agent The address of the agent to set the state of
+     * @param amount The amount of funds recovered from the liquidation
+     */
+    function distributeLiquidatedFunds(address agent, uint256 amount) external onlyOwner {
+        uint256 agentID = IAgent(agent).id();
+        // this call can only be called once per agent
+        if (agentLiquidated(agentID)) revert Unauthorized();
+        // transfer the assets into the agent police
+        _wFIL.transferFrom(msg.sender, address(this), amount);
+        uint256 excessAmount = _writeOffPools(agentID, amount);
 
-    emit CredentialUsed(sc.vc.subject, sc.vc);
-  }
+        // transfer the excess assets to the Agent's owner
+        _wFIL.transfer(IAuth(agent).owner(), excessAmount);
+    }
 
-  /*//////////////////////////////////////////////
+    /**
+     * @notice `isValidCredential` returns true if the credential is valid
+     * @param agent the ID of the agent
+     * @param action the 4 byte function signature of the function the Agent is aiming to execute
+     * @param sc the signed credential of the agent
+     * @dev a credential is valid if it meets the following criteria:
+     *      1. the credential is signed by the known issuer
+     *      2. the credential is not expired
+     *      3. the credential has not been used before
+     *      4. the credential's `subject` is the `agent`
+     */
+    function isValidCredential(uint256 agent, bytes4 action, SignedCredential calldata sc) external view {
+        // reverts if the credential isn't valid
+        validateCred(agent, action, sc);
+
+        // check to see if this credential has been used for
+        if (credentialUsed(sc.vc)) revert InvalidCredential();
+    }
+
+    /**
+     * @notice `credentialUsed` returns true if the credential has been used before
+     */
+    function credentialUsed(VerifiableCredential calldata vc) public view returns (bool) {
+        return _credentialUseBlock[digest(vc)] > 0;
+    }
+
+    /**
+     * @notice registerCredentialUseBlock burns a credential by storing a hash of the VC
+     * @dev only an Agent can burn its own credential
+     * @dev the computed digest includes a block number in it, so nonces are not necessary because only 1 valid credential can exist at one time
+     */
+    function registerCredentialUseBlock(SignedCredential memory sc) external onlyAgent {
+        if (IAgent(msg.sender).id() != sc.vc.subject) revert Unauthorized();
+        _credentialUseBlock[digest(sc.vc)] = block.number;
+
+        emit CredentialUsed(sc.vc.subject, sc.vc);
+    }
+
+    /*//////////////////////////////////////////////
                       POLICING
-  //////////////////////////////////////////////*/
+    //////////////////////////////////////////////*/
 
-  /**
-   * @notice `confirmRmEquity` checks to see if a withdrawal will bring the agent over maxDTE
-   * @param vc the verifiable credential
-   */
-  function confirmRmEquity(
-    VerifiableCredential calldata vc
-  ) external view {
-    Account memory account = _getAccount(vc.subject);
-    IPool pool = _pool();
-    // check to ensure we can withdraw equity from this pool
-    _agentApproved(vc, account, pool);
-    // check to ensure the withdrawal does not bring us over maxDTE, maxDTI, or maxDTL
-    address credParser = address(GetRoute.credParser(router));
-    // check to make sure the after the withdrawal, the DTE, DTI, DTL are all within the acceptable range
-    uint256 principal = account.principal;
-    // nothing borrowed, good to go!
-    if (principal == 0) return;
+    /**
+     * @notice `confirmRmEquity` checks to see if a withdrawal will bring the agent over maxDTE
+     * @param vc the verifiable credential
+     */
+    function confirmRmEquity(VerifiableCredential calldata vc) external view {
+        Account memory account = _getAccount(vc.subject);
+        IPool pool = _pool();
+        // check to ensure we can withdraw equity from this pool
+        _agentApproved(vc, account, pool);
+        // check to ensure the withdrawal does not bring us over maxDTE, maxDTI, or maxDTL
+        address credParser = address(GetRoute.credParser(router));
+        // check to make sure the after the withdrawal, the DTE, DTI, DTL are all within the acceptable range
+        uint256 principal = account.principal;
+        // nothing borrowed, good to go!
+        if (principal == 0) return;
 
-    uint256 agentTotalValue = vc.getAgentValue(credParser);
-    // since agentTotalValue includes borrowed funds (principal),
-    // agentTotalValue should always be greater than principal
-    if (agentTotalValue <= principal) revert OverLimitDTE();
+        uint256 agentTotalValue = vc.getAgentValue(credParser);
+        // since agentTotalValue includes borrowed funds (principal),
+        // agentTotalValue should always be greater than principal
+        if (agentTotalValue <= principal) revert OverLimitDTE();
 
-    // compute the interest owed on the principal to add to principal to get total debt
-    uint256 rate = pool.getRate();
-    uint256 debt = principal + _interestOwed(account, rate);
-    // if the DTE is greater than maxDTE, revert
-    if (debt.divWadDown(agentTotalValue - debt) > maxDTE) revert OverLimitDTE();
-    // if the DTL is greater than maxDTL, revert
-    if (_computeDTL(account, vc, credParser, rate) > maxDTL) revert OverLimitDTL();
-    // if the DTI is greater than maxDTI, revert
-    uint256 dailyRate = account.principal.mulWadUp(rate).mulWadUp(EPOCHS_IN_DAY);
-    if (dailyRate.divWadUp(vc.getExpectedDailyRewards(credParser)) > maxDTI) revert OverLimitDTI();
-  }
+        // compute the interest owed on the principal to add to principal to get total debt
+        uint256 rate = pool.getRate();
+        uint256 debt = principal + _interestOwed(account, rate);
+        // if the DTE is greater than maxDTE, revert
+        if (debt.divWadDown(agentTotalValue - debt) > maxDTE) revert OverLimitDTE();
+        // if the DTL is greater than maxDTL, revert
+        if (_computeDTL(account, vc, credParser, rate) > maxDTL) revert OverLimitDTL();
+        // if the DTI is greater than maxDTI, revert
+        uint256 dailyRate = account.principal.mulWadUp(rate).mulWadUp(EPOCHS_IN_DAY);
+        if (dailyRate.divWadUp(vc.getExpectedDailyRewards(credParser)) > maxDTI) revert OverLimitDTI();
+    }
 
-  /**
-   * @notice `confirmRmAdministration` checks to ensure an Agent's faulty sectors are in the tolerance range, and they're within the payment tolerance window
-   * @param vc the verifiable credential
-   */
-  function confirmRmAdministration(VerifiableCredential calldata vc) external view {
-    if (_epochsPaidBehindTarget(vc.subject, administrationWindow)) revert AgentStateRejected();
+    /**
+     * @notice `confirmRmAdministration` checks to ensure an Agent's faulty sectors are in the tolerance range, and they're within the payment tolerance window
+     * @param vc the verifiable credential
+     */
+    function confirmRmAdministration(VerifiableCredential calldata vc) external view {
+        if (_epochsPaidBehindTarget(vc.subject, administrationWindow)) revert AgentStateRejected();
 
-    address credParser = address(GetRoute.credParser(router));
-    // if were above the DTL ratio, revert
-    if (
-        _computeDTL(
-            _getAccount(vc.subject),
-            vc,
-            credParser,
-            _pool().getRate()
-        ) > maxDTL
-    ) revert AgentStateRejected();
+        address credParser = address(GetRoute.credParser(router));
+        // if were above the DTL ratio, revert
+        if (_computeDTL(_getAccount(vc.subject), vc, credParser, _pool().getRate()) > maxDTL) {
+            revert AgentStateRejected();
+        }
 
-    if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
-  }
+        if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
+    }
 
-  /*//////////////////////////////////////////////
+    /*//////////////////////////////////////////////
                   ADMIN CONTROLS
-  //////////////////////////////////////////////*/
+    //////////////////////////////////////////////*/
 
-  /**
-   * @notice `setAdministrationWindow` changes the administration window epochs
-   */
-  function setAdministrationWindow(uint256 _administrationWindow) external onlyOwner {
-    administrationWindow = _administrationWindow;
-  }
+    /**
+     * @notice `setAdministrationWindow` changes the administration window epochs
+     */
+    function setAdministrationWindow(uint256 _administrationWindow) external onlyOwner {
+        administrationWindow = _administrationWindow;
+    }
 
-  /**
-   * @notice `setMaxDTE` sets the maximum DTE for withdrawals and removing miners
-   */
-  function setMaxDTE(uint256 _maxDTE) external onlyOwner {
-    maxDTE = _maxDTE;
-  }
+    /**
+     * @notice `setMaxDTE` sets the maximum DTE for withdrawals and removing miners
+     */
+    function setMaxDTE(uint256 _maxDTE) external onlyOwner {
+        maxDTE = _maxDTE;
+    }
 
-  /**
-   * @notice `setMaxDTL` sets the maximum DTL for withdrawals and removing miners
-   */
-  function setMaxDTL(uint256 _maxDTL) external onlyOwner {
-    maxDTL = _maxDTL;
-  }
+    /**
+     * @notice `setMaxDTL` sets the maximum DTL for withdrawals and removing miners
+     */
+    function setMaxDTL(uint256 _maxDTL) external onlyOwner {
+        maxDTL = _maxDTL;
+    }
 
-  /**
-   * @notice `setdtlLiquidationThreshold` sets the DTL ratio at which an agent can be liquidated
-   */
-  function setDtlLiquidationThreshold(uint256 _dtlLiquidationThreshold) external onlyOwner {
-    dtlLiquidationThreshold = _dtlLiquidationThreshold;
-  }
+    /**
+     * @notice `setdtlLiquidationThreshold` sets the DTL ratio at which an agent can be liquidated
+     */
+    function setDtlLiquidationThreshold(uint256 _dtlLiquidationThreshold) external onlyOwner {
+        dtlLiquidationThreshold = _dtlLiquidationThreshold;
+    }
 
-  /**
-   * @notice `setMaxDTI` sets the maximum DTI for withdrawals and removing miners
-   */
-  function setMaxDTI(uint256 _maxDTI) external onlyOwner {
-    maxDTI = _maxDTI;
-  }
+    /**
+     * @notice `setMaxDTI` sets the maximum DTI for withdrawals and removing miners
+     */
+    function setMaxDTI(uint256 _maxDTI) external onlyOwner {
+        maxDTI = _maxDTI;
+    }
 
-  /**
-   * @notice `setRiskParamsToMatchPool` is a convenience method for setting the risk parameters of the agent police to match the pool's rate module
-   */
-  function setRiskParamsToMatchPool() external onlyOwner {
-    IPool pool = _pool();
-    maxDTE = pool.maxDTE();
-    maxDTI = pool.maxDTI();
-    maxDTL = pool.maxDTL();
-  }
+    /**
+     * @notice `setRiskParamsToMatchPool` is a convenience method for setting the risk parameters of the agent police to match the pool's rate module
+     */
+    function setRiskParamsToMatchPool() external onlyOwner {
+        IPool pool = _pool();
+        maxDTE = pool.maxDTE();
+        maxDTI = pool.maxDTI();
+        maxDTL = pool.maxDTL();
+    }
 
-  /**
-   * @notice `pause` sets this contract paused
-   */
-  function pause() external onlyOwner {
-    paused = true;
-  }
+    /**
+     * @notice `pause` sets this contract paused
+     */
+    function pause() external onlyOwner {
+        paused = true;
+    }
 
-  /**
-   * @notice `resume` resumes this contract
-   */
-  function resume() external onlyOwner {
-    paused = false;
-  }
+    /**
+     * @notice `resume` resumes this contract
+     */
+    function resume() external onlyOwner {
+        paused = false;
+    }
 
-  /**
-   * @notice `setSectorFaultyTolerancePercent` sets the percentage of sectors that can be faulty before the agent is considered faulty
-   */
-  function setSectorFaultyTolerancePercent(uint256 _sectorFaultyTolerancePercent) external onlyOwner {
-    sectorFaultyTolerancePercent = _sectorFaultyTolerancePercent;
-  }
+    /**
+     * @notice `setSectorFaultyTolerancePercent` sets the percentage of sectors that can be faulty before the agent is considered faulty
+     */
+    function setSectorFaultyTolerancePercent(uint256 _sectorFaultyTolerancePercent) external onlyOwner {
+        sectorFaultyTolerancePercent = _sectorFaultyTolerancePercent;
+    }
 
-  function refreshRoutes() external {
-    wFIL = GetRoute.wFIL(router);
-  }
-
-  /*//////////////////////////////////////////////
+    /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
-  //////////////////////////////////////////////*/
+    //////////////////////////////////////////////*/
 
-  /// @dev computes the pro-rata split of a total amount based on principal
-  function _writeOffPools(
-    uint256 _agentID,
-    uint256 _recoveredAmount
-  ) internal returns (uint256 excessFunds) {
-    IPool pool = _pool();
-    wFIL.approve(address(pool), _recoveredAmount);
-    // write off the pool's assets
-    uint256 totalOwed = pool.writeOff(_agentID, _recoveredAmount);
-    return _recoveredAmount > totalOwed ? _recoveredAmount - totalOwed : 0;
-  }
+    /// @dev computes the pro-rata split of a total amount based on principal
+    function _writeOffPools(uint256 _agentID, uint256 _recoveredAmount) internal returns (uint256 excessFunds) {
+        IPool pool = _pool();
+        _wFIL.approve(address(pool), _recoveredAmount);
+        // write off the pool's assets
+        uint256 totalOwed = pool.writeOff(_agentID, _recoveredAmount);
+        return _recoveredAmount > totalOwed ? _recoveredAmount - totalOwed : 0;
+    }
 
-  /// @dev returns true if pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid). Account must have existing principal
-  function _epochsPaidBehindTarget(
-    uint256 _agentID,
-    uint256 _targetEpoch
-  ) internal view returns (bool) {
-    Account memory account = _getAccount(_agentID);
-    return account.principal > 0 && account.epochsPaid < block.number - _targetEpoch;
-  }
+    /// @dev returns true if pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid). Account must have existing principal
+    function _epochsPaidBehindTarget(uint256 _agentID, uint256 _targetEpoch) internal view returns (bool) {
+        Account memory account = _getAccount(_agentID);
+        return account.principal > 0 && account.epochsPaid < block.number - _targetEpoch;
+    }
 
-  /// @dev loops through the pools and calls isApproved on each, 
-  /// reverting in the case of any non-approvals,
-  /// or in the case that an account owes payments over the acceptable threshold
-  function _agentApproved(VerifiableCredential calldata vc, Account memory account, IPool pool) internal view {
-    if (!pool.isApproved(account, vc)) revert AgentStateRejected();
-    // check faulty sector limit
-    if (_faultySectorsExceeded(vc, address(GetRoute.credParser(router)))) revert OverFaultySectorLimit();
-  }
+    /// @dev loops through the pools and calls isApproved on each,
+    /// reverting in the case of any non-approvals,
+    /// or in the case that an account owes payments over the acceptable threshold
+    function _agentApproved(VerifiableCredential calldata vc, Account memory account, IPool pool) internal view {
+        if (!pool.isApproved(account, vc)) revert AgentStateRejected();
+        // check faulty sector limit
+        if (_faultySectorsExceeded(vc, address(GetRoute.credParser(router)))) revert OverFaultySectorLimit();
+    }
 
-  /// @dev returns the account of the agent
-  /// @param agentID the ID of the agent
-  /// @return the account of the agent
-  /// @dev the pool ID is hardcoded to 0, as this is a relic of our obsolete multipool architecture
-  function _getAccount(uint256 agentID) internal view returns (Account memory) {
-    return AccountHelpers.getAccount(router, agentID, 0);
-  }
+    /// @dev returns the account of the agent
+    /// @param agentID the ID of the agent
+    /// @return the account of the agent
+    /// @dev the pool ID is hardcoded to 0, as this is a relic of our obsolete multipool architecture
+    function _getAccount(uint256 agentID) internal view returns (Account memory) {
+        return AccountHelpers.getAccount(router, agentID, 0);
+    }
 
-  /// @dev returns the interest owed of a particular Account struct given a VerifiableCredential
-  function _interestOwed(Account memory account, uint256 rate) internal view returns (uint256) {
-    // compute the number of epochs that are owed to get current
-    uint256 epochsToPay = block.number - account.epochsPaid;
-    // multiply the rate by the principal to get the per epoch interest rate
-    // the interestPerEpoch has an extra WAD to maintain precision
-    uint256 interestPerEpoch = account.principal.mulWadUp(rate);
-    // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
-    // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
-    return interestPerEpoch.mulWadUp(epochsToPay);
-  }
-  
-  function _computeDTL(Account memory account, VerifiableCredential calldata vc, address credParser, uint256 rate) internal view returns (uint256) {
-    // compute the interest owed on the principal to add to principal to get total debt
-    uint256 debt = account.principal + _interestOwed(account, rate);
-    // confusing naming convention - "collateral value" == "liquidation value" in this context
-    uint256 liquidationValue = vc.getCollateralValue(credParser);
-    // if there is no debt, DTL is 0
-    if (debt == 0) return 0;
-    // if liquidation value is 0 (and there is debt), we return the max uint256 value to avoid dividing by 0
-    if (liquidationValue == 0) return type(uint256).max;
-    // if liquidation value is 0 and there is no debt, the DTL ratio is also 0
-    return debt.divWadDown(vc.getCollateralValue(credParser));
-  }
+    /// @dev returns the interest owed of a particular Account struct given a VerifiableCredential
+    function _interestOwed(Account memory account, uint256 rate) internal view returns (uint256) {
+        // compute the number of epochs that are owed to get current
+        uint256 epochsToPay = block.number - account.epochsPaid;
+        // multiply the rate by the principal to get the per epoch interest rate
+        // the interestPerEpoch has an extra WAD to maintain precision
+        uint256 interestPerEpoch = account.principal.mulWadUp(rate);
+        // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
+        // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
+        return interestPerEpoch.mulWadUp(epochsToPay);
+    }
 
-  /**
-   * @notice `faultySectorsExceeded` checks to ensure an agent has not exceeded the faulty sector tolerance
-   * @return true if the agent has exceeded the faulty sector tolerance
-   * TODO: review this faulty sector logic - is it possible to have faulty sectors and no live sectors? if not, we can simplify here
-   */
-  function _faultySectorsExceeded(VerifiableCredential memory vc, address credParser) internal view returns (bool) {
-    // check to ensure the agent does not have too many faulty sectors
-    uint256 faultySectors = vc.getFaultySectors(credParser);
-    uint256 liveSectors = vc.getLiveSectors(credParser);
-    // if we have no sectors, we're good to go
-    if (liveSectors == 0 && faultySectors == 0) return false;
-    // if we have no live sectors, but we have faulty sectors, we exceeded the limit
-    if (liveSectors == 0 && faultySectors > 0) return true;
-    // if were above the faulty sector ratio, we exceeded the limit
-    if (
-      vc.getFaultySectors(credParser).divWadDown(vc.getLiveSectors(credParser)) > sectorFaultyTolerancePercent
-    ) return true;
+    function _computeDTL(Account memory account, VerifiableCredential calldata vc, address credParser, uint256 rate)
+        internal
+        view
+        returns (uint256)
+    {
+        // compute the interest owed on the principal to add to principal to get total debt
+        uint256 debt = account.principal + _interestOwed(account, rate);
+        // confusing naming convention - "collateral value" == "liquidation value" in this context
+        uint256 liquidationValue = vc.getCollateralValue(credParser);
+        // if there is no debt, DTL is 0
+        if (debt == 0) return 0;
+        // if liquidation value is 0 (and there is debt), we return the max uint256 value to avoid dividing by 0
+        if (liquidationValue == 0) return type(uint256).max;
+        // if liquidation value is 0 and there is no debt, the DTL ratio is also 0
+        return debt.divWadDown(vc.getCollateralValue(credParser));
+    }
 
-    return false;
-  }
+    /**
+     * @notice `faultySectorsExceeded` checks to ensure an agent has not exceeded the faulty sector tolerance
+     * @return true if the agent has exceeded the faulty sector tolerance
+     * TODO: review this faulty sector logic - is it possible to have faulty sectors and no live sectors? if not, we can simplify here
+     */
+    function _faultySectorsExceeded(VerifiableCredential memory vc, address credParser) internal view returns (bool) {
+        // check to ensure the agent does not have too many faulty sectors
+        uint256 faultySectors = vc.getFaultySectors(credParser);
+        uint256 liveSectors = vc.getLiveSectors(credParser);
+        // if we have no sectors, we're good to go
+        if (liveSectors == 0 && faultySectors == 0) return false;
+        // if we have no live sectors, but we have faulty sectors, we exceeded the limit
+        if (liveSectors == 0 && faultySectors > 0) return true;
+        // if were above the faulty sector ratio, we exceeded the limit
+        if (vc.getFaultySectors(credParser).divWadDown(vc.getLiveSectors(credParser)) > sectorFaultyTolerancePercent) {
+            return true;
+        }
 
-  function _pool() internal view returns (IPool) {
-    return IPool(IRouter(router).getRoute(ROUTE_INFINITY_POOL));
-  }
+        return false;
+    }
+
+    function _pool() internal view returns (IPool) {
+        return IPool(IRouter(router).getRoute(ROUTE_INFINITY_POOL));
+    }
 }
