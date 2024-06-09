@@ -368,7 +368,7 @@ contract InfinityPool is IPool, Ownable {
             // transfer the assets into the pool
             asset.transferFrom(msg.sender, address(this), vc.value);
 
-            emit Pay(vc.subject, vc.value, vc.value, 0, 0, convertToAssets(WAD));
+            emit Pay(vc.subject, vc.value, vc.value, 0, 0);
 
             return (_rentalFeesOwedPerEpoch, account.epochsPaid, 0, 0);
         }
@@ -431,7 +431,7 @@ contract InfinityPool is IPool, Ownable {
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), vc.value - refund);
 
-        emit Pay(vc.subject, vc.value, feeBasis, principalPaid, refund, convertToAssets(WAD));
+        emit Pay(vc.subject, vc.value, feeBasis, principalPaid, refund);
 
         return (rate, account.epochsPaid, principalPaid, refund);
     }
@@ -442,8 +442,19 @@ contract InfinityPool is IPool, Ownable {
     function updateAccounting() public {
         // only update the accounting if we're in a new epoch
         if (block.number > lastAccountingUpdatingEpoch) {
-            accruedRentalFees += _computeNewFeesAccrued();
+            uint256 newRentalFeesAccrued = _computeNewFeesAccrued();
+            accruedRentalFees += newRentalFeesAccrued;
+            uint256 previousAccountingUpdatingEpoch = lastAccountingUpdatingEpoch;
             lastAccountingUpdatingEpoch = block.number;
+
+            emit UpdateAccounting(
+                msg.sender,
+                newRentalFeesAccrued,
+                accruedRentalFees,
+                previousAccountingUpdatingEpoch,
+                lastAccountingUpdatingEpoch,
+                convertToAssets(WAD)
+            );
         }
     }
 

@@ -15,9 +15,7 @@ interface IPool {
 
     event Borrow(uint256 indexed agent, uint256 amount);
 
-    event Pay(
-        uint256 indexed agent, uint256 amount, uint256 interest, uint256 principal, uint256 refund, uint256 iFILPrice
-    );
+    event Pay(uint256 indexed agent, uint256 amount, uint256 interest, uint256 principal, uint256 refund);
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
@@ -26,6 +24,15 @@ interface IPool {
     );
 
     event WriteOff(uint256 indexed agentID, uint256 recoveredFunds, uint256 lostFunds, uint256 interestPaid);
+
+    event UpdateAccounting(
+        address indexed caller,
+        uint256 accruedRentalFeesMarginal,
+        uint256 accruedRentalFeesTotal,
+        uint256 previousAccountingUpdatingEpoch,
+        uint256 thisAccountingUpdateEpoch,
+        uint256 iFILPrice
+    );
 
     /*////////////////////////////////////////////////////////
                             GETTERS
