@@ -333,17 +333,13 @@ contract InfinityPool is IPool, Ownable {
     /**
      * @notice pay handles the accounting for a payment from the Agent to the Infintiy Pool
      * @param vc The Agent's VerifiableCredential - the `subject` must be the Agent's ID and the `value` must be the amount to pay
-     * @return rate The dynamic rate applied to this payment
-     * @return epochsPaid The number of epochs to move the account forward after payment
-     * @return principalPaid The amount of principal paid down (could be 0 if interest only payment)
-     * @return refund The amount of funds to refund to the Agent (could be 0 if no overpayment)
      * @dev The pay function applies the payment amount to the interest owed on the account first. If the entire interest owed is paid off by the payment, then the remainder is applied to the principal owed on the account.
      * @dev Treasury fees only apply to interest payments, not principal payments
      */
     function pay(VerifiableCredential calldata vc)
         external
         subjectIsAgentCaller(vc)
-        returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
+        returns (uint256 interestPaid, uint256 principalPaid)
     {
         updateAccounting();
         // grab this Agent's account from storage
@@ -356,6 +352,8 @@ contract InfinityPool is IPool, Ownable {
         uint256 interestPerEpoch;
         // the amount of interest paid on this payment, used for computing the treasury fee
         uint256 feeBasis;
+        // the amount of funds to refund to the Agent
+        uint256 refund;
 
         // if the account is "defaulted", we treat everything as interest
         if (account.defaulted) {
@@ -367,7 +365,7 @@ contract InfinityPool is IPool, Ownable {
 
             emit Pay(vc.subject, vc.value, vc.value, 0, 0);
 
-            return (_rentalFeesOwedPerEpoch, account.epochsPaid, 0, 0);
+            return (vc.value, 0);
         }
 
         // if the account is not "current", compute the amount of interest owed based on the new rate
@@ -428,9 +426,9 @@ contract InfinityPool is IPool, Ownable {
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), vc.value - refund);
 
-        emit Pay(vc.subject, vc.value, feeBasis, principalPaid, refund);
+        emit Pay(vc.subject, vc.value, feeBasis, principalPaid, _rentalFeesOwedPerEpoch);
 
-        return (rate, account.epochsPaid, principalPaid, refund);
+        return (feeBasis, principalPaid);
     }
 
     /**
