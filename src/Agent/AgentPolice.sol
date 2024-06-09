@@ -8,6 +8,7 @@ import {Operatable} from "src/Auth/Operatable.sol";
 import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
+import {FinMath} from "src/Pool/FinMath.sol";
 import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -133,14 +134,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         // ensure the credential is valid
         validateCred(IAgent(agent).id(), msg.sig, sc);
 
-        Account memory account = _getAccount(sc.vc.subject);
-        // compute the interest owed on the principal to add to principal to get total debt
-        uint256 rate = _pool().getRate();
-        uint256 debt = account.principal + _interestOwed(account, rate);
-
-        if (debt.divWadDown(sc.vc.getCollateralValue(address(GetRoute.credParser(router)))) < dtlLiquidationThreshold) {
-            revert Unauthorized();
-        }
+        if (
+            FinMath.computeDTL(
+                _getAccount(sc.vc.subject), sc.vc, _pool().getRate(), address(GetRoute.credParser(router))
+            ) < dtlLiquidationThreshold
+        ) revert Unauthorized();
 
         IAgent(agent).setInDefault();
         emit Defaulted(agent);
@@ -225,28 +223,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         IPool pool = _pool();
         // check to ensure we can withdraw equity from this pool
         _agentApproved(vc, account, pool);
-        // check to ensure the withdrawal does not bring us over maxDTE, maxDTI, or maxDTL
-        address credParser = address(GetRoute.credParser(router));
-        // check to make sure the after the withdrawal, the DTE, DTI, DTL are all within the acceptable range
-        uint256 principal = account.principal;
-        // nothing borrowed, good to go!
-        if (principal == 0) return;
-
-        uint256 agentTotalValue = vc.getAgentValue(credParser);
-        // since agentTotalValue includes borrowed funds (principal),
-        // agentTotalValue should always be greater than principal
-        if (agentTotalValue <= principal) revert OverLimitDTE();
-
-        // compute the interest owed on the principal to add to principal to get total debt
-        uint256 rate = pool.getRate();
-        uint256 debt = principal + _interestOwed(account, rate);
-        // if the DTE is greater than maxDTE, revert
-        if (debt.divWadDown(agentTotalValue - debt) > maxDTE) revert OverLimitDTE();
-        // if the DTL is greater than maxDTL, revert
-        if (_computeDTL(account, vc, credParser, rate) > maxDTL) revert OverLimitDTL();
-        // if the DTI is greater than maxDTI, revert
-        uint256 dailyRate = account.principal.mulWadUp(rate).mulWadUp(EPOCHS_IN_DAY);
-        if (dailyRate.divWadUp(vc.getExpectedDailyRewards(credParser)) > maxDTI) revert OverLimitDTI();
     }
 
     /**
@@ -258,7 +234,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
         address credParser = address(GetRoute.credParser(router));
         // if were above the DTL ratio, revert
-        if (_computeDTL(_getAccount(vc.subject), vc, credParser, _pool().getRate()) > maxDTL) {
+        if (FinMath.computeDTL(_getAccount(vc.subject), vc, _pool().getRate(), credParser) > maxDTL) {
             revert AgentStateRejected();
         }
 
@@ -358,9 +334,27 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     /// reverting in the case of any non-approvals,
     /// or in the case that an account owes payments over the acceptable threshold
     function _agentApproved(VerifiableCredential calldata vc, Account memory account, IPool pool) internal view {
-        if (!pool.isApproved(account, vc)) revert AgentStateRejected();
+        // check to ensure the withdrawal does not bring us over maxDTE, maxDTI, or maxDTL
+        address credParser = address(GetRoute.credParser(router));
+        // check to make sure the after the withdrawal, the DTE, DTI, DTL are all within the acceptable range
+        uint256 principal = account.principal;
+        // nothing borrowed, good to go!
+        if (principal == 0) return;
+
+        uint256 rate = pool.getRate();
+        uint256 dte = FinMath.computeDTE(account, vc, rate, credParser);
+        uint256 dti = FinMath.computeDTI(account, vc, rate, credParser);
+        uint256 dtl = FinMath.computeDTL(account, vc, rate, credParser);
+
+        // compute the interest owed on the principal to add to principal to get total debt
+        // if the DTE is greater than maxDTE, revert
+        if (dte > maxDTE) revert OverLimitDTE();
+        // if the DTL is greater than maxDTL, revert
+        if (dtl > maxDTL) revert OverLimitDTL();
+        // if the DTI is greater than maxDTI, revert
+        if (dti > maxDTI) revert OverLimitDTI();
         // check faulty sector limit
-        if (_faultySectorsExceeded(vc, address(GetRoute.credParser(router)))) revert OverFaultySectorLimit();
+        if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
     }
 
     /// @dev returns the account of the agent
@@ -369,35 +363,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     /// @dev the pool ID is hardcoded to 0, as this is a relic of our obsolete multipool architecture
     function _getAccount(uint256 agentID) internal view returns (Account memory) {
         return AccountHelpers.getAccount(router, agentID, 0);
-    }
-
-    /// @dev returns the interest owed of a particular Account struct given a VerifiableCredential
-    function _interestOwed(Account memory account, uint256 rate) internal view returns (uint256) {
-        // compute the number of epochs that are owed to get current
-        uint256 epochsToPay = block.number - account.epochsPaid;
-        // multiply the rate by the principal to get the per epoch interest rate
-        // the interestPerEpoch has an extra WAD to maintain precision
-        uint256 interestPerEpoch = account.principal.mulWadUp(rate);
-        // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
-        // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
-        return interestPerEpoch.mulWadUp(epochsToPay);
-    }
-
-    function _computeDTL(Account memory account, VerifiableCredential calldata vc, address credParser, uint256 rate)
-        internal
-        view
-        returns (uint256)
-    {
-        // compute the interest owed on the principal to add to principal to get total debt
-        uint256 debt = account.principal + _interestOwed(account, rate);
-        // confusing naming convention - "collateral value" == "liquidation value" in this context
-        uint256 liquidationValue = vc.getCollateralValue(credParser);
-        // if there is no debt, DTL is 0
-        if (debt == 0) return 0;
-        // if liquidation value is 0 (and there is debt), we return the max uint256 value to avoid dividing by 0
-        if (liquidationValue == 0) return type(uint256).max;
-        // if liquidation value is 0 and there is no debt, the DTL ratio is also 0
-        return debt.divWadDown(vc.getCollateralValue(credParser));
     }
 
     /**
