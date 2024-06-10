@@ -5,7 +5,6 @@ pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
 import "test/helpers/MockMiner.sol";
-import {PreStake} from "test/helpers/PreStake.sol";
 import {PoolToken} from "shim/PoolToken.sol";
 import {WFIL} from "shim/WFIL.sol";
 import {InfinityPool} from "src/Pool/InfinityPool.sol";
@@ -97,6 +96,7 @@ contract BaseTest is Test {
         vm.startPrank(systemAdmin);
         // deploys the router
         router = address(new Router(systemAdmin));
+        IRouter(router).pushRoute(ROUTE_WFIL_TOKEN, address(wFIL));
 
         address agentFactory = address(new AgentFactory(router));
         // 1e17 = 10% treasury fee on yield
@@ -115,6 +115,8 @@ contract BaseTest is Test {
             credParser,
             address(new AgentDeployer())
         );
+
+        GetRoute.agentPolice(router).setLevels(levels);
         // roll forward at least 1 week so our computations dont overflow/underflow
         vm.roll(block.number + EPOCHS_IN_WEEK);
 
@@ -343,6 +345,47 @@ contract BaseTest is Test {
             // minerID irrelevant for setRecovered action
             0,
             abi.encode(agentData)
+        );
+
+        return signCred(vc);
+    }
+
+    function issueGenericSetDefaultCred(uint256 agent) internal returns (SignedCredential memory) {
+        // roll forward so we don't get an identical credential that's already been used
+        vm.roll(block.number + 1);
+
+        // create a cred where DTL >100%
+        uint256 collateralValue = 0;
+        uint256 principal = 10e18;
+
+        AgentData memory ad = AgentData(
+            1e18,
+            collateralValue,
+            // expectedDailyFaultPenalties
+            0,
+            0,
+            0,
+            // qaPower hardcoded
+            0,
+            principal,
+            // faulty sectors
+            0,
+            // live sectors
+            0,
+            // Green Score
+            0
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent,
+            block.number,
+            block.number + 100,
+            0,
+            AgentPolice.setAgentDefaultDTL.selector,
+            // minerID irrelevant for setDefault action
+            0,
+            abi.encode(ad)
         );
 
         return signCred(vc);
@@ -578,14 +621,14 @@ contract BaseTest is Test {
         assertEq(IFILtoFIL, WAD, "Peg should be 1:1");
     }
 
-    function calculateInterestOwed(IPool pool, uint256 borrowAmount, uint256 rollFwdAmt)
+    function calculateInterestOwed(uint256 borrowAmount, uint256 rollFwdAmt)
         internal
         view
         returns (uint256 interestOwed, uint256 interestOwedPerEpoch)
     {
         // since gcred is hardcoded in the credential, we know the rate ahead of time (rate does not change if gcred does not change, even if other financial statistics change)
         // rate here is WAD based
-        uint256 rate = pool.getRate();
+        uint256 rate = IPool(IRouter(router).getRoute(ROUTE_INFINITY_POOL)).getRate();
         // note we add 1 more bock of interest owed to account for the roll forward of 1 epoch inside agentBorrow helper
         // since borrowAmount is also WAD based, the _interestOwedPerEpoch is also WAD based (e18 * e18 / e18)
         uint256 _interestOwedPerEpoch = borrowAmount.mulWadUp(rate);
@@ -617,23 +660,17 @@ contract BaseTest is Test {
         assertEq(agent.administration(), administration);
     }
 
-    function setAgentDefaulted(IAgent agent, uint256 rollFwdPeriod, uint256 borrowAmount, uint256 poolID) internal {
-        // TODO:
-        // IAgentPolice police = GetRoute.agentPolice(router);
-        // SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+    function setAgentDefaulted(IAgent agent) internal {
+        IAgentPolice police = GetRoute.agentPolice(router);
+        SignedCredential memory defaultCred = issueGenericSetDefaultCred(agent.id());
 
-        // agentBorrow(agent, poolID, borrowCred);
+        vm.startPrank(IAuth(address(police)).owner());
+        police.setAgentDefaultDTL(address(agent), defaultCred);
+        vm.stopPrank();
 
-        // vm.roll(block.number + rollFwdPeriod);
+        testInvariants(IPool(IRouter(router).getRoute(ROUTE_INFINITY_POOL)), "setAgentDefaultDTL");
 
-        // vm.startPrank(IAuth(address(police)).owner());
-        // police.setAgentDefaulted(address(agent));
-        // vm.stopPrank();
-
-        // IPool pool = GetRoute.pool(GetRoute.poolRegistry(router), poolID);
-        // testInvariants(pool, "setAgentDefaulted");
-
-        // assertTrue(agent.defaulted(), "Agent should be put into default");
+        assertTrue(agent.defaulted(), "Agent should be put into default");
     }
 
     function _borrowedPoolsCount(uint256 agentID) internal view returns (uint256) {
@@ -658,7 +695,7 @@ contract BaseTest is Test {
     }
 
     function _getAdjustedRate() internal pure returns (uint256) {
-        return FixedPointMathLib.divWadDown(15e16, EPOCHS_IN_YEAR * 1e18);
+        return FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
     }
 
     function testInvariants(IPool pool, string memory label) internal {
@@ -672,6 +709,7 @@ contract BaseTest is Test {
         // 3. minus any fees held temporarily by the pool
         uint256 agentCount = GetRoute.agentFactory(router).agentCount();
 
+        uint256 totalDebtFromAccounts = 0;
         uint256 totalBorrowedFromAccounts = 0;
 
         for (uint256 i = 1; i <= agentCount; i++) {
@@ -679,84 +717,33 @@ contract BaseTest is Test {
             // the invariant breaks when an account is in default, we no longer expect to get that amount back
             if (!account.defaulted) {
                 totalBorrowedFromAccounts += pool.getAgentBorrowed(i);
+                totalDebtFromAccounts += pool.getAgentDebt(i);
             }
         }
+
+        uint256 accruedRewards = totalDebtFromAccounts - totalBorrowedFromAccounts;
+        assertEq(
+            accruedRewards,
+            pool.accruedRentalFees(),
+            string(
+                abi.encodePacked(
+                    label,
+                    " _invIFILWorthAssetsOfPool: accrued rewards in each accont should match total pool accrued rewards"
+                )
+            )
+        );
 
         uint256 poolAssets = wFIL.balanceOf(address(pool)) - pool.feesCollected();
 
         // if we take the total supply of iFIL and convert it to assets, we should get the total pools assets + lent out funds
         uint256 totalIFILSupply = pool.liquidStakingToken().totalSupply();
 
-        assertEq(poolAssets + totalBorrowedFromAccounts, pool.totalAssets(), label);
-        assertEq(pool.convertToAssets(totalIFILSupply), poolAssets + totalBorrowedFromAccounts, label);
+        assertEq(poolAssets + totalDebtFromAccounts, pool.totalAssets(), label);
+        assertEq(pool.convertToAssets(totalIFILSupply), poolAssets + totalDebtFromAccounts, label);
         assertEq(pool.totalBorrowed(), totalBorrowedFromAccounts, label);
     }
 
-    uint256[61] rateArray = [
-        2113986132250972433409436834094,
-        2087561305597835277777777777777,
-        2061136478944698122146118721461,
-        2034711652291560966514459665144,
-        2008286825638423811834094368340,
-        1981861998985286656202435312024,
-        1955437172332149500570776255707,
-        1929012345679012344939117199391,
-        1902587519025875190258751902587,
-        1876162692372738034627092846270,
-        1796888212413326567732115677321,
-        1770463385760189413051750380517,
-        1744038559107052257420091324200,
-        1717613732453915101788432267884,
-        1691188905800777946156773211567,
-        1664764079147640791476407914764,
-        1638339252494503635844748858447,
-        1611914425841366480213089802130,
-        1585489599188229324581430745814,
-        1559064772535092168949771689497,
-        1532639945881955014269406392694,
-        1511500084559445289193302891933,
-        1490360223236935565068493150684,
-        1469220361914425840943683409436,
-        1448080500591916116818873668188,
-        1426940639269406392694063926940,
-        1405800777946896667617960426179,
-        1384660916624386943493150684931,
-        1363521055301877219368340943683,
-        1342381193979367495243531202435,
-        1321241332656857770167427701674,
-        1305386436664975477549467275494,
-        1289531540673093183980213089802,
-        1273676644681210890410958904109,
-        1257821748689328597792998477929,
-        1241966852697446304223744292237,
-        1226111956705564010654490106544,
-        1210257060713681718036529680365,
-        1194402164721799424467275494672,
-        1178547268729917130898021308980,
-        1162692372738034838280060882800,
-        1152122442076779976217656012176,
-        1141552511415525114155251141552,
-        1130982580754270251141552511415,
-        1120412650093015389079147640791,
-        1056993066125486216704718417047,
-        1099272788770505664954337899543,
-        1088702858109250802891933028919,
-        1078132927447995940829528158295,
-        1067562996786741078767123287671,
-        1056993066125486216704718417047,
-        1046423135464231354642313546423,
-        1035853204802976491628614916286,
-        1025283274141721629566210045662,
-        1014713343480466767503805175038,
-        1004143412819211905441400304414,
-        993573482157957043378995433789,
-        983003551496702181316590563165,
-        972433620835447319254185692541,
-        961863690174192457191780821917,
-        951293759512937595129375951293
-    ];
-
-    // used in the rate module
+    // used in the agent police
     uint256[10] levels = [
         // in prod, we don't set the 0th level to be max_uint, but we do this in testing to by default allow agents to borrow the max amount
         MAX_UINT256,
