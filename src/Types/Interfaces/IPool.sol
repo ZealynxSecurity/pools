@@ -80,7 +80,9 @@ interface IPool {
 
     function borrow(VerifiableCredential calldata vc) external;
 
-    function pay(VerifiableCredential calldata vc) external returns (uint256 interestPaid, uint256 principalPaid);
+    function pay(VerifiableCredential calldata vc)
+        external
+        returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund);
 
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC

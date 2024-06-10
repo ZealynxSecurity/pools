@@ -354,7 +354,7 @@ contract InfinityPool is IPool, Ownable {
     function pay(VerifiableCredential calldata vc)
         external
         subjectIsAgentCaller(vc)
-        returns (uint256 interestPaid, uint256 principalPaid)
+        returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
     {
         updateAccounting();
         // grab this Agent's account from storage
@@ -367,8 +367,6 @@ contract InfinityPool is IPool, Ownable {
         uint256 interestPerEpoch;
         // the amount of interest paid on this payment, used for computing the treasury fee
         uint256 feeBasis;
-        // the amount of funds to refund to the Agent
-        uint256 refund;
 
         // if the account is "defaulted", we treat everything as interest
         // here we would have already forfeited the agent's LM reward tokens, so we dont interact with the LM contract in this case
@@ -381,7 +379,7 @@ contract InfinityPool is IPool, Ownable {
 
             emit Pay(vc.subject, vc.value, vc.value, 0, 0);
 
-            return (vc.value, 0);
+            return (_rentalFeesOwedPerEpoch, account.epochsPaid, 0, 0);
         }
 
         // if the account is not "current", compute the amount of interest owed based on the new rate
@@ -446,7 +444,7 @@ contract InfinityPool is IPool, Ownable {
 
         emit Pay(vc.subject, vc.value, feeBasis, principalPaid, _rentalFeesOwedPerEpoch);
 
-        return (feeBasis, principalPaid);
+        return (_rentalFeesOwedPerEpoch, account.epochsPaid, principalPaid, refund);
     }
 
     /**
