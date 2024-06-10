@@ -8,6 +8,7 @@ import {FilAddress} from "shim/FilAddress.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
+import {FinMath} from "src/Pool/FinMath.sol";
 
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -81,9 +82,6 @@ contract InfinityPool is IPool, Ownable {
     /// @dev `minimumLiquidity` is the percentage of total assets that should be reserved for exits
     uint256 public minimumLiquidity = 0;
 
-    /// @dev `accruedRentalFees` tracks the amount of fees accrued based on borrowed FIL in the pool
-    uint256 public accruedRentalFees = 0;
-
     /// @dev `paidRentalFees` tracks the amount of fees paid to this pool
     uint256 public paidRentalFees = 0;
 
@@ -96,8 +94,12 @@ contract InfinityPool is IPool, Ownable {
     /// @dev `isShuttingDown` is a boolean that, when true, halts deposits and borrows. Once set, it cannot be unset.
     bool public isShuttingDown = false;
 
+    /// @dev `_accruedRentalFees` tracks the amount of fees accrued based on borrowed FIL in the pool
+    uint256 private _accruedRentalFees = 0;
+
     /// @dev `rentalFeesOwedPerEpoch` is the % of FIL charged to Agents on a per epoch basis
-    uint256 private _rentalFeesOwedPerEpoch = FixedPointMathLib.divWadDown(15e16, EPOCHS_IN_YEAR * 1e18);
+    /// @dev this param uses an extra WAD of precision to maintain precision in the math when applied over long durations
+    uint256 private _rentalFeesOwedPerEpoch = FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
 
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
@@ -139,9 +141,6 @@ contract InfinityPool is IPool, Ownable {
         if (msg.sender != address(asset)) _depositFIL(msg.sender);
     }
 
-    // The only things we need to pull into this contract are the ones unique to _each pool_
-    // This is just the approval module, and the treasury address
-    // Everything else is accesible through the router (power token for example)
     constructor(
         address owner_,
         address router_,
@@ -177,10 +176,30 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
+     * @dev Returns the amount a specific Agent owes to the pool (includes principal and interest)
+     * @param agentID The ID of the agent
+     * @return totalDebt The total borrowed + interest owed
+     */
+    function getAgentDebt(uint256 agentID) external view returns (uint256) {
+        return FinMath.computeDebt(AccountHelpers.getAccount(_router, agentID, id), _rentalFeesOwedPerEpoch);
+    }
+
+    /**
+     * @dev Returns the amount of rewards have accrued for the entire pool
+     * @return totalAccruedFees The total rewards that have accrued in this pool, without accounting for fees or payments
+     */
+    function accruedRentalFees() external view returns (uint256) {
+        return _accruedRentalFees + _computeNewFeesAccrued();
+    }
+
+    /**
      * @dev Returns the totalAssets of the pool
      * @return totalBorrowed The total borrowed from the agent
      */
     function totalAssets() public view override returns (uint256) {
+        // pseudo accounting update to make sure our values are correct
+        uint256 totalRentalFeesAccrued = _computeNewFeesAccrued() + _accruedRentalFees;
+
         // using accrual basis accounting, the assets of the pool are:
         // assets currently in the pool
         // total borrowed from agents
@@ -188,7 +207,7 @@ contract InfinityPool is IPool, Ownable {
         // subtract total rental fees paid
         // subtract lost assets from liquidations
         // subtract total treasury fees collected
-        return asset.balanceOf(address(this)) + totalBorrowed + accruedRentalFees - paidRentalFees - lostAssets
+        return asset.balanceOf(address(this)) + totalBorrowed + totalRentalFeesAccrued - paidRentalFees - lostAssets
             - feesCollected;
     }
 
@@ -454,14 +473,14 @@ contract InfinityPool is IPool, Ownable {
         // only update the accounting if we're in a new epoch
         if (block.number > lastAccountingUpdatingEpoch) {
             uint256 newRentalFeesAccrued = _computeNewFeesAccrued();
-            accruedRentalFees += newRentalFeesAccrued;
+            _accruedRentalFees += newRentalFeesAccrued;
             uint256 previousAccountingUpdatingEpoch = lastAccountingUpdatingEpoch;
             lastAccountingUpdatingEpoch = block.number;
 
             emit UpdateAccounting(
                 msg.sender,
                 newRentalFeesAccrued,
-                accruedRentalFees,
+                _accruedRentalFees,
                 previousAccountingUpdatingEpoch,
                 lastAccountingUpdatingEpoch,
                 convertToAssets(WAD)
@@ -475,9 +494,10 @@ contract InfinityPool is IPool, Ownable {
             // calculate the number of blocks passed since the last upgrade
             uint256 blocksPassed = block.number - lastAccountingUpdatingEpoch;
             // calculate the total % owed to the pool
-            uint256 feeRateAccrued = _rentalFeesOwedPerEpoch.mulWadUp(blocksPassed);
+            uint256 feeRateAccrued = _rentalFeesOwedPerEpoch.mulWadUp(blocksPassed * 1e18);
             // calculate the total interest accrued during this period
-            return totalBorrowed.mulWadUp(feeRateAccrued);
+            // div out the extra wad embedded in the rate for increase precision
+            return totalBorrowed.mulWadUp(feeRateAccrued).mulWadUp(1);
         }
         return 0;
     }

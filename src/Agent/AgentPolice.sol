@@ -93,8 +93,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         Operatable(_owner, _operator)
     {
         // default risk params:
-        // dte => 200%
-        maxDTE = 2e18;
+        // dte => 300%
+        maxDTE = 3e18;
         // dti => 80%
         maxDTI = 8e17;
         // dtl => 80%
@@ -384,7 +384,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         // check faulty sector limit
         if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
         // check if accrued debt has exceeded this agent's quota level
-        if (debt > accountLevel[vc.subject]) revert OverLimitQuota();
+        if (debt > levels[accountLevel[vc.subject]]) revert OverLimitQuota();
     }
 
     /// @dev returns the account of the agent
