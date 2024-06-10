@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
+// solhint-disable private-vars-leading-underscore, var-name-mixedcase
 pragma solidity ^0.8.17;
 
 import "./BaseTest.sol";
@@ -11,1822 +12,1739 @@ import {NewCredentials, NewAgentData} from "test/helpers/NewCredentials.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
 
 contract PoolTestState is BaseTest {
+    error InvalidState();
 
-  error InvalidState();
+    using Credentials for VerifiableCredential;
 
-  using Credentials for VerifiableCredential;
+    IPool pool;
+    IPoolRegistry poolRegistry;
+    uint256 borrowAmount = WAD;
+    uint256 stakeAmount = 1000e18;
+    uint256 expectedRateBasic = 15e16;
+    uint256 goodEDR = 0.01e18;
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner = makeAddr("MINER_OWNER");
+    SignedCredential borrowCredBasic;
+    VerifiableCredential vcBasic;
+    IAgent agent;
+    uint64 miner;
+    IPoolToken public liquidStakingToken;
+    IERC20 public asset;
+    uint256 agentID;
+    uint256 poolID;
+    IOffRamp ramp;
+    address newCredParser;
 
-  IPool pool;
-  IPoolRegistry poolRegistry;
-  uint256 borrowAmount = WAD;
-  uint256 stakeAmount = 1000e18;
-  uint256 expectedRateBasic = 15e16;
-  uint256 goodEDR = .01e18;
-  address investor1 = makeAddr("INVESTOR_1");
-  address minerOwner = makeAddr("MINER_OWNER");
-  uint256 gCredBasic;
-  SignedCredential borrowCredBasic;
-  VerifiableCredential vcBasic;
-  IAgent agent;
-  uint64 miner;
-  IPoolToken public liquidStakingToken;
-  IERC20 public asset;
-  uint256 agentID;
-  uint256 poolID;
-  IOffRamp ramp;
-  address newCredParser;
+    function setUp() public virtual {
+        (pool, agent, miner, borrowCredBasic, vcBasic) =
+            poolBasicSetup(stakeAmount, borrowAmount, investor1, minerOwner);
+        poolRegistry = GetRoute.poolRegistry(router);
+        asset = pool.asset();
+        liquidStakingToken = pool.liquidStakingToken();
+        agentID = agent.id();
+        poolID = pool.id();
+    }
 
-  function setUp() public virtual {
-    (pool, agent, miner, borrowCredBasic, vcBasic, gCredBasic) = PoolBasicSetup(
-      stakeAmount,
-      borrowAmount,
-      investor1,
-      minerOwner
-    );
-    poolRegistry = GetRoute.poolRegistry(router);
-    asset = pool.asset();
-    liquidStakingToken = pool.liquidStakingToken();
-    agentID = agent.id();
-    poolID = pool.id();
-  }
+    function loadWFIL(uint256 amount, address investor) internal {
+        vm.deal(investor, amount);
+        vm.prank(investor);
+        wFIL.deposit{value: amount}();
+    }
 
-  function loadWFIL(uint256 amount, address investor) internal {
-    vm.deal(investor, amount);
-    vm.prank(investor);
-    wFIL.deposit{value: amount}();
-  }
+    function loadApproveWFIL(uint256 amount, address investor) internal {
+        loadWFIL(amount, investor);
+        vm.prank(investor);
+        wFIL.approve(address(pool), amount);
+    }
 
-  function loadApproveWFIL(uint256 amount, address investor) internal {
-    loadWFIL(amount, investor);
-    vm.prank(investor);
-    wFIL.approve(address(pool), amount);
-  }
+    // function _setupRamp() internal {
+    //   ramp = _configureOffRamp(pool);
+    //   // Confirm there's no balance on the ramp to begin with
+    //   assertEq(asset.balanceOf(address(ramp)), 0);
+    //   vm.prank(systemAdmin);
+    //   pool.setRamp(IOffRamp(ramp));
+    // }
 
-  // function _setupRamp() internal {
-  //   ramp = _configureOffRamp(pool);
-  //   // Confirm there's no balance on the ramp to begin with
-  //   assertEq(asset.balanceOf(address(ramp)), 0);
-  //   vm.prank(systemAdmin);
-  //   pool.setRamp(IOffRamp(ramp));
-  // }
+    function _updateCredParser() internal {
+        newCredParser = address(new NewCredParser());
+        vm.startPrank(systemAdmin);
+        Router(router).pushRoute(ROUTE_CRED_PARSER, newCredParser);
+        pool.refreshRoutes();
+        assertEq(pool.credParser(), newCredParser);
+        vm.stopPrank();
+    }
 
-  function _updateCredParser() internal {
-    newCredParser = address(new NewCredParser());
-    vm.startPrank(systemAdmin);
-    Router(router).pushRoute(ROUTE_CRED_PARSER, newCredParser);
-    pool.refreshRoutes();
-    assertEq(pool.credParser(), newCredParser);
-    vm.stopPrank();
-  }
+    function _mintApproveLST(uint256 amount, address target, address spender) internal {
+        vm.prank(address(pool));
+        liquidStakingToken.mint(target, amount);
+        vm.prank(target);
+        liquidStakingToken.approve(address(spender), amount);
+    }
 
-  function _mintApproveLST(uint256 amount, address target, address spender) internal {
-    vm.prank(address(pool));
-    liquidStakingToken.mint(target, amount);
-    vm.prank(target);
-    liquidStakingToken.approve(address(spender), amount);
-  }
-
-  function _generateFees(uint256 paymentAmt, uint256 initialBorrow) internal {
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, initialBorrow));
-    vm.roll(block.number + GetRoute.agentPolice(router).defaultWindow() - 1);
-    agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmt));
-  }
+    function _generateFees(uint256 paymentAmt, uint256 initialBorrow) internal {
+        agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, initialBorrow));
+        vm.roll(block.number + (EPOCHS_IN_WEEK * 3));
+        agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmt));
+    }
 }
 
 contract PoolBasicSetupTest is BaseTest {
-  using Credentials for VerifiableCredential;
+    using Credentials for VerifiableCredential;
 
-  IPool pool;
-  uint256 borrowAmount = WAD;
-  uint256 stakeAmount = 1000e18;
-  uint256 expectedRateBasic = 15e18;
-  uint256 goodEDR = .01e18;
-  address investor1 = makeAddr("INVESTOR_1");
-  address minerOwner = makeAddr("MINER_OWNER");
-  uint256 gCredBasic;
-  SignedCredential borrowCredBasic;
-  VerifiableCredential vcBasic;
-  IAgent agent;
-  uint64 miner;
+    IPool pool;
+    uint256 borrowAmount = WAD;
+    uint256 stakeAmount = 1000e18;
+    uint256 expectedRateBasic = 15e18;
+    uint256 goodEDR = 0.01e18;
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner = makeAddr("MINER_OWNER");
+    SignedCredential borrowCredBasic;
+    VerifiableCredential vcBasic;
+    IAgent agent;
+    uint64 miner;
 
-  function testCreatePool() public {
-    IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
-    PoolToken liquidStakingToken = new PoolToken(systemAdmin);
-    uint256 id = poolRegistry.allPoolsLength();
-    pool = IPool(new InfinityPool(
-      systemAdmin,
-      router,
-      address(wFIL),
-      // no min liquidity for test pool
-      address(liquidStakingToken),
-      address(new PreStake(systemAdmin, IWFIL(address(wFIL)), IPoolToken(address(liquidStakingToken)))),
-      0,
-      id
-    ));
-    assertEq(pool.id(), id, "pool id not set");
-    assertEq(address(pool.asset()), address(wFIL), "pool asset not set");
-    assertEq(IAuth(address(pool)).owner(), systemAdmin, "pool owner not set");
-    assertEq(address(pool.liquidStakingToken()), address(liquidStakingToken), "pool liquid staking token not set");
-    assertEq(pool.minimumLiquidity(), 0, "pool min liquidity not set");
-    vm.prank(systemAdmin);
-    liquidStakingToken.setMinter(address(pool));
-    vm.startPrank(systemAdmin);
-    // After the pool has been attached to the factory the count should change
-    poolRegistry.attachPool(pool);
-    assertEq(poolRegistry.allPoolsLength(), id + 1, "pool not added to allPools");
-    vm.stopPrank();
-  }
+    function testCreatePool() public {
+        IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
+        PoolToken liquidStakingToken = new PoolToken(systemAdmin);
+        uint256 id = poolRegistry.allPoolsLength();
+        pool = IPool(
+            new InfinityPool(
+                systemAdmin,
+                router,
+                // no min liquidity for test pool
+                address(liquidStakingToken),
+                ILiquidityMineSP(address(0)),
+                0,
+                id
+            )
+        );
+        assertEq(pool.id(), id, "pool id not set");
+        assertEq(address(pool.asset()), address(wFIL), "pool asset not set");
+        assertEq(IAuth(address(pool)).owner(), systemAdmin, "pool owner not set");
+        assertEq(address(pool.liquidStakingToken()), address(liquidStakingToken), "pool liquid staking token not set");
+        assertEq(pool.minimumLiquidity(), 0, "pool min liquidity not set");
+        vm.prank(systemAdmin);
+        liquidStakingToken.setMinter(address(pool));
+        vm.startPrank(systemAdmin);
+        // After the pool has been attached to the factory the count should change
+        poolRegistry.attachPool(pool);
+        assertEq(poolRegistry.allPoolsLength(), id + 1, "pool not added to allPools");
+        vm.stopPrank();
+    }
 }
 
 contract PoolDrainTest is PoolTestState {
-  function testDrainPool() public {
-    uint256 amount = 100e18;
-    loadApproveWFIL(amount, investor1);
-    vm.prank(investor1);
-    pool.deposit(amount, investor1);
+    function testDrainPool() public {
+        uint256 amount = 100e18;
+        loadApproveWFIL(amount, investor1);
+        vm.prank(investor1);
+        pool.deposit(amount, investor1);
 
-    address prankster = makeAddr("PRANKSTER");
+        address prankster = makeAddr("PRANKSTER");
 
-    uint256 totalBorrowable = pool.totalBorrowableAssets();
-    SignedCredential memory sc = issueGenericBorrowCred(0, totalBorrowable);
+        uint256 totalBorrowable = pool.totalBorrowableAssets();
+        SignedCredential memory sc = issueGenericBorrowCred(0, totalBorrowable);
 
-    // Confirm that the pool has the FIL
-    uint256 preDrainPoolBal = wFIL.balanceOf(address(pool));
-    assertGt(preDrainPoolBal, 0, "Pool should have FIL");
-    assertEq(wFIL.balanceOf(prankster), 0, "prankster should not have fil");
+        // Confirm that the pool has the FIL
+        uint256 preDrainPoolBal = wFIL.balanceOf(address(pool));
+        assertGt(preDrainPoolBal, 0, "Pool should have FIL");
+        assertEq(wFIL.balanceOf(prankster), 0, "prankster should not have fil");
 
-    vm.startPrank(prankster);
-    vm.expectRevert(Unauthorized.selector);
-    pool.borrow(sc.vc);
-    vm.stopPrank();
+        vm.startPrank(prankster);
+        vm.expectRevert(Unauthorized.selector);
+        pool.borrow(sc.vc);
+        vm.stopPrank();
 
-    assertEq(wFIL.balanceOf(address(pool)), preDrainPoolBal, "Pool should not have been drained");
-    assertEq(wFIL.balanceOf(prankster), 0, "Prankster should not have received money");
-  }
+        assertEq(wFIL.balanceOf(address(pool)), preDrainPoolBal, "Pool should not have been drained");
+        assertEq(wFIL.balanceOf(prankster), 0, "Prankster should not have received money");
+    }
 }
 
 contract PoolDepositTest is PoolTestState {
-  function testDepositBasic() public {
-    uint256 amount = WAD;
-    uint256 balanceBefore = wFIL.balanceOf(address(pool));
-    uint256 lstBalanceBefore = pool.liquidStakingToken().balanceOf(address(investor1));
-    uint256 predictedLST = pool.previewDeposit(amount);
-    loadApproveWFIL(amount, investor1);
-    vm.prank(investor1);
-    pool.deposit(amount, investor1);
-    uint256 balanceAfter = wFIL.balanceOf(address(pool));
-    assertEq(balanceAfter, balanceBefore + amount, "deposit failed - wrong WFIL balance");
-    uint256 lstBalanceAfter = pool.liquidStakingToken().balanceOf(address(investor1));
-    assertEq(lstBalanceAfter, lstBalanceBefore + predictedLST, "deposit failed -  wrong LST balance");
-  }
+    function testDepositBasic() public {
+        uint256 amount = WAD;
+        uint256 balanceBefore = wFIL.balanceOf(address(pool));
+        uint256 lstBalanceBefore = pool.liquidStakingToken().balanceOf(address(investor1));
+        uint256 predictedLST = pool.previewDeposit(amount);
+        loadApproveWFIL(amount, investor1);
+        vm.prank(investor1);
+        pool.deposit(amount, investor1);
+        uint256 balanceAfter = wFIL.balanceOf(address(pool));
+        assertEq(balanceAfter, balanceBefore + amount, "deposit failed - wrong WFIL balance");
+        uint256 lstBalanceAfter = pool.liquidStakingToken().balanceOf(address(investor1));
+        assertEq(lstBalanceAfter, lstBalanceBefore + predictedLST, "deposit failed -  wrong LST balance");
+    }
 
-  function testDepositFuzz(uint256 amount) public {
-    amount = bound(amount, WAD, 1e21);
-    uint256 balanceBefore = wFIL.balanceOf(address(pool));
-    uint256 lstBalanceBefore = pool.liquidStakingToken().balanceOf(address(investor1));
-    uint256 predictedLST = pool.previewDeposit(amount);
-    loadApproveWFIL(amount, investor1);
-    vm.prank(investor1);
-    pool.deposit(amount, investor1);
-    uint256 balanceAfter = wFIL.balanceOf(address(pool));
-    assertEq(balanceAfter, balanceBefore + amount, "deposit failed - wrong WFIL balance");
-    uint256 lstBalanceAfter = pool.liquidStakingToken().balanceOf(address(investor1));
-    assertEq(lstBalanceAfter, lstBalanceBefore + predictedLST, "deposit failed -  wrong LST balance");
-  }
+    function testDepositFuzz(uint256 amount) public {
+        amount = bound(amount, WAD, 1e21);
+        uint256 balanceBefore = wFIL.balanceOf(address(pool));
+        uint256 lstBalanceBefore = pool.liquidStakingToken().balanceOf(address(investor1));
+        uint256 predictedLST = pool.previewDeposit(amount);
+        loadApproveWFIL(amount, investor1);
+        vm.prank(investor1);
+        pool.deposit(amount, investor1);
+        uint256 balanceAfter = wFIL.balanceOf(address(pool));
+        assertEq(balanceAfter, balanceBefore + amount, "deposit failed - wrong WFIL balance");
+        uint256 lstBalanceAfter = pool.liquidStakingToken().balanceOf(address(investor1));
+        assertEq(lstBalanceAfter, lstBalanceBefore + predictedLST, "deposit failed -  wrong LST balance");
+    }
 }
 
 contract PoolGetRateTest is PoolTestState {
-  using FixedPointMathLib for uint256;
+    using FixedPointMathLib for uint256;
 
-  // function testGetRateBasic() public {
-  //   uint256 rate = pool.getRate();
-  //   uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(rateArray[gCredBasic - pool.rateModule().minGCRED()]);
-  //   assertEq(rate, expectedRate);
-  // }
-
-  // function testGetRateFuzz(uint256 gCRED) public {
-  //   gCRED = bound(gCRED, 40, 100);
-  //   AgentData memory agentData = createAgentData(
-  //     // collateral value => 2x the borrowAmount
-  //     borrowAmount * 2,
-  //     // good gcred score
-  //     gCRED,
-  //     // good EDR
-  //     goodEDR,
-  //     // principal = borrowAmount
-  //     borrowAmount
-  //   );
-  //   vcBasic.claim = abi.encode(agentData);
-  //   uint256 rate = pool.getRate(vcBasic);
-  //   uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(rateArray[gCRED - pool.rateModule().minGCRED()]);
-  //   assertEq(rate, expectedRate);
-  // }
+    function testGetRateBasic() public {
+        uint256 rate = pool.getRate();
+        uint256 expectedRate = DEFAULT_BASE_RATE;
+        assertEq(rate, expectedRate);
+    }
 }
 
 contract PoolIsOverLeveragedTest is PoolTestState {
+    using FixedPointMathLib for uint256;
 
-  using FixedPointMathLib for uint256;
+    // function testIsApprovedSuccess() public {
+    //     bool isApproved = agentPolice.agentApproved(vcBasic);
+    //     assertTrue(isApproved, "Should be approved");
+    // }
 
-  function testIsApprovedSuccess() public {
-    bool isApproved = pool.isApproved(createAccount(borrowAmount), vcBasic);
-    assertTrue(isApproved, "Should be approved");
-  }
+    // function testIsApprovedOverLTV(uint256 principal, uint256 collateralValue) public {
+    //   principal = bound(principal, WAD, MAX_FIL - DUST);
+    //   // Even for very low values of agentValue there shouldn't be issues
+    //   // If the agent value is less than 2x the borrow amount, we should be over leveraged
+    //   collateralValue = bound(collateralValue, DUST, principal - DUST);
 
-  // function testIsApprovedOverLTV(uint256 principal, uint256 collateralValue) public {
-  //   principal = bound(principal, WAD, MAX_FIL - DUST);
-  //   // Even for very low values of agentValue there shouldn't be issues
-  //   // If the agent value is less than 2x the borrow amount, we should be over leveraged
-  //   collateralValue = bound(collateralValue, DUST, principal - DUST);
+    //   AgentData memory agentData = createAgentData(
+    //     // collateralValue => 2x the borrowAmount less dust
+    //     collateralValue,
+    //     // enormous EDR to ensure we are not over DTI
+    //     MAX_FIL,
+    //     // principal = borrowAmount
+    //     principal
+    //   );
+    //   // overwrite agent value to avoid DTE errors
+    //   agentData.agentValue = principal * 3;
+    //   vcBasic.claim = abi.encode(agentData);
 
-  //   AgentData memory agentData = createAgentData(
-  //     // collateralValue => 2x the borrowAmount less dust
-  //     collateralValue,
-  //     GCRED,
-  //     // enormous EDR to ensure we are not over DTI
-  //     MAX_FIL,
-  //     // principal = borrowAmount
-  //     principal
-  //   );
-  //   // overwrite agent value to avoid DTE errors
-  //   agentData.agentValue = principal * 3;
-  //   vcBasic.claim = abi.encode(agentData);
+    //   Account memory account = createAccount(principal);
 
-  //   Account memory account = createAccount(principal);
+    //   assertFalse(agentPolice.agentApproved(vcBasic), "Should not be approved");
+    //   // ensure this test failed because of the right check
+    //   assertTrue(
+    //     rateModule.computeLTV(principal, collateralValue) > agentPolice.maxDTL(), "Should be over LTV"
+    //   );
+    //   assertTrue(
+    //     rateModule.computeDTI(
+    //       agentData.expectedDailyRewards,
+    //       pool.getRate(vcBasic),
+    //       principal,
+    //       principal
+    //     ) < agentPolice.maxDTI(), "Should be under DTI"
+    //   );
+    //   assertTrue(
+    //     rateModule.computeDTE(principal, agentData.agentValue) < agentPolice.maxDTE(), "Should be under DTE"
+    //   );
+    // }
 
-  //   assertFalse(pool.isApproved(account, vcBasic), "Should not be approved");
-  //   // ensure this test failed because of the right check
-  //   assertTrue(
-  //     rateModule.computeLTV(principal, collateralValue) > pool.maxDTL(), "Should be over LTV"
-  //   );
-  //   assertTrue(
-  //     rateModule.computeDTI(
-  //       agentData.expectedDailyRewards,
-  //       pool.getRate(vcBasic),
-  //       principal,
-  //       principal
-  //     ) < pool.maxDTI(), "Should be under DTI"
-  //   );
-  //   assertTrue(
-  //     rateModule.computeDTE(principal, agentData.agentValue) < pool.maxDTE(), "Should be under DTE"
-  //   );
-  // }
+    // function testDTECalcNoFuzz() public {
+    //   uint256 agentTotalValue = 1000000000000010000;
+    //   uint256 principal = 1000000000000000000;
 
-  // function testDTECalcNoFuzz() public {
-  //   uint256 agentTotalValue = 1000000000000010000;
-  //   uint256 principal = 1000000000000000000;
+    //   // this DTE is known to be way over 100%
+    //   uint256 dte = pool.rateModule().computeDTE(principal, agentTotalValue);
+    //   assertGt(dte, 1e18, "DTE should be around 100%");
 
-  //   // this DTE is known to be way over 100%
-  //   uint256 dte = pool.rateModule().computeDTE(principal, agentTotalValue);
-  //   assertGt(dte, 1e18, "DTE should be around 100%");
+    //   // this DTE is known to be 50%
+    //   agentTotalValue = 3e18;
+    //   principal = 1e18;
+    //   dte = pool.rateModule().computeDTE(principal, agentTotalValue);
+    //   assertEq(dte, 5e17, "DTE should be 50%");
+    // }
 
-  //   // this DTE is known to be 50%
-  //   agentTotalValue = 3e18;
-  //   principal = 1e18;
-  //   dte = pool.rateModule().computeDTE(principal, agentTotalValue);
-  //   assertEq(dte, 5e17, "DTE should be 50%");
-  // }
+    // function testIsApprovedOverDTI(
+    //   uint256 principal,
+    //   uint256 collateralValue,
+    //   uint256 badEDR
+    // ) public {
+    //   principal = bound(principal, WAD, 1e22);
+    //   collateralValue = bound(collateralValue, principal * 2, 1e30);
 
-  // function testIsApprovedOverDTI(
-  //   uint256 principal,
-  //   uint256 collateralValue,
-  //   uint256 badEDR
-  // ) public {
-  //   principal = bound(principal, WAD, 1e22);
-  //   collateralValue = bound(collateralValue, principal * 2, 1e30);
+    //   IRateModule rateModule = IRateModule(pool.rateModule());
 
-  //   IRateModule rateModule = IRateModule(pool.rateModule());
+    //   uint256 badEDRUpper =
+    //     _getAdjustedRate()
+    //     .mulWadUp(principal)
+    //     .mulWadUp(EPOCHS_IN_DAY)
+    //     .divWadDown(agentPolice.maxDTE());
 
-  //   uint256 badEDRUpper =
-  //     _getAdjustedRate(GCRED)
-  //     .mulWadUp(principal)
-  //     .mulWadUp(EPOCHS_IN_DAY)
-  //     .divWadDown(pool.maxDTE());
+    //   badEDR = bound(badEDR, DUST, badEDRUpper - DUST);
 
-  //   badEDR = bound(badEDR, DUST, badEDRUpper - DUST);
+    //   AgentData memory agentData = createAgentData(
+    //     collateralValue,
+    //     // edr < expectedDailyPayment
+    //     badEDR,
+    //     principal
+    //   );
 
-  //   AgentData memory agentData = createAgentData(
-  //     collateralValue,
-  //     GCRED,
-  //     // edr < expectedDailyPayment
-  //     badEDR,
-  //     principal
-  //   );
+    //   Account memory account = createAccount(principal);
 
-  //   Account memory account = createAccount(principal);
+    //   vcBasic.claim = abi.encode(agentData);
+    //   assertFalse(agentPolice.agentApproved(vcBasic));
+    //   // ensure this test failed because of the right check
+    //   assertTrue(
+    //     rateModule.computeLTV(principal, collateralValue) < agentPolice.maxDTL(), "Should be under LTV"
+    //   );
+    //   assertTrue(
+    //     rateModule.computeDTI(
+    //       agentData.expectedDailyRewards,
+    //       pool.getRate(vcBasic),
+    //       principal,
+    //       principal
+    //     ) > agentPolice.maxDTI(), "Should be over DTI"
+    //   );
+    //   assertTrue(
+    //     rateModule.computeDTE(principal, agentData.agentValue) < agentPolice.maxDTE(), "Should be under DTE"
+    //   );
+    // }
 
-  //   vcBasic.claim = abi.encode(agentData);
-  //   assertFalse(pool.isApproved(account, vcBasic));
-  //   // ensure this test failed because of the right check
-  //   assertTrue(
-  //     rateModule.computeLTV(principal, collateralValue) < pool.maxDTL(), "Should be under LTV"
-  //   );
-  //   assertTrue(
-  //     rateModule.computeDTI(
-  //       agentData.expectedDailyRewards,
-  //       pool.getRate(vcBasic),
-  //       principal,
-  //       principal
-  //     ) > pool.maxDTI(), "Should be over DTI"
-  //   );
-  //   assertTrue(
-  //     rateModule.computeDTE(principal, agentData.agentValue) < pool.maxDTE(), "Should be under DTE"
-  //   );
-  // }
+    // function testKnownLTV() public {
+    //   uint256 principal = 1e18;
+    //   uint256 collateralValue = 2e18;
+    //   uint256 ltv = pool.rateModule().computeLTV(principal, collateralValue);
+    //   assertEq(ltv, 5e17, "LTV should be 50%");
+    // }
 
-  // function testKnownLTV() public {
-  //   uint256 principal = 1e18;
-  //   uint256 collateralValue = 2e18;
-  //   uint256 ltv = pool.rateModule().computeLTV(principal, collateralValue);
-  //   assertEq(ltv, 5e17, "LTV should be 50%");
-  // }
+    // function testIsApprovedOverDTE(
+    //   uint256 principal,
+    //   uint256 agentValue
+    // ) public {
+    //   IRateModule rateModule = IRateModule(pool.rateModule());
+    //   uint256 maxDTE = agentPolice.maxDTE();
+    //   principal = bound(principal, DUST, MAX_FIL);
+    //   agentValue = bound(agentValue, 0, principal.divWadDown(maxDTE));
 
-  // function testIsApprovedOverDTE(
-  //   uint256 principal,
-  //   uint256 agentValue
-  // ) public {
-  //   IRateModule rateModule = IRateModule(pool.rateModule());
-  //   uint256 maxDTE = pool.maxDTE();
-  //   principal = bound(principal, DUST, MAX_FIL);
-  //   agentValue = bound(agentValue, 0, principal.divWadDown(maxDTE));
+    //   AgentData memory agentData = createAgentData(
+    //     // great collateral value so we dont have LTV error
+    //     MAX_FIL,
+    //     // great EDR so we dont have DTI error
+    //     MAX_FIL,
+    //     principal
+    //   );
 
-  //   AgentData memory agentData = createAgentData(
-  //     // great collateral value so we dont have LTV error
-  //     MAX_FIL,
-  //     GCRED,
-  //     // great EDR so we dont have DTI error
-  //     MAX_FIL,
-  //     principal
-  //   );
-
-  //   Account memory account = createAccount(principal);
-  //   agentData.agentValue = agentValue;
-  //   vcBasic.claim = abi.encode(agentData);
-  //   assertFalse(pool.isApproved(account, vcBasic), "Should be false");
-  //   // ensure this test failed because of the right check
-  //   assertTrue(
-  //     rateModule.computeLTV(principal, agentData.collateralValue) < pool.maxDTL(), "Should be under LTV"
-  //   );
-  //   assertTrue(
-  //     rateModule.computeDTI(
-  //       agentData.expectedDailyRewards,
-  //       pool.getRate(vcBasic),
-  //       principal,
-  //       principal
-  //     ) < pool.maxDTI(), "Should be under DTI"
-  //   );
-  //   assertTrue(
-  //     rateModule.computeDTE(principal, agentValue) > pool.maxDTE(), "Should be over DTE"
-  //   );
-  // }
+    //   Account memory account = createAccount(principal);
+    //   agentData.agentValue = agentValue;
+    //   vcBasic.claim = abi.encode(agentData);
+    //   assertFalse(agentPolice.agentApproved(vcBasic), "Should be false");
+    //   // ensure this test failed because of the right check
+    //   assertTrue(
+    //     rateModule.computeLTV(principal, agentData.collateralValue) < agentPolice.maxDTL(), "Should be under LTV"
+    //   );
+    //   assertTrue(
+    //     rateModule.computeDTI(
+    //       agentData.expectedDailyRewards,
+    //       pool.getRate(vcBasic),
+    //       principal,
+    //       principal
+    //     ) < agentPolice.maxDTI(), "Should be under DTI"
+    //   );
+    //   assertTrue(
+    //     rateModule.computeDTE(principal, agentValue) > agentPolice.maxDTE(), "Should be over DTE"
+    //   );
+    // }
 }
 
 contract PoolWithLeverageTest is BaseTest {
-  using FixedPointMathLib for uint256;
-
-  uint256 maxBorrowDTE = 2e18; // 2x max leverage
-  uint256 maxBorrowLTCV = 8e17; // borrow 80% to liquidation value
-  uint256 maxWithdrawDTE = 15e17; // 1.5x max leverage for withdrawals
-  uint256 maxWithdrawLTCV = 8e17; // 80% to liquidation value for withdrawals
-
-
-  address investor1 = makeAddr("INVESTOR_1");
-  address minerOwner = makeAddr("MINER_OWNER");
-  uint256 stakeAmount = 1000e18;
-
-  uint256 initialAgentTotalVal = 100e18; // total agents balance is 100 FIL to begin each test
-
-  IAgent agent;
-  uint64 miner;
-  IPool pool;
-  IAgentPolice agentPolice;
-
-  function setUp() public {
-    pool = createAndFundPool(stakeAmount, investor1);
-    (agent, miner) = configureAgent(minerOwner);
-
-    agentPolice = IAgentPolice(GetRoute.agentPolice(router));
-    vm.startPrank(systemAdmin);
-    pool.setMaxDTL(maxBorrowLTCV);
-    pool.setMaxDTE(maxBorrowDTE);
-    agentPolice.setMaxDTE(maxWithdrawDTE);
-    agentPolice.setMaxDTL(maxWithdrawLTCV);
-    vm.stopPrank();
-  }
-
-  // tests borrowing 2x when the liquidation value and equity support it
-  function testBorrow2xLeverageValid() public {
-    // borrow 2x our initial value
-    uint256 borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal);
-    // agent value increases by the borrow amount
-    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
-    // ensure the liquidation value doesn't block the higher leverage
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
-
-    AgentData memory agentData = AgentData(
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    VerifiableCredential memory vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      borrowAmount,
-      Agent.borrow.selector,
-      // minerID irrelevant for borrow action
-      0,
-      abi.encode(agentData)
-    );
-
-    SignedCredential memory sc = signCred(vc);
-
-    agentBorrow(agent, pool.id(), sc);
-
-    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-
-    assertEq(account.principal, borrowAmount, "Principal should be borrow amount");
-    assertEq(account.principal, initialAgentTotalVal * 2, "Principal should be 2x equity");
-  }
-
-  // tests borrowing 2x when the liquidation value does not support it
-  function testBorrow2xLeverageInvalid() public {
-    // borrow 2x our initial value
-    uint256 borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal);
-    // agent value increases by the borrow amount
-    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
-    // use a liquidation value _just_ under the approved loan to liquidation value (LTV)
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() + DUST);
-
-    AgentData memory agentData = AgentData(
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    VerifiableCredential memory vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      borrowAmount,
-      Agent.borrow.selector,
-      // minerID irrelevant for borrow action
-      0,
-      abi.encode(agentData)
-    );
-
-    SignedCredential memory sc = signCred(vc);
-
-    vm.startPrank(minerOwner);
-    try agent.borrow(pool.id(), sc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
-    }
-    vm.stopPrank();
-
-    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-
-    assertEq(account.principal, 0, "Principal should be 0");
-  }
-
-  // tests borrowing over 2x when the equity value does not support it
-  function testBorrow2xLeverageOverDTE() public {
-    // borrow 2x our initial value
-    uint256 borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal);
-    // agent value increases by the borrow amount
-    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
-    // ensure the liquidation value doesn't block the higher leverage
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
-
-    AgentData memory agentData = AgentData(
-      // decrease equity to below 2x the borrow amount
-      postActionAV - DUST,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    VerifiableCredential memory vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      borrowAmount,
-      Agent.borrow.selector,
-      // minerID irrelevant for borrow action
-      0,
-      abi.encode(agentData)
-    );
-
-    SignedCredential memory sc = signCred(vc);
-
-    vm.startPrank(minerOwner);
-    try agent.borrow(pool.id(), sc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
-    }
-    vm.stopPrank();
-
-    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-
-    assertEq(account.principal, 0, "Principal should be borrow amount");
-  }
-
-  // tests borrowing max liquidation value when liquidation value is less than 2x equity
-  // this test uses known values to ensure the math is correct
-  function testBorrowToLV() public {
-    // borrow an amount to max out the LV, below 2x leverage 
-    uint256 borrowAmount = 175e18;
-    // agent value increases by the borrow amount
-    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
-    // get a liquidation value by discounting the agent value by the max loan to liquidation value ratio
-    // this amount is less than 2x the equity in this hardcoded example
-    uint256 postActionLiquidationValue = postActionAV.mulWadUp(pool.maxDTL());
-
-    AgentData memory agentData = AgentData(
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    VerifiableCredential memory vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      borrowAmount,
-      Agent.borrow.selector,
-      // minerID irrelevant for borrow action
-      0,
-      abi.encode(agentData)
-    );
-
-    SignedCredential memory sc = signCred(vc);
-
-    agentBorrow(agent, pool.id(), sc);
-
-    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-
-    assertEq(account.principal, borrowAmount, "Principal should be borrow amount");
-
-    uint256 equity = postActionAV - borrowAmount;
-    assertLt(account.principal, equity.mulWadUp(pool.maxDTE()), "Principal should be less than 2x equity");
-    assertGt(account.principal, equity, "Principal should be more than 1x equity");
-  }
-
-  // tests withdrawing when over DTE > 1.5
-  function testWithdrawOverDTE() public {
-    // borrow a little over 1.5x our initial value
-    uint256 borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
-    // agent value increases by the borrow amount
-    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
-    // ensure the liquidation value doesn't block the higher leverage
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
-
-    AgentData memory agentData = AgentData(
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    VerifiableCredential memory vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      borrowAmount,
-      Agent.borrow.selector,
-      // minerID irrelevant for borrow action
-      0,
-      abi.encode(agentData)
-    );
-
-    SignedCredential memory sc = signCred(vc);
-
-    agentBorrow(agent, pool.id(), sc);
-
-    vm.roll(block.number + 1);
-
-    uint256 withdrawAmount = 1e18;
-
-    // try to withdraw any amount while DTE>1 and withdrawing will fail
-    AgentData memory withdrawAgentData = AgentData(
-      // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      withdrawAmount,
-      Agent.withdraw.selector,
-      // minerID irrelevant for withdraw action
-      0,
-      abi.encode(withdrawAgentData)
-    );
-
-    sc = signCred(vc);
-
-    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-
-    assertTrue(pool.isApproved(account, sc.vc), "Pool should approve");
-
-    vm.startPrank(minerOwner);
-    // here we are over just DTE, LTV is under 1 (agent police's value for withdrawing)
-    try agent.withdraw(minerOwner, sc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
-    }
-    vm.stopPrank();
-    
-    try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
-    }
-  }
-
-  // this test uses hardcoded values to test the full spectrum of rules within the agent police and rate module
-  function testAllRulesHardcoded() public {
-    // attempt to borrow a little more than 2x our initial value
-    uint256 borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
-    // agent value increases by the borrow amount
-    uint256 postActionAV = initialAgentTotalVal + borrowAmount;
-    // ensure the liquidation value doesn't block the higher leverage
-    uint256 postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
-
-    AgentData memory agentData = AgentData(
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    VerifiableCredential memory vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      borrowAmount,
-      Agent.borrow.selector,
-      // minerID irrelevant for borrow action
-      0,
-      abi.encode(agentData)
-    );
-
-    SignedCredential memory sc = signCred(vc);
-
-    // first we attempt to borrow an amount that rate module will reject due to DTE
-    vm.startPrank(minerOwner);
-    try agent.borrow(pool.id(), sc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
-    }
-    vm.stopPrank();
-
-    assertEq(AccountHelpers.getAccount(router, agent.id(), pool.id()).principal, 0, "Principal should be 0");
-
-    // next we attempt to borrow an amount that rate module will reject due to LTV 
-    borrowAmount = pool.maxDTE().mulWadUp(initialAgentTotalVal);
-    // postActionAV in this case is max uint256 to ensure it does not reject due to DTE
-    postActionAV = type(uint256).max;
-    // postActionLiquidationValue is set to be just under maxLTV 
-    postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() + DUST);
-
-    vm.roll(block.number + 1);
-
-    agentData = AgentData(
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      borrowAmount,
-      Agent.borrow.selector,
-      // minerID irrelevant for borrow action
-      0,
-      abi.encode(agentData)
-    );
-
-    sc = signCred(vc);
-
-    vm.startPrank(minerOwner);
-    try agent.borrow(pool.id(), sc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
-    }
-    vm.stopPrank();
-
-    assertEq(AccountHelpers.getAccount(router, agent.id(), pool.id()).principal, 0, "Principal should be 0");
-
-    // then we borrow a little less (by using withdrawal DTE) that is approved by rate module, but that will later reject on the agent police withdrawal for DTE and LTV
-    borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
-    // agent value increases by the borrow amount
-    postActionAV = initialAgentTotalVal + borrowAmount;
-    // ensure the liquidation value doesn't block the higher leverage
-    postActionLiquidationValue = borrowAmount.divWadDown(pool.maxDTL() - DUST);
-
-    agentData = AgentData(
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      borrowAmount,
-      Agent.borrow.selector,
-      // minerID irrelevant for borrow action
-      0,
-      abi.encode(agentData)
-    );
-
-    sc = signCred(vc);
-
-    vm.startPrank(minerOwner);
-    agent.borrow(pool.id(), sc);
-    vm.stopPrank();
-
-    assertEq(AccountHelpers.getAccount(router, agent.id(), pool.id()).principal, borrowAmount, "Principal should be borrowAmount");
-    assertEq(agent.liquidAssets(), borrowAmount, "Agent balance should have borrowed amount");
-    // then we isolate agent police DTE withdrawal test (should fail DTE, pass LTV)
-    // attempt to withdraw any amount that results in DTE>1.5 and withdrawing will fail because of DTE (not LTV)
-    uint256 withdrawAmount = 1e18 + DUST;
-    // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
-    postActionAV = agent.liquidAssets() + initialAgentTotalVal - withdrawAmount;
-    // postActionLiquidationValue is set to max UINT256 to avoid LTV rejection in this case
-    postActionLiquidationValue = type(uint256).max;
-
-    vm.roll(block.number + 1);
-
-    // try to withdraw any amount while DTE>1 and withdrawing will fail
-    AgentData memory withdrawAgentData = AgentData(
-      // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
-
-    vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      withdrawAmount,
-      Agent.withdraw.selector,
-      // minerID irrelevant for withdraw action
-      0,
-      abi.encode(withdrawAgentData)
-    );
-
-    sc = signCred(vc);
-
-    Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-
-    // console.log(account);
-
-    // the pool should approve this withdrawal request because it is under the LTV and under borrow DTE
-    assertTrue(pool.isApproved(account, sc.vc), "Pool should approve");
-
-    // it should reject the withdrawal because of DTE
-    vm.startPrank(minerOwner);
-    // here we are over just DTE, LTV is under 0.8 (agent police's value for withdrawing)
-    try agent.withdraw(minerOwner, sc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
-    }
-    vm.stopPrank();
-    
-    try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+    using FixedPointMathLib for uint256;
+
+    uint256 maxBorrowDTE = 2e18; // 2x max leverage
+    uint256 maxBorrowLTCV = 8e17; // borrow 80% to liquidation value
+    uint256 maxWithdrawDTE = 15e17; // 1.5x max leverage for withdrawals
+    uint256 maxWithdrawLTCV = 8e17; // 80% to liquidation value for withdrawals
+
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner = makeAddr("MINER_OWNER");
+    uint256 stakeAmount = 1000e18;
+
+    uint256 initialAgentTotalVal = 100e18; // total agents balance is 100 FIL to begin each test
+
+    IAgent agent;
+    uint64 miner;
+    IPool pool;
+    IAgentPolice agentPolice;
+
+    function setUp() public {
+        pool = createAndFundPool(stakeAmount, investor1);
+        (agent, miner) = configureAgent(minerOwner);
+
+        agentPolice = IAgentPolice(GetRoute.agentPolice(router));
+        vm.startPrank(systemAdmin);
+        // TODO: make variable for max dti and change ltcv
+        agentPolice.setMaxDTI(8e17);
+        agentPolice.setMaxDTE(maxWithdrawDTE);
+        agentPolice.setMaxDTL(maxWithdrawLTCV);
+        vm.stopPrank();
     }
 
-    // then we isolate agent police LTV withdrawal test (should fail LTV, pass DTE)
-    // attempt to withdraw any amount that results in DTE<1.5, LTV > 0.8 and withdrawing will fail because of LTV (not DTE)
-    // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
-    postActionAV = type(uint256).max;
-    // postActionLiquidationValue is set to an amount that will result in an LTV over 0.8
-    postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() + DUST);
+    // tests borrowing 2x when the liquidation value and equity support it
+    function testBorrow2xLeverageValid() public {
+        // borrow 2x our initial value
+        uint256 borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal);
+        // agent value increases by the borrow amount
+        uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+        // ensure the liquidation value doesn't block the higher leverage
+        uint256 postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() - DUST);
 
-    vm.roll(block.number + 1);
+        AgentData memory agentData = AgentData(
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
 
-    // try to withdraw any amount while DTE>1 and withdrawing will fail
-    withdrawAgentData = AgentData(
-      // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      borrowAmount,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            borrowAmount,
+            Agent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
 
-    vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      withdrawAmount,
-      Agent.withdraw.selector,
-      // minerID irrelevant for withdraw action
-      0,
-      abi.encode(withdrawAgentData)
-    );
+        SignedCredential memory sc = signCred(vc);
 
-    sc = signCred(vc);
+        agentBorrow(agent, pool.id(), sc);
 
-    account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
-    // the pool should not approve this withdrawal request because it is under the LTV (same as police) and under borrow DTE
-    assertFalse(pool.isApproved(account, sc.vc), "Pool should not approve");
-
-    // it should reject the withdrawal because of DTE
-    vm.startPrank(minerOwner);
-    // here we are over just LTV, DTE is under 1.5 (agent police's value for withdrawing)
-    try agent.withdraw(minerOwner, sc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        assertEq(account.principal, borrowAmount, "Principal should be borrow amount");
+        assertEq(account.principal, initialAgentTotalVal * 2, "Principal should be 2x equity");
     }
-    vm.stopPrank();
-    
-    try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
-      revert("Should have failed");
-    } catch (bytes memory b) {
-      assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+
+    // tests borrowing 2x when the liquidation value does not support it
+    function testBorrow2xLeverageInvalid() public {
+        // borrow 2x our initial value
+        uint256 borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal);
+        // agent value increases by the borrow amount
+        uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+        // use a liquidation value _just_ under the approved loan to liquidation value (LTV)
+        uint256 postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() + DUST);
+
+        AgentData memory agentData = AgentData(
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            borrowAmount,
+            Agent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
+
+        SignedCredential memory sc = signCred(vc);
+
+        vm.startPrank(minerOwner);
+        try agent.borrow(pool.id(), sc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+        vm.stopPrank();
+
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+        assertEq(account.principal, 0, "Principal should be 0");
     }
-    // then we pay back some principal and attempt to withdraw the same amount (should pass both DTE and LTV)
-    // use 2e18 to leave a little liquid fil on the agent for the payment
-    uint256 payAmount = borrowAmount - 2e18;
-    agentPay(agent, pool, issueGenericPayCred(agent.id(), payAmount));
 
-    vm.roll(block.number + 1);
+    // tests borrowing over 2x when the equity value does not support it
+    function testBorrow2xLeverageOverDTE() public {
+        // borrow 2x our initial value
+        uint256 borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal);
+        // agent value increases by the borrow amount
+        uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+        // ensure the liquidation value doesn't block the higher leverage
+        uint256 postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() - DUST);
 
-    // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
-    postActionAV = initialAgentTotalVal + agent.liquidAssets() - payAmount;
-    // postActionLiquidationValue is set to an amount that will result in an LTV under 0.8
-    postActionLiquidationValue = postActionAV.divWadDown(agentPolice.maxDTL() - DUST);
+        AgentData memory agentData = AgentData(
+            // decrease equity to below 2x the borrow amount
+            postActionAV - DUST,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
 
-    // try to withdraw any amount while DTE<1.5 and LTV<0.8 should pass
-    withdrawAgentData = AgentData(
-      // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
-      postActionAV,
-      postActionLiquidationValue,
-      // 0 expected daily fault penalties
-      0,
-      getUnblockingEDR(),
-      // perfect GCRED
-      100,
-      // QA power does not matter
-      0,
-      // principal
-      2e18,
-      // no faulty sectors
-      0,
-      // no live sectors (does not matter for these tests)
-      0,
-      // green score does not matter
-      0
-    );
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            borrowAmount,
+            Agent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
 
-    vc = VerifiableCredential(
-      vcIssuer,
-      agent.id(),
-      block.number,
-      block.number + 100,
-      withdrawAmount,
-      Agent.withdraw.selector,
-      // minerID irrelevant for withdraw action
-      0,
-      abi.encode(withdrawAgentData)
-    );
+        SignedCredential memory sc = signCred(vc);
 
-    sc = signCred(vc);
+        vm.startPrank(minerOwner);
+        try agent.borrow(pool.id(), sc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+        vm.stopPrank();
 
-    account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
-    // the pool should not approve this withdrawal request because it is under the LTV (same as police) and under borrow DTE
-    assertTrue(pool.isApproved(account, sc.vc), "Pool should approve");
-
-    // it should reject the withdrawal because of DTE
-    vm.startPrank(minerOwner);
-    // here we are over just LTV, DTE is under 1.5 (agent police's value for withdrawing)
-    try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
-      // assert the withdrawal request is not denied
-      assertTrue(true);
-    } catch {
-      revert("Withdrawing should be approved by police");
+        assertEq(account.principal, 0, "Principal should be borrow amount");
     }
-    
-    try agent.withdraw(minerOwner, sc) {
-      // assert the withdrawal request is not denied
-      assertTrue(true);
-    } catch {
-      revert("Should not have failed");
-    }
-    vm.stopPrank();
-  }
 
-  // computes an EDR that will not block the miner from borrowing
-  function getUnblockingEDR() internal pure returns (uint256) {
-    // dumb calculation for now
-    return 100e18;
-  }
+    // tests borrowing max liquidation value when liquidation value is less than 2x equity
+    // this test uses known values to ensure the math is correct
+    function testBorrowToLV() public {
+        // borrow an amount to max out the LV, below 2x leverage
+        uint256 borrowAmount = 175e18;
+        // agent value increases by the borrow amount
+        uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+        // get a liquidation value by discounting the agent value by the max loan to liquidation value ratio
+        // this amount is less than 2x the equity in this hardcoded example
+        uint256 postActionLiquidationValue = postActionAV.mulWadUp(agentPolice.maxDTL());
+
+        AgentData memory agentData = AgentData(
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            borrowAmount,
+            Agent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
+
+        SignedCredential memory sc = signCred(vc);
+
+        agentBorrow(agent, pool.id(), sc);
+
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+        assertEq(account.principal, borrowAmount, "Principal should be borrow amount");
+
+        uint256 equity = postActionAV - borrowAmount;
+        assertLt(account.principal, equity.mulWadUp(agentPolice.maxDTE()), "Principal should be less than 2x equity");
+        assertGt(account.principal, equity, "Principal should be more than 1x equity");
+    }
+
+    // tests withdrawing when over DTE > 1.5
+    function testWithdrawOverDTE() public {
+        // borrow a little over 1.5x our initial value
+        uint256 borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
+        // agent value increases by the borrow amount
+        uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+        // ensure the liquidation value doesn't block the higher leverage
+        uint256 postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() - DUST);
+
+        AgentData memory agentData = AgentData(
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            borrowAmount,
+            Agent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
+
+        SignedCredential memory sc = signCred(vc);
+
+        agentBorrow(agent, pool.id(), sc);
+
+        vm.roll(block.number + 1);
+
+        uint256 withdrawAmount = 1e18;
+
+        // try to withdraw any amount while DTE>1 and withdrawing will fail
+        AgentData memory withdrawAgentData = AgentData(
+            // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            withdrawAmount,
+            Agent.withdraw.selector,
+            // minerID irrelevant for withdraw action
+            0,
+            abi.encode(withdrawAgentData)
+        );
+
+        sc = signCred(vc);
+
+        // Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+        // TODO: expect revert
+        // assertTrue(agentPolice.agentApproved(sc.vc), "Police should approve");
+
+        vm.startPrank(minerOwner);
+        // here we are over just DTE, LTV is under 1 (agent police's value for withdrawing)
+        try agent.withdraw(minerOwner, sc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+        vm.stopPrank();
+
+        try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+    }
+
+    // this test uses hardcoded values to test the full spectrum of rules within the agent police and rate module
+    function testAllRulesHardcoded() public {
+        // attempt to borrow a little more than 2x our initial value
+        uint256 borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
+        // agent value increases by the borrow amount
+        uint256 postActionAV = initialAgentTotalVal + borrowAmount;
+        // ensure the liquidation value doesn't block the higher leverage
+        uint256 postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() - DUST);
+
+        AgentData memory agentData = AgentData(
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            borrowAmount,
+            Agent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
+
+        SignedCredential memory sc = signCred(vc);
+
+        // first we attempt to borrow an amount that rate module will reject due to DTE
+        vm.startPrank(minerOwner);
+        try agent.borrow(pool.id(), sc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+        vm.stopPrank();
+
+        assertEq(AccountHelpers.getAccount(router, agent.id(), pool.id()).principal, 0, "Principal should be 0");
+
+        // next we attempt to borrow an amount that rate module will reject due to LTV
+        borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal);
+        // postActionAV in this case is max uint256 to ensure it does not reject due to DTE
+        postActionAV = type(uint256).max;
+        // postActionLiquidationValue is set to be just under maxLTV
+        postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() + DUST);
+
+        vm.roll(block.number + 1);
+
+        agentData = AgentData(
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            borrowAmount,
+            Agent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
+
+        sc = signCred(vc);
+
+        vm.startPrank(minerOwner);
+        try agent.borrow(pool.id(), sc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+        vm.stopPrank();
+
+        assertEq(AccountHelpers.getAccount(router, agent.id(), pool.id()).principal, 0, "Principal should be 0");
+
+        // then we borrow a little less (by using withdrawal DTE) that is approved by rate module, but that will later reject on the agent police withdrawal for DTE and LTV
+        borrowAmount = agentPolice.maxDTE().mulWadUp(initialAgentTotalVal) + DUST;
+        // agent value increases by the borrow amount
+        postActionAV = initialAgentTotalVal + borrowAmount;
+        // ensure the liquidation value doesn't block the higher leverage
+        postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() - DUST);
+
+        agentData = AgentData(
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            borrowAmount,
+            Agent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
+
+        sc = signCred(vc);
+
+        vm.startPrank(minerOwner);
+        agent.borrow(pool.id(), sc);
+        vm.stopPrank();
+
+        assertEq(
+            AccountHelpers.getAccount(router, agent.id(), pool.id()).principal,
+            borrowAmount,
+            "Principal should be borrowAmount"
+        );
+        assertEq(agent.liquidAssets(), borrowAmount, "Agent balance should have borrowed amount");
+        // then we isolate agent police DTE withdrawal test (should fail DTE, pass LTV)
+        // attempt to withdraw any amount that results in DTE>1.5 and withdrawing will fail because of DTE (not LTV)
+        uint256 withdrawAmount = 1e18 + DUST;
+        // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
+        postActionAV = agent.liquidAssets() + initialAgentTotalVal - withdrawAmount;
+        // postActionLiquidationValue is set to max UINT256 to avoid LTV rejection in this case
+        postActionLiquidationValue = type(uint256).max;
+
+        vm.roll(block.number + 1);
+
+        // try to withdraw any amount while DTE>1 and withdrawing will fail
+        AgentData memory withdrawAgentData = AgentData(
+            // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            withdrawAmount,
+            Agent.withdraw.selector,
+            // minerID irrelevant for withdraw action
+            0,
+            abi.encode(withdrawAgentData)
+        );
+
+        sc = signCred(vc);
+
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+        // console.log(account);
+
+        // the pool should approve this withdrawal request because it is under the LTV and under borrow DTE
+        // TODO: expect revert
+        // assertTrue(agentPolice.agentApproved(sc.vc), "Police should approve");
+
+        // it should reject the withdrawal because of DTE
+        vm.startPrank(minerOwner);
+        // here we are over just DTE, LTV is under 0.8 (agent police's value for withdrawing)
+        try agent.withdraw(minerOwner, sc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+        vm.stopPrank();
+
+        try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+
+        // then we isolate agent police LTV withdrawal test (should fail LTV, pass DTE)
+        // attempt to withdraw any amount that results in DTE<1.5, LTV > 0.8 and withdrawing will fail because of LTV (not DTE)
+        // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
+        postActionAV = type(uint256).max;
+        // postActionLiquidationValue is set to an amount that will result in an LTV over 0.8
+        postActionLiquidationValue = borrowAmount.divWadDown(agentPolice.maxDTL() + DUST);
+
+        vm.roll(block.number + 1);
+
+        // try to withdraw any amount while DTE>1 and withdrawing will fail
+        withdrawAgentData = AgentData(
+            // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            borrowAmount,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            withdrawAmount,
+            Agent.withdraw.selector,
+            // minerID irrelevant for withdraw action
+            0,
+            abi.encode(withdrawAgentData)
+        );
+
+        sc = signCred(vc);
+
+        account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+        // the pool should not approve this withdrawal request because it is under the LTV (same as police) and under borrow DTE
+        // TODO: expect revert
+        // assertFalse(agentPolice.agentApproved(sc.vc), "Police should not approve");
+
+        // it should reject the withdrawal because of DTE
+        vm.startPrank(minerOwner);
+        // here we are over just LTV, DTE is under 1.5 (agent police's value for withdrawing)
+        try agent.withdraw(minerOwner, sc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+        vm.stopPrank();
+
+        try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
+            revert("Should have failed");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), AgentPolice.AgentStateRejected.selector);
+        }
+        // then we pay back some principal and attempt to withdraw the same amount (should pass both DTE and LTV)
+        // use 2e18 to leave a little liquid fil on the agent for the payment
+        uint256 payAmount = borrowAmount - 2e18;
+        agentPay(agent, pool, issueGenericPayCred(agent.id(), payAmount));
+
+        vm.roll(block.number + 1);
+
+        // postActionAV is equal to the agents assets + its initial assets - withdrawal amount
+        postActionAV = initialAgentTotalVal + agent.liquidAssets() - payAmount;
+        // postActionLiquidationValue is set to an amount that will result in an LTV under 0.8
+        postActionLiquidationValue = postActionAV.divWadDown(agentPolice.maxDTL() - DUST);
+
+        // try to withdraw any amount while DTE<1.5 and LTV<0.8 should pass
+        withdrawAgentData = AgentData(
+            // make sure equity and liquidation value do not interfere, this check is for the agent police to block the withdraw
+            postActionAV,
+            postActionLiquidationValue,
+            // 0 expected daily fault penalties
+            0,
+            getUnblockingEDR(),
+            // perfect GCRED
+            100,
+            // QA power does not matter
+            0,
+            // principal
+            2e18,
+            // no faulty sectors
+            0,
+            // no live sectors (does not matter for these tests)
+            0,
+            // green score does not matter
+            0
+        );
+
+        vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            withdrawAmount,
+            Agent.withdraw.selector,
+            // minerID irrelevant for withdraw action
+            0,
+            abi.encode(withdrawAgentData)
+        );
+
+        sc = signCred(vc);
+
+        account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+        // the pool should not approve this withdrawal request because it is under the LTV (same as police) and under borrow DTE
+        // TODO: expect revert
+        // assertTrue(agentPolice.agentApproved(sc.vc), "Police should approve");
+
+        // it should reject the withdrawal because of DTE
+        vm.startPrank(minerOwner);
+        // here we are over just LTV, DTE is under 1.5 (agent police's value for withdrawing)
+        try GetRoute.agentPolice(router).confirmRmEquity(sc.vc) {
+            // assert the withdrawal request is not denied
+            assertTrue(true);
+        } catch {
+            revert("Withdrawing should be approved by police");
+        }
+
+        try agent.withdraw(minerOwner, sc) {
+            // assert the withdrawal request is not denied
+            assertTrue(true);
+        } catch {
+            revert("Should not have failed");
+        }
+        vm.stopPrank();
+    }
+
+    // computes an EDR that will not block the miner from borrowing
+    function getUnblockingEDR() internal pure returns (uint256) {
+        // dumb calculation for now
+        return 100e18;
+    }
 }
 
 contract PoolFeeTests is PoolTestState {
-  function testHarvestFees() public {
-    uint256 amount = WAD;
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, borrowAmount));
-    // Roll foward enough that all payment is interest
-    // Once the math in Pay is fixed this should be posible to lower
-    vm.roll(block.number + 1000000000);
-    agentPay(agent, pool, issueGenericPayCred(agentID, amount));
-    // Some of these numbers are inconsistent - we should calculate this value
-    // instead of getting it from the contract once the calculations are stable
-    uint256 feesCollected = pool.feesCollected();
-    pool.harvestFees(feesCollected);
-    assertEq(asset.balanceOf(treasury), feesCollected);
-  }
+    function testHarvestFees() public {
+        uint256 amount = WAD;
+        agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, borrowAmount));
+        // Roll foward enough that all payment is interest
+        // Once the math in Pay is fixed this should be posible to lower
+        vm.roll(block.number + 1000000000);
+        agentPay(agent, pool, issueGenericPayCred(agentID, amount));
+        // Some of these numbers are inconsistent - we should calculate this value
+        // instead of getting it from the contract once the calculations are stable
+        uint256 feesCollected = pool.feesCollected();
+        pool.harvestFees(feesCollected);
+        assertEq(asset.balanceOf(treasury), feesCollected);
+    }
 }
 
 contract PoolAPRTests is PoolTestState {
+    using FixedPointMathLib for uint256;
 
-  using FixedPointMathLib for uint256;
+    // we know that a GCRED score of 80 should come out to be 22% APR rougly
+    uint256 KNOWN_RATE = 22e16;
 
-  // we know that a GCRED score of 80 should come out to be 22% APR rougly
-  uint256 KNOWN_RATE = 22e16;
+    function testGetRateAppliedAnnually() public {
+        uint256 testRate = _getAdjustedRate();
 
-  function testGetRateAppliedAnnually() public {
-    uint256 testRate = _getAdjustedRate(GCRED);
+        uint256 chargedRatePerEpoch = pool.getRate();
 
-    uint256 chargedRatePerEpoch = pool.getRate();
+        assertEq(testRate, chargedRatePerEpoch, "Test rates should match");
+        // annualRateMultiplier becomes WAD based after the divWadDown
+        uint256 annualRateMultiplier = KNOWN_RATE.divWadDown(DEFAULT_BASE_RATE);
+        // the perEpochMultiplier then gets another WAD added to it to make it more precise - (e18 * WAD / epochs (non WAD))
+        // it's important to keep the perEpochMultiplier with an extra WAD to remain price at the epoch level
+        uint256 perEpochMultiplier = annualRateMultiplier.divWadDown(EPOCHS_IN_YEAR);
+        // computes what the per epoch rate should be, muls out the extra WAD in `perEpochMultiplier`
+        uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(perEpochMultiplier);
+        // mulWadUp on EPOCHS (non WAD) then cancels out the final WAD present in `expectedRate`
+        assertEq(expectedRate.mulWadUp(EPOCHS_IN_YEAR), KNOWN_RATE, "APR should be known APR value");
+        assertEq(chargedRatePerEpoch.mulWadUp(EPOCHS_IN_YEAR), KNOWN_RATE, "APR should be known APR value");
 
-    assertEq(testRate, chargedRatePerEpoch, "Test rates should match");
-    // annualRateMultiplier becomes WAD based after the divWadDown
-    uint256 annualRateMultiplier = KNOWN_RATE.divWadDown(DEFAULT_BASE_RATE);
-    // the perEpochMultiplier then gets another WAD added to it to make it more precise - (e18 * WAD / epochs (non WAD))
-    // it's important to keep the perEpochMultiplier with an extra WAD to remain price at the epoch level
-    uint256 perEpochMultiplier = annualRateMultiplier.divWadDown(EPOCHS_IN_YEAR);
-    // computes what the per epoch rate should be, muls out the extra WAD in `perEpochMultiplier`
-    uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(perEpochMultiplier);
-    // mulWadUp on EPOCHS (non WAD) then cancels out the final WAD present in `expectedRate`
-    assertEq(expectedRate.mulWadUp(EPOCHS_IN_YEAR), KNOWN_RATE, "APR should be known APR value");
-    assertEq(chargedRatePerEpoch.mulWadUp(EPOCHS_IN_YEAR), KNOWN_RATE, "APR should be known APR value");
-
-    assertEq(
-      chargedRatePerEpoch,
-      expectedRate,
-      "Charged rate should be known rate"
-    );
-    // NOTE: imprecision between different calculations of the per epoch rate, bth result in the same desired APR
-    assertApproxEqAbs(
-      chargedRatePerEpoch,
-      KNOWN_RATE.divWadDown(EPOCHS_IN_YEAR),
-      1e11,
-      "Charged rate should be known rate"
-    );
-  }
-
-  function testGetRateAppliedTenYears() public {
-    uint256 KNOWN_RATE_10Y = KNOWN_RATE * 10;
-
-    uint256 testRate = _getAdjustedRate(GCRED);
-
-    uint256 chargedRatePerEpoch = pool.getRate();
-
-    assertEq(testRate, chargedRatePerEpoch, "Test rates should match");
-
-    // adds 1 an extra wad (e16 * wad / e16)
-    uint256 annualRateMultiplier = KNOWN_RATE.divWadDown(DEFAULT_BASE_RATE);
-    // maintains 1 extra wad (e18 * wad / epochs * wad)
-    uint256 perEpochMultiplier = annualRateMultiplier.divWadDown(EPOCHS_IN_YEAR);
-    // computes what the per epoch rate should be, muls out the last extra WAD
-    uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(perEpochMultiplier);
-
-    assertEq(expectedRate.mulWadUp(EPOCHS_IN_YEAR * 10), KNOWN_RATE_10Y, "APR should be known APR value");
-    assertEq(chargedRatePerEpoch.mulWadUp(EPOCHS_IN_YEAR * 10), KNOWN_RATE_10Y, "APR should be known APR value");
-
-    // NOTE: imprecision between different calculations of the per epoch rate, bth result in the same desired APR
-    // I believe this is due to the fact that the KNOWN_RATE only specifies 4 digits of precision
-    assertEq(
-      chargedRatePerEpoch,
-      expectedRate,
-      "Charged rate should be known rate"
-    );
-    assertApproxEqAbs(
-      chargedRatePerEpoch,
-      KNOWN_RATE.divWadDown(EPOCHS_IN_YEAR),
-      1e11,
-      "Charged rate should be known rate"
-    );
-  }
-
-  function testAPRKnownCREDSinglePayment(uint256 principal, uint256 collateralValue) public {
-    principal = bound(principal, WAD, MAX_FIL / 2);
-    collateralValue = bound(collateralValue, principal * 2, MAX_FIL);
-
-    uint256 interestOwed = startSimulation(principal);
-
-    Account memory accountBefore = AccountHelpers.getAccount(router, agentID, poolID);
-
-    uint256 prePaymentPoolBal = wFIL.balanceOf(address(pool));
-    uint256 payment = interestOwed;
-    SignedCredential memory payCred = issuePayCred(
-      agentID,
-      principal,
-      collateralValue,
-      payment
-    );
-    // pay back the amount
-    agentPay(agent, pool, payCred);
-
-    Account memory accountAfter = AccountHelpers.getAccount(router, agentID, poolID);
-
-    assertEq(accountAfter.principal, accountBefore.principal, "Principal should not change");
-    assertEq(accountAfter.epochsPaid, block.number - 1, "Epochs paid should be up to date");
-
-    assertPoolFundsSuccess(principal, interestOwed, prePaymentPoolBal);
-  }
-
-  function testAPRKnownGCRED(
-    uint256 principal,
-    uint256 collateralValue,
-    uint256 numPayments
-  ) public {
-    principal = bound(principal, WAD, MAX_FIL / 2);
-    collateralValue = bound(collateralValue, principal * 2, MAX_FIL);
-    // test APR when making payments twice a week to once every two weeks
-    numPayments = bound(numPayments, 26, 104);
-
-    // borrow an amount
-    uint256 interestOwed = startSimulation(principal);
-
-    uint256 payment = interestOwed / numPayments;
-
-    Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
-    uint256 prePaymentPoolBal = wFIL.balanceOf(address(pool));
-    // since each payment is for the same amount, we memoize the first payment amount and assert the others against it
-    uint256 epochsCreditForPayment;
-    Account memory prevAccount = AccountHelpers.getAccount(router, agentID, poolID);
-    for (uint256 i = 0; i < numPayments; i++) {
-      SignedCredential memory payCred = issuePayCred(
-        agentID,
-        principal,
-        collateralValue,
-        payment
-      );
-      // pay back the amount
-      agentPay(agent, pool, payCred);
-
-      Account memory updatedAccount = AccountHelpers.getAccount(router, agentID, poolID);
-
-      assertEq(updatedAccount.principal, prevAccount.principal, "Account principal not should have changed");
-      assertGt(updatedAccount.epochsPaid, prevAccount.epochsPaid, "Account epochs paid should have increased");
-
-      uint256 _epochsCreditForPayment = updatedAccount.epochsPaid - prevAccount.epochsPaid;
-      if (i == 0) {
-        epochsCreditForPayment = _epochsCreditForPayment;
-      }
-
-      if (_epochsCreditForPayment == 0) {
-        // break the test early if it fails
-        break;
-      }
-      assertGt(epochsCreditForPayment, 0, "Payment should have been made");
-      assertEq(epochsCreditForPayment, _epochsCreditForPayment, "Payment should have been made for the same number of epochs");
-      if (epochsCreditForPayment != _epochsCreditForPayment) {
-        break;
-      }
-
-      prevAccount = updatedAccount;
+        assertEq(chargedRatePerEpoch, expectedRate, "Charged rate should be known rate");
+        // NOTE: imprecision between different calculations of the per epoch rate, bth result in the same desired APR
+        assertApproxEqAbs(
+            chargedRatePerEpoch, KNOWN_RATE.divWadDown(EPOCHS_IN_YEAR), 1e11, "Charged rate should be known rate"
+        );
     }
 
-    Account memory newAccount = AccountHelpers.getAccount(router, agentID, poolID);
+    function testGetRateAppliedTenYears() public {
+        uint256 KNOWN_RATE_10Y = KNOWN_RATE * 10;
 
-    assertEq(
-      newAccount.principal,
-      account.principal,
-      "Principal should not change"
-    );
+        uint256 testRate = _getAdjustedRate();
 
-    assertApproxEqAbs(
-      newAccount.epochsPaid,
-      // each payment shifts block.number forward by 1 by issuing a new cred, so we subtract that here for the assertion
-      block.number - numPayments,
-      // here our acceptance criteria is the number of payments because each payment moves the block.number forward (and some rounding)
-      100,
-      "Epochs paid should be up to date"
-    );
+        uint256 chargedRatePerEpoch = pool.getRate();
 
-    assertPoolFundsSuccess(principal, interestOwed, prePaymentPoolBal);
-  }
+        assertEq(testRate, chargedRatePerEpoch, "Test rates should match");
 
-  function assertPoolFundsSuccess(
-    uint256 principal,
-    uint256 interestOwed,
-    uint256 prePaymentPoolBal
-  ) internal {
-    // 10,000,000 represents a factor of 10 larger than the years worth of epochs
-    // so we lose 1 digit of precision for 10 years of epochs (since 1 year of epochs is roughly 1 million epochs, the next significant digit is at 10 million epochs)
-    uint256 MAX_PRECISION_DELTA = 1e8;
+        // adds 1 an extra wad (e16 * wad / e16)
+        uint256 annualRateMultiplier = KNOWN_RATE.divWadDown(DEFAULT_BASE_RATE);
+        // maintains 1 extra wad (e18 * wad / epochs * wad)
+        uint256 perEpochMultiplier = annualRateMultiplier.divWadDown(EPOCHS_IN_YEAR);
+        // computes what the per epoch rate should be, muls out the last extra WAD
+        uint256 expectedRate = DEFAULT_BASE_RATE.mulWadUp(perEpochMultiplier);
 
-    uint256 poolEarnings = wFIL.balanceOf(address(pool)) - prePaymentPoolBal;
-    // ensures the pool got the interest
-    assertApproxEqAbs(
-      poolEarnings,
-      interestOwed,
-      DUST,
-      "Pool should have received the owed interest"
-    );
+        assertEq(expectedRate.mulWadUp(EPOCHS_IN_YEAR * 10), KNOWN_RATE_10Y, "APR should be known APR value");
+        assertEq(chargedRatePerEpoch.mulWadUp(EPOCHS_IN_YEAR * 10), KNOWN_RATE_10Y, "APR should be known APR value");
 
-    // ensures the interest the pool got is what we'd expect
-    assertApproxEqAbs(
-      poolEarnings,
-      KNOWN_RATE.mulWadUp(principal),
-      MAX_PRECISION_DELTA,
-      "Pool should have received the expected known amount"
-    );
+        // NOTE: imprecision between different calculations of the per epoch rate, bth result in the same desired APR
+        // I believe this is due to the fact that the KNOWN_RATE only specifies 4 digits of precision
+        assertEq(chargedRatePerEpoch, expectedRate, "Charged rate should be known rate");
+        assertApproxEqAbs(
+            chargedRatePerEpoch, KNOWN_RATE.divWadDown(EPOCHS_IN_YEAR), 1e11, "Charged rate should be known rate"
+        );
+    }
 
-    uint256 treasuryFeeRate = GetRoute.poolRegistry(router).treasuryFeeRate();
-    // ensures the pool got the right amount of fees
-    assertApproxEqAbs(
-      pool.feesCollected(),
-      // fees collected should be treasury fee % of the interest earned
-      poolEarnings.mulWadUp(treasuryFeeRate),
-      DUST,
-      "Treasury should have received the right amount of fees"
-    );
+    function testAPRKnownCREDSinglePayment(uint256 principal, uint256 collateralValue) public {
+        principal = bound(principal, WAD, MAX_FIL / 2);
+        collateralValue = bound(collateralValue, principal * 2, MAX_FIL);
 
-    uint256 knownTreasuryFeeAmount = KNOWN_RATE.mulWadUp(principal).mulWadUp(treasuryFeeRate);
+        uint256 interestOwed = startSimulation(principal);
 
-    // ensures the pool got the right amount of fees
-    assertApproxEqAbs(
-      pool.feesCollected(),
-      // fees collected should be treasury fee % of the interest earned
-      knownTreasuryFeeAmount,
-      MAX_PRECISION_DELTA,
-      "Treasury should have received the known amount of fees portion of principal delta precision"
-    );
-  }
+        Account memory accountBefore = AccountHelpers.getAccount(router, agentID, poolID);
 
-  function startSimulation(uint256 principal) internal returns (uint256 interestOwed) {
-    depositFundsIntoPool(pool, principal + WAD, makeAddr("Investor1"));
-    SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, principal);
-    uint256 epochStart = block.number;
-    agentBorrow(agent, poolID, borrowCred);
+        uint256 prePaymentPoolBal = wFIL.balanceOf(address(pool));
+        uint256 payment = interestOwed;
+        SignedCredential memory payCred = issuePayCred(agentID, principal, collateralValue, payment);
+        // pay back the amount
+        agentPay(agent, pool, payCred);
 
-    // move forward a year
-    vm.roll(block.number + EPOCHS_IN_YEAR);
+        Account memory accountAfter = AccountHelpers.getAccount(router, agentID, poolID);
 
-    // compute how much we should owe in interest
-    uint256 adjustedRate = _getAdjustedRate(GCRED);
-    Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
+        assertEq(accountAfter.principal, accountBefore.principal, "Principal should not change");
+        assertEq(accountAfter.epochsPaid, block.number - 1, "Epochs paid should be up to date");
 
-    assertEq(account.startEpoch, epochStart, "Account should have correct start epoch");
-    assertEq(account.principal, principal, "Account should have correct principal");
+        assertPoolFundsSuccess(principal, interestOwed, prePaymentPoolBal);
+    }
 
-    uint256 epochsToPay = block.number - account.epochsPaid;
-    interestOwed = account.principal.mulWadUp(adjustedRate).mulWadUp(epochsToPay);
-    assertGt(principal, interestOwed, "principal should be greater than interest owed for a GCRED of 80");
-  }
+    function testAPRKnownGCRED(uint256 principal, uint256 collateralValue, uint256 numPayments) public {
+        principal = bound(principal, WAD, MAX_FIL / 2);
+        collateralValue = bound(collateralValue, principal * 2, MAX_FIL);
+        // test APR when making payments twice a week to once every two weeks
+        numPayments = bound(numPayments, 26, 104);
 
-  function issuePayCred(
-    uint256 agentID,
-    uint256 principal,
-    uint256 collateralValue,
-    uint256 paymentAmount
-  ) internal returns (SignedCredential memory) {
-    // here we temporarily roll forward so we don't get an identical credential that's already been used
-    // then we roll it back to where it was so that we don't creep over a year's worth of epochs
-    vm.roll(block.number + 1);
+        // borrow an amount
+        uint256 interestOwed = startSimulation(principal);
 
-    uint256 adjustedRate = _getAdjustedRate(GCRED);
+        uint256 payment = interestOwed / numPayments;
 
-    AgentData memory agentData = createAgentData(
-      collateralValue,
-      // good gcred score
-      GCRED,
-      // good EDR
-      adjustedRate.mulWadUp(principal).mulWadUp(EPOCHS_IN_DAY) * 5,
-      principal
-    );
+        Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
+        uint256 prePaymentPoolBal = wFIL.balanceOf(address(pool));
+        // since each payment is for the same amount, we memoize the first payment amount and assert the others against it
+        uint256 epochsCreditForPayment;
+        Account memory prevAccount = AccountHelpers.getAccount(router, agentID, poolID);
+        for (uint256 i = 0; i < numPayments; i++) {
+            SignedCredential memory payCred = issuePayCred(agentID, principal, collateralValue, payment);
+            // pay back the amount
+            agentPay(agent, pool, payCred);
 
-    VerifiableCredential memory vc = VerifiableCredential(
-      vcIssuer,
-      agentID,
-      block.number,
-      block.number + 100,
-      paymentAmount,
-      Agent.pay.selector,
-      // minerID irrelevant for pay action
-      0,
-      abi.encode(agentData)
-    );
+            Account memory updatedAccount = AccountHelpers.getAccount(router, agentID, poolID);
 
-    // roll back in time to not mess with the "annual" part of the APR
-    // vm.roll(block.number - index);
+            assertEq(updatedAccount.principal, prevAccount.principal, "Account principal not should have changed");
+            assertGt(updatedAccount.epochsPaid, prevAccount.epochsPaid, "Account epochs paid should have increased");
 
-    return signCred(vc);
-  }
+            uint256 _epochsCreditForPayment = updatedAccount.epochsPaid - prevAccount.epochsPaid;
+            if (i == 0) {
+                epochsCreditForPayment = _epochsCreditForPayment;
+            }
+
+            if (_epochsCreditForPayment == 0) {
+                // break the test early if it fails
+                break;
+            }
+            assertGt(epochsCreditForPayment, 0, "Payment should have been made");
+            assertEq(
+                epochsCreditForPayment,
+                _epochsCreditForPayment,
+                "Payment should have been made for the same number of epochs"
+            );
+            if (epochsCreditForPayment != _epochsCreditForPayment) {
+                break;
+            }
+
+            prevAccount = updatedAccount;
+        }
+
+        Account memory newAccount = AccountHelpers.getAccount(router, agentID, poolID);
+
+        assertEq(newAccount.principal, account.principal, "Principal should not change");
+
+        assertApproxEqAbs(
+            newAccount.epochsPaid,
+            // each payment shifts block.number forward by 1 by issuing a new cred, so we subtract that here for the assertion
+            block.number - numPayments,
+            // here our acceptance criteria is the number of payments because each payment moves the block.number forward (and some rounding)
+            100,
+            "Epochs paid should be up to date"
+        );
+
+        assertPoolFundsSuccess(principal, interestOwed, prePaymentPoolBal);
+    }
+
+    function assertPoolFundsSuccess(uint256 principal, uint256 interestOwed, uint256 prePaymentPoolBal) internal {
+        // 10,000,000 represents a factor of 10 larger than the years worth of epochs
+        // so we lose 1 digit of precision for 10 years of epochs (since 1 year of epochs is roughly 1 million epochs, the next significant digit is at 10 million epochs)
+        uint256 MAX_PRECISION_DELTA = 1e8;
+
+        uint256 poolEarnings = wFIL.balanceOf(address(pool)) - prePaymentPoolBal;
+        // ensures the pool got the interest
+        assertApproxEqAbs(poolEarnings, interestOwed, DUST, "Pool should have received the owed interest");
+
+        // ensures the interest the pool got is what we'd expect
+        assertApproxEqAbs(
+            poolEarnings,
+            KNOWN_RATE.mulWadUp(principal),
+            MAX_PRECISION_DELTA,
+            "Pool should have received the expected known amount"
+        );
+
+        uint256 treasuryFeeRate = GetRoute.poolRegistry(router).treasuryFeeRate();
+        // ensures the pool got the right amount of fees
+        assertApproxEqAbs(
+            pool.feesCollected(),
+            // fees collected should be treasury fee % of the interest earned
+            poolEarnings.mulWadUp(treasuryFeeRate),
+            DUST,
+            "Treasury should have received the right amount of fees"
+        );
+
+        uint256 knownTreasuryFeeAmount = KNOWN_RATE.mulWadUp(principal).mulWadUp(treasuryFeeRate);
+
+        // ensures the pool got the right amount of fees
+        assertApproxEqAbs(
+            pool.feesCollected(),
+            // fees collected should be treasury fee % of the interest earned
+            knownTreasuryFeeAmount,
+            MAX_PRECISION_DELTA,
+            "Treasury should have received the known amount of fees portion of principal delta precision"
+        );
+    }
+
+    function startSimulation(uint256 principal) internal returns (uint256 interestOwed) {
+        depositFundsIntoPool(pool, principal + WAD, makeAddr("Investor1"));
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, principal);
+        uint256 epochStart = block.number;
+        agentBorrow(agent, poolID, borrowCred);
+
+        // move forward a year
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        // compute how much we should owe in interest
+        uint256 adjustedRate = _getAdjustedRate();
+        Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
+
+        assertEq(account.startEpoch, epochStart, "Account should have correct start epoch");
+        assertEq(account.principal, principal, "Account should have correct principal");
+
+        uint256 epochsToPay = block.number - account.epochsPaid;
+        interestOwed = account.principal.mulWadUp(adjustedRate).mulWadUp(epochsToPay);
+        assertGt(principal, interestOwed, "principal should be greater than interest owed");
+    }
+
+    function issuePayCred(uint256 agentID, uint256 principal, uint256 collateralValue, uint256 paymentAmount)
+        internal
+        returns (SignedCredential memory)
+    {
+        // here we temporarily roll forward so we don't get an identical credential that's already been used
+        // then we roll it back to where it was so that we don't creep over a year's worth of epochs
+        vm.roll(block.number + 1);
+
+        uint256 adjustedRate = _getAdjustedRate();
+
+        AgentData memory agentData = createAgentData(
+            collateralValue,
+            // good EDR
+            adjustedRate.mulWadUp(principal).mulWadUp(EPOCHS_IN_DAY) * 5,
+            principal
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agentID,
+            block.number,
+            block.number + 100,
+            paymentAmount,
+            Agent.pay.selector,
+            // minerID irrelevant for pay action
+            0,
+            abi.encode(agentData)
+        );
+
+        // roll back in time to not mess with the "annual" part of the APR
+        // vm.roll(block.number - index);
+
+        return signCred(vc);
+    }
 }
 
 contract Pool4626Tests is PoolTestState {
+    function setUp() public override {
+        super.setUp();
+    }
 
-  function setUp () public override{
-    super.setUp();
-  }
+    function testPoolDepositAsset() public {
+        uint256 amount = WAD;
+        loadApproveWFIL(amount, investor1);
+        uint256 balanceBefore = asset.balanceOf(address(pool));
+        vm.prank(investor1);
+        pool.deposit(amount, investor1);
+        uint256 balanceAfter = asset.balanceOf(address(pool));
+        assertEq(balanceAfter - balanceBefore, amount);
+    }
 
-  function testPoolDepositAsset() public {
-    uint256 amount = WAD;
-    loadApproveWFIL(amount, investor1);
-    uint256 balanceBefore = asset.balanceOf(address(pool));
-    vm.prank(investor1);
-    pool.deposit(amount, investor1);
-    uint256 balanceAfter = asset.balanceOf(address(pool));
-    assertEq(balanceAfter - balanceBefore, amount);
-  }
+    function testPoolDepositFil() public {
+        uint256 amount = WAD;
+        vm.deal(investor1, amount);
+        uint256 balanceBefore = asset.balanceOf(address(pool));
+        pool.deposit{value: amount}(investor1);
+        uint256 balanceAfter = asset.balanceOf(address(pool));
+        assertEq(balanceAfter - balanceBefore, amount);
+    }
 
-  function testPoolDepositFil() public {
-    uint256 amount = WAD;
-    vm.deal(investor1, amount);
-    uint256 balanceBefore = asset.balanceOf(address(pool));
-    pool.deposit{value: amount}(investor1);
-    uint256 balanceAfter = asset.balanceOf(address(pool));
-    assertEq(balanceAfter - balanceBefore, amount);
-  }
+    function testPoolReceiveFil() public {
+        uint256 amount = WAD;
+        vm.deal(investor1, amount);
+        uint256 balanceBefore = asset.balanceOf(address(pool));
+        vm.prank(investor1);
+        (bool success,) = address(pool).call{value: amount}("");
+        assertTrue(success, "Address: unable to send value, recipient may have reverted");
+        uint256 balanceAfter = asset.balanceOf(address(pool));
+        assertEq(balanceAfter - balanceBefore, amount);
+    }
 
-  function testPoolReceiveFil() public {
-    uint256 amount = WAD;
-    vm.deal(investor1, amount);
-    uint256 balanceBefore = asset.balanceOf(address(pool));
-    vm.prank(investor1);
-    (bool success, ) = address(pool).call{value: amount}("");
-    assertTrue(success, "Address: unable to send value, recipient may have reverted");
-    uint256 balanceAfter = asset.balanceOf(address(pool));
-    assertEq(balanceAfter - balanceBefore, amount);
-  }
+    function testPoolFallbackFil() public {
+        uint256 amount = WAD;
+        vm.deal(investor1, amount);
+        uint256 balanceBefore = asset.balanceOf(address(pool));
+        vm.prank(investor1);
+        (bool success,) =
+            address(pool).call{value: amount}(abi.encodeWithSignature("fakeFunction(uint256, uint256)", 1, 2));
+        assertTrue(success, "Address: unable to send value, recipient may have reverted");
+        uint256 balanceAfter = asset.balanceOf(address(pool));
+        assertEq(balanceAfter - balanceBefore, amount);
+    }
 
-  function testPoolFallbackFil() public {
-    uint256 amount = WAD;
-    vm.deal(investor1, amount);
-    uint256 balanceBefore = asset.balanceOf(address(pool));
-    vm.prank(investor1);
-    (bool success, ) = address(pool).call{value: amount}(abi.encodeWithSignature("fakeFunction(uint256, uint256)", 1, 2));
-    assertTrue(success, "Address: unable to send value, recipient may have reverted");
-    uint256 balanceAfter = asset.balanceOf(address(pool));
-    assertEq(balanceAfter - balanceBefore, amount);
-  }
+    function testPoolMint() public {
+        uint256 assets = WAD;
+        uint256 shares = pool.convertToShares(WAD);
+        loadApproveWFIL(assets, investor1);
+        uint256 balanceBefore = asset.balanceOf(address(pool));
+        vm.prank(investor1);
+        pool.mint(shares, investor1);
+        uint256 balanceAfter = asset.balanceOf(address(pool));
+        assertEq(balanceAfter - balanceBefore, assets);
+    }
 
-  function testPoolMint() public {
-    uint256 assets = WAD;
-    uint256 shares = pool.convertToShares(WAD);
-    loadApproveWFIL(assets, investor1);
-    uint256 balanceBefore = asset.balanceOf(address(pool));
-    vm.prank(investor1);
-    pool.mint(shares, investor1);
-    uint256 balanceAfter = asset.balanceOf(address(pool));
-    assertEq(balanceAfter - balanceBefore, assets);
-  }
+    function testMaxDeposit() public {
+        // No limits on deposits
+        assertEq(pool.maxDeposit(investor1), type(uint256).max);
+    }
 
-  function testMaxDeposit() public {
-    // No limits on deposits
-    assertEq(pool.maxDeposit(investor1), type(uint256).max);
-  }
+    function testMaxMint() public {
+        // No limits on mints
+        assertEq(pool.maxMint(investor1), type(uint256).max);
+    }
 
-  function testMaxMint() public {
-    // No limits on mints
-    assertEq(pool.maxMint(investor1), type(uint256).max);
-  }
+    function testDepositZeroFail() public {
+        vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
+        vm.prank(address(investor1));
+        pool.deposit(0, investor1);
+    }
 
-  function testDepositZeroFail() public {
-    vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
-    vm.prank(address(investor1));
-    pool.deposit(0, investor1);
-  }
-
-  function testSendZeroFail() public {
-    vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
-    vm.prank(address(investor1));
-    pool.deposit(investor1);
-  }
+    function testSendZeroFail() public {
+        vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
+        vm.prank(address(investor1));
+        pool.deposit(investor1);
+    }
 }
 
-
 contract PoolAdminTests is PoolTestState {
+    // function testSetRamp() public {
+    //   IOffRamp newRamp = IOffRamp(address(0x1));
+    //   vm.prank(address(systemAdmin));
+    //   pool.setRamp(newRamp);
+    //   assertEq(address(pool.ramp()), address(newRamp));
+    // }
 
-  // function testSetRamp() public {
-  //   IOffRamp newRamp = IOffRamp(address(0x1));
-  //   vm.prank(address(systemAdmin));
-  //   pool.setRamp(newRamp);
-  //   assertEq(address(pool.ramp()), address(newRamp));
-  // }
-
-  function testJumpStartTotalBorrowed() public {
-    uint256 amount = WAD;
-    vm.prank(address(poolRegistry));
-    pool.jumpStartTotalBorrowed(amount);
-    assertEq(pool.totalBorrowed(), amount);
-  }
-
-  function testJumpStartAccount(uint256 jumpStartAmount) public {
-    jumpStartAmount = bound(jumpStartAmount, WAD, MAX_FIL);
-    address receiver = makeAddr("receiver");
-    (Agent newAgent,) = configureAgent(receiver);
-    uint256 agentID = newAgent.id();
-    vm.startPrank(IAuth(address(pool)).owner());
-    pool.jumpStartAccount(receiver, agentID, jumpStartAmount);
-    vm.stopPrank();
-
-    uint256 balanceOfReceiver = pool.liquidStakingToken().balanceOf(receiver);
-
-    Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
-
-    assertEq(account.principal, jumpStartAmount, "Account principal should be updated");
-    assertEq(balanceOfReceiver, jumpStartAmount, "Should have minted liquid staking tokens");
-    assertEq(account.startEpoch, block.number, "Account start epoch should be updated");
-    assertEq(account.epochsPaid, block.number, "Account epochsPaid should be updated");
-
-    // test making a payment
-    uint256 payment = jumpStartAmount / 2;
-    agentPay(IAgent(address(newAgent)), pool, issueGenericPayCred(agentID, payment));
-  }
-
-  function testJumpStartTotalBorrowedBadState() public {
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, WAD));
-    vm.prank(address(poolRegistry));
-    vm.expectRevert(abi.encodeWithSelector(InvalidState.selector));
-    pool.jumpStartTotalBorrowed(WAD);
-  }
-
-  function testSetMinimumLiquidity() public {
-    uint256 amount = WAD;
-    vm.prank(address(systemAdmin));
-    pool.setMinimumLiquidity(amount);
-    assertEq(pool.minimumLiquidity(), amount);
-  }
-
-  // function testSetRateModule() public {
-  //   IRateModule newRateModule = IRateModule(address(0x1));
-  //   vm.prank(address(systemAdmin));
-  //   pool.setRateModule(newRateModule);
-  //   assertEq(address(pool.rateModule()), address(newRateModule));
-  // }
-
-  function testshutDownPool() public {
-    assertEq(stakeAmount, asset.balanceOf(address(pool)));
-    vm.prank(address(systemAdmin));
-    pool.shutDown();
-    assertTrue(pool.isShuttingDown(), "Pool should be shut down");
-    vm.prank(address(poolRegistry));
-  }
-
-  function testPayAfterShutDown() public {
-    uint256 stakeAmount = 100e18;
-    uint256 initialPoolAssets = pool.totalAssets();
-    uint256 initialPoolTotalBorrowableAssets = pool.totalBorrowableAssets();
-
-    vm.deal(investor1, stakeAmount);
-    vm.prank(investor1);
-    pool.deposit{value: stakeAmount}(investor1);
-
-    uint256 totalBorrowable = pool.totalBorrowableAssets();
-
-    assertEq(pool.totalAssets(), stakeAmount + initialPoolAssets, "pool should have assets");
-    assertEq(initialPoolTotalBorrowableAssets + stakeAmount, totalBorrowable, "pool should have borrowable assets");
-
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, totalBorrowable));
-    assertEq(agent.liquidAssets(), totalBorrowable, "Agent should have stakeAmount assets after borrowing");
-    assertEq(pool.totalAssets(), stakeAmount + initialPoolAssets, "pool should have assets");
-    assertEq(pool.totalBorrowableAssets(), 0, "pool should have no borrowable assets");
-
-    vm.prank(systemAdmin);
-    pool.shutDown();
-
-    assertEq(agent.liquidAssets(), totalBorrowable, "Agent should have stakeAmount assets after borrowing");
-
-    uint256 prePayBal = wFIL.balanceOf(address(pool));
-    agentPay(agent, pool, issueGenericPayCred(agentID, stakeAmount));
-    assertApproxEqAbs(pool.totalAssets(), initialPoolAssets + stakeAmount, 1e18, "pool should have assets");
-    assertEq(pool.totalBorrowableAssets(), 0, "pool should have no borrowable assets after shutdown payment");
-    assertEq(wFIL.balanceOf(address(pool)), prePayBal + stakeAmount, "pool should have received payment");
-  }
-
-  function testFallbackAfterShutDown() public {
-    vm.prank(address(systemAdmin));
-    pool.shutDown();
-    assertTrue(pool.isShuttingDown(), "Pool should be shut down");
-
-    address depositor = makeAddr("depositor");
-    vm.deal(depositor, WAD);
-    uint256 beforeBal = depositor.balance;
-    vm.startPrank(depositor);
-    vm.expectRevert(abi.encodeWithSelector(InvalidState.selector));
-    // ignore return value of low-level calls not used compiler warning
-    (bool success, ) = address(pool).call{value: WAD}("");
-    // not sure why this returns true
-    assertTrue(success, "Not sure?");
-    assertEq(beforeBal, WAD, "Depositor should still have its funds");
-    vm.stopPrank();
-  }
-
-  function testUpgradePool(uint256 paymentAmt, uint256 initialBorrow) public {
-
-    initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
-    paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
-
-    // Generate some fees to harvest
-    _generateFees(paymentAmt, initialBorrow);
-    uint256 fees = pool.feesCollected();
-    uint256 treasuryBalance = asset.balanceOf(address(treasury));
-
-
-    IPool newPool = IPool(new InfinityPool(
-      systemAdmin,
-      router,
-      address(asset),
-      // no min liquidity for test pool
-      address(liquidStakingToken),
-      address(new PreStake(systemAdmin, IWFIL(address(wFIL)), IPoolToken(address(liquidStakingToken)))),
-      0,
-      poolID
-    ));
-    vm.prank(systemAdmin);
-    liquidStakingToken.setMinter(address(newPool));
-
-    // get stats before upgrade
-    uint256 lstBalance = liquidStakingToken.balanceOf(investor1);
-    uint256 totalBorrowed = pool.totalBorrowed();
-    uint256 agentBorrowed = pool.getAgentBorrowed(agentID);
-    uint256 assetBalance = asset.balanceOf(address(pool));
-
-    // first shut down the pool
-    vm.startPrank(systemAdmin);
-    pool.shutDown();
-    // then upgrade it
-    poolRegistry.upgradePool(newPool);
-    vm.stopPrank();
-
-    // get stats after upgrade
-    uint256 lstBalanceNew = newPool.liquidStakingToken().balanceOf(investor1);
-    uint256 totalBorrowedNew = newPool.totalBorrowed();
-    uint256 agentBorrowedNew = newPool.getAgentBorrowed(agentID);
-    uint256 agentBalanceNew = wFIL.balanceOf(address(agent));
-    uint256 assetBalanceNew = newPool.asset().balanceOf(address(newPool));
-
-    // Test balances updated correctly through upgrade
-    assertEq(lstBalanceNew, lstBalance, "LST balance should be the same");
-    assertEq(totalBorrowedNew, totalBorrowed, "Total borrowed should be the same");
-    assertEq(agentBorrowedNew, agentBorrowed, "Agent borrowed should be the same");
-    assertEq(assetBalanceNew, assetBalance - fees, "Asset balance should be the same");
-    assertEq(asset.balanceOf(treasury), treasuryBalance + fees, "Treasury should have received fees");
-
-    assertNewPoolWorks(newPool, assetBalanceNew, agentBalanceNew);
-  }
-
-  function testSetMaxEpochsOwedTolerance(uint256 epochsOwedTolerance) public {
-    vm.assume(epochsOwedTolerance < EPOCHS_IN_YEAR);
-
-    IInfinityPool infpool = IInfinityPool(address(pool));
-
-    vm.startPrank(systemAdmin);
-    if (epochsOwedTolerance > EPOCHS_IN_DAY) {
-      vm.expectRevert(InvalidParams.selector);
-      infpool.setMaxEpochsOwedTolerance(epochsOwedTolerance);
-    } else {
-      infpool.setMaxEpochsOwedTolerance(epochsOwedTolerance);
-      assertEq(infpool.maxEpochsOwedTolerance(), epochsOwedTolerance);
+    function testJumpStartTotalBorrowed() public {
+        uint256 amount = WAD;
+        vm.prank(address(poolRegistry));
+        pool.jumpStartTotalBorrowed(amount);
+        assertEq(pool.totalBorrowed(), amount);
     }
-  }
 
-  function assertNewPoolWorks(IPool newPool, uint256 assetBalanceNew, uint256 agentWFILBal) internal {
-    // deposit into the pool again
-    address newInvestor = makeAddr("NEW_INVESTOR");
-    uint256 newStakeAmount = borrowAmount;
-    uint256 newLSTBal = newPool.previewDeposit(newStakeAmount);
+    function testJumpStartAccount(uint256 jumpStartAmount) public {
+        jumpStartAmount = bound(jumpStartAmount, WAD, MAX_FIL);
+        address receiver = makeAddr("receiver");
+        (Agent newAgent,) = configureAgent(receiver);
+        uint256 agentID = newAgent.id();
+        vm.startPrank(IAuth(address(pool)).owner());
+        pool.jumpStartAccount(receiver, agentID, jumpStartAmount);
+        vm.stopPrank();
 
-    depositFundsIntoPool(newPool, WAD, newInvestor);
+        uint256 balanceOfReceiver = pool.liquidStakingToken().balanceOf(receiver);
 
-    assertEq(
-      newPool.liquidStakingToken().balanceOf(newInvestor), newLSTBal,
-      "Investor should have received new liquid staking tokens"
-    );
-    assertEq(
-      wFIL.balanceOf(address(newPool)),
-      assetBalanceNew + newStakeAmount,
-      "Pool should have received new stake amount"
-    );
+        Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
 
-    // Make a payment to get the account's epochsPaid current
-    Account memory account = AccountHelpers.getAccount(router, agent.id(), newPool.id());
-    vm.deal(address(agent), account.principal);
+        assertEq(account.principal, jumpStartAmount, "Account principal should be updated");
+        assertEq(balanceOfReceiver, jumpStartAmount, "Should have minted liquid staking tokens");
+        assertEq(account.startEpoch, block.number, "Account start epoch should be updated");
+        assertEq(account.epochsPaid, block.number, "Account epochsPaid should be updated");
 
-    agentPay(agent, newPool, issueGenericPayCred(agentID, account.principal));
+        // test making a payment
+        uint256 payment = jumpStartAmount / 2;
+        agentPay(IAgent(address(newAgent)), pool, issueGenericPayCred(agentID, payment));
+    }
 
-    uint256 newBorrowAmount = newPool.totalBorrowableAssets();
-    // Test that the new pool can be used to borrow
-    agentBorrow(agent, newPool.id(), issueGenericBorrowCred(agentID, newPool.totalBorrowableAssets()));
+    function testJumpStartTotalBorrowedBadState() public {
+        agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, WAD));
+        vm.prank(address(poolRegistry));
+        vm.expectRevert(abi.encodeWithSelector(InvalidState.selector));
+        pool.jumpStartTotalBorrowed(WAD);
+    }
 
-    assertEq(wFIL.balanceOf(address(agent)), newBorrowAmount + agentWFILBal, "Agent should have received new borrow amount");
-  }
+    function testSetMinimumLiquidity() public {
+        uint256 amount = WAD;
+        vm.prank(address(systemAdmin));
+        pool.setMinimumLiquidity(amount);
+        assertEq(pool.minimumLiquidity(), amount);
+    }
 
-  function testHarvestFeesTreasury(uint256 paymentAmt, uint256 initialBorrow, uint256 harvestAmount) public {
-    initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
-    paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
-    // Generate some fees to harvest
-    _generateFees(paymentAmt, initialBorrow);
+    // function testSetRateModule() public {
+    //   IRateModule newRateModule = IRateModule(address(0x1));
+    //   vm.prank(address(systemAdmin));
+    //   pool.setRateModule(newRateModule);
+    //   assertEq(address(pool.rateModule()), address(newRateModule));
+    // }
 
-    uint256 fees = pool.feesCollected();
-    assertGt(fees, 0, "Fees should be greater than 0");
-    uint256 treasuryBalance = asset.balanceOf(address(treasury));
-    harvestAmount = bound(harvestAmount, 0, fees);
+    function testshutDownPool() public {
+        assertEq(stakeAmount, asset.balanceOf(address(pool)));
+        vm.prank(address(systemAdmin));
+        pool.shutDown();
+        assertTrue(pool.isShuttingDown(), "Pool should be shut down");
+        vm.prank(address(poolRegistry));
+    }
 
-    vm.prank(systemAdmin);
-    pool.harvestFees(harvestAmount);
+    function testPayAfterShutDown() public {
+        uint256 stakeAmount = 100e18;
+        uint256 initialPoolAssets = pool.totalAssets();
+        uint256 initialPoolTotalBorrowableAssets = pool.totalBorrowableAssets();
 
-    assertEq(pool.feesCollected(), fees - harvestAmount, "Fees should be reduced by harvest amount");
-    assertEq(asset.balanceOf(address(treasury)), treasuryBalance + harvestAmount, "Treasury should have received harvest amount");
-  }
+        vm.deal(investor1, stakeAmount);
+        vm.prank(investor1);
+        pool.deposit{value: stakeAmount}(investor1);
+
+        uint256 totalBorrowable = pool.totalBorrowableAssets();
+
+        assertEq(pool.totalAssets(), stakeAmount + initialPoolAssets, "pool should have assets");
+        assertEq(initialPoolTotalBorrowableAssets + stakeAmount, totalBorrowable, "pool should have borrowable assets");
+
+        agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, totalBorrowable));
+        assertEq(agent.liquidAssets(), totalBorrowable, "Agent should have stakeAmount assets after borrowing");
+        assertEq(pool.totalAssets(), stakeAmount + initialPoolAssets, "pool should have assets");
+        assertEq(pool.totalBorrowableAssets(), 0, "pool should have no borrowable assets");
+
+        vm.prank(systemAdmin);
+        pool.shutDown();
+
+        assertEq(agent.liquidAssets(), totalBorrowable, "Agent should have stakeAmount assets after borrowing");
+
+        uint256 prePayBal = wFIL.balanceOf(address(pool));
+        agentPay(agent, pool, issueGenericPayCred(agentID, stakeAmount));
+        assertApproxEqAbs(pool.totalAssets(), initialPoolAssets + stakeAmount, 1e18, "pool should have assets");
+        assertEq(pool.totalBorrowableAssets(), 0, "pool should have no borrowable assets after shutdown payment");
+        assertEq(wFIL.balanceOf(address(pool)), prePayBal + stakeAmount, "pool should have received payment");
+    }
+
+    function testFallbackAfterShutDown() public {
+        vm.prank(address(systemAdmin));
+        pool.shutDown();
+        assertTrue(pool.isShuttingDown(), "Pool should be shut down");
+
+        address depositor = makeAddr("depositor");
+        vm.deal(depositor, WAD);
+        uint256 beforeBal = depositor.balance;
+        vm.startPrank(depositor);
+        vm.expectRevert(abi.encodeWithSelector(InvalidState.selector));
+        // ignore return value of low-level calls not used compiler warning
+        (bool success,) = address(pool).call{value: WAD}("");
+        // not sure why this returns true
+        assertTrue(success, "Not sure?");
+        assertEq(beforeBal, WAD, "Depositor should still have its funds");
+        vm.stopPrank();
+    }
+
+    function testUpgradePool(uint256 paymentAmt, uint256 initialBorrow) public {
+        initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
+        paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
+
+        // Generate some fees to harvest
+        _generateFees(paymentAmt, initialBorrow);
+        uint256 fees = pool.feesCollected();
+        uint256 treasuryBalance = asset.balanceOf(address(treasury));
+
+        IPool newPool = IPool(
+            new InfinityPool(
+                systemAdmin,
+                router,
+                // no min liquidity for test pool
+                address(liquidStakingToken),
+                ILiquidityMineSP(address(0)),
+                0,
+                poolID
+            )
+        );
+        vm.prank(systemAdmin);
+        liquidStakingToken.setMinter(address(newPool));
+
+        // get stats before upgrade
+        uint256 lstBalance = liquidStakingToken.balanceOf(investor1);
+        uint256 totalBorrowed = pool.totalBorrowed();
+        uint256 agentBorrowed = pool.getAgentBorrowed(agentID);
+        uint256 assetBalance = asset.balanceOf(address(pool));
+
+        // first shut down the pool
+        vm.startPrank(systemAdmin);
+        pool.shutDown();
+        // then upgrade it
+        poolRegistry.upgradePool(newPool);
+        vm.stopPrank();
+
+        // get stats after upgrade
+        uint256 lstBalanceNew = newPool.liquidStakingToken().balanceOf(investor1);
+        uint256 totalBorrowedNew = newPool.totalBorrowed();
+        uint256 agentBorrowedNew = newPool.getAgentBorrowed(agentID);
+        uint256 agentBalanceNew = wFIL.balanceOf(address(agent));
+        uint256 assetBalanceNew = newPool.asset().balanceOf(address(newPool));
+
+        // Test balances updated correctly through upgrade
+        assertEq(lstBalanceNew, lstBalance, "LST balance should be the same");
+        assertEq(totalBorrowedNew, totalBorrowed, "Total borrowed should be the same");
+        assertEq(agentBorrowedNew, agentBorrowed, "Agent borrowed should be the same");
+        assertEq(assetBalanceNew, assetBalance - fees, "Asset balance should be the same");
+        assertEq(asset.balanceOf(treasury), treasuryBalance + fees, "Treasury should have received fees");
+
+        assertNewPoolWorks(newPool, assetBalanceNew, agentBalanceNew);
+    }
+
+    function testSetMaxEpochsOwedTolerance(uint256 epochsOwedTolerance) public {
+        vm.assume(epochsOwedTolerance < EPOCHS_IN_YEAR);
+
+        IInfinityPool infpool = IInfinityPool(address(pool));
+
+        vm.startPrank(systemAdmin);
+        if (epochsOwedTolerance > EPOCHS_IN_DAY) {
+            vm.expectRevert(InvalidParams.selector);
+            infpool.setMaxEpochsOwedTolerance(epochsOwedTolerance);
+        } else {
+            infpool.setMaxEpochsOwedTolerance(epochsOwedTolerance);
+            assertEq(infpool.maxEpochsOwedTolerance(), epochsOwedTolerance);
+        }
+    }
+
+    function assertNewPoolWorks(IPool newPool, uint256 assetBalanceNew, uint256 agentWFILBal) internal {
+        // deposit into the pool again
+        address newInvestor = makeAddr("NEW_INVESTOR");
+        uint256 newStakeAmount = borrowAmount;
+        uint256 newLSTBal = newPool.previewDeposit(newStakeAmount);
+
+        depositFundsIntoPool(newPool, WAD, newInvestor);
+
+        assertEq(
+            newPool.liquidStakingToken().balanceOf(newInvestor),
+            newLSTBal,
+            "Investor should have received new liquid staking tokens"
+        );
+        assertEq(
+            wFIL.balanceOf(address(newPool)),
+            assetBalanceNew + newStakeAmount,
+            "Pool should have received new stake amount"
+        );
+
+        // Make a payment to get the account's epochsPaid current
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), newPool.id());
+        vm.deal(address(agent), account.principal);
+
+        agentPay(agent, newPool, issueGenericPayCred(agentID, account.principal));
+
+        uint256 newBorrowAmount = newPool.totalBorrowableAssets();
+        // Test that the new pool can be used to borrow
+        agentBorrow(agent, newPool.id(), issueGenericBorrowCred(agentID, newPool.totalBorrowableAssets()));
+
+        assertEq(
+            wFIL.balanceOf(address(agent)),
+            newBorrowAmount + agentWFILBal,
+            "Agent should have received new borrow amount"
+        );
+    }
+
+    function testHarvestFeesTreasury(uint256 paymentAmt, uint256 initialBorrow, uint256 harvestAmount) public {
+        initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
+        paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
+        // Generate some fees to harvest
+        _generateFees(paymentAmt, initialBorrow);
+
+        uint256 fees = pool.feesCollected();
+        assertGt(fees, 0, "Fees should be greater than 0");
+        uint256 treasuryBalance = asset.balanceOf(address(treasury));
+        harvestAmount = bound(harvestAmount, 0, fees);
+
+        vm.prank(systemAdmin);
+        pool.harvestFees(harvestAmount);
+
+        assertEq(pool.feesCollected(), fees - harvestAmount, "Fees should be reduced by harvest amount");
+        assertEq(
+            asset.balanceOf(address(treasury)),
+            treasuryBalance + harvestAmount,
+            "Treasury should have received harvest amount"
+        );
+    }
 }
 
 contract PoolErrorBranches is PoolTestState {
+    using FixedPointMathLib for uint256;
 
-  using FixedPointMathLib for uint256;
-
-  function testTotalBorrowableZero(uint256 borrowAmount) public {
-    uint256 balance = asset.balanceOf(address(pool));
-    uint256 minLiquidity = pool.getAbsMinLiquidity();
-    borrowAmount = bound(borrowAmount, balance - minLiquidity , balance);
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, borrowAmount));
-    assertEq(pool.totalBorrowableAssets(), 0, "Total borrowable should be zero");
-  }
-
-  function testLiquidAssetsOnShutdown() public {
-    uint256 liquidAssets = pool.getLiquidAssets();
-    assertGt(liquidAssets, 0, "Liquid assets should be greater than zero before pool is shut down");
-    vm.prank(address(systemAdmin));
-    pool.shutDown();
-    assertTrue(pool.isShuttingDown(), "Pool should be shut down");
-    assertEq(pool.getLiquidAssets(), liquidAssets, "Liquid assets should be the same when pool is shutting down");
-  }
-
-  function testPayUpBeforeBorrow(uint256 borrowAmount, uint256 rollFwdAmount) public {
-    uint256 secondBorrowAmount = WAD;
-    borrowAmount = bound(borrowAmount, WAD, stakeAmount - secondBorrowAmount - DUST);
-    rollFwdAmount = bound(rollFwdAmount, 1, 42*EPOCHS_IN_DAY);
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, borrowAmount));
-    vm.roll(block.number + rollFwdAmount);
-
-    uint256 buffer = IInfinityPool(address(pool)).maxEpochsOwedTolerance();
-
-    if (rollFwdAmount < buffer) {
-      agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, secondBorrowAmount));
-    } else {
-      vm.startPrank(_agentOperator(agent));
-      try agent.borrow(poolID, issueGenericBorrowCred(agentID, WAD)) {
-        fail("Should not be able to borrow without paying up");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), InfinityPool.PayUp.selector);
-      }
-      vm.stopPrank();
+    function testTotalBorrowableZero(uint256 borrowAmount) public {
+        uint256 balance = asset.balanceOf(address(pool));
+        uint256 minLiquidity = pool.getAbsMinLiquidity();
+        borrowAmount = bound(borrowAmount, balance - minLiquidity, balance);
+        agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, borrowAmount));
+        assertEq(pool.totalBorrowableAssets(), 0, "Total borrowable should be zero");
     }
-  }
 
-  function testLiquidAssetsLessThanFees(
-    uint256 initialBorrow,
-    uint256 paymentAmt
-  ) public {
-    initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
-    // ensure we have enough money to pay some interest
-    uint256 minPayment = _getAdjustedRate(GCRED).mulWadUp(initialBorrow) / WAD;
-    paymentAmt = bound(paymentAmt, minPayment + DUST, initialBorrow - DUST);
-    assertGt(pool.getLiquidAssets(), 0, "Liquid assets should be greater than zero before pool is shut down");
-    // Our first borrow is based on the payment amount to generate fees
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, initialBorrow));
-    // Roll foward enough that at least _some_ payment is interest
-    vm.roll(block.number + GetRoute.agentPolice(router).defaultWindow() - 1);
-    agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmt));
-
-    // if we dont have enough to borrow, deposit enough to borrow the rest
-    if (pool.totalBorrowableAssets() < WAD) {
-      address investor = makeAddr("investor1");
-      vm.deal(investor, WAD);
-      vm.prank(investor);
-      pool.deposit{value: WAD}(investor);
+    function testLiquidAssetsOnShutdown() public {
+        uint256 liquidAssets = pool.getLiquidAssets();
+        assertGt(liquidAssets, 0, "Liquid assets should be greater than zero before pool is shut down");
+        vm.prank(address(systemAdmin));
+        pool.shutDown();
+        assertTrue(pool.isShuttingDown(), "Pool should be shut down");
+        assertEq(pool.getLiquidAssets(), liquidAssets, "Liquid assets should be the same when pool is shutting down");
     }
-    // pay back principal so we can borrow again
-    Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
-    agentPay(agent, pool, issueGenericPayCred(agentID, account.principal));
-    // borrow the rest of the assets
-    agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
-    assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when liquid assets less than fees");
-    assertGt(pool.feesCollected(), 0, "Pool should have generated fees");
-  }
 
-  function testMintZeroShares() public {
-    vm.prank(address(investor1));
-    vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
-    pool.mint(0, investor1);
-  }
+    function testLiquidAssetsLessThanFees(uint256 initialBorrow, uint256 paymentAmt) public {
+        initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
+        // ensure we have enough money to pay some interest
+        uint256 minPayment = _getAdjustedRate().mulWadUp(initialBorrow) / WAD;
+        paymentAmt = bound(paymentAmt, minPayment + DUST, initialBorrow - DUST);
+        assertGt(pool.getLiquidAssets(), 0, "Liquid assets should be greater than zero before pool is shut down");
+        // Our first borrow is based on the payment amount to generate fees
+        agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, initialBorrow));
+        // Roll foward enough that at least _some_ payment is interest
+        vm.roll(block.number + EPOCHS_IN_WEEK * 3);
+        agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmt));
+
+        // if we dont have enough to borrow, deposit enough to borrow the rest
+        if (pool.totalBorrowableAssets() < WAD) {
+            address investor = makeAddr("investor1");
+            vm.deal(investor, WAD);
+            vm.prank(investor);
+            pool.deposit{value: WAD}(investor);
+        }
+        // pay back principal so we can borrow again
+        Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
+        agentPay(agent, pool, issueGenericPayCred(agentID, account.principal));
+        // borrow the rest of the assets
+        agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
+        assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when liquid assets less than fees");
+        assertGt(pool.feesCollected(), 0, "Pool should have generated fees");
+    }
+
+    function testMintZeroShares() public {
+        vm.prank(address(investor1));
+        vm.expectRevert(abi.encodeWithSelector(InvalidParams.selector));
+        pool.mint(0, investor1);
+    }
 }
 
 contract PoolPreStakeIntegrationTest is BaseTest {
-  IInfinityPool pool;
+    IInfinityPool pool;
 
-  function setUp() public {
-    pool = IInfinityPool(address(createPool()));
-  }
+    function setUp() public {
+        pool = IInfinityPool(address(createPool()));
+    }
 
-  function testTransferFromPreStake(uint256 preStakeBal, uint256 transferFromAmt) public {
-    address preStake = address(IInfinityPool(address(pool)).preStake());
-    vm.assume(transferFromAmt < preStakeBal);
-    vm.deal(preStake, preStakeBal);
+    function testTransferFromPreStake(uint256 preStakeBal, uint256 transferFromAmt) public {
+        address preStake = address(IInfinityPool(address(pool)).preStake());
+        vm.assume(transferFromAmt < preStakeBal);
+        vm.deal(preStake, preStakeBal);
 
-    vm.startPrank(preStake);
-    wFIL.deposit{value: preStakeBal}();
-    wFIL.approve(address(pool), preStakeBal);
-    vm.stopPrank();
+        vm.startPrank(preStake);
+        wFIL.deposit{value: preStakeBal}();
+        wFIL.approve(address(pool), preStakeBal);
+        vm.stopPrank();
 
-    uint256 wFILPoolBal = wFIL.balanceOf(address(pool));
-    uint256 poolSharesIssued = pool.liquidStakingToken().totalSupply();
+        uint256 wFILPoolBal = wFIL.balanceOf(address(pool));
+        uint256 poolSharesIssued = pool.liquidStakingToken().totalSupply();
 
-    vm.startPrank(IAuth(address(pool)).owner());
-    pool.transferFromPreStake(transferFromAmt);
+        vm.startPrank(IAuth(address(pool)).owner());
+        pool.transferFromPreStake(transferFromAmt);
 
-    assertEq(wFIL.balanceOf(address(pool)), wFILPoolBal + transferFromAmt);
-    assertEq(pool.liquidStakingToken().totalSupply(), poolSharesIssued);
-  }
+        assertEq(wFIL.balanceOf(address(pool)), wFILPoolBal + transferFromAmt);
+        assertEq(pool.liquidStakingToken().totalSupply(), poolSharesIssued);
+    }
 }
 
 // TODO: REIMPLEMENT CRED changing tests
@@ -1845,7 +1763,7 @@ contract PoolPreStakeIntegrationTest is BaseTest {
 //       // agent value = lockedFunds * 1.2 (such that locked funds = 83% of locked funds)
 //       uint256 agentValue = lockedFunds * 120 / 100;
 //       // NOTE: since we don't pull this off the pool it could be out of sync - careful
-//       uint256 adjustedRate = _getAdjustedRate(gCredBasic);
+//       uint256 adjustedRate = _getAdjustedRate();
 
 //       NewAgentData memory agentData = NewAgentData(
 //         agentValue,
@@ -1861,10 +1779,8 @@ contract PoolPreStakeIntegrationTest is BaseTest {
 //         block.number,
 //         0,
 //         1e18,
-//         12345 
+//         12345
 //       );
-
-      
 
 //       VerifiableCredential memory vc = VerifiableCredential(
 //         vcIssuer,
@@ -1898,97 +1814,112 @@ contract PoolAccountingTest is BaseTest {
     address minerOwner = makeAddr("MINER_OWNER");
 
     function setUp() public {
-      pool = createPool();
-      iFIL = pool.liquidStakingToken();
-      (agent, miner) = configureAgent(minerOwner);
+        pool = createPool();
+        iFIL = pool.liquidStakingToken();
+        (agent, miner) = configureAgent(minerOwner);
     }
 
     function testOverPayUnderTotalBorrowed() public {
-      vm.startPrank(systemAdmin);
-      GetRoute.poolRegistry(router).setTreasuryFeeRate(0);
-      vm.stopPrank();
+        vm.startPrank(systemAdmin);
+        GetRoute.poolRegistry(router).setTreasuryFeeRate(0);
+        vm.stopPrank();
 
-      (IAgent agent2,) = configureAgent(minerOwner);
-      uint256 borrowAmountAgent1 = 10e18;
-      uint256 payAmount = 20e18;
-      uint256 borrowAmountAgent2 = 100e18;
+        (IAgent agent2,) = configureAgent(minerOwner);
+        uint256 borrowAmountAgent1 = 10e18;
+        uint256 payAmount = 20e18;
+        uint256 borrowAmountAgent2 = 100e18;
 
-      depositFundsIntoPool(pool, MAX_FIL, investor);
+        depositFundsIntoPool(pool, MAX_FIL, investor);
 
-      // totalBorrowed should be a large number for this assertion
-      agentBorrow(agent2, pool.id(), issueGenericBorrowCred(agent2.id(), borrowAmountAgent2));
+        // totalBorrowed should be a large number for this assertion
+        agentBorrow(agent2, pool.id(), issueGenericBorrowCred(agent2.id(), borrowAmountAgent2));
 
-      Account memory account2 = AccountHelpers.getAccount(router, agent2.id(), pool.id());
-      assertEq(account2.principal, borrowAmountAgent2, "Account should have borrowed amount");
-      testInvariants(pool, "test over pay under total borrowed 1");
+        Account memory account2 = AccountHelpers.getAccount(router, agent2.id(), pool.id());
+        assertEq(account2.principal, borrowAmountAgent2, "Account should have borrowed amount");
+        testInvariants(pool, "test over pay under total borrowed 1");
 
-      assertPegInTact(pool);
+        assertPegInTact(pool);
 
-      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), borrowAmountAgent1));
+        agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), borrowAmountAgent1));
 
-      testInvariants(pool, "test over pay under total borrowed 1.5");
+        testInvariants(pool, "test over pay under total borrowed 1.5");
 
-      agentPay(agent, pool, issueGenericPayCred(agent.id(), payAmount));
+        agentPay(agent, pool, issueGenericPayCred(agent.id(), payAmount));
 
-      Account memory postPayAccount1 = AccountHelpers.getAccount(router, agent.id(), pool.id());
-      Account memory postPayAccount2 = AccountHelpers.getAccount(router, agent2.id(), pool.id());
-      assertEq(postPayAccount1.principal, 0, "Account should have been paid off");
-      assertEq(postPayAccount2.principal, pool.totalBorrowed(), "Agent2 principal should equal pool's total borrowed");
-      testInvariants(pool, "test over pay under total borrowed 2");
+        Account memory postPayAccount1 = AccountHelpers.getAccount(router, agent.id(), pool.id());
+        Account memory postPayAccount2 = AccountHelpers.getAccount(router, agent2.id(), pool.id());
+        assertEq(postPayAccount1.principal, 0, "Account should have been paid off");
+        assertEq(postPayAccount2.principal, pool.totalBorrowed(), "Agent2 principal should equal pool's total borrowed");
+        testInvariants(pool, "test over pay under total borrowed 2");
     }
 
     function testPayAfterLiquidation(uint256 payAmount) public {
-      payAmount = bound(payAmount, 1, MAX_FIL);
-      uint256 stakeAmount = 100e18;
-      uint64 liquidatorID = 1;
-      depositFundsIntoPool(pool, stakeAmount, investor);
+        payAmount = bound(payAmount, 1, MAX_FIL);
+        uint256 stakeAmount = 100e18;
+        uint64 liquidatorID = 1;
+        depositFundsIntoPool(pool, stakeAmount, investor);
 
-      // borrow half the pool's assets, default, then pay everything back to the pool (as interest)
-      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), stakeAmount / 2));
+        // borrow half the pool's assets, default, then pay everything back to the pool (as interest)
+        agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), stakeAmount / 2));
 
-      vm.roll(block.number + EPOCHS_IN_YEAR);
+        vm.roll(block.number + EPOCHS_IN_YEAR);
 
-      uint256 toAssets = pool.convertToAssets(WAD);
-      uint256 toShares = pool.convertToShares(WAD);
+        uint256 toAssets = pool.convertToAssets(WAD);
+        uint256 toShares = pool.convertToShares(WAD);
 
-      IAgentPolice police = GetRoute.agentPolice(router);
-      vm.startPrank(systemAdmin);
-      police.setAgentDefaulted(address(agent));
-      police.prepareMinerForLiquidation(address(agent), miner, liquidatorID);
-      police.distributeLiquidatedFunds(address(agent), 0);
-      vm.stopPrank();
+        IAgentPolice police = GetRoute.agentPolice(router);
+        vm.startPrank(systemAdmin);
+        // TODO: fix this
+        // police.setAgentDefaulted(address(agent));
+        police.prepareMinerForLiquidation(address(agent), miner, liquidatorID);
+        police.distributeLiquidatedFunds(address(agent), 0);
+        vm.stopPrank();
 
-      uint256 toAssetsAfterLiquidating = pool.convertToAssets(WAD);
-      uint256 toSharesAfterLiquidating = pool.convertToShares(WAD);
+        uint256 toAssetsAfterLiquidating = pool.convertToAssets(WAD);
+        uint256 toSharesAfterLiquidating = pool.convertToShares(WAD);
 
-      assertEq(agent.defaulted(), true, "Agent should be defaulted");
-      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-      assertEq(account.defaulted, true, "Account should be defaulted");
+        assertEq(agent.defaulted(), true, "Agent should be defaulted");
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+        assertEq(account.defaulted, true, "Account should be defaulted");
 
-      assertEq(pool.totalBorrowed(), 0, "Pool should have no total borrowed");
-      assertEq(pool.getLiquidAssets(), stakeAmount / 2, "Pool should have half its liquid assets after losing everything else");
-      assertEq(toAssetsAfterLiquidating, toAssets / 2, "iFIL should be worth half");
-      assertEq(toSharesAfterLiquidating, toShares * 2, "iFIL should be worth half");
-      assertEq(pool.totalBorrowableAssets(), stakeAmount / 2, "Pool should have half as many total borrowable assets");
+        assertEq(pool.totalBorrowed(), 0, "Pool should have no total borrowed");
+        assertEq(
+            pool.getLiquidAssets(),
+            stakeAmount / 2,
+            "Pool should have half its liquid assets after losing everything else"
+        );
+        assertEq(toAssetsAfterLiquidating, toAssets / 2, "iFIL should be worth half");
+        assertEq(toSharesAfterLiquidating, toShares * 2, "iFIL should be worth half");
+        assertEq(pool.totalBorrowableAssets(), stakeAmount / 2, "Pool should have half as many total borrowable assets");
 
-      vm.deal(address(agent), payAmount);
-      vm.startPrank(_agentOperator(agent));
-      agent.pay(pool.id(), issueGenericPayCred(agent.id(), payAmount));
-      vm.stopPrank();
-      console.log(payAmount);
+        vm.deal(address(agent), payAmount);
+        vm.startPrank(_agentOperator(agent));
+        agent.pay(pool.id(), issueGenericPayCred(agent.id(), payAmount));
+        vm.stopPrank();
+        console.log(payAmount);
 
-      assertEq(pool.totalBorrowed(), 0, "Pool should still have no total borrowed");
+        assertEq(pool.totalBorrowed(), 0, "Pool should still have no total borrowed");
 
-      uint256 fee = GetRoute.poolRegistry(router).treasuryFeeRate().mulWadUp(payAmount);
-      uint256 payAmountLessFee = payAmount - fee;
+        uint256 fee = GetRoute.poolRegistry(router).treasuryFeeRate().mulWadUp(payAmount);
+        uint256 payAmountLessFee = payAmount - fee;
 
-      assertApproxEqAbs(pool.getLiquidAssets(), (stakeAmount / 2) + payAmountLessFee, 1e16, "Pool should have payAmount added to its liquid assets");
-      assertApproxEqAbs(pool.totalBorrowableAssets(), (stakeAmount / 2) + payAmountLessFee, 1e16, "Pool should have payAmount added to total borrowable assets");
-      // if pay amount is greater than 1e16, then the iFIL should be worth more (bc of treasury fees)
-      if (payAmount > 1e16) {
-        assertGt(pool.convertToAssets(WAD), toAssetsAfterLiquidating, "iFIL should be worth more");
-        assertGt(toSharesAfterLiquidating, pool.convertToShares(WAD), "iFIL should be worth more");
-      }
+        assertApproxEqAbs(
+            pool.getLiquidAssets(),
+            (stakeAmount / 2) + payAmountLessFee,
+            1e16,
+            "Pool should have payAmount added to its liquid assets"
+        );
+        assertApproxEqAbs(
+            pool.totalBorrowableAssets(),
+            (stakeAmount / 2) + payAmountLessFee,
+            1e16,
+            "Pool should have payAmount added to total borrowable assets"
+        );
+        // if pay amount is greater than 1e16, then the iFIL should be worth more (bc of treasury fees)
+        if (payAmount > 1e16) {
+            assertGt(pool.convertToAssets(WAD), toAssetsAfterLiquidating, "iFIL should be worth more");
+            assertGt(toSharesAfterLiquidating, pool.convertToShares(WAD), "iFIL should be worth more");
+        }
     }
 }
 
@@ -2006,204 +1937,214 @@ contract PoolStakingTest is BaseTest {
     address minerOwner = makeAddr("MINER_OWNER");
 
     function setUp() public {
-      pool = createPool();
-      iFIL = pool.liquidStakingToken();
-      (agent, miner) = configureAgent(minerOwner);
+        pool = createPool();
+        iFIL = pool.liquidStakingToken();
+        (agent, miner) = configureAgent(minerOwner);
     }
 
     function testDepositFILTwice(uint256 stakeAmount) public {
-      stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+        stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
-      vm.deal(investor, MAX_FIL);
-      vm.startPrank(investor);
+        vm.deal(investor, MAX_FIL);
+        vm.startPrank(investor);
 
-      // first we put WAD worth of FIL in the pool to block inflation attacks
-      uint256 sharesFromInitialDeposit = pool.deposit{value: WAD}(investor);
-      assertEq(sharesFromInitialDeposit, WAD, "Shares should be equal to WAD");
+        // first we put WAD worth of FIL in the pool to block inflation attacks
+        uint256 sharesFromInitialDeposit = pool.deposit{value: WAD}(investor);
+        assertEq(sharesFromInitialDeposit, WAD, "Shares should be equal to WAD");
 
-      uint256 sharesFromSecondDeposit = pool.deposit{value: stakeAmount}(investor);
-      assertEq(sharesFromSecondDeposit, stakeAmount, "Shares should be equal to stakeAmount");
-      vm.stopPrank();
-      testInvariants(pool, "test deposit fil twice");
+        uint256 sharesFromSecondDeposit = pool.deposit{value: stakeAmount}(investor);
+        assertEq(sharesFromSecondDeposit, stakeAmount, "Shares should be equal to stakeAmount");
+        vm.stopPrank();
+        testInvariants(pool, "test deposit fil twice");
     }
 
     function testDepositTwice(uint256 stakeAmount) public {
-      stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+        stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
-      vm.deal(investor, MAX_FIL);
-      vm.startPrank(investor);
+        vm.deal(investor, MAX_FIL);
+        vm.startPrank(investor);
 
-      wFIL.deposit{value: stakeAmount + WAD}();
-      wFIL.approve(address(pool), stakeAmount + WAD);
+        wFIL.deposit{value: stakeAmount + WAD}();
+        wFIL.approve(address(pool), stakeAmount + WAD);
 
-      // first we put WAD worth of FIL in the pool to block inflation attacks
-      uint256 sharesFromInitialDeposit = pool.deposit(WAD, investor);
-      assertEq(sharesFromInitialDeposit, WAD, "Shares should be equal to WAD");
+        // first we put WAD worth of FIL in the pool to block inflation attacks
+        uint256 sharesFromInitialDeposit = pool.deposit(WAD, investor);
+        assertEq(sharesFromInitialDeposit, WAD, "Shares should be equal to WAD");
 
-      uint256 sharesFromSecondDeposit = pool.deposit(stakeAmount, investor);
-      assertEq(sharesFromSecondDeposit, stakeAmount, "Shares should be equal to stakeAmount");
-      vm.stopPrank();
-      testInvariants(pool, "test deposit twice");
+        uint256 sharesFromSecondDeposit = pool.deposit(stakeAmount, investor);
+        assertEq(sharesFromSecondDeposit, stakeAmount, "Shares should be equal to stakeAmount");
+        vm.stopPrank();
+        testInvariants(pool, "test deposit twice");
     }
 
     function testMintTwice(uint256 mintAmount) public {
-      mintAmount = bound(mintAmount, 1, MAX_FIL);
+        mintAmount = bound(mintAmount, 1, MAX_FIL);
 
-      vm.deal(investor, MAX_FIL);
-      vm.startPrank(investor);
+        vm.deal(investor, MAX_FIL);
+        vm.startPrank(investor);
 
-      wFIL.deposit{value: mintAmount + WAD}();
-      wFIL.approve(address(pool), mintAmount + WAD);
+        wFIL.deposit{value: mintAmount + WAD}();
+        wFIL.approve(address(pool), mintAmount + WAD);
 
-      // first we put WAD worth of FIL in the pool to block inflation attacks
-      uint256 sharesFromInitialDeposit = pool.mint(WAD, investor);
-      assertEq(sharesFromInitialDeposit, WAD, "Shares should be equal to WAD");
+        // first we put WAD worth of FIL in the pool to block inflation attacks
+        uint256 sharesFromInitialDeposit = pool.mint(WAD, investor);
+        assertEq(sharesFromInitialDeposit, WAD, "Shares should be equal to WAD");
 
-      uint256 sharesFromSecondDeposit = pool.mint(mintAmount, investor);
-      assertEq(sharesFromSecondDeposit, mintAmount, "Shares should be equal to mintAmount");
-      vm.stopPrank();
-      testInvariants(pool, "test mint twice");
+        uint256 sharesFromSecondDeposit = pool.mint(mintAmount, investor);
+        assertEq(sharesFromSecondDeposit, mintAmount, "Shares should be equal to mintAmount");
+        vm.stopPrank();
+        testInvariants(pool, "test mint twice");
     }
 
     function testMintDepositZero() public {
-      vm.startPrank(investor);
-      vm.expectRevert(InvalidParams.selector);
-      pool.mint(0, address(this));
+        vm.startPrank(investor);
+        vm.expectRevert(InvalidParams.selector);
+        pool.mint(0, address(this));
 
-      vm.expectRevert(InvalidParams.selector);
-      pool.deposit(0, address(this));
-      vm.stopPrank();
-      testInvariants(pool, "test mint deposit zero");
+        vm.expectRevert(InvalidParams.selector);
+        pool.deposit(0, address(this));
+        vm.stopPrank();
+        testInvariants(pool, "test mint deposit zero");
     }
 
     function testMintDepositForReceiver(string memory seed, uint256 amount) public {
-      amount = bound(amount, 1, MAX_FIL);
+        amount = bound(amount, 1, MAX_FIL);
 
-      address receiver = makeAddr(seed);
+        address receiver = makeAddr(seed);
 
-      vm.deal(investor, amount * 2 + WAD);
-      vm.startPrank(investor);
+        vm.deal(investor, amount * 2 + WAD);
+        vm.startPrank(investor);
 
-      wFIL.deposit{value: amount * 2 + WAD}();
-      wFIL.approve(address(pool), amount * 2 + WAD);
+        wFIL.deposit{value: amount * 2 + WAD}();
+        wFIL.approve(address(pool), amount * 2 + WAD);
 
-      uint256 preDepositIFILBal = iFIL.balanceOf(receiver);
+        uint256 preDepositIFILBal = iFIL.balanceOf(receiver);
 
-      pool.deposit(amount, receiver);
+        pool.deposit(amount, receiver);
 
-      uint256 postDepositIFILBal = iFIL.balanceOf(receiver);
+        uint256 postDepositIFILBal = iFIL.balanceOf(receiver);
 
-      assertEq(postDepositIFILBal - preDepositIFILBal, amount, "Receiver should have received minted iFIL");
+        assertEq(postDepositIFILBal - preDepositIFILBal, amount, "Receiver should have received minted iFIL");
 
-      pool.mint(amount, receiver);
+        pool.mint(amount, receiver);
 
-      uint256 postMintIFILBal = iFIL.balanceOf(receiver);
+        uint256 postMintIFILBal = iFIL.balanceOf(receiver);
 
-      assertEq(postMintIFILBal - postDepositIFILBal, amount, "Receiver should have received minted iFIL");
+        assertEq(postMintIFILBal - postDepositIFILBal, amount, "Receiver should have received minted iFIL");
 
-      vm.stopPrank();
-      testInvariants(pool, "testMintDepositForReceiver");
+        vm.stopPrank();
+        testInvariants(pool, "testMintDepositForReceiver");
     }
 
     function testMintAfterKnownPoolTokenAppreciation() public {
-      uint256 stakeAmount = 100e18;
-      uint256 rewardAmount = 50e18;
+        uint256 stakeAmount = 100e18;
+        uint256 rewardAmount = 50e18;
 
-      vm.startPrank(investor);
-      vm.deal(investor, MAX_FIL);
-      wFIL.deposit{value: MAX_FIL}();
-      wFIL.approve(address(pool), MAX_FIL);
+        vm.startPrank(investor);
+        vm.deal(investor, MAX_FIL);
+        wFIL.deposit{value: MAX_FIL}();
+        wFIL.approve(address(pool), MAX_FIL);
 
-      uint256 shares = pool.deposit(stakeAmount, investor);
-      assertEq(pool.liquidStakingToken().totalSupply(), shares, "Total supply should equal shares");
-      assertEq(pool.convertToAssets(shares), stakeAmount, "Preview redeem should equal stake amount");
-      assertPegInTact(pool);
-      // next we want to double the pool's asset
-      // we do this by transferring the rewards amount directly into the pool
-      wFIL.transfer(address(pool), rewardAmount);
-      // expecting to convert to assets should cause rewardAmount % increase in price
-      assertEq(pool.convertToAssets(shares), rewardAmount + stakeAmount, "Preview redeem should equal stake amount + reward amount");
+        uint256 shares = pool.deposit(stakeAmount, investor);
+        assertEq(pool.liquidStakingToken().totalSupply(), shares, "Total supply should equal shares");
+        assertEq(pool.convertToAssets(shares), stakeAmount, "Preview redeem should equal stake amount");
+        assertPegInTact(pool);
+        // next we want to double the pool's asset
+        // we do this by transferring the rewards amount directly into the pool
+        wFIL.transfer(address(pool), rewardAmount);
+        // expecting to convert to assets should cause rewardAmount % increase in price
+        assertEq(
+            pool.convertToAssets(shares),
+            rewardAmount + stakeAmount,
+            "Preview redeem should equal stake amount + reward amount"
+        );
 
-      // mint wad shares, expect to get back 
-      uint256 mintDepositAmount = WAD;
-      // assets here should be more than the mintDepositAmount by the price of iFIL denominated in FIL
-      uint256 assets = pool.mint(mintDepositAmount, investor);
-      // since we 50% appreciated on pool assets, it should br 1.5x the assets required to mint the mintDepositAmount
-      assertEq(assets, mintDepositAmount * 3 / 2, "Assets should be 1.5x the mint amount");
+        // mint wad shares, expect to get back
+        uint256 mintDepositAmount = WAD;
+        // assets here should be more than the mintDepositAmount by the price of iFIL denominated in FIL
+        uint256 assets = pool.mint(mintDepositAmount, investor);
+        // since we 50% appreciated on pool assets, it should br 1.5x the assets required to mint the mintDepositAmount
+        assertEq(assets, mintDepositAmount * 3 / 2, "Assets should be 1.5x the mint amount");
 
-      shares = pool.deposit(mintDepositAmount, investor);
-      assertEq(shares, mintDepositAmount * 2 / 3, "Shares received should be 50% less than mintDepositAmount after appreciation");
-      testInvariants(pool, "testMintAfterKnownPoolTokenAppreciation");
+        shares = pool.deposit(mintDepositAmount, investor);
+        assertEq(
+            shares,
+            mintDepositAmount * 2 / 3,
+            "Shares received should be 50% less than mintDepositAmount after appreciation"
+        );
+        testInvariants(pool, "testMintAfterKnownPoolTokenAppreciation");
     }
 
     function testMintDepositAfterPoolTokenAppreciation(uint256 stakeAmount, uint256 rewardAmount) public {
-      stakeAmount = bound(stakeAmount, WAD, MAX_FIL / 2);
-      rewardAmount = bound(rewardAmount, WAD, MAX_FIL / 2);
+        stakeAmount = bound(stakeAmount, WAD, MAX_FIL / 2);
+        rewardAmount = bound(rewardAmount, WAD, MAX_FIL / 2);
 
-      vm.startPrank(investor);
-      vm.deal(investor, MAX_FIL * 3);
-      wFIL.deposit{value: MAX_FIL * 3}();
-      wFIL.approve(address(pool), MAX_FIL * 3);
+        vm.startPrank(investor);
+        vm.deal(investor, MAX_FIL * 3);
+        wFIL.deposit{value: MAX_FIL * 3}();
+        wFIL.approve(address(pool), MAX_FIL * 3);
 
-      uint256 shares = pool.deposit(stakeAmount, investor);
-      assertEq(pool.liquidStakingToken().totalSupply(), shares, "Total supply should equal shares");
-      assertEq(pool.convertToAssets(shares), stakeAmount, "Preview redeem should equal stake amount");
-      assertPegInTact(pool);
-      // next we want to appreciate the pool's asset
-      // we do this by transferring the rewards amount directly into the pool
-      wFIL.transfer(address(pool), rewardAmount);
-      // expecting to convert to assets should cause rewardAmount % increase in price
-      assertEq(pool.convertToAssets(shares), rewardAmount + stakeAmount, "Preview redeem should equal stake amount + reward amount");
+        uint256 shares = pool.deposit(stakeAmount, investor);
+        assertEq(pool.liquidStakingToken().totalSupply(), shares, "Total supply should equal shares");
+        assertEq(pool.convertToAssets(shares), stakeAmount, "Preview redeem should equal stake amount");
+        assertPegInTact(pool);
+        // next we want to appreciate the pool's asset
+        // we do this by transferring the rewards amount directly into the pool
+        wFIL.transfer(address(pool), rewardAmount);
+        // expecting to convert to assets should cause rewardAmount % increase in price
+        assertEq(
+            pool.convertToAssets(shares),
+            rewardAmount + stakeAmount,
+            "Preview redeem should equal stake amount + reward amount"
+        );
 
-      uint256 mintDepositAmount = WAD;
-      // assets here should be more than the mintDepositAmount by the price of iFIL denominated in FIL
-      uint256 assets = pool.mint(mintDepositAmount, investor);
-      // appreciate by difference in assets
-      uint256 appreciation = (rewardAmount + stakeAmount).divWadDown(stakeAmount);
+        uint256 mintDepositAmount = WAD;
+        // assets here should be more than the mintDepositAmount by the price of iFIL denominated in FIL
+        uint256 assets = pool.mint(mintDepositAmount, investor);
+        // appreciate by difference in assets
+        uint256 appreciation = (rewardAmount + stakeAmount).divWadDown(stakeAmount);
 
-      assertApproxEqAbs(assets, appreciation.mulWadDown(mintDepositAmount), 1, "Assets should include appreciation");
-      assertGt(assets, mintDepositAmount, "Assets paid should be greater than mint amount");
+        assertApproxEqAbs(assets, appreciation.mulWadDown(mintDepositAmount), 1, "Assets should include appreciation");
+        assertGt(assets, mintDepositAmount, "Assets paid should be greater than mint amount");
 
-      shares = pool.deposit(WAD, investor);
+        shares = pool.deposit(WAD, investor);
 
-      assertApproxEqAbs(shares, mintDepositAmount.divWadDown(appreciation), 1, "Assets should include appreciation");
-      assertLt(shares, mintDepositAmount, "Assets paid should be greater than mint amount");
+        assertApproxEqAbs(shares, mintDepositAmount.divWadDown(appreciation), 1, "Assets should include appreciation");
+        assertLt(shares, mintDepositAmount, "Assets paid should be greater than mint amount");
 
-      testInvariants(pool, "testMintDepositAfterPoolTokenAppreciation");
+        testInvariants(pool, "testMintDepositAfterPoolTokenAppreciation");
     }
 
     function testRecursiveDepositMintAfterDepeg(uint256 runs, uint256 depegAmt) public {
-      runs = bound(runs, 1, 1000);
-      depegAmt = bound(depegAmt, WAD, 1e27);
+        runs = bound(runs, 1, 1000);
+        depegAmt = bound(depegAmt, WAD, 1e27);
 
-      // first depeg iFIL to make sure it holds after depegging
-      vm.startPrank(investor);
-      vm.deal(investor, MAX_FIL);
-      wFIL.deposit{value: MAX_FIL}();
-      wFIL.approve(address(pool), MAX_FIL);
+        // first depeg iFIL to make sure it holds after depegging
+        vm.startPrank(investor);
+        vm.deal(investor, MAX_FIL);
+        wFIL.deposit{value: MAX_FIL}();
+        wFIL.approve(address(pool), MAX_FIL);
 
-      pool.deposit(WAD, investor);
-      wFIL.transfer(address(pool), depegAmt);
-
-      uint256 begConvertToShares = pool.convertToShares(WAD);
-      uint256 begConvertToAssets = pool.convertToAssets(WAD);
-
-      assertLt(begConvertToShares, WAD, "iFIL should have depegged");
-      assertGt(begConvertToAssets, WAD, "iFIL should have depgged");
-
-      for (uint256 i = 0; i < runs; i++) {
-        uint256 convertToShares = pool.convertToShares(WAD);
-        uint256 convertToAssets = pool.convertToAssets(WAD);
         pool.deposit(WAD, investor);
-        assertApproxEqRel(pool.convertToAssets(WAD), convertToAssets, 1e3, "iFIL should not have depegged again");
-        assertApproxEqRel(pool.convertToShares(WAD), convertToShares, 1e3, "iFIL should not have depegged again");
-      }
+        wFIL.transfer(address(pool), depegAmt);
 
-      assertApproxEqRel(pool.convertToAssets(WAD), begConvertToAssets, 1e3, "iFIL should not have depegged again");
-      assertApproxEqRel(pool.convertToShares(WAD), begConvertToShares, 1e3, "iFIL should not have depegged again");
+        uint256 begConvertToShares = pool.convertToShares(WAD);
+        uint256 begConvertToAssets = pool.convertToAssets(WAD);
 
-      testInvariants(pool, "testRecursiveDepositMintAfterDepeg");
+        assertLt(begConvertToShares, WAD, "iFIL should have depegged");
+        assertGt(begConvertToAssets, WAD, "iFIL should have depgged");
+
+        for (uint256 i = 0; i < runs; i++) {
+            uint256 convertToShares = pool.convertToShares(WAD);
+            uint256 convertToAssets = pool.convertToAssets(WAD);
+            pool.deposit(WAD, investor);
+            assertApproxEqRel(pool.convertToAssets(WAD), convertToAssets, 1e3, "iFIL should not have depegged again");
+            assertApproxEqRel(pool.convertToShares(WAD), convertToShares, 1e3, "iFIL should not have depegged again");
+        }
+
+        assertApproxEqRel(pool.convertToAssets(WAD), begConvertToAssets, 1e3, "iFIL should not have depegged again");
+        assertApproxEqRel(pool.convertToShares(WAD), begConvertToShares, 1e3, "iFIL should not have depegged again");
+
+        testInvariants(pool, "testRecursiveDepositMintAfterDepeg");
     }
 }
-
-

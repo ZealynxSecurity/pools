@@ -40,12 +40,9 @@ contract Deploy is Script {
         address wFIL = vm.envAddress("WFIL_ADDR");
         address agentFactory = address(new AgentFactory(router));
         address minerRegistry = address(new MinerRegistry(router, IAgentFactory(agentFactory)));
-        address poolRegistry = address(
-            new PoolRegistry(1e17, deployerAddr, router)
-        );
-        address agentPolice = address(
-            new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, WINDOW_LENGTH, deployerAddr, deployerAddr, router, IWFIL(wFIL))
-        );
+        address poolRegistry = address(new PoolRegistry(1e17, deployerAddr, router));
+        address agentPolice =
+            address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, deployerAddr, deployerAddr, router));
         address vcIssuer = vm.envAddress("VC_ISSUER_ADDR");
         address credParser = address(new CredParser());
         address agentDeployer = address(new AgentDeployer());

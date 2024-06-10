@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
+// solhint-disable private-vars-leading-underscore, var-name-mixedcase
 pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
@@ -8,16 +9,8 @@ import {FlipSig} from "./helpers/FlipSig.sol";
 
 contract SigReplay is Test {
     // this test illustrates signature malleability and the need for replay protection in the Agent Police
-    function testReplayNativeRecover(
-        uint256 vcIssuerPk,
-        bytes32 digest
-    ) public {
-        (
-            address signer,
-            uint8 v,
-            bytes32 r,
-            bytes32 s
-        ) = generateSignatureAndAddress(vcIssuerPk, digest);
+    function testReplayNativeRecover(uint256 vcIssuerPk, bytes32 digest) public {
+        (address signer, uint8 v, bytes32 r, bytes32 s) = generateSignatureAndAddress(vcIssuerPk, digest);
 
         FlipSig flipSig = new FlipSig();
 
@@ -29,10 +22,7 @@ contract SigReplay is Test {
 
         assertTrue(signer == signer2, "Signature must recover properly");
         // !
-        assertTrue(
-            signer == signer3,
-            "Illustrate: two different signatures recover to same address"
-        );
+        assertTrue(signer == signer3, "Illustrate: two different signatures recover to same address");
         // !
         assertTrue(
             !BytesLib.equal(abi.encode(v, r, s), abi.encode(v_, r_, s_)),
@@ -44,12 +34,7 @@ contract SigReplay is Test {
     function testReplayOZRecover(uint256 vcIssuerPk, bytes32 digest) public {
         FlipSig flipSig = new FlipSig();
 
-        (
-            address signer,
-            uint8 v,
-            bytes32 r,
-            bytes32 s
-        ) = generateSignatureAndAddress(vcIssuerPk, digest);
+        (address signer, uint8 v, bytes32 r, bytes32 s) = generateSignatureAndAddress(vcIssuerPk, digest);
 
         address signer2 = ECDSA.recover(digest, v, r, s);
 
@@ -59,37 +44,30 @@ contract SigReplay is Test {
         address signer3 = ECDSA.recover(digest, v_, r_, s_);
 
         assertTrue(signer == signer2, "Signature must recover properly");
-        assertTrue(
-            signer != signer3,
-            "Illustrate: two different signatures recover to same address"
-        );
+        assertTrue(signer != signer3, "Illustrate: two different signatures recover to same address");
         assertTrue(
             !BytesLib.equal(abi.encode(v, r, s), abi.encode(v_, r_, s_)),
             "Illustrate: two different signatures create same hash key"
         );
     }
 
-    function generateSignatureAndAddress(
-        uint256 vcIssuerPk,
-        bytes32 digest
-    ) internal returns (address signer, uint8 v, bytes32 r, bytes32 s) {
-        vcIssuerPk = bound(
-            vcIssuerPk,
-            1,
-            115792089237316195423570985008687907852837564279074904382605163141518161494336
-        );
+    function generateSignatureAndAddress(uint256 vcIssuerPk, bytes32 digest)
+        internal
+        returns (address signer, uint8 v, bytes32 r, bytes32 s)
+    {
+        vcIssuerPk =
+            bound(vcIssuerPk, 1, 115792089237316195423570985008687907852837564279074904382605163141518161494336);
 
         signer = vm.addr(vcIssuerPk);
 
         (v, r, s) = vm.sign(vcIssuerPk, digest);
     }
 
-    function recoverSignerUnsafe(
-        uint8 v,
-        bytes32 r,
-        bytes32 s,
-        bytes32 _hash
-    ) internal pure returns (address signer_) {
+    function recoverSignerUnsafe(uint8 v, bytes32 r, bytes32 s, bytes32 _hash)
+        internal
+        pure
+        returns (address signer_)
+    {
         signer_ = ecrecover(_hash, v, r, s);
     }
 }

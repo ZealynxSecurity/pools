@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
+// solhint-disable private-vars-leading-underscore, var-name-mixedcase
 pragma solidity 0.8.17;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
@@ -41,117 +42,118 @@ contract AgentBasicTest is BaseTest {
 
     uint64 miner;
     Agent agent;
+
     function setUp() public {
         miner = _newMiner(minerOwner1);
         agent = _configureAgent(minerOwner1, miner);
     }
 
     function assertAgentPermissions(address operator, address owner, address _agent) public {
-      assertEq(Agent(payable(_agent)).owner(), owner, "wrong owner");
-      assertEq(Agent(payable(_agent)).operator(), operator, "wrong operator");
+        assertEq(Agent(payable(_agent)).owner(), owner, "wrong owner");
+        assertEq(Agent(payable(_agent)).operator(), operator, "wrong operator");
     }
 
     function testInitialState() public {
-      assertAgentPermissions(minerOwner1, minerOwner1, address(agent));
+        assertAgentPermissions(minerOwner1, minerOwner1, address(agent));
     }
 
     function testAddMinerNonOwnerOperator() public {
-      SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), miner);
-      vm.startPrank(investor1);
-      try agent.addMiner(addMinerCred) {
-        assertTrue(false, "should have failed - unauthorized");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-      }
+        SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), miner);
+        vm.startPrank(investor1);
+        try agent.addMiner(addMinerCred) {
+            assertTrue(false, "should have failed - unauthorized");
+        } catch (bytes memory e) {
+            assertEq(errorSelector(e), Unauthorized.selector);
+        }
     }
 
     function testAddDuplicateMiner() public {
-      // hack to get the miner's next_owner to be the agent again so we can attempt to add duplicate miners without running into other errors
-      // although i dont think this situation could ever occur (because agent would already own the miner at this point)
-      vm.startPrank(address(agent));
-      miner.changeOwnerAddress(address(agent));
-      vm.stopPrank();
+        // hack to get the miner's next_owner to be the agent again so we can attempt to add duplicate miners without running into other errors
+        // although i dont think this situation could ever occur (because agent would already own the miner at this point)
+        vm.startPrank(address(agent));
+        miner.changeOwnerAddress(address(agent));
+        vm.stopPrank();
 
-      SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), miner);
+        SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), miner);
 
-      vm.startPrank(minerOwner1);
-      try agent.addMiner(addMinerCred) {
-        assertTrue(false, "should have failed - duplicate miner");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), MinerRegistry.InvalidParams.selector);
-      }
+        vm.startPrank(minerOwner1);
+        try agent.addMiner(addMinerCred) {
+            assertTrue(false, "should have failed - duplicate miner");
+        } catch (bytes memory e) {
+            assertEq(errorSelector(e), MinerRegistry.InvalidParams.selector);
+        }
 
-      vm.stopPrank();
+        vm.stopPrank();
     }
 
     function testTransferOwner() public {
-      address owner = makeAddr("OWNER");
-      vm.prank(minerOwner1);
-      agent.transferOwnership(owner);
-      assertEq(agent.pendingOwner(), owner);
-      vm.prank(owner);
-      agent.acceptOwnership();
-      assertEq(agent.owner(), owner);
+        address owner = makeAddr("OWNER");
+        vm.prank(minerOwner1);
+        agent.transferOwnership(owner);
+        assertEq(agent.pendingOwner(), owner);
+        vm.prank(owner);
+        agent.acceptOwnership();
+        assertEq(agent.owner(), owner);
     }
 
     function testTransferOperator() public {
-      address operator = makeAddr("OPERATOR");
-      vm.prank(minerOwner1);
-      agent.transferOperator(operator);
-      assertEq(agent.pendingOperator(), operator);
-      vm.prank(operator);
-      agent.acceptOperator();
-      assertEq(agent.operator(), operator);
+        address operator = makeAddr("OPERATOR");
+        vm.prank(minerOwner1);
+        agent.transferOperator(operator);
+        assertEq(agent.pendingOperator(), operator);
+        vm.prank(operator);
+        agent.acceptOperator();
+        assertEq(agent.operator(), operator);
     }
 
     function testSetAdoRequestKey(address pubKey) public {
-      vm.startPrank(agent.owner());
-      agent.setAdoRequestKey(pubKey);
-      assertEq(agent.adoRequestKey(), pubKey);
+        vm.startPrank(agent.owner());
+        agent.setAdoRequestKey(pubKey);
+        assertEq(agent.adoRequestKey(), pubKey);
     }
 
     function testReceive() public {
-      uint256 transferAmt = 1e18;
+        uint256 transferAmt = 1e18;
 
-      vm.deal(investor1, transferAmt);
-      (Agent agent1,) = configureAgent(investor1);
-      uint256 agentFILBal = address(agent1).balance;
+        vm.deal(investor1, transferAmt);
+        (Agent agent1,) = configureAgent(investor1);
+        uint256 agentFILBal = address(agent1).balance;
 
-      vm.prank(investor1);
-      (bool sent,) = payable(address(agent1)).call{value: transferAmt}("");
-      assertTrue(sent);
-      assertEq(address(agent1).balance, agentFILBal + transferAmt);
+        vm.prank(investor1);
+        (bool sent,) = payable(address(agent1)).call{value: transferAmt}("");
+        assertTrue(sent);
+        assertEq(address(agent1).balance, agentFILBal + transferAmt);
     }
 
     function testFallback() public {
-      uint256 transferAmt = 1e18;
+        uint256 transferAmt = 1e18;
 
-      vm.deal(investor1, transferAmt);
-      (Agent _agent,) = configureAgent(investor1);
-      uint256 agentFILBal = address(_agent).balance;
+        vm.deal(investor1, transferAmt);
+        (Agent _agent,) = configureAgent(investor1);
+        uint256 agentFILBal = address(_agent).balance;
 
-      vm.prank(investor1);
-      (bool sent,) = payable(address(_agent)).call{value: transferAmt}(bytes("fdsa"));
-      assertTrue(sent);
-      assertEq(address(_agent).balance, agentFILBal + transferAmt);
+        vm.prank(investor1);
+        (bool sent,) = payable(address(_agent)).call{value: transferAmt}(bytes("fdsa"));
+        assertTrue(sent);
+        assertEq(address(_agent).balance, agentFILBal + transferAmt);
     }
 
     function testSingleUseCredentials() public {
-      // testing that single use credentials are consumed through pushFunds call
-      uint256 pushAmount = 1e18;
-      vm.deal(address(agent), pushAmount);
-      SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), miner, pushAmount);
+        // testing that single use credentials are consumed through pushFunds call
+        uint256 pushAmount = 1e18;
+        vm.deal(address(agent), pushAmount);
+        SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), miner, pushAmount);
 
-      vm.startPrank(minerOwner1);
-      agent.pushFunds(pushFundsCred);
+        vm.startPrank(minerOwner1);
+        agent.pushFunds(pushFundsCred);
 
-      try agent.pushFunds(pushFundsCred) {
-        assertTrue(false, "should have failed - single use credential");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
-      }
+        try agent.pushFunds(pushFundsCred) {
+            assertTrue(false, "should have failed - single use credential");
+        } catch (bytes memory e) {
+            assertEq(errorSelector(e), VCVerifier.InvalidCredential.selector);
+        }
 
-      vm.stopPrank();
+        vm.stopPrank();
     }
 }
 
@@ -164,81 +166,81 @@ contract AgentPushPullFundsTest is BaseTest {
 
     uint64 miner;
     Agent agent;
+
     function setUp() public {
         miner = _newMiner(minerOwner1);
         agent = _configureAgent(minerOwner1, miner);
     }
 
     function testPullFunds(uint256 drawAmount) public {
-      vm.assume(drawAmount > 0.001e18);
-      uint256 preAgentBal = address(agent).balance;
+        vm.assume(drawAmount > 0.001e18);
+        uint256 preAgentBal = address(agent).balance;
 
-      address miner1 = idStore.ids(miner);
-      // give the miner some funds to pull
-      vm.deal(miner1, drawAmount);
+        address miner1 = idStore.ids(miner);
+        // give the miner some funds to pull
+        vm.deal(miner1, drawAmount);
 
-      assertEq(wFIL.balanceOf(address(agent)), 0);
-      SignedCredential memory pullFundsCred = issuePullFundsCred(agent.id(), miner, drawAmount);
-      vm.startPrank(minerOwner1);
-      agent.pullFunds(pullFundsCred);
-      vm.stopPrank();
-      assertEq(address(agent).balance, drawAmount + preAgentBal);
-      assertEq(miner1.balance, 0);
+        assertEq(wFIL.balanceOf(address(agent)), 0);
+        SignedCredential memory pullFundsCred = issuePullFundsCred(agent.id(), miner, drawAmount);
+        vm.startPrank(minerOwner1);
+        agent.pullFunds(pullFundsCred);
+        vm.stopPrank();
+        assertEq(address(agent).balance, drawAmount + preAgentBal);
+        assertEq(miner1.balance, 0);
     }
 
     function testPushFunds(uint256 pushAmount) public {
-      vm.assume(pushAmount > 0.001e18);
-      require(address(agent).balance == 0);
+        vm.assume(pushAmount > 0.001e18);
+        require(address(agent).balance == 0);
 
-      address miner1 = idStore.ids(miner);
-      // give the agent some funds to pull
-      vm.deal(address(agent), pushAmount);
+        address miner1 = idStore.ids(miner);
+        // give the agent some funds to pull
+        vm.deal(address(agent), pushAmount);
 
-      SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), miner, pushAmount);
-      vm.prank(minerOwner1);
-      agent.pushFunds(pushFundsCred);
+        SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), miner, pushAmount);
+        vm.prank(minerOwner1);
+        agent.pushFunds(pushFundsCred);
 
-      assertEq(address(agent).balance, 0);
-      assertEq(miner1.balance, pushAmount);
+        assertEq(address(agent).balance, 0);
+        assertEq(miner1.balance, pushAmount);
     }
 
     function testPushFundsToRandomMiner() public {
-      uint64 secondMiner = _newMiner(minerOwner1);
+        uint64 secondMiner = _newMiner(minerOwner1);
 
-      SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), secondMiner, 1e18);
-      vm.startPrank(minerOwner1);
-      try agent.pushFunds(pushFundsCred) {
-          assertTrue(false, "should not be able to push funds to random miners");
-      } catch (bytes memory b) {
-          assertEq(errorSelector(b), Unauthorized.selector);
-      }
+        SignedCredential memory pushFundsCred = issuePushFundsCred(agent.id(), secondMiner, 1e18);
+        vm.startPrank(minerOwner1);
+        try agent.pushFunds(pushFundsCred) {
+            assertTrue(false, "should not be able to push funds to random miners");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), Unauthorized.selector);
+        }
 
-      vm.stopPrank();
+        vm.stopPrank();
     }
 
     function testPullFundsWithWrongCred() public {
-      SignedCredential memory pullFundsCred = issuePullFundsCred(agent.id(), miner, 0);
-      vm.startPrank(minerOwner1);
-      try agent.pushFunds(pullFundsCred) {
-        assertTrue(false, "should not be able to pull funds with wrong cred");
-      } catch (bytes memory b) {
-        assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
-      }
+        SignedCredential memory pullFundsCred = issuePullFundsCred(agent.id(), miner, 0);
+        vm.startPrank(minerOwner1);
+        try agent.pushFunds(pullFundsCred) {
+            assertTrue(false, "should not be able to pull funds with wrong cred");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
+        }
     }
 
     function testPushFundsWithWrongCred() public {
-      SignedCredential memory pullFundsCred = issuePushFundsCred(agent.id(), miner, 0);
-      vm.startPrank(minerOwner1);
-      try agent.pullFunds(pullFundsCred) {
-        assertTrue(false, "should not be able to pull funds with wrong cred");
-      } catch (bytes memory b) {
-        assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
-      }
+        SignedCredential memory pullFundsCred = issuePushFundsCred(agent.id(), miner, 0);
+        vm.startPrank(minerOwner1);
+        try agent.pullFunds(pullFundsCred) {
+            assertTrue(false, "should not be able to pull funds with wrong cred");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), VCVerifier.InvalidCredential.selector);
+        }
     }
 }
 
 contract AgentRmEquityTest is BaseTest {
-
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
@@ -250,463 +252,362 @@ contract AgentRmEquityTest is BaseTest {
     IAgent agent;
     uint64 miner;
     IPool pool;
+    IAgentPolice agentPolice;
 
     function setUp() public {
-      pool = createAndFundPool(stakeAmount, investor1);
-      (agent, miner) = configureAgent(minerOwner);
+        pool = createAndFundPool(stakeAmount, investor1);
+        (agent, miner) = configureAgent(minerOwner);
+        agentPolice = GetRoute.agentPolice(router);
     }
 
     // no matter what statistics come in the credential, if no loans, can withdraw
-    function testWithdrawWithNoLoans(
-      uint256 bal,
-      uint256 withdrawAmount
-    ) public {
-      vm.assume(bal >= withdrawAmount);
+    function testWithdrawWithNoLoans(uint256 bal, uint256 withdrawAmount) public {
+        vm.assume(bal >= withdrawAmount);
 
-      vm.deal(address(agent), withdrawAmount);
+        vm.deal(address(agent), withdrawAmount);
 
-      (
-        address receiver,
-        SignedCredential memory withdrawCred
-      ) = customWithdrawCred(
-        // balance doesn't matter in this test
-        bal,
-        // withdraw amount doesn't matter in this test
-        withdrawAmount,
-        // principal has to be 0 for this test (no loans)
-        0,
-        // agent value
-        bal,
-        // collateral value
-        bal,
-        // EDR does not matter for this test
-        0
-      );
+        (address receiver, SignedCredential memory withdrawCred) = customWithdrawCred(
+            // balance doesn't matter in this test
+            bal,
+            // withdraw amount doesn't matter in this test
+            withdrawAmount,
+            // principal has to be 0 for this test (no loans)
+            0,
+            // agent value
+            bal,
+            // collateral value
+            bal,
+            // EDR does not matter for this test
+            0
+        );
 
-      withdrawAndAssert(
-        receiver,
-        withdrawAmount,
-        withdrawCred
-      );
+        withdrawAndAssert(receiver, withdrawAmount, withdrawCred);
     }
 
     /// @dev this test only checks against the AgentPolice DTE check, it does not check against the pool's checks
     function testWithdrawWithOutstandingPrincipal(
-      uint256 bal,
-      uint256 withdrawAmount,
-      uint256 principal,
-      uint256 agentValue
+        uint256 bal,
+        uint256 withdrawAmount,
+        uint256 principal,
+        uint256 agentValue
     ) public {
-      bal = bound(bal, DUST, MAX_FIL);
-      withdrawAmount = bound(withdrawAmount, 0, bal - DUST);
-      principal = bound(principal, WAD, MAX_FIL);
-      // agentValue includes principal, so it should never be less than principal
-      agentValue = bound(agentValue, principal, MAX_FIL);
-      uint256 collateralValue = agentValue / 2;
+        bal = bound(bal, DUST, MAX_FIL);
+        withdrawAmount = bound(withdrawAmount, 0, bal - DUST);
+        principal = bound(principal, WAD, MAX_FIL);
+        // agentValue includes principal, so it should never be less than principal
+        agentValue = bound(agentValue, principal, MAX_FIL);
+        uint256 collateralValue = agentValue / 2;
 
-      (
-        address receiver,
-        SignedCredential memory withdrawCred
-      ) = customWithdrawCred(
-        bal,
-        withdrawAmount,
-        principal,
-        agentValue,
-        collateralValue,
-        // EDR does not matter for this test
-        WAD
-      );
-
-      // uint256 preAgentBalance = address(agent).balance;
-
-      uint256 equity = agentValue - principal;
-
-      uint256 maxPoliceDTE = GetRoute.agentPolice(router).maxDTE();
-      uint256 maxPoliceDTL = GetRoute.agentPolice(router).maxDTL();
-
-      if (principal > (equity * maxPoliceDTE / WAD) || principal > (collateralValue * maxPoliceDTL / WAD)) {
-        // DTE > 1 -> no go
-        withdrawAndAssertRevert(
-          receiver,
-          withdrawCred,
-          AgentPolice.AgentStateRejected.selector
+        (address receiver, SignedCredential memory withdrawCred) = customWithdrawCred(
+            bal,
+            withdrawAmount,
+            principal,
+            agentValue,
+            collateralValue,
+            // EDR does not matter for this test
+            WAD
         );
-      } else {
-        // DTE <= 1
-        withdrawAndAssert(
-          receiver,
-          withdrawAmount,
-          withdrawCred
-        );
-      }
+
+        // uint256 preAgentBalance = address(agent).balance;
+
+        uint256 equity = agentValue - principal;
+
+        uint256 maxPoliceDTE = GetRoute.agentPolice(router).maxDTE();
+        uint256 maxPoliceDTL = GetRoute.agentPolice(router).maxDTL();
+
+        if (principal > (equity * maxPoliceDTE / WAD) || principal > (collateralValue * maxPoliceDTL / WAD)) {
+            // DTE > 1 -> no go
+            withdrawAndAssertRevert(receiver, withdrawCred, AgentPolice.AgentStateRejected.selector);
+        } else {
+            // DTE <= 1
+            withdrawAndAssert(receiver, withdrawAmount, withdrawCred);
+        }
     }
 
     function testWithdrawIntoUnapprovedLTV(uint256 principal, uint256 collateralValue) public {
-      collateralValue = bound(collateralValue, WAD, MAX_FIL);
-      principal = bound(principal, collateralValue + DUST, MAX_FIL);
-      depositFundsIntoPool(pool, principal, investor1);
-      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), principal));
+        collateralValue = bound(collateralValue, WAD, MAX_FIL);
+        principal = bound(principal, collateralValue + DUST, MAX_FIL);
+        depositFundsIntoPool(pool, principal, investor1);
+        agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), principal));
 
-      // create a withdraw credential
-      (
-        address receiver,
-        SignedCredential memory withdrawCred
-      ) = customWithdrawCred(
-        // balance doesn't matter in this test
-        100e18,
-        // withdraw amount doesn't matter in this test
-        1e18,
-        principal,
-        collateralValue * 2,
-        collateralValue,
-        // EDR does not matter for this test
-        WAD
-      );
+        // create a withdraw credential
+        (address receiver, SignedCredential memory withdrawCred) = customWithdrawCred(
+            // balance doesn't matter in this test
+            100e18,
+            // withdraw amount doesn't matter in this test
+            1e18,
+            principal,
+            collateralValue * 2,
+            collateralValue,
+            // EDR does not matter for this test
+            WAD
+        );
 
-      withdrawAndAssertRevert(
-        receiver,
-        withdrawCred,
-        AgentPolice.AgentStateRejected.selector
-      );
+        withdrawAndAssertRevert(receiver, withdrawCred, AgentPolice.AgentStateRejected.selector);
     }
 
     function testWithdrawIntoUnapprovedDTI(uint256 principal, uint256 badEDR) public {
-      // in this test, we want EDR to be > maxDTI, so we set the principal to be
-      principal = bound(principal, WAD, MAX_FIL);
-      depositFundsIntoPool(pool, principal, investor1);
-      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), principal));
+        // in this test, we want EDR to be > maxDTI, so we set the principal to be
+        principal = bound(principal, WAD, MAX_FIL);
+        depositFundsIntoPool(pool, principal, investor1);
+        agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), principal));
 
-      uint256 badEDRUpper =
-        _getAdjustedRate(GCRED)
-        .mulWadUp(principal)
-        .mulWadUp(EPOCHS_IN_DAY)
-        .divWadDown(pool.maxDTE());
+        uint256 badEDRUpper =
+            _getAdjustedRate().mulWadUp(principal).mulWadUp(EPOCHS_IN_DAY).divWadDown(agentPolice.maxDTE());
 
-      badEDR = bound(badEDR, DUST, badEDRUpper - DUST);
-      // collateral needs to result in LTV < 1
-      uint256 collateralValue = principal * 3;
-      // agent value needs to result in DTE < 1
-      uint256 agentValue = collateralValue * 3;
+        badEDR = bound(badEDR, DUST, badEDRUpper - DUST);
+        // collateral needs to result in LTV < 1
+        uint256 collateralValue = principal * 3;
+        // agent value needs to result in DTE < 1
+        uint256 agentValue = collateralValue * 3;
 
-      (
-        address receiver,
-        SignedCredential memory withdrawCred
-      ) = customWithdrawCred(
-        // balance doesn't matter in this test
-        100e18,
-        // withdraw amount doesn't matter in this test
-        1e18,
-        principal,
-        // agent value needs to result in LTV < 1
-        agentValue,
-        // collateral value
-        collateralValue,
-        // EDR does not matter for this test
-        badEDR
-      );
+        (address receiver, SignedCredential memory withdrawCred) = customWithdrawCred(
+            // balance doesn't matter in this test
+            100e18,
+            // withdraw amount doesn't matter in this test
+            1e18,
+            principal,
+            // agent value needs to result in LTV < 1
+            agentValue,
+            // collateral value
+            collateralValue,
+            // EDR does not matter for this test
+            badEDR
+        );
 
-      withdrawAndAssertRevert(
-        receiver,
-        withdrawCred,
-        AgentPolice.AgentStateRejected.selector
-      );
+        withdrawAndAssertRevert(receiver, withdrawCred, AgentPolice.AgentStateRejected.selector);
     }
 
     function testWithdrawOverEpochsOwedThreshold(uint256 rollFwdEpochs) public {
-      vm.assume(rollFwdEpochs < EPOCHS_IN_YEAR);
-      uint256 borrowAmount = WAD;
-      uint256 agentValue = WAD * 10;
+        vm.assume(rollFwdEpochs < EPOCHS_IN_YEAR);
+        uint256 borrowAmount = WAD;
+        uint256 agentValue = WAD * 10;
 
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      agentBorrow(agent, pool.id(), borrowCred);
+        agentBorrow(agent, pool.id(), borrowCred);
 
-      vm.roll(block.number + rollFwdEpochs);
+        vm.roll(block.number + rollFwdEpochs);
 
-      (
-        address receiver,
-        SignedCredential memory withdrawCred
-      ) = customWithdrawCred(
-        // balance
-        10e18,
-        // withdrawAmount 1
-        WAD,
-        WAD,
-        agentValue,
-        agentValue / 10,
-        // great EDR
-        WAD
-      );
+        (address receiver, SignedCredential memory withdrawCred) = customWithdrawCred(
+            // balance
+            10e18,
+            // withdrawAmount 1
+            WAD,
+            WAD,
+            agentValue,
+            agentValue / 10,
+            // great EDR
+            WAD
+        );
 
-      withdrawAndAssert(
-        receiver,
-        WAD,
-        withdrawCred
-      );
+        withdrawAndAssert(receiver, WAD, withdrawCred);
     }
 
-    function testWithdrawMoreThanLiquid(
-      uint256 bal,
-      uint256 withdrawAmount,
-      uint256 principal,
-      uint256 agentValue
-    ) public {
-      bal = bound(bal, 0, MAX_FIL);
-      withdrawAmount = bound(withdrawAmount, bal + 1, MAX_FIL);
+    function testWithdrawMoreThanLiquid(uint256 bal, uint256 withdrawAmount, uint256 principal, uint256 agentValue)
+        public
+    {
+        bal = bound(bal, 0, MAX_FIL);
+        withdrawAmount = bound(withdrawAmount, bal + 1, MAX_FIL);
 
-      principal = bound(principal, WAD, MAX_FIL / 3);
-      // ensure DTE < 1
-      agentValue = bound(agentValue, principal * 3, MAX_FIL);
+        principal = bound(principal, WAD, MAX_FIL / 3);
+        // ensure DTE < 1
+        agentValue = bound(agentValue, principal * 3, MAX_FIL);
 
-      (
-        address receiver,
-        SignedCredential memory withdrawCred
-       ) = customWithdrawCred(
-        bal,
-        withdrawAmount,
-        principal,
-        agentValue,
-        agentValue / 2,
-        // great EDR
-        WAD
-      );
+        (address receiver, SignedCredential memory withdrawCred) = customWithdrawCred(
+            bal,
+            withdrawAmount,
+            principal,
+            agentValue,
+            agentValue / 2,
+            // great EDR
+            WAD
+        );
 
-      withdrawAndAssertRevert(
-        receiver,
-        withdrawCred,
-        Agent.InsufficientFunds.selector
-      );
+        withdrawAndAssertRevert(receiver, withdrawCred, Agent.InsufficientFunds.selector);
     }
 
     function customWithdrawCred(
-      uint256 bal,
-      uint256 withdrawAmount,
-      uint256 principal,
-      uint256 agentValue,
-      uint256 collateralValue,
-      uint256 edr
-    ) internal returns (
-      address receiver,
-      SignedCredential memory sc
-    ) {
-      receiver = makeAddr("RECEIVER");
-      vm.deal(address(agent), bal);
+        uint256 bal,
+        uint256 withdrawAmount,
+        uint256 principal,
+        uint256 agentValue,
+        uint256 collateralValue,
+        uint256 edr
+    ) internal returns (address receiver, SignedCredential memory sc) {
+        receiver = makeAddr("RECEIVER");
+        vm.deal(address(agent), bal);
 
-      AgentData memory agentData = AgentData(
-        agentValue,
-        collateralValue,
-        // no expected daily faults
-        0,
-        edr,
-        GCRED,
-        10e18,
-        principal,
-        0,
-        0,
-        0
-      );
+        AgentData memory agentData = AgentData(
+            agentValue,
+            collateralValue,
+            // no expected daily faults
+            0,
+            // GCRED deprecated
+            0,
+            edr,
+            10e18,
+            principal,
+            0,
+            0,
+            0
+        );
 
-      sc = issueWithdrawCred(
-        agent.id(),
-        withdrawAmount,
-        agentData
-      );
+        sc = issueWithdrawCred(agent.id(), withdrawAmount, agentData);
     }
 
     // no matter what statistics come in the credential, if no loans, can remove miner
     function testRemoveMinerWithNoLoans() public {
-      (
-        uint64 newMinerOwner,
-        SignedCredential memory removeMinerCred
-      ) = customRemoveMinerCred(
-        // balance doesn't matter in this test
-        miner,
-        // principal has to be 0 for this test (no loans)
-        0,
-        // agent value does not matter for this test
-        DUST,
-        // collateral value does not matter for this test
-        DUST,
-        // EDR does not matter for this test
-        0
-      );
+        (uint64 newMinerOwner, SignedCredential memory removeMinerCred) = customRemoveMinerCred(
+            // balance doesn't matter in this test
+            miner,
+            // principal has to be 0 for this test (no loans)
+            0,
+            // agent value does not matter for this test
+            DUST,
+            // collateral value does not matter for this test
+            DUST,
+            // EDR does not matter for this test
+            0
+        );
 
-      removeMinerAndAssertSuccess(
-        miner,
-        newMinerOwner,
-        removeMinerCred
-      );
+        removeMinerAndAssertSuccess(miner, newMinerOwner, removeMinerCred);
     }
 
     /// @dev this test only checks against the AgentPolice DTE check, it does not check against the pool's checks
-    function testRemoveMinerWithOutstandingPrincipal(
-      uint256 principal,
-      uint256 agentValue
-    ) public {
-      principal = bound(principal, WAD, MAX_FIL);
-      // agentValue includes principal, so it should never be less than principal
-      agentValue = bound(agentValue, principal, MAX_FIL);
+    function testRemoveMinerWithOutstandingPrincipal(uint256 principal, uint256 agentValue) public {
+        principal = bound(principal, WAD, MAX_FIL);
+        // agentValue includes principal, so it should never be less than principal
+        agentValue = bound(agentValue, principal, MAX_FIL);
 
-      uint256 collateralValue = agentValue / 2;
+        uint256 collateralValue = agentValue / 2;
 
-      (
-        uint64 newMinerOwner,
-        SignedCredential memory removeMinerCred
-      ) = customRemoveMinerCred(
-        // balance doesn't matter in this test
-        miner,
-        principal,
-        agentValue,
-        // collateral value
-        collateralValue,
-        // EDR does not matter for this test
-        WAD
-      );
-
-      uint256 equity = agentValue - principal;
-
-      if (principal > equity || principal > collateralValue) {
-        // DTE > 1 -> no go
-        removeMinerAndAssertRevert(
-          miner,
-          newMinerOwner,
-          removeMinerCred,
-          AgentPolice.AgentStateRejected.selector
+        (uint64 newMinerOwner, SignedCredential memory removeMinerCred) = customRemoveMinerCred(
+            // balance doesn't matter in this test
+            miner,
+            principal,
+            agentValue,
+            // collateral value
+            collateralValue,
+            // EDR does not matter for this test
+            WAD
         );
-      } else {
-        // DTE <= 1
-        removeMinerAndAssertSuccess(
-          miner,
-          newMinerOwner,
-          removeMinerCred
-        );
-      }
+
+        uint256 equity = agentValue - principal;
+
+        if (principal > equity || principal > collateralValue) {
+            // DTE > 1 -> no go
+            removeMinerAndAssertRevert(miner, newMinerOwner, removeMinerCred, AgentPolice.AgentStateRejected.selector);
+        } else {
+            // DTE <= 1
+            removeMinerAndAssertSuccess(miner, newMinerOwner, removeMinerCred);
+        }
     }
 
     function customRemoveMinerCred(
-      uint64 minerToRemove,
-      uint256 principal,
-      uint256 agentValue,
-      uint256 collateralValue,
-      uint256 edr
-    ) internal returns (
-      uint64 newMinerOwnerId,
-      SignedCredential memory rmMinerCred
-    ) {
-      address newMinerOwner = makeAddr("NEW_MINER_OWNER");
+        uint64 minerToRemove,
+        uint256 principal,
+        uint256 agentValue,
+        uint256 collateralValue,
+        uint256 edr
+    ) internal returns (uint64 newMinerOwnerId, SignedCredential memory rmMinerCred) {
+        address newMinerOwner = makeAddr("NEW_MINER_OWNER");
 
-      newMinerOwnerId = idStore.addAddr(newMinerOwner);
+        newMinerOwnerId = idStore.addAddr(newMinerOwner);
 
-      AgentData memory agentData = AgentData(
-        agentValue,
-        collateralValue,
-        // no expected daily faults
-        0,
-        edr,
-        GCRED,
-        10e18,
-        principal,
-        0,
-        0,
-        0
-      );
+        AgentData memory agentData = AgentData(
+            agentValue,
+            collateralValue,
+            // no expected daily faults
+            0,
+            edr,
+            // GCRED deprecated
+            0,
+            10e18,
+            principal,
+            0,
+            0,
+            0
+        );
 
-      rmMinerCred = issueRemoveMinerCred(
-        agent.id(),
-        minerToRemove,
-        agentData
-      );
+        rmMinerCred = issueRemoveMinerCred(agent.id(), minerToRemove, agentData);
     }
 
-    function withdrawAndAssert(
-      address receiver,
-      uint256 withdrawAmount,
-      SignedCredential memory withdrawCred
-    ) internal {
-      uint256 preAgentLiquidFunds = agent.liquidAssets();
+    function withdrawAndAssert(address receiver, uint256 withdrawAmount, SignedCredential memory withdrawCred)
+        internal
+    {
+        uint256 preAgentLiquidFunds = agent.liquidAssets();
 
-      uint256 buffer = GetRoute.agentPolice(router).maxEpochsOwedTolerance();
+        testInvariants(pool, "withdrawAndAssertSuccess - pre");
 
-      testInvariants(pool, "withdrawAndAssertSuccess - pre");
-
-      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-      // action should not be allowed
-      if (account.epochsPaid > 0 && account.epochsPaid + buffer < block.number) {
-        vm.startPrank(_agentOwner(agent));
-        vm.expectRevert(AgentPolice.AgentStateRejected.selector);
-        agent.withdraw(receiver, withdrawCred);
-        vm.stopPrank();
-
-        assertEq(agent.liquidAssets(), preAgentLiquidFunds);
-        assertEq(receiver.balance, 0);
-      } else {
         vm.startPrank(minerOwner);
         agent.withdraw(receiver, withdrawCred);
         vm.stopPrank();
 
         assertEq(agent.liquidAssets(), preAgentLiquidFunds - withdrawAmount);
         assertEq(receiver.balance, withdrawAmount);
-      }
 
-      testInvariants(pool, "withdrawAndAssertSuccess - post");
+        testInvariants(pool, "withdrawAndAssertSuccess - post");
     }
 
-    function withdrawAndAssertRevert(
-      address receiver,
-      SignedCredential memory withdrawCred,
-      bytes4 errorSelectorValue
-    ) internal {
-      uint256 preAgentLiquidFunds = agent.liquidAssets();
-      // withdraw
-      vm.startPrank(minerOwner);
-      vm.expectRevert(abi.encodeWithSelector(errorSelectorValue));
-      agent.withdraw(receiver, withdrawCred);
-      vm.stopPrank();
+    function withdrawAndAssertRevert(address receiver, SignedCredential memory withdrawCred, bytes4 errorSelectorValue)
+        internal
+    {
+        uint256 preAgentLiquidFunds = agent.liquidAssets();
+        // withdraw
+        vm.startPrank(minerOwner);
+        vm.expectRevert(abi.encodeWithSelector(errorSelectorValue));
+        agent.withdraw(receiver, withdrawCred);
+        vm.stopPrank();
 
-      assertEq(
-        agent.liquidAssets(),
-        preAgentLiquidFunds,
-        "No funds should have been withdrawn"
-      );
-      testInvariants(pool, "withdrawAndAssertRevert");
+        assertEq(agent.liquidAssets(), preAgentLiquidFunds, "No funds should have been withdrawn");
+        testInvariants(pool, "withdrawAndAssertRevert");
     }
 
-    function removeMinerAndAssertSuccess(
-      uint64 removedMiner,
-      uint64 newMinerOwner,
-      SignedCredential memory rmMinerCred
-    ) internal {
-      vm.startPrank(minerOwner);
-      agent.removeMiner(newMinerOwner, rmMinerCred);
-      vm.stopPrank();
+    function removeMinerAndAssertSuccess(uint64 removedMiner, uint64 newMinerOwner, SignedCredential memory rmMinerCred)
+        internal
+    {
+        vm.startPrank(minerOwner);
+        agent.removeMiner(newMinerOwner, rmMinerCred);
+        vm.stopPrank();
 
-      assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 0, "Agent should have no miners registered");
-      assertFalse(GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner), "Miner should not be registered after removing");
-      testInvariants(pool, "removeMinerAndAssertSuccess");
-      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), idStore.ids(newMinerOwner), "Miner should have new proposed owner");
+        assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 0, "Agent should have no miners registered");
+        assertFalse(
+            GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner),
+            "Miner should not be registered after removing"
+        );
+        testInvariants(pool, "removeMinerAndAssertSuccess");
+        assertEq(
+            IMockMiner(idStore.ids(removedMiner)).proposed(),
+            idStore.ids(newMinerOwner),
+            "Miner should have new proposed owner"
+        );
     }
 
     function removeMinerAndAssertRevert(
-      uint64 removedMiner,
-      uint64 newMinerOwner,
-      SignedCredential memory rmMinerCred,
-      bytes4 errorSelectorValue
+        uint64 removedMiner,
+        uint64 newMinerOwner,
+        SignedCredential memory rmMinerCred,
+        bytes4 errorSelectorValue
     ) internal {
-      vm.startPrank(minerOwner);
-      vm.expectRevert(abi.encodeWithSelector(errorSelectorValue));
-      agent.removeMiner(newMinerOwner, rmMinerCred);
-      vm.stopPrank();
+        vm.startPrank(minerOwner);
+        vm.expectRevert(abi.encodeWithSelector(errorSelectorValue));
+        agent.removeMiner(newMinerOwner, rmMinerCred);
+        vm.stopPrank();
 
-      assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 1, "Agent should have 1 miner registered");
-      assertTrue(GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner), "Miner should be registered");
-      assertEq(IMockMiner(idStore.ids(removedMiner)).proposed(), address(0), "Miner should not have new propsed owner");
-      testInvariants(pool, "removeMinerAndAssertRevert");
+        assertEq(GetRoute.minerRegistry(router).minersCount(agent.id()), 1, "Agent should have 1 miner registered");
+        assertTrue(GetRoute.minerRegistry(router).minerRegistered(agent.id(), miner), "Miner should be registered");
+        assertEq(
+            IMockMiner(idStore.ids(removedMiner)).proposed(), address(0), "Miner should not have new propsed owner"
+        );
+        testInvariants(pool, "removeMinerAndAssertRevert");
     }
 }
 
 contract AgentBorrowingTest is BaseTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
+
     address investor1 = makeAddr("INVESTOR_1");
     address minerOwner = makeAddr("MINER_OWNER");
     uint256 stakeAmount = 1000e18;
@@ -716,105 +617,104 @@ contract AgentBorrowingTest is BaseTest {
     IPool pool;
 
     function setUp() public {
-      pool = createAndFundPool(stakeAmount, investor1);
-      (agent, miner) = configureAgent(minerOwner);
+        pool = createAndFundPool(stakeAmount, investor1);
+        (agent, miner) = configureAgent(minerOwner);
     }
 
     function testBorrowValid(uint256 borrowAmount) public {
-      borrowAmount = bound(borrowAmount, WAD, stakeAmount);
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        borrowAmount = bound(borrowAmount, WAD, stakeAmount);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      agentBorrow(agent, pool.id(), borrowCred);
+        agentBorrow(agent, pool.id(), borrowCred);
     }
 
     function testBorrowTwice(uint256 borrowAmount) public {
-      borrowAmount = bound(borrowAmount, WAD, stakeAmount / 2);
+        borrowAmount = bound(borrowAmount, WAD, stakeAmount / 2);
 
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      uint256 borrowBlock = block.number;
-      agentBorrow(agent, pool.id(), borrowCred);
-      // roll forward to test the startEpoch and epochsPaid
-      vm.roll(block.number + 1000);
+        uint256 borrowBlock = block.number;
+        agentBorrow(agent, pool.id(), borrowCred);
+        // roll forward to test the startEpoch and epochsPaid
+        vm.roll(block.number + 1000);
 
-      borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
-      // Since we've already borrowed, we pretend the SP locks substantially more funds
-      uint256 collateralValue = borrowAmount * 4;
+        borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        // Since we've already borrowed, we pretend the SP locks substantially more funds
+        uint256 collateralValue = borrowAmount * 4;
 
-      AgentData memory agentData = createAgentData(
-        collateralValue,
-        GCRED,
-        borrowCred.vc.getExpectedDailyRewards(credParser),
-        // principal = borrowAmount * 2 (second time borrowing)
-        borrowAmount * 2
-      );
-      borrowCred.vc.claim = abi.encode(agentData);
-      borrowCred = signCred(borrowCred.vc);
-      agentBorrow(agent, pool.id(), borrowCred);
+        AgentData memory agentData = createAgentData(
+            collateralValue,
+            borrowCred.vc.getExpectedDailyRewards(credParser),
+            // principal = borrowAmount * 2 (second time borrowing)
+            borrowAmount * 2
+        );
+        borrowCred.vc.claim = abi.encode(agentData);
+        borrowCred = signCred(borrowCred.vc);
+        agentBorrow(agent, pool.id(), borrowCred);
 
-      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-      assertEq(account.principal, borrowAmount * 2);
-      assertEq(account.startEpoch, borrowBlock);
-      assertEq(account.epochsPaid, borrowBlock);
-      testInvariants(pool, "testBorrowTwice");
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+        assertEq(account.principal, borrowAmount * 2);
+        assertEq(account.startEpoch, borrowBlock);
+        assertEq(account.epochsPaid, borrowBlock);
+        testInvariants(pool, "testBorrowTwice");
     }
 
     function testBorrowMoreThanLiquid(uint256 borrowAmount) public {
-      borrowAmount = bound(borrowAmount, stakeAmount + 1, MAX_FIL);
+        borrowAmount = bound(borrowAmount, stakeAmount + 1, MAX_FIL);
 
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      vm.startPrank(minerOwner);
-      try agent.borrow(pool.id(), borrowCred) {
-        assertTrue(false, "should not be able to borrow more than liquid");
-      } catch (bytes memory b) {
-        assertEq(errorSelector(b), InsufficientLiquidity.selector);
-      }
+        vm.startPrank(minerOwner);
+        try agent.borrow(pool.id(), borrowCred) {
+            assertTrue(false, "should not be able to borrow more than liquid");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), InsufficientLiquidity.selector);
+        }
 
-      vm.stopPrank();
-      testInvariants(pool, "testBorrowMoreThanLiquid");
+        vm.stopPrank();
+        testInvariants(pool, "testBorrowMoreThanLiquid");
     }
 
     function testBorrowNothing() public {
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), 0);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), 0);
 
-      vm.startPrank(minerOwner);
-      try agent.borrow(pool.id(), borrowCred) {
-        assertTrue(false, "should not be able to borrow 0");
-      } catch (bytes memory b) {
-        assertEq(errorSelector(b), InvalidParams.selector);
-      }
+        vm.startPrank(minerOwner);
+        try agent.borrow(pool.id(), borrowCred) {
+            assertTrue(false, "should not be able to borrow 0");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), InvalidParams.selector);
+        }
 
-      vm.stopPrank();
-      testInvariants(pool, "testBorrowNothing");
+        vm.stopPrank();
+        testInvariants(pool, "testBorrowNothing");
     }
 
     function testBorrowNonOwnerOperator() public {
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), 1e18);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), 1e18);
 
-      vm.startPrank(makeAddr("NON_OWNER_OPERATOR"));
-      try agent.borrow(pool.id(), borrowCred) {
-        assertTrue(false, "should not be able to borrow more than liquid");
-      } catch (bytes memory b) {
-        assertEq(errorSelector(b), Unauthorized.selector);
-      }
+        vm.startPrank(makeAddr("NON_OWNER_OPERATOR"));
+        try agent.borrow(pool.id(), borrowCred) {
+            assertTrue(false, "should not be able to borrow more than liquid");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), Unauthorized.selector);
+        }
 
-      vm.stopPrank();
-      testInvariants(pool, "testBorrowNonOwnerOperator");
+        vm.stopPrank();
+        testInvariants(pool, "testBorrowNonOwnerOperator");
     }
 
     function testBorrowWrongCred() public {
-      SignedCredential memory nonBorrowCred = issueAddMinerCred(agent.id(), 0);
+        SignedCredential memory nonBorrowCred = issueAddMinerCred(agent.id(), 0);
 
-      vm.startPrank(minerOwner);
-      try agent.borrow(pool.id(), nonBorrowCred) {
-        assertTrue(false, "should not be able to borrow more than liquid");
-      } catch (bytes memory b) {
-        assertEq(errorSelector(b), InvalidCredential.selector);
-      }
+        vm.startPrank(minerOwner);
+        try agent.borrow(pool.id(), nonBorrowCred) {
+            assertTrue(false, "should not be able to borrow more than liquid");
+        } catch (bytes memory b) {
+            assertEq(errorSelector(b), InvalidCredential.selector);
+        }
 
-      vm.stopPrank();
-      testInvariants(pool, "testBorrowWrongCred");
+        vm.stopPrank();
+        testInvariants(pool, "testBorrowWrongCred");
     }
 }
 
@@ -822,6 +722,7 @@ contract AgentPayTest is BaseTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
+
     error AccountDNE();
 
     address investor1 = makeAddr("INVESTOR_1");
@@ -833,122 +734,109 @@ contract AgentPayTest is BaseTest {
     IPool pool;
 
     function setUp() public {
-      pool = createAndFundPool(stakeAmount, investor1);
-      (agent, miner) = configureAgent(minerOwner);
+        pool = createAndFundPool(stakeAmount, investor1);
+        (agent, miner) = configureAgent(minerOwner);
     }
 
     function testNonAgentCannotPay(string memory payerSeed) public {
-      // Establish Static Params
-      uint256 borrowAmount = 10e18;
-      uint256 poolId = pool.id();
-      uint256 agentId = agent.id();
-      uint256 rollFwdAmt = GetRoute.agentPolice(router).defaultWindow() / 2;
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agentId, borrowAmount);
+        // Establish Static Params
+        uint256 borrowAmount = 10e18;
+        uint256 poolId = pool.id();
+        uint256 agentId = agent.id();
+        uint256 rollFwdAmt = EPOCHS_IN_WEEK * 2;
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agentId, borrowAmount);
 
-      // We're just going to use the full amount of interest owed as our pay amount
-      (uint256 payAmount,) = calculateInterestOwed(pool, borrowCred.vc, borrowAmount, rollFwdAmt);
-      // Set fuzzed values to logical test limits - in this case anyone but the agent should be unauthorized
-      address payer = makeAddr(payerSeed);
-      vm.assume(payer != address(agent));
-      // Set up the test state
+        // We're just going to use the full amount of interest owed as our pay amount
+        (uint256 payAmount,) = calculateInterestOwed(pool, borrowAmount, rollFwdAmt);
+        // Set fuzzed values to logical test limits - in this case anyone but the agent should be unauthorized
+        address payer = makeAddr(payerSeed);
+        vm.assume(payer != address(agent));
+        // Set up the test state
 
-      // Borrow funds and roll forward to generate interest
-      agentBorrow(agent, poolId, borrowCred);
-      vm.roll(block.number + rollFwdAmt);
+        // Borrow funds and roll forward to generate interest
+        agentBorrow(agent, poolId, borrowCred);
+        vm.roll(block.number + rollFwdAmt);
 
-      // Load the payer with sufficient funds to make the payment
-      vm.startPrank(payer);
-      vm.deal(payer, payAmount);
-      wFIL.deposit{value: payAmount}();
-      wFIL.approve(address(pool), payAmount);
+        // Load the payer with sufficient funds to make the payment
+        vm.startPrank(payer);
+        vm.deal(payer, payAmount);
+        wFIL.deposit{value: payAmount}();
+        wFIL.approve(address(pool), payAmount);
 
-      // Attempt to pay the interest - we should revert as unauthorized since the payer is not the agent
-      SignedCredential memory payCred = issueGenericPayCred(agentId, payAmount);
-      vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
-      agent.pay(poolId, payCred);
-      vm.stopPrank();
-      testInvariants(pool, "testNonAgentCannotPay");
+        // Attempt to pay the interest - we should revert as unauthorized since the payer is not the agent
+        SignedCredential memory payCred = issueGenericPayCred(agentId, payAmount);
+        vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
+        agent.pay(poolId, payCred);
+        vm.stopPrank();
+        testInvariants(pool, "testNonAgentCannotPay");
     }
 
     function testCannotPayOnNonExistentAccount() public {
-      // Establish Static Params
-      uint256 payAmount = 10e18;
-      uint256 poolId = pool.id();
-      uint256 agentId = agent.id();
+        // Establish Static Params
+        uint256 payAmount = 10e18;
+        uint256 poolId = pool.id();
+        uint256 agentId = agent.id();
 
+        // Load the payer with sufficient funds to make the payment
+        vm.startPrank(address(agent));
+        vm.deal(address(agent), payAmount);
+        wFIL.deposit{value: payAmount}();
+        wFIL.approve(address(pool), payAmount);
+        vm.stopPrank();
 
-      // Load the payer with sufficient funds to make the payment
-      vm.startPrank(address(agent));
-      vm.deal(address(agent), payAmount);
-      wFIL.deposit{value: payAmount}();
-      wFIL.approve(address(pool), payAmount);
-      vm.stopPrank();
-
-      vm.startPrank(address(minerOwner));
-      // Attempt to pay the interest - we should revert since the account does not exist
-      SignedCredential memory payCred = issueGenericPayCred(agentId, payAmount);
-      vm.expectRevert(abi.encodeWithSelector(AccountDNE.selector));
-      agent.pay(poolId, payCred);
-      vm.stopPrank();
-      testInvariants(pool, "testCannotPayOnNonExistentAccount");
+        vm.startPrank(address(minerOwner));
+        // Attempt to pay the interest - we should revert since the account does not exist
+        SignedCredential memory payCred = issueGenericPayCred(agentId, payAmount);
+        vm.expectRevert(abi.encodeWithSelector(AccountDNE.selector));
+        agent.pay(poolId, payCred);
+        vm.stopPrank();
+        testInvariants(pool, "testCannotPayOnNonExistentAccount");
     }
 
     function testPayInterestOnly(uint256 borrowAmount, uint256 payAmount, uint256 rollFwdAmt) public {
-      rollFwdAmt = bound(rollFwdAmt, 1, GetRoute.agentPolice(router).defaultWindow() - 1);
-      borrowAmount = bound(borrowAmount, 1e18, stakeAmount);
+        rollFwdAmt = bound(rollFwdAmt, 1, EPOCHS_IN_WEEK * 3);
+        borrowAmount = bound(borrowAmount, 1e18, stakeAmount);
 
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
-      (uint256 interestOwed, uint256 interestOwedPerEpoch) = calculateInterestOwed(pool, borrowCred.vc, borrowAmount, rollFwdAmt);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        (uint256 interestOwed, uint256 interestOwedPerEpoch) = calculateInterestOwed(pool, borrowAmount, rollFwdAmt);
 
-      // bind the pay amount to less than the interest owed
-      payAmount = bound(payAmount, interestOwedPerEpoch + DUST, interestOwed - DUST);
+        // bind the pay amount to less than the interest owed
+        payAmount = bound(payAmount, interestOwedPerEpoch + DUST, interestOwed - DUST);
 
-      StateSnapshot memory prePayState = borrowRollFwdAndPay(
-        agent,
-        pool,
-        borrowCred,
-        payAmount,
-        rollFwdAmt
-      );
+        StateSnapshot memory prePayState = borrowRollFwdAndPay(agent, pool, borrowCred, payAmount, rollFwdAmt);
 
-      assertEq(
-        prePayState.agentBorrowed,
-        AccountHelpers.getAccount(router, agent.id(), pool.id()).principal,
-        "principal should not change"
-      );
-      testInvariants(pool, "testPayInterestOnly");
+        assertEq(
+            prePayState.agentBorrowed,
+            AccountHelpers.getAccount(router, agent.id(), pool.id()).principal,
+            "principal should not change"
+        );
+        testInvariants(pool, "testPayInterestOnly");
     }
 
     function testPayInterestAndPartialPrincipal(uint256 borrowAmount, uint256 payAmount, uint256 rollFwdAmt) public {
-      rollFwdAmt = bound(rollFwdAmt, 1, GetRoute.agentPolice(router).defaultWindow() - 1);
-      // bind borrow amount min 1e18 to ensure theres a decent amount of principal to repay
-      borrowAmount = bound(borrowAmount, 1e18, stakeAmount);
+        rollFwdAmt = bound(rollFwdAmt, 1, EPOCHS_IN_WEEK * 3);
+        // bind borrow amount min 1e18 to ensure theres a decent amount of principal to repay
+        borrowAmount = bound(borrowAmount, 1e18, stakeAmount);
 
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      (uint256 interestOwed,) = calculateInterestOwed(pool, borrowCred.vc, borrowAmount, rollFwdAmt);
-      // bind the pay amount to in between the interest owed and less than the principal
-      payAmount = bound(payAmount, interestOwed + DUST, interestOwed + borrowAmount - DUST);
+        (uint256 interestOwed,) = calculateInterestOwed(pool, borrowAmount, rollFwdAmt);
+        // bind the pay amount to in between the interest owed and less than the principal
+        payAmount = bound(payAmount, interestOwed + DUST, interestOwed + borrowAmount - DUST);
 
-      StateSnapshot memory prePayState = borrowRollFwdAndPay(
-        agent,
-        pool,
-        borrowCred,
-        payAmount,
-        rollFwdAmt
-      );
+        StateSnapshot memory prePayState = borrowRollFwdAndPay(agent, pool, borrowCred, payAmount, rollFwdAmt);
 
-      uint256 principalPaid = payAmount - interestOwed;
+        uint256 principalPaid = payAmount - interestOwed;
 
-      Account memory postPaymentAccount = AccountHelpers.getAccount(router, agent.id(), pool.id());
+        Account memory postPaymentAccount = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
-      assertEq(
-        prePayState.agentBorrowed - principalPaid,
-        postPaymentAccount.principal,
-        "account should have decreased principal"
-      );
-      assertEq(postPaymentAccount.epochsPaid, block.number, "epochs paid should be current");
-      testInvariants(pool, "testPayInterestAndPartialPrincipal");
+        assertEq(
+            prePayState.agentBorrowed - principalPaid,
+            postPaymentAccount.principal,
+            "account should have decreased principal"
+        );
+        assertEq(postPaymentAccount.epochsPaid, block.number, "epochs paid should be current");
+        testInvariants(pool, "testPayInterestAndPartialPrincipal");
     }
 
     function testPayFullExit(uint256 payAmount) public {}
@@ -956,130 +844,135 @@ contract AgentPayTest is BaseTest {
     function testPayTooMuch(uint256 payAmount) public {}
 
     function borrowRollFwdAndPay(
-      IAgent _agent,
-      IPool newPool,
-      SignedCredential memory borrowCred,
-      uint256 payAmount,
-      uint256 rollFwdAmt
-    ) internal returns (
-      StateSnapshot memory
-    ) {
-      uint256 agentID = _agent.id();
-      uint256 poolID = newPool.id();
-      agentBorrow(_agent, poolID, borrowCred);
+        IAgent _agent,
+        IPool newPool,
+        SignedCredential memory borrowCred,
+        uint256 payAmount,
+        uint256 rollFwdAmt
+    ) internal returns (StateSnapshot memory) {
+        uint256 agentID = _agent.id();
+        uint256 poolID = newPool.id();
+        agentBorrow(_agent, poolID, borrowCred);
 
-      vm.roll(block.number + rollFwdAmt);
+        vm.roll(block.number + rollFwdAmt);
 
-      (
-        ,,
-        uint256 principalPaid,
-        uint256 refund,
-        StateSnapshot memory prePayState
-      ) = agentPay(_agent, newPool, issueGenericPayCred(agentID, payAmount));
+        (,, uint256 principalPaid, uint256 refund, StateSnapshot memory prePayState) =
+            agentPay(_agent, newPool, issueGenericPayCred(agentID, payAmount));
 
-      assertPmtSuccess(_agent, newPool, prePayState, payAmount, principalPaid, refund);
+        assertPmtSuccess(_agent, newPool, prePayState, payAmount, principalPaid, refund);
 
-      return prePayState;
+        return prePayState;
     }
 
     function assertPmtSuccess(
-      IAgent newAgent,
-      IPool newPool,
-      StateSnapshot memory prePayState,
-      uint256 payAmount,
-      uint256 principalPaid,
-      uint256 refund
+        IAgent newAgent,
+        IPool newPool,
+        StateSnapshot memory prePayState,
+        uint256 payAmount,
+        uint256 principalPaid,
+        uint256 refund
     ) internal {
-      assertEq(prePayState.poolBalanceWFIL + payAmount, wFIL.balanceOf(address(newPool)), "pool should have received funds");
-      assertEq(prePayState.agentBalanceWFIL - payAmount, wFIL.balanceOf(address(newAgent)), "agent should have paid funds");
+        assertEq(
+            prePayState.poolBalanceWFIL + payAmount, wFIL.balanceOf(address(newPool)), "pool should have received funds"
+        );
+        assertEq(
+            prePayState.agentBalanceWFIL - payAmount, wFIL.balanceOf(address(newAgent)), "agent should have paid funds"
+        );
 
-      Account memory postPaymentAccount = AccountHelpers.getAccount(router, newAgent.id(), newPool.id());
+        Account memory postPaymentAccount = AccountHelpers.getAccount(router, newAgent.id(), newPool.id());
 
-      // full exit
-      if (principalPaid >= prePayState.agentBorrowed) {
-        // refund should be greater than 0 if too much principal was paid
-        if (principalPaid > prePayState.agentBorrowed) {
-          assertEq(principalPaid - refund, prePayState.agentBorrowed, "should be a refund");
+        // full exit
+        if (principalPaid >= prePayState.agentBorrowed) {
+            // refund should be greater than 0 if too much principal was paid
+            if (principalPaid > prePayState.agentBorrowed) {
+                assertEq(principalPaid - refund, prePayState.agentBorrowed, "should be a refund");
+            }
+
+            assertEq(postPaymentAccount.principal, 0, "principal should be 0");
+            assertEq(postPaymentAccount.epochsPaid, 0, "epochs paid should be reset");
+            assertEq(postPaymentAccount.startEpoch, 0, "start epoch should be reset");
+
+            assertEq(
+                _borrowedPoolsCount(agent.id()) - 1,
+                prePayState.agentPoolBorrowCount,
+                "agent should have removed pool from borrowed list"
+            );
+        } else {
+            // partial exit or interest only payment
+            assertGt(
+                postPaymentAccount.epochsPaid, prePayState.accountEpochsPaid, "epochs paid should have moved forward"
+            );
+            assertLe(postPaymentAccount.epochsPaid, block.number, "epochs paid should not be in the future");
+            assertEq(
+                _borrowedPoolsCount(newAgent.id()),
+                prePayState.agentPoolBorrowCount,
+                "agent should not have removed pool from borrowed list"
+            );
         }
-
-        assertEq(postPaymentAccount.principal, 0, "principal should be 0");
-        assertEq(postPaymentAccount.epochsPaid, 0, "epochs paid should be reset");
-        assertEq(postPaymentAccount.startEpoch, 0, "start epoch should be reset");
-
-        assertEq(_borrowedPoolsCount(agent.id()) - 1, prePayState.agentPoolBorrowCount, "agent should have removed pool from borrowed list");
-      } else {
-        // partial exit or interest only payment
-        assertGt(postPaymentAccount.epochsPaid, prePayState.accountEpochsPaid, "epochs paid should have moved forward");
-        assertLe(postPaymentAccount.epochsPaid, block.number, "epochs paid should not be in the future");
-        assertEq(_borrowedPoolsCount(newAgent.id()), prePayState.agentPoolBorrowCount, "agent should not have removed pool from borrowed list");
-
-      }
-      testInvariants(pool, "assertPaySuccess");
+        testInvariants(pool, "assertPaySuccess");
     }
 }
-
 
 contract AgentPoolsTest is BaseTest {
-  using Credentials for VerifiableCredential;
-  using AccountHelpers for Account;
+    using Credentials for VerifiableCredential;
+    using AccountHelpers for Account;
 
-  address investor1 = makeAddr("INVESTOR_1");
-  address minerOwner = makeAddr("MINER_OWNER");
-  uint256 stakeAmount = 1000e18;
+    address investor1 = makeAddr("INVESTOR_1");
+    address minerOwner = makeAddr("MINER_OWNER");
+    uint256 stakeAmount = 1000e18;
 
-  IAgent agent;
-  uint64 miner;
-  IPool pool;
+    IAgent agent;
+    uint64 miner;
+    IPool pool;
 
-  function setUp() public {
-    // We only need a single agent instance across all pools
-    IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
-    // public key does not matter for these solidity unit tests as it is only relevant for ado integration/security
-    agent = IAgent(agentFactory.create(minerOwner, minerOwner, makeAddr("ADO_REQ_KEY")));
-  }
-
-  function testCreateRemoveMultiplePools(uint256 poolCount, uint256 totalBorrow) public {
-    // NOTE: This has been tested up to 1000 but it takes a very long time to run
-    poolCount = bound(poolCount, 1, 10);
-    totalBorrow = bound(totalBorrow, WAD * poolCount, stakeAmount);
-    uint256 borrowPerPool = totalBorrow / poolCount;
-    // uint256 borrowRemainder = totalBorrow % poolCount;
-    IPool[] memory pools = new IPool[](poolCount);
-
-    for (uint256 i = 0; i < poolCount; i++) {
-      pools[i] = createFundBorrowPool(borrowPerPool);
+    function setUp() public {
+        // We only need a single agent instance across all pools
+        IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
+        // public key does not matter for these solidity unit tests as it is only relevant for ado integration/security
+        agent = IAgent(agentFactory.create(minerOwner, minerOwner, makeAddr("ADO_REQ_KEY")));
     }
 
-    assertEq(_borrowedPoolsCount(agent.id()), poolCount, "agent should have correct pool count");
+    function testCreateRemoveMultiplePools(uint256 poolCount, uint256 totalBorrow) public {
+        // NOTE: This has been tested up to 1000 but it takes a very long time to run
+        poolCount = bound(poolCount, 1, 10);
+        totalBorrow = bound(totalBorrow, WAD * poolCount, stakeAmount);
+        uint256 borrowPerPool = totalBorrow / poolCount;
+        // uint256 borrowRemainder = totalBorrow % poolCount;
+        IPool[] memory pools = new IPool[](poolCount);
 
-    for (uint256 i = 0; i < poolCount; i++) {
-      SignedCredential memory sc = issueGenericPayCred(agent.id(), borrowPerPool*2);
-      vm.deal(address(agent), borrowPerPool*2);
+        for (uint256 i = 0; i < poolCount; i++) {
+            pools[i] = createFundBorrowPool(borrowPerPool);
+        }
 
-      agentPay(agent, pools[i], sc);
+        assertEq(_borrowedPoolsCount(agent.id()), poolCount, "agent should have correct pool count");
+
+        for (uint256 i = 0; i < poolCount; i++) {
+            SignedCredential memory sc = issueGenericPayCred(agent.id(), borrowPerPool * 2);
+            vm.deal(address(agent), borrowPerPool * 2);
+
+            agentPay(agent, pools[i], sc);
+        }
+        assertEq(_borrowedPoolsCount(agent.id()), 0, "agent should have correct pool count");
+
+        for (uint256 i = 0; i < poolCount; i++) {
+            testInvariants(GetRoute.pool(GetRoute.poolRegistry(router), i), "testCreateRemoveMultiplePools");
+        }
     }
-    assertEq(_borrowedPoolsCount(agent.id()), 0, "agent should have correct pool count");
 
-    for (uint256 i = 0; i < poolCount; i++) {
-      testInvariants(GetRoute.pool(GetRoute.poolRegistry(router), i), "testCreateRemoveMultiplePools");
+    function createFundBorrowPool(uint256 amount) internal returns (IPool borrowPool) {
+        borrowPool = createAndFundPool(stakeAmount, investor1);
+        uint64 minerNew = _newMiner(minerOwner);
+        _agentClaimOwnership(address(agent), minerNew, minerOwner);
+        agentBorrow(agent, borrowPool.id(), issueGenericBorrowCred(agent.id(), amount));
+        return borrowPool;
     }
-  }
-
-
-  function createFundBorrowPool(uint256 amount) internal returns (IPool borrowPool) {
-    borrowPool = createAndFundPool(stakeAmount, investor1);
-    uint64 minerNew = _newMiner(minerOwner);
-    _agentClaimOwnership(address(agent), minerNew, minerOwner);
-    agentBorrow(agent, borrowPool.id(), issueGenericBorrowCred(agent.id(), amount));
-    return borrowPool;
-  }
 }
-
 
 contract AgentPoliceTest is BaseTest {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
     using FixedPointMathLib for uint256;
+
     error AlreadyDefaulted();
 
     address investor1 = makeAddr("INVESTOR_1");
@@ -1096,444 +989,314 @@ contract AgentPoliceTest is BaseTest {
     address policeOwner;
 
     function setUp() public {
-      pool = createAndFundPool(stakeAmount, investor1);
-      (agent, miner) = configureAgent(minerOwner);
-      police = GetRoute.agentPolice(router);
-      policeOwner = IAuth(address(police)).owner();
+        pool = createAndFundPool(stakeAmount, investor1);
+        (agent, miner) = configureAgent(minerOwner);
+        police = GetRoute.agentPolice(router);
+        policeOwner = IAuth(address(police)).owner();
     }
 
     function testBurnSomeoneElseCredential() public {
-      // different agent ID
-      SignedCredential memory sc = issueGenericBorrowCred(2, WAD);
-      vm.startPrank(address(agent));
-      vm.expectRevert(Unauthorized.selector);
-      police.registerCredentialUseBlock(sc);
+        // different agent ID
+        SignedCredential memory sc = issueGenericBorrowCred(2, WAD);
+        vm.startPrank(address(agent));
+        vm.expectRevert(Unauthorized.selector);
+        police.registerCredentialUseBlock(sc);
     }
 
     function testSetAdministrationWindow(uint256 newAdminWindow) public {
-      vm.prank(systemAdmin);
-      police.setAdministrationWindow(newAdminWindow);
-      assertEq(police.administrationWindow(), newAdminWindow, "administration window should be set");
+        vm.prank(systemAdmin);
+        police.setAdministrationWindow(newAdminWindow);
+        assertEq(police.administrationWindow(), newAdminWindow, "administration window should be set");
     }
 
     function testReplaySignature() public {
-      SignedCredential memory sc = issueGenericBorrowCred(agent.id(), WAD);
-      agentBorrow(agent, pool.id(), sc);
+        SignedCredential memory sc = issueGenericBorrowCred(agent.id(), WAD);
+        agentBorrow(agent, pool.id(), sc);
 
-      FlipSig flipSig = new FlipSig();
+        FlipSig flipSig = new FlipSig();
 
-      (uint8 flippedV, bytes32 flippedR, bytes32 flippedS) = flipSig.reuseSignature(sc.v, sc.r, sc.s);
+        (uint8 flippedV, bytes32 flippedR, bytes32 flippedS) = flipSig.reuseSignature(sc.v, sc.r, sc.s);
 
-      SignedCredential memory replayedCred = SignedCredential(
-        sc.vc,
-        flippedV,
-        flippedR,
-        flippedS
-      );
+        SignedCredential memory replayedCred = SignedCredential(sc.vc, flippedV, flippedR, flippedS);
 
-      vm.startPrank(minerOwner);
-      uint256 poolID = pool.id();
-      vm.expectRevert("ECDSA: invalid signature 's' value");
-      agent.borrow(poolID, replayedCred);
+        vm.startPrank(minerOwner);
+        uint256 poolID = pool.id();
+        vm.expectRevert("ECDSA: invalid signature 's' value");
+        agent.borrow(poolID, replayedCred);
 
-      vm.stopPrank();
+        vm.stopPrank();
     }
 
     function testPutAgentOnAdministration(uint256 rollFwdPeriod, uint256 borrowAmount) public {
-      rollFwdPeriod = bound(
-        rollFwdPeriod,
-        police.administrationWindow() + 1,
-        police.administrationWindow() * 10
-      );
+        rollFwdPeriod = bound(rollFwdPeriod, police.administrationWindow() + 1, police.administrationWindow() * 10);
 
-      borrowAmount = bound(borrowAmount, WAD, stakeAmount);
-      // helper includes assertions
-      putAgentOnAdministration(
-        agent,
-        administration,
-        rollFwdPeriod,
-        borrowAmount,
-        pool.id()
-      );
-      testInvariants(pool, "testPutAgentOnAdministration");
+        borrowAmount = bound(borrowAmount, WAD, stakeAmount);
+        // helper includes assertions
+        putAgentOnAdministration(agent, administration, rollFwdPeriod, borrowAmount, pool.id());
+        testInvariants(pool, "testPutAgentOnAdministration");
     }
 
     function testPutAgentOnAdministrationNoLoans() public {
-      vm.startPrank(IAuth(address(police)).owner());
-      try police.putAgentOnAdministration(address(agent), administration) {
-        assertTrue(false, "Agent should not be eligible for administration");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-      }
-      testInvariants(pool, "testPutAgentOnAdministrationNoLoans");
-    }
-
-    function testTakeActionFaultySectors(uint256 consecutiveEpochsOfFaults) public {
-      // consecutiveEpochsOfFaults should be less than 42 days of faults
-      vm.assume(consecutiveEpochsOfFaults < 42 * EPOCHS_IN_DAY);
-      uint256 limitBeforeActionAllowed = police.maxConsecutiveFaultEpochs();
-      vm.startPrank(IAuth(address(police)).owner());
-      // should not be able to take action on agent with no faults
-      try police.putAgentOnAdministrationDueToFaultySectorDays(address(agent), administration) {
-        assertTrue(false, "Agent should not be eligible for administration");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-        assertEq(agent.administration(), address(0), "Agent should not be on administration");
-      }
-
-      try police.setAgentDefaultDueToFaultySectorDays(address(agent)) {
-        assertTrue(false, "Agent should not be eligible for default");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-        assertFalse(agent.defaulted(), "Agent should not be defaulted");
-      }
-
-      IAgent[] memory agents = new IAgent[](1);
-      agents[0] = agent;
-      police.markAsFaulty(agents);
-
-      assertEq(agent.faultySectorStartEpoch(), block.number, "Agent should have faulty sectors");
-
-      vm.roll(block.number + consecutiveEpochsOfFaults);
-
-      if (consecutiveEpochsOfFaults == 0 || consecutiveEpochsOfFaults < limitBeforeActionAllowed) {
-        // no actions should be possible
-        try police.putAgentOnAdministrationDueToFaultySectorDays(address(agent), administration) {
-          assertTrue(false, "Agent should not be eligible for administration");
+        vm.startPrank(IAuth(address(police)).owner());
+        try police.putAgentOnAdministration(address(agent), administration) {
+            assertTrue(false, "Agent should not be eligible for administration");
         } catch (bytes memory e) {
-          assertEq(agent.administration(), address(0), "Agent should not be on administration");
-          assertEq(errorSelector(e), Unauthorized.selector);
+            assertEq(errorSelector(e), Unauthorized.selector);
         }
-
-        try police.setAgentDefaultDueToFaultySectorDays(address(agent)) {
-          assertTrue(false, "Agent should not be eligible for default");
-        } catch (bytes memory e) {
-          assertFalse(agent.defaulted(), "Agent should not be defaulted");
-          assertEq(errorSelector(e), Unauthorized.selector);
-        }
-      } else {
-        // actions should be possible
-        police.putAgentOnAdministrationDueToFaultySectorDays(address(agent), administration);
-        assertEq(agent.administration(), administration, "Agent should be on administration");
-
-        police.setAgentDefaultDueToFaultySectorDays(address(agent));
-        assertEq(agent.defaulted(), true, "Agent should be defaulted");
-      }
-
-      testInvariants(pool, "testTakeActionFaultySectors");
-    }
-
-    function testRmAgentFromAdministrationAgentRecovered(uint256 consecutiveEpochsOfFaults, uint256 faultySectors, uint256 liveSectors) public {
-      // consecutiveEpochsOfFaults should be more than maxConsecutiveFaultDays days of faults
-      uint256 limitBeforeActionAllowed = police.maxConsecutiveFaultEpochs();
-      consecutiveEpochsOfFaults = bound(consecutiveEpochsOfFaults, limitBeforeActionAllowed, 42 * EPOCHS_IN_DAY);
-      faultySectors = bound(faultySectors, 0, 1e27);
-      liveSectors = bound(liveSectors, faultySectors + 1, 1e27);
-      vm.startPrank(IAuth(address(police)).owner());
-
-      IAgent[] memory agents = new IAgent[](1);
-      agents[0] = agent;
-      uint256 faultyHeight = block.number;
-      police.markAsFaulty(agents);
-
-      assertEq(agent.faultySectorStartEpoch(), faultyHeight, "Agent should have faulty sectors");
-
-      vm.roll(faultyHeight + consecutiveEpochsOfFaults);
-
-      police.putAgentOnAdministrationDueToFaultySectorDays(address(agent), administration);
-      assertEq(agent.administration(), administration, "Agent should be on administration");
-
-      vm.stopPrank();
-
-      SignedCredential memory sc = issueGenericRecoverCred(agent.id(), faultySectors, liveSectors);
-
-      vm.startPrank(IAuth(address(agent)).owner());
-
-      if (faultySectors == 0 || faultySectors * WAD / liveSectors < police.sectorFaultyTolerancePercent()) {
-        agent.setRecovered(sc);
-        assertEq(agent.faultySectorStartEpoch(), 0, "Agent should not have faulty sectors");
-        assertEq(agent.administration(), address(0), "Agent should be on administration");
-      } else {
-        try agent.setRecovered(sc) {
-          assertTrue(false, "Agent should not be able to recover");
-        } catch (bytes memory e) {
-          assertEq(agent.faultySectorStartEpoch(), faultyHeight, "Agent should have faulty sectors");
-          assertEq(agent.administration(), administration, "Agent should be on administration");
-          assertEq(errorSelector(e), AgentPolice.AgentStateRejected.selector);
-        }
-      }
-
-      testInvariants(pool, "testRmAgentFromAdministrationAgentRecovered");
+        testInvariants(pool, "testPutAgentOnAdministrationNoLoans");
     }
 
     function testInvalidPutAgentOnAdministration() public {
-      uint256 borrowAmount = WAD;
+        uint256 borrowAmount = WAD;
 
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-      agentBorrow(agent, pool.id(), borrowCred);
+        agentBorrow(agent, pool.id(), borrowCred);
 
-      vm.startPrank(IAuth(address(police)).owner());
-      try police.putAgentOnAdministration(address(agent), administration) {
-        assertTrue(false, "Agent should not be eligible for administration");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-      }
+        vm.startPrank(IAuth(address(police)).owner());
+        try police.putAgentOnAdministration(address(agent), administration) {
+            assertTrue(false, "Agent should not be eligible for administration");
+        } catch (bytes memory e) {
+            assertEq(errorSelector(e), Unauthorized.selector);
+        }
     }
 
     function testRmAgentFromAdministration() public {
-      uint256 rollFwdPeriod = police.administrationWindow() + 100;
-      uint256 borrowAmount = WAD;
+        uint256 rollFwdPeriod = police.administrationWindow() + 100;
+        uint256 borrowAmount = WAD;
 
-      putAgentOnAdministration(
-        agent,
-        administration,
-        rollFwdPeriod,
-        borrowAmount,
-        pool.id()
-      );
+        putAgentOnAdministration(agent, administration, rollFwdPeriod, borrowAmount, pool.id());
 
-      // deal enough funds to the Agent so it can make a payment back to the Pool
-      vm.deal(address(agent), borrowAmount * 4);
+        // deal enough funds to the Agent so it can make a payment back to the Pool
+        vm.deal(address(agent), borrowAmount * 4);
 
-      SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
+        SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
 
-      // here we are exiting the pool by overpaying so much
-      (,uint256 epochsPaid,,,) = agentPay(agent, pool, sc);
+        // here we are exiting the pool by overpaying so much
+        (, uint256 epochsPaid,,,) = agentPay(agent, pool, sc);
 
-      require(epochsPaid == 0, "Should have exited from the pool");
+        require(epochsPaid == 0, "Should have exited from the pool");
 
+        sc = issueGenericRecoverCred(agent.id(), 0, 1e18);
+        // check that the agent is no longer on administration
+        vm.startPrank(IAuth(address(agent)).owner());
+        agent.setRecovered(sc);
+        vm.stopPrank();
 
-      sc = issueGenericRecoverCred(agent.id(), 0, 1e18);
-      // check that the agent is no longer on administration
-      vm.startPrank(IAuth(address(agent)).owner());
-      agent.setRecovered(sc);
-      vm.stopPrank();
-
-      assertEq(agent.administration(), address(0), "Agent Should not be on administration after paying up");
-      testInvariants(pool, "testRmAgentFromAdministration");
+        assertEq(agent.administration(), address(0), "Agent Should not be on administration after paying up");
+        testInvariants(pool, "testRmAgentFromAdministration");
     }
 
-    function testSetAgentDefaulted(uint256 rollFwdPeriod, uint256 borrowAmount) public {
-      rollFwdPeriod = bound(
-        rollFwdPeriod,
-        police.defaultWindow() + 1,
-        police.defaultWindow() * 10
-      );
+    // function testSetAgentDefaulted(uint256 rollFwdPeriod, uint256 borrowAmount) public {
+    //     rollFwdPeriod = bound(rollFwdPeriod, EPOCHS_IN_WEEK * 3 + 1, EPOCHS_IN_WEEK * 3 * 10);
 
-      borrowAmount = bound(borrowAmount, WAD, stakeAmount);
-      // helper includes assertions
-      setAgentDefaulted(
-        agent,
-        rollFwdPeriod,
-        borrowAmount,
-        pool.id()
-      );
-    }
+    //     borrowAmount = bound(borrowAmount, WAD, stakeAmount);
+    //     // helper includes assertions
+    //     setAgentDefaulted(agent, rollFwdPeriod, borrowAmount, pool.id());
+    // }
 
     function testSetAdministrationNonAgentPolice(uint256 rollFwdPeriod) public {
-      rollFwdPeriod = bound(
-        rollFwdPeriod,
-        police.administrationWindow() + 1,
-        police.administrationWindow() * 10
-      );
+        rollFwdPeriod = bound(rollFwdPeriod, police.administrationWindow() + 1, police.administrationWindow() * 10);
 
-      uint256 borrowAmount = WAD;
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
-      agentBorrow(agent, pool.id(), borrowCred);
+        uint256 borrowAmount = WAD;
+        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        agentBorrow(agent, pool.id(), borrowCred);
 
-      vm.roll(block.number + rollFwdPeriod);
+        vm.roll(block.number + rollFwdPeriod);
 
-      try police.putAgentOnAdministration(address(agent), administration) {
-        assertTrue(false, "only agent police owner should be able to call putAgentOnAdministration");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-      }
+        try police.putAgentOnAdministration(address(agent), administration) {
+            assertTrue(false, "only agent police owner should be able to call putAgentOnAdministration");
+        } catch (bytes memory e) {
+            assertEq(errorSelector(e), Unauthorized.selector);
+        }
 
-      try agent.setAdministration(administration) {
-        assertTrue(false, "only agent police should be able to put the agent on adminstration");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-      }
+        try agent.setAdministration(administration) {
+            assertTrue(false, "only agent police should be able to put the agent on adminstration");
+        } catch (bytes memory e) {
+            assertEq(errorSelector(e), Unauthorized.selector);
+        }
     }
 
-    function testSetAgentDefaultedNonAgentPolice(uint256 rollFwdPeriod) public {
-      rollFwdPeriod = bound(
-        rollFwdPeriod,
-        police.defaultWindow() + 1,
-        police.defaultWindow() * 10
-      );
+    // function testSetAgentDefaultedNonAgentPolice(uint256 rollFwdPeriod) public {
+    //     rollFwdPeriod = bound(rollFwdPeriod, EPOCHS_IN_WEEK, EPOCHS_IN_WEEK * 10);
 
-      uint256 borrowAmount = WAD;
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
-      agentBorrow(agent, pool.id(), borrowCred);
+    //     uint256 borrowAmount = WAD;
+    //     SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+    //     agentBorrow(agent, pool.id(), borrowCred);
 
-      vm.roll(block.number + rollFwdPeriod);
+    //     vm.roll(block.number + rollFwdPeriod);
 
-      try police.setAgentDefaulted(address(agent)) {
-        assertTrue(false, "only agent police owner operator should be able to call setAgentInDefault");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-      }
+    //     try police.setAgentDefaulted(address(agent)) {
+    //         assertTrue(false, "only agent police owner operator should be able to call setAgentInDefault");
+    //     } catch (bytes memory e) {
+    //         assertEq(errorSelector(e), Unauthorized.selector);
+    //     }
 
-      try agent.setInDefault() {
-        assertTrue(false, "only agent police should be able to call setAgentInDefault on the agent");
-      } catch (bytes memory e) {
-        assertEq(errorSelector(e), Unauthorized.selector);
-      }
-    }
+    //     try agent.setInDefault() {
+    //         assertTrue(false, "only agent police should be able to call setAgentInDefault on the agent");
+    //     } catch (bytes memory e) {
+    //         assertEq(errorSelector(e), Unauthorized.selector);
+    //     }
+    // }
 
-    function testPrepareMinerForLiquidation() public {
-      setAgentDefaulted(
-        agent,
-        police.defaultWindow() + 1,
-        WAD,
-        pool.id()
-      );
+    // function testPrepareMinerForLiquidation() public {
+    //     setAgentDefaulted(agent, EPOCHS_IN_WEEK * 3 + 1, WAD, pool.id());
 
-      address terminator = makeAddr("liquidator");
-      uint64 liquidatorID = idStore.addAddr(terminator);
+    //     address terminator = makeAddr("liquidator");
+    //     uint64 liquidatorID = idStore.addAddr(terminator);
 
-      vm.startPrank(policeOwner);
-      police.prepareMinerForLiquidation(address(agent), miner, liquidatorID);
-      vm.stopPrank();
-      // get the miner actor to ensure that the proposed owner on the miner is the policeOwner
-      assertEq(IMockMiner(idStore.ids(miner)).proposed(), terminator, "Mock miner should have terminator as its proposed owner");
-      testInvariants(pool, "testPrepareMinerForLiquidation");
-    }
+    //     vm.startPrank(policeOwner);
+    //     police.prepareMinerForLiquidation(address(agent), miner, liquidatorID);
+    //     vm.stopPrank();
+    //     // get the miner actor to ensure that the proposed owner on the miner is the policeOwner
+    //     assertEq(
+    //         IMockMiner(idStore.ids(miner)).proposed(),
+    //         terminator,
+    //         "Mock miner should have terminator as its proposed owner"
+    //     );
+    //     testInvariants(pool, "testPrepareMinerForLiquidation");
+    // }
 
-    function testDistributeLiquidatedFundsNonAgentPolice() public {
-      uint256 agentID = agent.id();
-      agentBorrow(agent, pool.id(), issueGenericBorrowCred(agentID, WAD));
-      vm.roll(block.number + police.defaultWindow() + 100);
+    // function testDistributeLiquidatedFundsNonAgentPolice() public {
+    //     uint256 agentID = agent.id();
+    //     agentBorrow(agent, pool.id(), issueGenericBorrowCred(agentID, WAD));
+    //     vm.roll(block.number + EPOCHS_IN_WEEK * 3 + 100);
 
-      vm.startPrank(policeOwner);
-      // set the agent in default
-      police.setAgentDefaulted(address(agent));
-      vm.stopPrank();
+    //     vm.startPrank(policeOwner);
+    //     // set the agent in default
+    //     police.setAgentDefaulted(address(agent));
+    //     vm.stopPrank();
 
-      address prankster = makeAddr("prankster");
-      vm.startPrank(prankster);
-      vm.expectRevert(Unauthorized.selector);
-      police.distributeLiquidatedFunds(address(agent), 0);
-      testInvariants(pool, "testDistributeLiquidatedFundsNonAgentPolice");
-    }
+    //     address prankster = makeAddr("prankster");
+    //     vm.startPrank(prankster);
+    //     vm.expectRevert(Unauthorized.selector);
+    //     police.distributeLiquidatedFunds(address(agent), 0);
+    //     testInvariants(pool, "testDistributeLiquidatedFundsNonAgentPolice");
+    // }
 
-    function testDistributeLiquidatedFunds(uint256 borrowAmount, uint256 recoveredFunds) public {
-      borrowAmount = bound(borrowAmount, WAD, stakeAmount);
-      recoveredFunds = bound(recoveredFunds, 0, borrowAmount);
+    // function testDistributeLiquidatedFunds(uint256 borrowAmount, uint256 recoveredFunds) public {
+    //     borrowAmount = bound(borrowAmount, WAD, stakeAmount);
+    //     recoveredFunds = bound(recoveredFunds, 0, borrowAmount);
 
-      uint256 agentID = agent.id();
-      // borrow half the stake amount
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, borrowAmount);
-      agentBorrow(agent, pool.id(), borrowCred);
-      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+    //     uint256 agentID = agent.id();
+    //     // borrow half the stake amount
+    //     SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, borrowAmount);
+    //     agentBorrow(agent, pool.id(), borrowCred);
+    //     Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
 
-      uint256 borrowedBefore = pool.totalBorrowed();
-      uint256 totalAssetsBefore = pool.totalAssets();
-      // roll forward to the default window
-      vm.roll(block.number + police.defaultWindow() + 1);
+    //     uint256 borrowedBefore = pool.totalBorrowed();
+    //     uint256 totalAssetsBefore = pool.totalAssets();
+    //     // roll forward to the default window
+    //     vm.roll(block.number + EPOCHS_IN_WEEK * 3 + 1);
 
-      vm.startPrank(policeOwner);
-      // set the agent in default
-      police.setAgentDefaulted(address(agent));
+    //     vm.startPrank(policeOwner);
+    //     // set the agent in default
+    //     police.setAgentDefaulted(address(agent));
 
-      vm.deal(policeOwner, recoveredFunds);
-      wFIL.deposit{value: recoveredFunds}();
-      wFIL.approve(address(police), recoveredFunds);
+    //     vm.deal(policeOwner, recoveredFunds);
+    //     wFIL.deposit{value: recoveredFunds}();
+    //     wFIL.approve(address(police), recoveredFunds);
 
-      assertPegInTact(pool);
-      // distribute the recovered funds
-      police.distributeLiquidatedFunds(address(agent), recoveredFunds);
+    //     assertPegInTact(pool);
+    //     // distribute the recovered funds
+    //     police.distributeLiquidatedFunds(address(agent), recoveredFunds);
 
-      uint256 borrowedAfter = pool.totalBorrowed();
-      uint256 totalAssetsAfter = pool.totalAssets();
+    //     uint256 borrowedAfter = pool.totalBorrowed();
+    //     uint256 totalAssetsAfter = pool.totalAssets();
 
-      uint256 lostAmount = totalAssetsBefore - pool.totalAssets();
-      uint256 recoverPercent = (totalAssetsBefore - lostAmount) * WAD / totalAssetsBefore;
+    //     uint256 lostAmount = totalAssetsBefore - pool.totalAssets();
+    //     uint256 recoverPercent = (totalAssetsBefore - lostAmount) * WAD / totalAssetsBefore;
 
-      uint256 poolTokenSupply = pool.liquidStakingToken().totalSupply();
-      uint256 tokenPrice = poolTokenSupply * WAD / (totalAssetsBefore - lostAmount);
+    //     uint256 poolTokenSupply = pool.liquidStakingToken().totalSupply();
+    //     uint256 tokenPrice = poolTokenSupply * WAD / (totalAssetsBefore - lostAmount);
 
-      // by checking converting 1 poolToken to its asset equivalent should mirror the recoverPercent
-      assertEq(pool.convertToAssets(WAD), recoverPercent , "IFILtoFIL should be 1");
-      assertEq(pool.convertToShares(WAD), tokenPrice, "FILtoIFIL should be 1");
-      assertEq(totalAssetsBefore + recoveredFunds - borrowAmount, totalAssetsAfter, "Pool should have recovered funds");
-      assertEq(lostAmount, borrowAmount - recoveredFunds, "lost amount should be correct");
+    //     // by checking converting 1 poolToken to its asset equivalent should mirror the recoverPercent
+    //     assertEq(pool.convertToAssets(WAD), recoverPercent, "IFILtoFIL should be 1");
+    //     assertEq(pool.convertToShares(WAD), tokenPrice, "FILtoIFIL should be 1");
+    //     assertEq(
+    //         totalAssetsBefore + recoveredFunds - borrowAmount, totalAssetsAfter, "Pool should have recovered funds"
+    //     );
+    //     assertEq(lostAmount, borrowAmount - recoveredFunds, "lost amount should be correct");
 
-      assertEq(borrowedBefore - borrowedAfter, account.principal, "Pool should have written down assets correctly");
-      assertEq(wFIL.balanceOf(address(police)), 0, "Agent police should not have funds");
-      assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
-      testInvariants(pool, "testDistributeLiquidatedFunds");
-      if (lostAmount == 0) {
-        assertPegInTact(pool);
-      }
-    }
+    //     assertEq(borrowedBefore - borrowedAfter, account.principal, "Pool should have written down assets correctly");
+    //     assertEq(wFIL.balanceOf(address(police)), 0, "Agent police should not have funds");
+    //     assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
+    //     testInvariants(pool, "testDistributeLiquidatedFunds");
+    //     if (lostAmount == 0) {
+    //         assertPegInTact(pool);
+    //     }
+    // }
 
-    function testDistributeLiquidatedFundsFullRecovery(
-      uint256 rollFwdPeriod,
-      uint256 borrowAmount,
-      uint256 recoveredFunds
-    ) public {
-      borrowAmount = bound(borrowAmount, WAD, stakeAmount);
-      SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
-      rollFwdPeriod = bound(
-        rollFwdPeriod,
-        police.defaultWindow() + 1,
-        police.defaultWindow() * 10
-      );
-      vm.assume(recoveredFunds > WAD);
+    // function testDistributeLiquidatedFundsFullRecovery(
+    //     uint256 rollFwdPeriod,
+    //     uint256 borrowAmount,
+    //     uint256 recoveredFunds
+    // ) public {
+    //     borrowAmount = bound(borrowAmount, WAD, stakeAmount);
+    //     SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+    //     rollFwdPeriod = bound(rollFwdPeriod, EPOCHS_IN_WEEK * 3 + 1, EPOCHS_IN_WEEK * 3 * 10);
+    //     vm.assume(recoveredFunds > WAD);
 
-      uint256 balanceAfter;
-      uint256 balanceBefore;
-      uint256 interestOwed = getPenaltyOwed(borrowAmount, rollFwdPeriod);
-      recoveredFunds = bound(recoveredFunds, borrowAmount, stakeAmount);
-      agentBorrow(agent, pool.id(), borrowCred);
-      balanceBefore = wFIL.balanceOf(address(pool));
-      uint256 totalAssetsBefore = pool.totalAssets();
-      // roll forward to the default window
-      vm.roll(block.number + rollFwdPeriod);
-      vm.startPrank(policeOwner);
-      // set the agent in default
-      police.setAgentDefaulted(address(agent));
-      vm.stopPrank();
-      vm.deal(policeOwner, recoveredFunds);
-      vm.startPrank(policeOwner);
-      wFIL.deposit{value: recoveredFunds}();
-      wFIL.approve(address(police), recoveredFunds);
-      // distribute the recovered funds
-      police.distributeLiquidatedFunds(address(agent), recoveredFunds);
-      Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-      assertTrue(account.defaulted, "Agent should be defaulted");
-      balanceAfter = wFIL.balanceOf(address(pool));
-      uint256 balanceChange = borrowAmount + interestOwed > recoveredFunds ? recoveredFunds : borrowAmount + interestOwed;
-      assertEq(balanceAfter - balanceBefore, balanceChange,  "Pool should have received the correct amount of funds");
-      assertEq(wFIL.balanceOf(IAuth(address(agent)).owner()), recoveredFunds - balanceChange,  "Police owner should only have paid the amount owed");
-      assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
-      testInvariants(pool, "testDistributeLiquidatedFundsFullRecovery");
-      
-      uint256 gainAmount = pool.totalAssets() - totalAssetsBefore;
-      uint256 gainPercent = (totalAssetsBefore + gainAmount) * WAD / totalAssetsBefore;
+    //     uint256 balanceAfter;
+    //     uint256 balanceBefore;
+    //     uint256 interestOwed = getPenaltyOwed(borrowAmount, rollFwdPeriod);
+    //     recoveredFunds = bound(recoveredFunds, borrowAmount, stakeAmount);
+    //     agentBorrow(agent, pool.id(), borrowCred);
+    //     balanceBefore = wFIL.balanceOf(address(pool));
+    //     uint256 totalAssetsBefore = pool.totalAssets();
+    //     // roll forward to the default window
+    //     vm.roll(block.number + rollFwdPeriod);
+    //     vm.startPrank(policeOwner);
+    //     // set the agent in default
+    //     police.setAgentDefaulted(address(agent));
+    //     vm.stopPrank();
+    //     vm.deal(policeOwner, recoveredFunds);
+    //     vm.startPrank(policeOwner);
+    //     wFIL.deposit{value: recoveredFunds}();
+    //     wFIL.approve(address(police), recoveredFunds);
+    //     // distribute the recovered funds
+    //     police.distributeLiquidatedFunds(address(agent), recoveredFunds);
+    //     Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+    //     assertTrue(account.defaulted, "Agent should be defaulted");
+    //     balanceAfter = wFIL.balanceOf(address(pool));
+    //     uint256 balanceChange =
+    //         borrowAmount + interestOwed > recoveredFunds ? recoveredFunds : borrowAmount + interestOwed;
+    //     assertEq(balanceAfter - balanceBefore, balanceChange, "Pool should have received the correct amount of funds");
+    //     assertEq(
+    //         wFIL.balanceOf(IAuth(address(agent)).owner()),
+    //         recoveredFunds - balanceChange,
+    //         "Police owner should only have paid the amount owed"
+    //     );
+    //     assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
+    //     testInvariants(pool, "testDistributeLiquidatedFundsFullRecovery");
 
-      uint256 poolTokenSupply = pool.liquidStakingToken().totalSupply();
-      uint256 tokenPrice = poolTokenSupply * WAD / (totalAssetsBefore + gainAmount);
-      // by checking converting 1 poolToken to its asset equivalent should mirror the recoverPercent
-      assertEq(pool.convertToAssets(WAD), gainPercent , "IFILtoFIL should increase by the fees pay on top of the recovery amount");
-      assertEq(pool.convertToShares(WAD), tokenPrice, "FILtoIFIL should be 1");
-    }
+    //     uint256 gainAmount = pool.totalAssets() - totalAssetsBefore;
+    //     uint256 gainPercent = (totalAssetsBefore + gainAmount) * WAD / totalAssetsBefore;
 
-    function getPenaltyOwed(uint256 amount, uint256 rollFwdPeriod) public view returns (uint256) {
-      uint256 rate = pool.getRate();
-      uint256 _interestOwedPerEpoch = amount.mulWadUp(rate);
-      // _interestOwedPerEpoch is mulWadUp by epochs (not WAD based), which cancels the WAD out for interestOwed
-      return _interestOwedPerEpoch.mulWadUp(rollFwdPeriod);
-    }
+    //     uint256 poolTokenSupply = pool.liquidStakingToken().totalSupply();
+    //     uint256 tokenPrice = poolTokenSupply * WAD / (totalAssetsBefore + gainAmount);
+    //     // by checking converting 1 poolToken to its asset equivalent should mirror the recoverPercent
+    //     assertEq(
+    //         pool.convertToAssets(WAD),
+    //         gainPercent,
+    //         "IFILtoFIL should increase by the fees pay on top of the recovery amount"
+    //     );
+    //     assertEq(pool.convertToShares(WAD), tokenPrice, "FILtoIFIL should be 1");
+    // }
+
+    // function getPenaltyOwed(uint256 amount, uint256 rollFwdPeriod) public view returns (uint256) {
+    //     uint256 rate = pool.getRate();
+    //     uint256 _interestOwedPerEpoch = amount.mulWadUp(rate);
+    //     // _interestOwedPerEpoch is mulWadUp by epochs (not WAD based), which cancels the WAD out for interestOwed
+    //     return _interestOwedPerEpoch.mulWadUp(rollFwdPeriod);
+    // }
 }
 
 contract AgentUpgradeTest is BaseTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
     using MinerHelper for uint64;
+
     address investor1 = makeAddr("INVESTOR_1");
     address minerOwner = makeAddr("MINER_OWNER");
     uint256 stakeAmount = 10e18;
@@ -1543,10 +1306,7 @@ contract AgentUpgradeTest is BaseTest {
     address prevAgentAddr;
 
     function setUp() public {
-        pool = createAndFundPool(
-            stakeAmount,
-            investor1
-        );
+        pool = createAndFundPool(stakeAmount, investor1);
         (agent, miner) = configureAgent(minerOwner);
         prevAgentAddr = address(agent);
     }
@@ -1562,9 +1322,9 @@ contract AgentUpgradeTest is BaseTest {
         IAgentFactory agentFactory = GetRoute.agentFactory(router);
         vm.prank(agentOwner);
         try agentFactory.upgradeAgent(prevAgentAddr) {
-          assertTrue(false, "Should have reverted");
+            assertTrue(false, "Should have reverted");
         } catch (bytes memory e) {
-          assertEq(errorSelector(e), Unauthorized.selector);
+            assertEq(errorSelector(e), Unauthorized.selector);
         }
     }
 
@@ -1671,7 +1431,7 @@ contract AgentUpgradeTest is BaseTest {
 
         vm.startPrank(agentOwner);
         agentFactory.upgradeAgent(prevAgentAddr);
-        
+
         assertEq(preUpgradeAcc.epochsPaid, postUpgradeAcc.epochsPaid);
         assertEq(preUpgradeAcc.principal, postUpgradeAcc.principal);
         assertEq(preUpgradeAcc.defaulted, postUpgradeAcc.defaulted);
@@ -1713,117 +1473,69 @@ contract AgentUpgradeTest is BaseTest {
     }
 
     function testUpgradeMigrateMiner() public {
-      uint64[] memory miners = new uint64[](1);
-      miners[0] = miner;
+        uint64[] memory miners = new uint64[](1);
+        miners[0] = miner;
 
-      IMinerRegistry registry = GetRoute.minerRegistry(router);
-      IAgentFactory agentFactory = GetRoute.agentFactory(router);
+        IMinerRegistry registry = GetRoute.minerRegistry(router);
+        IAgentFactory agentFactory = GetRoute.agentFactory(router);
 
-      _upgradeAgentDeployer();
+        _upgradeAgentDeployer();
 
-      assertTrue(registry.minerRegistered(agent.id(), miner), "Agent should have miner before removing");
-      assertEq(registry.minersCount(agent.id()), 1, "Agent should have 1 miner");
+        assertTrue(registry.minerRegistered(agent.id(), miner), "Agent should have miner before removing");
+        assertEq(registry.minersCount(agent.id()), 1, "Agent should have 1 miner");
 
-      vm.prank(minerOwner);
-      IAgent newAgent = IAgent(agentFactory.upgradeAgent(prevAgentAddr));
+        vm.prank(minerOwner);
+        IAgent newAgent = IAgent(agentFactory.upgradeAgent(prevAgentAddr));
 
-      vm.prank(address(newAgent));
-      agent.migrateMiner(miner);
+        vm.prank(address(newAgent));
+        agent.migrateMiner(miner);
 
-      vm.prank(minerOwner);
-      UpgradedAgent(payable(address(newAgent))).addMigratedMiners(miners);
-      assertTrue(registry.minerRegistered(newAgent.id(), miner), "miner should still be registed to the agent");
-      assertTrue(miner.isOwner(address(newAgent)), "The mock miner's owner should change to the new agent");
+        vm.prank(minerOwner);
+        UpgradedAgent(payable(address(newAgent))).addMigratedMiners(miners);
+        assertTrue(registry.minerRegistered(newAgent.id(), miner), "miner should still be registed to the agent");
+        assertTrue(miner.isOwner(address(newAgent)), "The mock miner's owner should change to the new agent");
     }
 
     function _upgradeAgentDeployer() internal {
-      UpgradedAgentDeployer deployer = new UpgradedAgentDeployer();
+        UpgradedAgentDeployer deployer = new UpgradedAgentDeployer();
 
-      vm.prank(systemAdmin);
-      IRouter(router).pushRoute(ROUTE_AGENT_DEPLOYER, address(deployer));
+        vm.prank(systemAdmin);
+        IRouter(router).pushRoute(ROUTE_AGENT_DEPLOYER, address(deployer));
     }
 }
 
-contract AgentDataTest is BaseTest{
-  using Credentials for VerifiableCredential;
-  function testGreenScore(uint32 greenScore) public {
-    AgentData memory data = AgentData(
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      // Green Score
-      greenScore
-    );
-    VerifiableCredential memory vc = VerifiableCredential(
-      address(0x0),
-      0,
-      0,
-      0,
-      0,
-      bytes4(0),
-      0,
-      abi.encode(data)
-    );
-    assertEq(vc.getGreenScore(credParser), greenScore, "Green score should be correct");
-  }
+contract AgentDataTest is BaseTest {
+    using Credentials for VerifiableCredential;
 
-  function testFaultySectors(uint256 faultySectors) public {
-    AgentData memory data = AgentData(
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      faultySectors,
-      0,
-      0
-    );
-    VerifiableCredential memory vc = VerifiableCredential(
-      address(0x0),
-      0,
-      0,
-      0,
-      0,
-      bytes4(0),
-      0,
-      abi.encode(data)
-    );
-    assertEq(vc.getFaultySectors(credParser), faultySectors, "Faulty sectors should be correct");
-  }
+    function testGreenScore(uint32 greenScore) public {
+        AgentData memory data = AgentData(
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            // Green Score
+            greenScore
+        );
+        VerifiableCredential memory vc = VerifiableCredential(address(0x0), 0, 0, 0, 0, bytes4(0), 0, abi.encode(data));
+        assertEq(vc.getGreenScore(credParser), greenScore, "Green score should be correct");
+    }
 
-  function testLiveSectors(uint256 liveSectors) public {
-    AgentData memory data = AgentData(
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      liveSectors,
-      0
-    );
-    VerifiableCredential memory vc = VerifiableCredential(
-      address(0x0),
-      0,
-      0,
-      0,
-      0,
-      bytes4(0),
-      0,
-      abi.encode(data)
-    );
-    assertEq(vc.getLiveSectors(credParser), liveSectors, "Live sectors should be correct");
-  }
+    function testFaultySectors(uint256 faultySectors) public {
+        AgentData memory data = AgentData(0, 0, 0, 0, 0, 0, 0, faultySectors, 0, 0);
+        VerifiableCredential memory vc = VerifiableCredential(address(0x0), 0, 0, 0, 0, bytes4(0), 0, abi.encode(data));
+        assertEq(vc.getFaultySectors(credParser), faultySectors, "Faulty sectors should be correct");
+    }
+
+    function testLiveSectors(uint256 liveSectors) public {
+        AgentData memory data = AgentData(0, 0, 0, 0, 0, 0, 0, 0, liveSectors, 0);
+        VerifiableCredential memory vc = VerifiableCredential(address(0x0), 0, 0, 0, 0, bytes4(0), 0, abi.encode(data));
+        assertEq(vc.getLiveSectors(credParser), liveSectors, "Live sectors should be correct");
+    }
 }
 
 // contract AgentCollateralsTest is BaseTest {

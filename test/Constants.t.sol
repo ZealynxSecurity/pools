@@ -206,7 +206,6 @@ pragma solidity 0.8.17;
 //     tester = new MsgSigTester();
 //   }
 
-
 //   /**
 //    * @dev Function signatures _must_ match the msg.sig value inside the function being called
 //    * This test could be beefed up to call a fake interface with the same function signature
@@ -283,7 +282,6 @@ pragma solidity 0.8.17;
 //     assertEq(expitPoolSig, POOL_EXIT_SELECTOR);
 //   }
 // }
-
 
 // contract MsgSigTester {
 //   function addMiners(address[] calldata) external pure returns (bytes4) {
