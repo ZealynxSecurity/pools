@@ -146,9 +146,9 @@ contract InfinityPool is IPool, Ownable {
         address owner_,
         address router_,
         address liquidStakingToken_,
+        ILiquidityMineSP lm_,
         uint256 minimumLiquidity_,
-        uint256 id_,
-        ILiquidityMineSP lm_
+        uint256 id_
     ) Ownable(owner_) {
         _router = router_;
         asset = IERC20(IRouter(_router).getRoute(ROUTE_WFIL_TOKEN));
