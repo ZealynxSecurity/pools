@@ -4,7 +4,6 @@ pragma solidity 0.8.17;
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
@@ -55,6 +54,8 @@ interface IPool {
     function totalBorrowableAssets() external view returns (uint256);
 
     function getAgentBorrowed(uint256 agentID) external view returns (uint256);
+
+    function getAgentDebt(uint256 agentID) external view returns (uint256);
 
     function getLiquidAssets() external view returns (uint256);
 

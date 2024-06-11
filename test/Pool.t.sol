@@ -4,7 +4,6 @@ pragma solidity ^0.8.17;
 
 import "./BaseTest.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
-import {IInfinityPool} from "src/Types/Interfaces/IInfinityPool.sol";
 
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {NewCredParser} from "test/helpers/NewCredParser.sol";
@@ -32,7 +31,6 @@ contract PoolTestState is BaseTest {
     IERC20 public asset;
     uint256 agentID;
     uint256 poolID;
-    IOffRamp ramp;
     address newCredParser;
 
     function setUp() public virtual {

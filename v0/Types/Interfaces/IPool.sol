@@ -1,16 +1,15 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-2.0-or-later
+// solhint-disable
 pragma solidity 0.8.17;
 
-import {IPool} from "src/Types/Interfaces/IPool.sol";
-import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
-import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {Account} from "src/Types/Structs/Account.sol";
-import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
-import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
-import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-import {IPreStake} from "src/Types/Interfaces/IPreStake.sol";
+import {IPoolToken} from "v0/Types/Interfaces/IPoolToken.sol";
+import {VerifiableCredential} from "v0/Types/Structs/Credentials.sol";
+import {Account} from "v0/Types/Structs/Account.sol";
+import {IOffRamp} from "v0/Types/Interfaces/IOffRamp.sol";
+import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
+import {IERC20} from "v0/Types/Interfaces/IERC20.sol";
 
-interface IInfinityPool {
+interface IPool {
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -44,15 +43,18 @@ interface IInfinityPool {
         uint256 shares
     );
 
-    event WriteOff(uint256 agentID, uint256 recoveredDebt, uint256 lostAmount);
+    event WriteOff(
+      uint256 indexed agentID,
+      uint256 recoveredFunds,
+      uint256 lostFunds,
+      uint256 interestPaid
+    );
 
     /*////////////////////////////////////////////////////////
                             GETTERS
     ////////////////////////////////////////////////////////*/
 
     function asset() external view returns (IERC20);
-
-    function preStake() external view returns (IPreStake);
 
     function liquidStakingToken() external view returns (IPoolToken);
 
@@ -63,8 +65,6 @@ interface IInfinityPool {
     function id() external view returns (uint256);
 
     function minimumLiquidity() external view returns (uint256);
-
-    function maxEpochsOwedTolerance() external view returns (uint256);
 
     function getAbsMinLiquidity() external view returns (uint256);
 
@@ -81,7 +81,6 @@ interface IInfinityPool {
     function feesCollected() external view returns (uint256);
 
     function getRate(
-        Account calldata account,
         VerifiableCredential calldata vc
     ) external view returns (uint256);
 
@@ -165,9 +164,9 @@ interface IInfinityPool {
 
     function decommissionPool(IPool newPool) external returns (uint256 borrowedAmount);
 
-    function jumpStartTotalBorrowed(uint256 amount) external;
-
     function jumpStartAccount(address receiver, uint256 agentID, uint256 principal) external;
+
+    function jumpStartTotalBorrowed(uint256 amount) external;
 
     function setRamp(IOffRamp newRamp) external;
 
@@ -175,14 +174,6 @@ interface IInfinityPool {
 
     function setRateModule(IRateModule newRateModule) external;
 
-    function setMaxEpochsOwedTolerance(uint256 epochs) external;
-
-    function writeOff(uint256 agentID, uint256 recoveredDebt) external;
-
-    function transferFromPreStake(uint256 amount) external;
-
-    function recoverFIL(address receiver) external;
-
-    function recoverERC20(address receiver, IERC20 token) external;
+    function writeOff(uint256 agentID, uint256 recoveredDebt) external returns (uint256 totalOwed);
 }
 

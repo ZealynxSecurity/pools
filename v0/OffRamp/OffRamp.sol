@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: BUSL-1.1
+//solhint-disable
 pragma solidity 0.8.17;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {GetRoute} from "src/Router/GetRoute.sol";
+import {GetRoute} from "v0/Router/GetRoute.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 
-import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
-import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
-import {DEPRECATED_IPool} from "src/Types/Interfaces/DEPRECATED_IPool.sol";
-import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
-import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
+import {IERC4626} from "v0/Types/Interfaces/IERC4626.sol";
+import {IPoolToken} from "v0/Types/Interfaces/IPoolToken.sol";
+import {IPool} from "v0/Types/Interfaces/IPool.sol";
+import {IWFIL} from "v0/Types/Interfaces/IWFIL.sol";
+import {IOffRamp} from "v0/Types/Interfaces/IOffRamp.sol";
 
 contract SimpleRamp is IOffRamp {
     using FixedPointMathLib for uint256;
@@ -23,7 +24,7 @@ contract SimpleRamp is IOffRamp {
     address private immutable router;
     uint256 private immutable poolID;
 
-    DEPRECATED_IPool public pool;
+    IPool public pool;
     IPoolToken public iFIL;
     IWFIL public wFIL;
 
@@ -259,7 +260,7 @@ contract SimpleRamp is IOffRamp {
     }
 
     function _refreshExtern() internal {
-        pool = DEPRECATED_IPool(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
+        pool = GetRoute.pool(GetRoute.poolRegistry(router), poolID);
         iFIL = pool.liquidStakingToken();
         wFIL = IWFIL(address(pool.asset()));
     }

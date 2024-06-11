@@ -40,6 +40,29 @@ remappings = [
 ]
 optimizer_details.yul = false
 
+[profile.v0]
+src = 'v0'
+out = 'out-v0'
+libs = ['lib', 'shim/FEVM']
+solc_version = "0.8.17"
+remappings = [
+  "ds-test/=lib/forge-std/lib/ds-test/src/",
+  "forge-std/=lib/forge-std/src/",
+  "@openzeppelin/=lib/openzeppelin-contracts/",
+  "solmate/=lib/solmate/src/",
+  "bytes-utils/=lib/solidity-bytes-utils/contracts/",
+  "filecoin-solidity/=lib/filecoin-solidity/contracts/v0.8/",
+  "solidity-cborutils/=lib/solidity-cborutils/",
+  "@ensdomains/buffer/=lib/buffer/",
+  "v0/=v0/",
+  "deploy/=deploy/",
+  "shim/=shim/FEVM/",
+  "fevmate/=lib/fevmate/contracts/",
+  "glifmate/=lib/glifmate/src/",
+  "@zondax/solidity-bignumber/=lib/filecoin-solidity/lib/solidity-bignumber/"
+]
+optimizer_details.yul = false
+
 [fuzz]
 runs = 1024
 

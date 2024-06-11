@@ -1,14 +1,15 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-2.0-or-later
+// solhint-disable
 pragma solidity 0.8.17;
 
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {Ownable} from "src/Auth/Ownable.sol";
-import {GetRoute} from "src/Router/GetRoute.sol";
-import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
-import {IRouter} from "src/Types/Interfaces/IRouter.sol";
-import {Account} from "src/Types/Structs/Account.sol";
-import {Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
+import {Ownable} from "v0/Auth/Ownable.sol";
+import {GetRoute} from "v0/Router/GetRoute.sol";
+import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
+import {IRouter} from "v0/Types/Interfaces/IRouter.sol";
+import {Account} from "v0/Types/Structs/Account.sol";
+import {Credentials, VerifiableCredential} from "v0/Types/Structs/Credentials.sol";
+import {EPOCHS_IN_DAY} from "v0/Constants/Epochs.sol";
 
 /**
  * @title RateModule
@@ -24,10 +25,10 @@ contract RateModule is IRateModule, Ownable {
     using FixedPointMathLib for uint256;
 
     /// @dev `maxDTI` is the maximum ratio of expected daily interest payments to expected daily rewards
-    uint256 public maxDTI = 0.25e18;
+    uint256 public maxDTI = 0.5e18;
 
     /// @dev `maxDTE` is the maximum ratio of principal to equity (principal / (agentValue - principal))
-    uint256 public maxDTE = 1e18;
+    uint256 public maxDTE = 3e18;
 
     /// @dev `maxLTV` is the maximum ratio of principal to collateral
     uint256 public maxLTV = 1e18;
@@ -102,7 +103,7 @@ contract RateModule is IRateModule, Ownable {
         VerifiableCredential calldata vc
     ) external view returns (bool) {
         // if you're behind on your payments, you're not approved
-        if (account.epochsPaid + GetRoute.agentPolice(router).administrationWindow() < block.number) {
+        if (account.epochsPaid + GetRoute.agentPolice(router).defaultWindow() < block.number) {
             return false;
         }
 
