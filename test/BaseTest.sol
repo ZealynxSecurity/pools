@@ -728,7 +728,7 @@ contract BaseTest is Test {
             string(
                 abi.encodePacked(
                     label,
-                    " _invIFILWorthAssetsOfPool: accrued rewards in each accont should match total pool accrued rewards"
+                    " _invIFILWorthAssetsOfPool: accrued rewards in each account should match total pool accrued rewards"
                 )
             )
         );
@@ -738,9 +738,21 @@ contract BaseTest is Test {
         // if we take the total supply of iFIL and convert it to assets, we should get the total pools assets + lent out funds
         uint256 totalIFILSupply = pool.liquidStakingToken().totalSupply();
 
-        assertEq(poolAssets + totalDebtFromAccounts, pool.totalAssets(), label);
-        assertEq(pool.convertToAssets(totalIFILSupply), poolAssets + totalDebtFromAccounts, label);
-        assertEq(pool.totalBorrowed(), totalBorrowedFromAccounts, label);
+        assertEq(
+            poolAssets + totalDebtFromAccounts,
+            pool.totalAssets(),
+            string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: pool total assets invariant wrong"))
+        );
+        assertEq(
+            pool.convertToAssets(totalIFILSupply),
+            poolAssets + totalDebtFromAccounts,
+            string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: iFIL convert to total assets invariant wrong"))
+        );
+        assertEq(
+            pool.totalBorrowed(),
+            totalBorrowedFromAccounts,
+            string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: total borrowed invariant wrong"))
+        );
     }
 
     // used in the agent police
