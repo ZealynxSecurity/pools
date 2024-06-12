@@ -210,7 +210,8 @@ contract InfinityPool is IPool, Ownable {
      * @return treasuryFeesReserved The total treasury rewards that have accrued in this pool
      */
     function treasuryFeesReserved() public view returns (uint256) {
-        return _treasuryFeesOwed - _treasuryFeesPaid;
+        (, uint256 newTreasuryFeesOwed) = _computeNewFeesAccrued();
+        return newTreasuryFeesOwed + _treasuryFeesOwed - _treasuryFeesPaid;
     }
 
     /**
