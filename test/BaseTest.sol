@@ -287,7 +287,10 @@ contract BaseTest is Test {
     function issueGenericPayCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
         // roll forward so we don't get an identical credential that's already been used
         vm.roll(block.number + 1);
+        return _issueGenericPayCred(agent, amount);
+    }
 
+    function _issueGenericPayCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
         AgentData memory agentData = createAgentData(
             // collateralValue => 2x the borrowAmount
             amount * 2,
@@ -391,6 +394,11 @@ contract BaseTest is Test {
     function issueGenericBorrowCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
         // roll forward so we don't get an identical credential that's already been used
         vm.roll(block.number + 1);
+        return _issueGenericBorrowCred(agent, amount);
+    }
+
+    // this is a helper function to allow us to issue a borrow cred without rolling forward
+    function _issueGenericBorrowCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
         uint256 principal = amount;
         // NOTE: since we don't pull this off the pool it could be out of sync - careful
         uint256 adjustedRate = _getAdjustedRate();
@@ -730,7 +738,7 @@ contract BaseTest is Test {
             )
         );
 
-        uint256 poolAssets = wFIL.balanceOf(address(pool)) - pool.feesCollected();
+        uint256 poolAssets = wFIL.balanceOf(address(pool)) - pool.treasuryFeesReserved();
 
         // if we take the total supply of iFIL and convert it to assets, we should get the total pools assets + lent out funds
         uint256 totalIFILSupply = pool.liquidStakingToken().totalSupply();

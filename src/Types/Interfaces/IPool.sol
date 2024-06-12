@@ -61,7 +61,7 @@ interface IPool {
 
     function getLiquidAssets() external view returns (uint256);
 
-    function treasuryFeesOwed() external view returns (uint256);
+    function treasuryFeesReserved() external view returns (uint256);
 
     function getRate() external view returns (uint256);
 
@@ -75,7 +75,7 @@ interface IPool {
 
     function lostAssets() external view returns (uint256);
 
-    function lastAccountingUpdatingEpoch() external view returns (uint256);
+    function lastAccountingUpdateEpoch() external view returns (uint256);
 
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS

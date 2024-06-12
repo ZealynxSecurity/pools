@@ -190,9 +190,9 @@ contract PoolFeeTests is PoolTestState {
         agentPay(agent, pool, issueGenericPayCred(agentID, amount));
         // Some of these numbers are inconsistent - we should calculate this value
         // instead of getting it from the contract once the calculations are stable
-        uint256 feesCollected = pool.feesCollected();
-        pool.harvestFees(feesCollected);
-        assertEq(asset.balanceOf(treasury), feesCollected);
+        uint256 treasuryFeesOwed = pool.treasuryFeesReserved();
+        pool.harvestFees(treasuryFeesOwed);
+        assertEq(asset.balanceOf(treasury), treasuryFeesOwed);
     }
 }
 
@@ -361,7 +361,7 @@ contract PoolAPRTests is PoolTestState {
         uint256 treasuryFeeRate = GetRoute.poolRegistry(router).treasuryFeeRate();
         // ensures the pool got the right amount of fees
         assertApproxEqAbs(
-            pool.feesCollected(),
+            pool.treasuryFeesReserved(),
             // fees collected should be treasury fee % of the interest earned
             poolEarnings.mulWadUp(treasuryFeeRate),
             DUST,
@@ -372,7 +372,7 @@ contract PoolAPRTests is PoolTestState {
 
         // ensures the pool got the right amount of fees
         assertApproxEqAbs(
-            pool.feesCollected(),
+            pool.treasuryFeesReserved(),
             // fees collected should be treasury fee % of the interest earned
             knownTreasuryFeeAmount,
             MAX_PRECISION_DELTA,
@@ -626,7 +626,7 @@ contract PoolAdminTests is PoolTestState {
 
         // Generate some fees to harvest
         _generateFees(paymentAmt, initialBorrow);
-        uint256 fees = pool.feesCollected();
+        uint256 fees = pool.treasuryFeesReserved();
         uint256 treasuryBalance = asset.balanceOf(address(treasury));
 
         IPool newPool = IPool(
@@ -715,7 +715,7 @@ contract PoolAdminTests is PoolTestState {
         // Generate some fees to harvest
         _generateFees(paymentAmt, initialBorrow);
 
-        uint256 fees = pool.feesCollected();
+        uint256 fees = pool.treasuryFeesReserved();
         assertGt(fees, 0, "Fees should be greater than 0");
         uint256 treasuryBalance = asset.balanceOf(address(treasury));
         harvestAmount = bound(harvestAmount, 0, fees);
@@ -723,7 +723,7 @@ contract PoolAdminTests is PoolTestState {
         vm.prank(systemAdmin);
         pool.harvestFees(harvestAmount);
 
-        assertEq(pool.feesCollected(), fees - harvestAmount, "Fees should be reduced by harvest amount");
+        assertEq(pool.treasuryFeesReserved(), fees - harvestAmount, "Fees should be reduced by harvest amount");
         assertEq(
             asset.balanceOf(address(treasury)),
             treasuryBalance + harvestAmount,
@@ -777,7 +777,7 @@ contract PoolErrorBranches is PoolTestState {
         // borrow the rest of the assets
         agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
         assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when liquid assets less than fees");
-        assertGt(pool.feesCollected(), 0, "Pool should have generated fees");
+        assertGt(pool.treasuryFeesReserved(), 0, "Pool should have generated fees");
     }
 
     function testMintZeroShares() public {
@@ -936,7 +936,6 @@ contract PoolAccountingTest is BaseTest {
         vm.startPrank(_agentOperator(agent));
         agent.pay(pool.id(), issueGenericPayCred(agent.id(), payAmount));
         vm.stopPrank();
-        console.log(payAmount);
 
         assertEq(pool.totalBorrowed(), 0, "Pool should still have no total borrowed");
 
@@ -1190,6 +1189,289 @@ contract PoolStakingTest is BaseTest {
 }
 
 // these tests mock out all other contracts so we can isolate the infinity pool code for testing
-// contract PoolIsolationTests is BaseTest {
-//    function test
-// }
+contract PoolIsolationTests is BaseTest {
+    using FixedPointMathLib for uint256;
+
+    uint256 public constant _DUST = 1e2;
+
+    IPool public pool;
+    address public investor = makeAddr("INVESTOR");
+
+    address[] public agents = [makeAddr("AGENT1")];
+
+    // charge 1% of borrow amount per epoch in these tests to simply math assertions
+    uint256 public rentalFeesPerEpoch = 1e34;
+
+    function setUp() public {
+        pool = createPool();
+        // first we set the rentalFeesOwedPerEpoch to a known value to make the math easier to make assertions
+        vm.prank(systemAdmin);
+        pool.setRentalFeesOwedPerEpoch(rentalFeesPerEpoch);
+    }
+
+    // this test goes through various states of the pool with a single depositor and borrower to make assertions about totalAssets
+    function testTotalAssets(uint256 depositAmount, uint256 rollFwd) public {
+        _mockAgentFactoryAgentsCalls();
+        uint64 agentID = 1;
+        address agent = agents[agentID - 1];
+        depositAmount = bound(depositAmount, 1e18, MAX_FIL);
+        rollFwd = bound(rollFwd, 1, EPOCHS_IN_YEAR);
+        uint256 borrowAmount = depositAmount;
+        uint256 startBlock = block.number;
+
+        // at the start, total assets should be 0
+        assertEq(pool.totalAssets(), 0, "Total assets should be 0 before any assets are added");
+
+        // after a deposit, total assets should equal the deposit amount
+        vm.deal(investor, depositAmount);
+        pool.deposit{value: depositAmount}(investor);
+
+        assertEq(
+            pool.totalAssets(), depositAmount, "Total assets should equal the deposit amount after initial deposit"
+        );
+
+        // after a borrow, total assets should not change
+        VerifiableCredential memory vc = _issueGenericBorrowCred(agentID, borrowAmount).vc;
+        vm.startPrank(agent);
+        pool.borrow(vc);
+        vm.stopPrank();
+
+        assertEq(pool.totalAssets(), depositAmount, "Total assets should equal the deposit amount after initial borrow");
+
+        // after a block goes by, interest should accrue, increasing total assets
+        vm.roll(block.number + 1);
+
+        // the expected accrued interest should be 1% of the borrow amount, minus treasury fee
+        uint256 expectedTotalInterest = borrowAmount.mulWadUp(rentalFeesPerEpoch).mulWadUp(1);
+        uint256 expectedAccruedRentalFees = expectedTotalInterest.mulWadUp(1e18 - pool.treasuryFeeRate());
+        uint256 accountInterestOwed = pool.getAgentInterestOwed(agentID);
+
+        assertApproxEqAbs(
+            accountInterestOwed,
+            expectedTotalInterest,
+            _DUST,
+            "Account interest owed should equal the expected interest"
+        );
+        assertApproxEqAbs(
+            pool.totalAssets(),
+            depositAmount + expectedAccruedRentalFees,
+            _DUST,
+            "Total assets should equal the deposit amount plus the expected interest"
+        );
+
+        // after a payment is made, total assets should stay the same
+        uint256 paymentAmount = accountInterestOwed;
+
+        vc = _issueGenericPayCred(agentID, paymentAmount).vc;
+
+        // give the agent the payment amount of fil
+        vm.deal(agent, paymentAmount);
+        vm.startPrank(agent);
+        wFIL.approve(address(pool), paymentAmount);
+        pool.pay(vc);
+        vm.stopPrank();
+
+        assertApproxEqAbs(
+            pool.totalAssets(),
+            depositAmount + expectedAccruedRentalFees,
+            _DUST,
+            "Total assets should equal the deposit amount plus the expected interest after a payment"
+        );
+
+        // after harvesting treasury fees, total assets should stay the same
+        vm.prank(systemAdmin);
+        pool.harvestFees(pool.treasuryFeesReserved());
+
+        assertApproxEqAbs(
+            pool.totalAssets(),
+            depositAmount + expectedAccruedRentalFees,
+            _DUST,
+            "Total assets should equal the deposit amount plus the expected interest after a harvest"
+        );
+
+        // roll forward to accrue more interest
+        vm.roll(block.number + rollFwd);
+
+        expectedTotalInterest = borrowAmount.mulWadUp(rentalFeesPerEpoch).mulWadUp(block.number - startBlock);
+        expectedAccruedRentalFees = expectedTotalInterest.mulWadUp(1e18 - pool.treasuryFeeRate());
+
+        assertEq(pool.totalBorrowed(), borrowAmount, "Total borrowed should equal the borrow amount");
+        assertApproxEqAbs(
+            pool.getAgentInterestOwed(agentID) + paymentAmount,
+            expectedTotalInterest,
+            _DUST,
+            "Account interest owed + paid should equal the expected interest - 2"
+        );
+        assertApproxEqAbs(
+            pool.totalAssets(),
+            depositAmount + expectedAccruedRentalFees,
+            _DUST,
+            "Total assets should equal the deposit amount plus the expected interest - 2"
+        );
+    }
+
+    function _testTotalAssetsAfterLiquidationPartialRecovery() public {}
+
+    function _testTotalAssetsAfterLiquidationFullRecovery() public {}
+
+    function testAccruedRentalFeesEqualTotalDebtAccruedOnAccounts(
+        uint256 agentCount,
+        uint256 depositAmt,
+        uint256 rollFwd
+    ) public {
+        uint256 startBlock = block.number;
+        // first lets load in a number of agents to the agent factory
+        agentCount = bound(agentCount, 1, 20);
+        depositAmt = bound(depositAmt, 1e18, MAX_FIL / agentCount);
+        rollFwd = bound(rollFwd, 1, EPOCHS_IN_YEAR);
+        agents = new address[](agentCount);
+        for (uint256 i = 0; i < agentCount; i++) {
+            agents[i] = makeAddr(string(abi.encodePacked("AGENT", vm.toString(i))));
+        }
+        _mockAgentFactoryAgentsCalls();
+        // in this test we make multiple accounts, roll forward, and test that the accrued debt on each account matches the total accrued debt for the pool
+        uint256 depositAmount = depositAmt * agents.length;
+        // borrow the full amount in the pool
+        uint256 borrowAmount = depositAmt;
+
+        // after a deposit, total assets should equal the deposit amount
+        vm.deal(investor, depositAmount);
+        pool.deposit{value: depositAmount}(investor);
+
+        // borrow FIL from all the agents
+        for (uint256 i = 0; i < agents.length; i++) {
+            uint256 agentID = i + 1;
+            address agent = agents[i];
+            VerifiableCredential memory vc = _issueGenericBorrowCred(agentID, borrowAmount).vc;
+            vm.prank(agent);
+            pool.borrow(vc);
+        }
+
+        assertEq(
+            pool.totalAssets(), depositAmount, "Total assets should equal the deposit amount when nothing is borrowed"
+        );
+
+        // roll forward to accrue interest
+        vm.roll(block.number + 1);
+
+        // the expected accrued interest should be 1% of the borrow amount, minus treasury fee
+        uint256 expectedTotalInterest = (borrowAmount * agents.length).mulWadUp(rentalFeesPerEpoch).mulWadUp(1);
+        uint256 expectedAccruedRentalFees = expectedTotalInterest.mulWadUp(1e18 - pool.treasuryFeeRate());
+        uint256 expectedTotalInterestFromAccounts;
+        for (uint256 i = 0; i < agents.length; i++) {
+            uint256 agentID = i + 1;
+            expectedTotalInterestFromAccounts += pool.getAgentInterestOwed(agentID);
+        }
+
+        // check that the total accrued rental fees match the expected interest
+        assertEq(
+            pool.accruedRentalFees(),
+            expectedTotalInterest,
+            "Total accrued rental fees should equal the expected interest"
+        );
+        assertApproxEqAbs(
+            pool.accruedRentalFees(),
+            expectedTotalInterestFromAccounts,
+            _DUST,
+            "Total accrued rental fees should equal the expected interest from accounts"
+        );
+        assertApproxEqAbs(
+            pool.totalAssets(),
+            depositAmount + expectedAccruedRentalFees,
+            _DUST,
+            "Total assets should equal the deposit amount plus the expected interest"
+        );
+
+        uint256 totalPayments;
+
+        // make payments and make the same assertions
+        for (uint256 i = 0; i < agents.length; i++) {
+            uint256 agentID = i + 1;
+            address agent = agents[i];
+            uint256 paymentAmount = pool.getAgentInterestOwed(agentID);
+            totalPayments += paymentAmount;
+
+            VerifiableCredential memory vc = _issueGenericPayCred(agentID, paymentAmount).vc;
+            // give the agent the payment amount of fil
+            vm.deal(agent, paymentAmount);
+            vm.startPrank(agent);
+            wFIL.approve(address(pool), paymentAmount);
+            pool.pay(vc);
+            vm.stopPrank();
+        }
+
+        // check that the total accrued rental fees match the expected interest
+        assertEq(
+            pool.accruedRentalFees(),
+            expectedTotalInterest,
+            "Total accrued rental fees should equal the expected interest"
+        );
+        assertApproxEqAbs(
+            pool.accruedRentalFees(),
+            expectedTotalInterestFromAccounts,
+            _DUST,
+            "Total accrued rental fees should equal the expected interest from accounts"
+        );
+        assertApproxEqAbs(
+            pool.totalAssets(),
+            depositAmount + expectedAccruedRentalFees,
+            _DUST,
+            "Total assets should equal the deposit amount plus the expected interest"
+        );
+        assertApproxEqAbs(
+            pool.paidRentalFees(), expectedTotalInterest, _DUST, "Paid rental fees should equal the expected interest"
+        );
+
+        // roll forward to accrue more interest
+        vm.roll(block.number + rollFwd);
+
+        // the expected accrued interest should be 1% of the borrow amount, minus treasury fee
+        expectedTotalInterest =
+            (borrowAmount * agents.length).mulWadUp(rentalFeesPerEpoch).mulWadUp(block.number - startBlock);
+        expectedAccruedRentalFees = expectedTotalInterest.mulWadUp(1e18 - pool.treasuryFeeRate());
+        expectedTotalInterestFromAccounts = 0;
+        for (uint256 i = 0; i < agents.length; i++) {
+            uint256 agentID = i + 1;
+            expectedTotalInterestFromAccounts += pool.getAgentInterestOwed(agentID);
+        }
+
+        // check that the total accrued rental fees match the expected interest
+        assertApproxEqAbs(
+            pool.accruedRentalFees(),
+            expectedTotalInterest,
+            _DUST,
+            "Total accrued rental fees should equal the expected interest"
+        );
+        assertApproxEqAbs(
+            pool.accruedRentalFees(),
+            expectedTotalInterestFromAccounts + totalPayments,
+            _DUST,
+            "Total accrued rental fees should equal the expected interest from accounts + total payments"
+        );
+        assertApproxEqAbs(
+            pool.totalAssets(),
+            // here we use expectedAccruedRentalFees because it accounts for treasury fees
+            depositAmount + (expectedTotalInterestFromAccounts + totalPayments).mulWadUp(1e18 - pool.treasuryFeeRate()),
+            _DUST,
+            "Total assets should equal the deposit amount plus the expected interest plus the total payments derived from accounts"
+        );
+        assertApproxEqAbs(
+            pool.totalAssets(),
+            depositAmount + expectedAccruedRentalFees,
+            _DUST,
+            "Total assets should equal the deposit amount plus the expected interest"
+        );
+    }
+
+    function _mockAgentFactoryAgentsCalls() internal {
+        for (uint256 i = 0; i < agents.length; i++) {
+            address agent = agents[i];
+            // mock a call to the agent factory about the agent to give it an ID
+            vm.mockCall(
+                address(GetRoute.agentFactory(router)),
+                abi.encodeWithSelector(bytes4(keccak256("agents(address)")), agent),
+                abi.encode(i + 1)
+            );
+        }
+    }
+}
