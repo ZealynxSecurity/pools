@@ -12,7 +12,8 @@ library FinMath {
 
     // debt is the accumulation of interest + principal on the account
     function computeDebt(Account memory account, uint256 rate) internal view returns (uint256) {
-        return account.principal + interestOwed(account, rate);
+        (uint256 _interestOwed,) = interestOwed(account, rate);
+        return account.principal + _interestOwed;
     }
 
     function computeDTE(Account memory account, VerifiableCredential calldata vc, uint256 rate, address credParser)
@@ -61,14 +62,18 @@ library FinMath {
     }
 
     /// @dev returns the interest owed of a particular Account struct given a VerifiableCredential
-    function interestOwed(Account memory account, uint256 rate) internal view returns (uint256) {
+    function interestOwed(Account memory account, uint256 rate)
+        internal
+        view
+        returns (uint256 totalInterest, uint256 interestPerEpoch)
+    {
         // compute the number of epochs that are owed to get current
         uint256 epochsToPay = block.number - account.epochsPaid;
         // multiply the rate by the principal to get the per epoch interest rate
         // the interestPerEpoch has an extra WAD to maintain precision
-        uint256 interestPerEpoch = account.principal.mulWadUp(rate);
+        interestPerEpoch = account.principal.mulWadUp(rate);
         // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
         // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
-        return interestPerEpoch.mulWadUp(epochsToPay);
+        return (interestPerEpoch.mulWadUp(epochsToPay), interestPerEpoch);
     }
 }

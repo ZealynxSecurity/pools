@@ -638,7 +638,7 @@ contract BaseTest is Test {
         // since borrowAmount is also WAD based, the _interestOwedPerEpoch is also WAD based (e18 * e18 / e18)
         uint256 _interestOwedPerEpoch = borrowAmount.mulWadUp(rate);
         // _interestOwedPerEpoch is mulWadUp by epochs (not WAD based), which cancels the WAD out for interestOwed
-        interestOwed = (_interestOwedPerEpoch.mulWadUp(rollFwdAmt + 1));
+        interestOwed = (_interestOwedPerEpoch.mulWadUp(rollFwdAmt));
         // when setting the interestOwedPerEpoch, we div out the WAD manually here
         // we'd rather use the more precise _interestOwedPerEpoch to compute interestOwed above
         interestOwedPerEpoch = _interestOwedPerEpoch / WAD;
@@ -668,6 +668,9 @@ contract BaseTest is Test {
     function setAgentDefaulted(IAgent agent) internal {
         IAgentPolice police = GetRoute.agentPolice(router);
         SignedCredential memory defaultCred = issueGenericSetDefaultCred(agent.id());
+
+        // set an account in storage with some principal
+        agentBorrow(agent, 0, issueGenericBorrowCred(agent.id(), 10e18));
 
         vm.startPrank(IAuth(address(police)).owner());
         police.setAgentDefaultDTL(address(agent), defaultCred);
@@ -715,6 +718,7 @@ contract BaseTest is Test {
         uint256 agentCount = GetRoute.agentFactory(router).agentCount();
 
         uint256 totalDebtFromAccounts = 0;
+        uint256 totalInterestFromAccounts = 0;
         uint256 totalBorrowedFromAccounts = 0;
 
         for (uint256 i = 1; i <= agentCount; i++) {
@@ -723,10 +727,21 @@ contract BaseTest is Test {
             if (!account.defaulted) {
                 totalBorrowedFromAccounts += pool.getAgentBorrowed(i);
                 totalDebtFromAccounts += pool.getAgentDebt(i);
+                totalInterestFromAccounts += pool.getAgentInterestOwed(i);
             }
         }
 
-        uint256 accruedRewards = totalDebtFromAccounts - totalBorrowedFromAccounts;
+        // the difference between what our current debt is and what we've borrowed is the total amount we've accrued
+        // we add back what had paid in interest to get the total amount of rewards we've accrued
+        uint256 accruedRewards = totalDebtFromAccounts - totalBorrowedFromAccounts + pool.paidRentalFees();
+        uint256 accruedRewards2 = totalInterestFromAccounts + pool.paidRentalFees();
+
+        assertEq(
+            accruedRewards,
+            accruedRewards2,
+            string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: accrued rewards calculations should match"))
+        );
+
         assertEq(
             accruedRewards,
             pool.accruedRentalFees(),
@@ -738,19 +753,19 @@ contract BaseTest is Test {
             )
         );
 
-        uint256 poolAssets = wFIL.balanceOf(address(pool)) - pool.treasuryFeesReserved();
+        uint256 poolAssets = wFIL.balanceOf(address(pool));
 
         // if we take the total supply of iFIL and convert it to assets, we should get the total pools assets + lent out funds
         uint256 totalIFILSupply = pool.liquidStakingToken().totalSupply();
 
         assertEq(
-            poolAssets + totalDebtFromAccounts,
+            poolAssets + totalDebtFromAccounts - pool.treasuryFeesReserved(),
             pool.totalAssets(),
             string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: pool total assets invariant wrong"))
         );
         assertEq(
             pool.convertToAssets(totalIFILSupply),
-            poolAssets + totalDebtFromAccounts,
+            poolAssets + totalDebtFromAccounts - pool.treasuryFeesReserved(),
             string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: iFIL convert to total assets invariant wrong"))
         );
         assertEq(

@@ -193,7 +193,9 @@ contract InfinityPool is IPool, Ownable {
      * @return totalDebt The total interest owed
      */
     function getAgentInterestOwed(uint256 agentID) external view returns (uint256) {
-        return FinMath.interestOwed(AccountHelpers.getAccount(_router, agentID, id), _rentalFeesOwedPerEpoch);
+        (uint256 _interestOwed,) =
+            FinMath.interestOwed(AccountHelpers.getAccount(_router, agentID, id), _rentalFeesOwedPerEpoch);
+        return _interestOwed;
     }
 
     /**
@@ -296,8 +298,7 @@ contract InfinityPool is IPool, Ownable {
         uint256 interestOwed = 0;
         // if the account is not "current", compute the amount of interest owed based on the penalty rate
         if (account.epochsPaid < block.number) {
-            interestOwed =
-                account.principal.mulWadUp(_rentalFeesOwedPerEpoch).mulWadUp(block.number - account.epochsPaid);
+            (interestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
         }
 
         // compute the amount of fees and principal we can pay off
@@ -424,17 +425,13 @@ contract InfinityPool is IPool, Ownable {
 
         // if the account is not "current", compute the amount of interest owed based on the new rate
         if (account.epochsPaid < block.number) {
-            // compute the number of epochs that are owed to get current
-            uint256 epochsToPay = block.number - account.epochsPaid;
-            // multiply the rate by the principal to get the per epoch interest rate
-            // the interestPerEpoch has an extra WAD to maintain precision
-            interestPerEpoch = account.principal.mulWadUp(_rentalFeesOwedPerEpoch);
+            (interestOwed, interestPerEpoch) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
             // ensure the payment is greater than or equal to at least 1 epochs worth of interest
             // NOTE - we multiply by WAD here because the interestPerEpoch has an extra WAD to maintain precision
             if (vc.value * WAD < interestPerEpoch) revert InvalidParams();
             // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
             // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
-            interestOwed = interestPerEpoch.mulWadUp(epochsToPay);
+            interestOwed = interestPerEpoch.mulWadUp(block.number - account.epochsPaid);
         }
         // if the payment is less than the interest owed, pay interest only
         if (vc.value <= interestOwed) {
@@ -516,15 +513,20 @@ contract InfinityPool is IPool, Ownable {
     {
         // only update the accounting if we're in a new epoch
         if (block.number > lastAccountingUpdateEpoch) {
-            // calculate the number of blocks passed since the last upgrade
-            uint256 blocksPassed = block.number - lastAccountingUpdateEpoch;
-            // calculate the total % owed to the pool
-            uint256 feeRateAccrued = _rentalFeesOwedPerEpoch.mulWadUp(blocksPassed * 1e18);
-            // calculate the total interest accrued during this period
-            newRentalFeesAccrued = totalBorrowed.mulWadUp(feeRateAccrued);
+            // create a pseudo Account struct for the whole pool to reuse the FinMath library
+            (newRentalFeesAccrued,) = FinMath.interestOwed(
+                Account({
+                    principal: totalBorrowed,
+                    startEpoch: lastAccountingUpdateEpoch,
+                    epochsPaid: lastAccountingUpdateEpoch,
+                    defaulted: false
+                }),
+                _rentalFeesOwedPerEpoch
+            );
+
             newTreasuryFeesAccrued = newRentalFeesAccrued.mulWadDown(treasuryFeeRate);
             // div out the extra wad embedded in the rate for increase precision
-            return (newRentalFeesAccrued.mulWadUp(1), newTreasuryFeesAccrued.mulWadUp(1));
+            return (newRentalFeesAccrued, newTreasuryFeesAccrued);
         }
         return (0, 0);
     }

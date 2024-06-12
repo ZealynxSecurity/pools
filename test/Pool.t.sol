@@ -1162,7 +1162,7 @@ contract PoolStakingTest is BaseTest {
 contract PoolIsolationTests is BaseTest {
     using FixedPointMathLib for uint256;
 
-    uint256 public constant _DUST = 1e2;
+    uint256 public constant _DUST = 1e3;
 
     IPool public pool;
     address public investor = makeAddr("INVESTOR");
@@ -1432,16 +1432,16 @@ contract PoolIsolationTests is BaseTest {
     }
 
     // test ensures that even if we make a lot of payments, the pool accounting holds up
-    function testFuzzManyPaymentsTotalAssets(uint256 numPayments, uint256 rollFwd) public {
+    function testFuzzManyPaymentsTotalAssets(uint256 numPayments, uint256 rollFwd, uint256 depositAmount) public {
         numPayments = bound(numPayments, 3, 100);
         rollFwd = bound(rollFwd, numPayments, EPOCHS_IN_YEAR);
+        depositAmount = bound(depositAmount, 1e18, MAX_FIL);
         _mockAgentFactoryAgentsCalls();
         uint256 agentID = 1;
         address agent = agents[agentID - 1];
         uint256 startBlock = block.number;
 
-        uint256 depositAmount = 100e18;
-        uint256 borrowAmount = 100e18;
+        uint256 borrowAmount = depositAmount;
 
         // after a deposit, total assets should equal the deposit amount
         vm.deal(investor, depositAmount);
@@ -1488,6 +1488,11 @@ contract PoolIsolationTests is BaseTest {
             "Total assets should equal the deposit amount plus the expected interest"
         );
         assertEq(pool.getAgentInterestOwed(agentID), 0, "Agent interest owed should be 0 after all payments");
+        assertEq(
+            AccountHelpers.getAccount(router, agentID, 0).epochsPaid,
+            block.number,
+            "Agent should have paid for all epochs"
+        );
     }
 
     function _mockAgentFactoryAgentsCalls() internal {

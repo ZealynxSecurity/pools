@@ -658,15 +658,14 @@ contract AgentBorrowingTest is BaseTest {
     function testBorrowTwice(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, WAD, depositAmt / 2);
 
-        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        SignedCredential memory borrowCred = _issueGenericBorrowCred(agent.id(), borrowAmount);
 
         uint256 borrowBlock = block.number;
         agentBorrow(agent, pool.id(), borrowCred);
-        console.log("----------- just borrowed 1 --------");
         // roll forward to test the startEpoch and epochsPaid
         vm.roll(block.number + 1000);
 
-        borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        borrowCred = _issueGenericBorrowCred(agent.id(), borrowAmount);
         // Since we've already borrowed, we pretend the SP locks substantially more funds
         uint256 collateralValue = borrowAmount * 4;
 
@@ -678,9 +677,7 @@ contract AgentBorrowingTest is BaseTest {
         );
         borrowCred.vc.claim = abi.encode(agentData);
         borrowCred = signCred(borrowCred.vc);
-        console.log("------- before borrow 2 -------");
         agentBorrow(agent, pool.id(), borrowCred);
-        console.log("------- after borrow 2 -------");
 
         Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
         assertEq(account.principal, borrowAmount * 2);
@@ -827,12 +824,15 @@ contract AgentPayTest is BaseTest {
         rollFwdAmt = bound(rollFwdAmt, 1, EPOCHS_IN_WEEK * 3);
         borrowAmount = bound(borrowAmount, 1e18, depositAmt);
 
-        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        SignedCredential memory borrowCred = _issueGenericBorrowCred(agent.id(), borrowAmount);
         (uint256 interestOwed, uint256 interestOwedPerEpoch) = calculateInterestOwed(borrowAmount, rollFwdAmt);
 
+        if (interestOwed + DUST > interestOwedPerEpoch) {
+            payAmount = interestOwed;
+        } else {
+            payAmount = bound(payAmount, interestOwedPerEpoch + DUST, interestOwed - DUST);
+        }
         // bind the pay amount to less than the interest owed
-        payAmount = bound(payAmount, interestOwedPerEpoch + DUST, interestOwed - DUST);
-
         StateSnapshot memory prePayState = borrowRollFwdAndPay(agent, pool, borrowCred, payAmount, rollFwdAmt);
 
         assertEq(
@@ -848,7 +848,7 @@ contract AgentPayTest is BaseTest {
         // bind borrow amount min 1e18 to ensure theres a decent amount of principal to repay
         borrowAmount = bound(borrowAmount, 1e18, depositAmt);
 
-        SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
+        SignedCredential memory borrowCred = _issueGenericBorrowCred(agent.id(), borrowAmount);
 
         (uint256 interestOwed,) = calculateInterestOwed(borrowAmount, rollFwdAmt);
         // bind the pay amount to in between the interest owed and less than the principal
@@ -887,7 +887,7 @@ contract AgentPayTest is BaseTest {
         vm.roll(block.number + rollFwdAmt);
 
         (,, uint256 principalPaid, uint256 refund, StateSnapshot memory prePayState) =
-            agentPay(_agent, newPool, issueGenericPayCred(agentID, payAmount));
+            agentPay(_agent, newPool, _issueGenericPayCred(agentID, payAmount));
 
         assertPmtSuccess(_agent, newPool, prePayState, payAmount, principalPaid, refund);
 
