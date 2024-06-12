@@ -632,6 +632,7 @@ contract AgentRmEquityTest is BaseTest {
 }
 
 contract AgentBorrowingTest is BaseTest {
+    using FixedPointMathLib for uint256;
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
 
@@ -669,20 +670,55 @@ contract AgentBorrowingTest is BaseTest {
         // Since we've already borrowed, we pretend the SP locks substantially more funds
         uint256 collateralValue = borrowAmount * 4;
 
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
         AgentData memory agentData = createAgentData(
             collateralValue,
             borrowCred.vc.getExpectedDailyRewards(credParser),
             // principal = borrowAmount * 2 (second time borrowing)
             borrowAmount * 2
         );
+
+        uint256 interestOwed = pool.getAgentInterestOwed(agent.id());
+
         borrowCred.vc.claim = abi.encode(agentData);
         borrowCred = signCred(borrowCred.vc);
         agentBorrow(agent, pool.id(), borrowCred);
 
-        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
-        assertEq(account.principal, borrowAmount * 2);
-        assertEq(account.startEpoch, borrowBlock);
-        assertEq(account.epochsPaid, borrowBlock);
+        Account memory updatedAccount = AccountHelpers.getAccount(router, agent.id(), pool.id());
+        assertEq(updatedAccount.principal, borrowAmount * 2);
+        assertEq(updatedAccount.startEpoch, borrowBlock);
+
+        uint256 expectedInterestOwedPerEpoch = updatedAccount.principal.mulWadUp(pool.getRate());
+        // if the new interest per epoch is bigger than the previous interest owed, then the epoch cursor should represent 1 epoch of interest worth of interest
+        if (expectedInterestOwedPerEpoch > interestOwed * WAD) {
+            assertEq(
+                updatedAccount.epochsPaid,
+                block.number - 1,
+                "Agent interest owed should equal the expected interest owed per epoch"
+            );
+            assertEq(
+                pool.getAgentInterestOwed(agent.id()),
+                // we expect the interest owed to be the expected interest owed per epoch, div out the extra epoch precision
+                expectedInterestOwedPerEpoch.mulWadUp(1),
+                "Agent interest owed should equal the expected interest owed per epoch"
+            );
+        } else {
+            // else the epochsPaid should shift forward and the interest should remain unchanged
+
+            assertGt(
+                updatedAccount.epochsPaid,
+                account.epochsPaid,
+                "Account epochs paid should be greater than initial epochs paid after borrowing with interest owed"
+            );
+
+            assertTrue(pool.getAgentInterestOwed(agent.id()) >= interestOwed, "Interest owed should not decrease");
+            // interest owed should not have changed (using relative approximation )
+            assertApproxEqRel(
+                pool.getAgentInterestOwed(agent.id()), interestOwed, 1e16, "Interest owed should not have changed"
+            );
+        }
+
         testInvariants(pool, "testBorrowTwice");
     }
 

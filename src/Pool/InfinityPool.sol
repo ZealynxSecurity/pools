@@ -375,9 +375,36 @@ contract InfinityPool is IPool, Ownable {
             uint256 currentEpoch = block.number;
             account.startEpoch = currentEpoch;
             account.epochsPaid = currentEpoch;
+            account.principal += vc.value;
+        } else {
+            // shift the epochsPaid cursor up, so the account does not end up overpaying interest on previously borrowed funds
+            // first we compute the interest owed before the new borrowed amount is applied
+            (uint256 interestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
+            // then add the new borrowed amount to the account's principal
+            account.principal += vc.value;
+            // compute the new interest owed per epoch after the new borrowed amount is applied to the account
+            // note that interestPerEpoch has an extra WAD to maintain precision
+            uint256 interestPerEpochAfter = FinMath.interestPerEpoch(account, _rentalFeesOwedPerEpoch);
+            // if interest exists but it is less than the minimum new interest per epoch, we set the account to the current epoch minus 1
+            // note that this account is now slightly overpaying for interest, so we need to adjust our accrued rewards
+            if (interestOwed > 0 && (interestOwed <= interestPerEpochAfter.mulWadUp(1))) {
+                account.epochsPaid = block.number - 1;
+                // add the difference between the new interest owed (after divving out the extra WAD) and previousInterestOwed to the accruedFees of the pool
+                _accruedRentalFees += interestPerEpochAfter.mulWadUp(1) - interestOwed;
+            } else if (interestOwed > 0) {
+                // if the interestOwed is bigger than 0 and the interestPerEpochAfter, we need to adjust the epochsPaid cursor forward
+                // given a new interest per epoch owed with the new borrow amount applied, we need to solve for the number of epochs (at the new interestPerEpochRate) that will result in the same amount of interest owed
+                account.epochsPaid = block.number - interestOwed.divWadUp(interestPerEpochAfter);
+                // since we lost precision by divving into epochs (not wad based), we check for any accounting mismatches, and adjust the accrued rental fees
+                (uint256 newInterestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
+                if (newInterestOwed != interestOwed) {
+                    // add the difference between the new interest owed and previousInterestOwed to the accruedFees of the pool
+                    _accruedRentalFees += newInterestOwed - interestOwed;
+                }
+            }
+            // if we dont owe any interest we leave the account epoch's paid cursor alone to maintain the same amount of total interest owed
         }
 
-        account.principal += vc.value;
         account.save(_router, vc.subject, id);
 
         totalBorrowed += vc.value;

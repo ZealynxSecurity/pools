@@ -65,15 +65,20 @@ library FinMath {
     function interestOwed(Account memory account, uint256 rate)
         internal
         view
-        returns (uint256 totalInterest, uint256 interestPerEpoch)
+        returns (uint256 _totalInterest, uint256 _interestPerEpoch)
     {
         // compute the number of epochs that are owed to get current
         uint256 epochsToPay = block.number - account.epochsPaid;
         // multiply the rate by the principal to get the per epoch interest rate
         // the interestPerEpoch has an extra WAD to maintain precision
-        interestPerEpoch = account.principal.mulWadUp(rate);
+        _interestPerEpoch = interestPerEpoch(account, rate);
         // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
         // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
-        return (interestPerEpoch.mulWadUp(epochsToPay), interestPerEpoch);
+        return (_interestPerEpoch.mulWadUp(epochsToPay), _interestPerEpoch);
+    }
+
+    /// @dev returns the interest owed per epoch of a particular Account based on its principal
+    function interestPerEpoch(Account memory account, uint256 rate) internal pure returns (uint256) {
+        return account.principal.mulWadUp(rate);
     }
 }

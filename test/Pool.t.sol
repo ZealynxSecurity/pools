@@ -1495,6 +1495,101 @@ contract PoolIsolationTests is BaseTest {
         );
     }
 
+    function testFuzzInterestOwedAfterBorrowTwoTimes(uint256 rollFwd, uint256 borrowAmount) public {
+        rollFwd = bound(rollFwd, 1, EPOCHS_IN_YEAR * 10);
+        borrowAmount = bound(borrowAmount, 1e18, MAX_FIL);
+        // make sure we have enoguh funds
+        uint256 depositAmount = borrowAmount * 10;
+
+        _mockAgentFactoryAgentsCalls();
+
+        uint256 agentID = 1;
+        address agent = agents[agentID - 1];
+
+        // after a deposit, total assets should equal the deposit amount
+        vm.deal(investor, depositAmount);
+        pool.deposit{value: depositAmount}(investor);
+
+        // after a borrow, total assets should not change
+        VerifiableCredential memory vc = _issueGenericBorrowCred(agentID, borrowAmount).vc;
+        vm.startPrank(agent);
+        pool.borrow(vc);
+        vm.stopPrank();
+
+        Account memory account = AccountHelpers.getAccount(router, agentID, 0);
+        assertEq(account.principal, borrowAmount, "Account should have borrowed amount");
+        assertEq(account.epochsPaid, block.number, "Account epochs paid should be current block");
+
+        uint256 interestOwed = pool.getAgentInterestOwed(agentID);
+        uint256 debtOwed = pool.getAgentDebt(agentID);
+        assertEq(interestOwed, 0, "Agent interest owed should be 0 after first borrow");
+        assertEq(debtOwed, borrowAmount, "Agent debt should equal the borrow amount");
+
+        // roll forward to accrue interest
+
+        vm.roll(block.number + rollFwd);
+
+        interestOwed = pool.getAgentInterestOwed(agentID);
+        debtOwed = pool.getAgentDebt(agentID);
+        assertGt(interestOwed, 0, "Agent interest owed should be greater than 0 after first borrow");
+        assertGt(debtOwed, borrowAmount, "Agent debt should equal the borrow amount after first borrow");
+        // epochs paid should not have shifted since initial borrow when no payment occurs
+        assertEq(
+            account.epochsPaid,
+            AccountHelpers.getAccount(router, agentID, 0).epochsPaid,
+            "Account epochs paid should be unchanged"
+        );
+
+        // after a second borrow, interest should not change
+        vc = _issueGenericBorrowCred(agentID, borrowAmount).vc;
+        vm.startPrank(agent);
+        pool.borrow(vc);
+        vm.stopPrank();
+
+        Account memory updatedAccount = AccountHelpers.getAccount(router, agentID, 0);
+
+        // we calculate the expected interest owed per epoch by the agent
+        uint256 expectedInterestOwedPerEpoch = updatedAccount.principal.mulWadUp(rentalFeesPerEpoch);
+
+        // if the new interest per epoch is bigger than the previous interest owed, then the epoch cursor should represent 1 epoch of interest worth of interest
+        if (expectedInterestOwedPerEpoch > interestOwed * WAD) {
+            assertEq(
+                updatedAccount.epochsPaid,
+                block.number - 1,
+                "Agent interest owed should equal the expected interest owed per epoch"
+            );
+            assertEq(
+                pool.getAgentInterestOwed(agentID),
+                // we expect the interest owed to be the expected interest owed per epoch, div out the extra epoch precision
+                expectedInterestOwedPerEpoch.mulWadUp(1),
+                "Agent interest owed should equal the expected interest owed per epoch"
+            );
+        } else {
+            // else the epochsPaid should shift forward and the interest should remain unchanged
+
+            assertGt(
+                updatedAccount.epochsPaid,
+                account.epochsPaid,
+                "Account epochs paid should be greater than initial epochs paid after borrowing with interest owed"
+            );
+
+            assertTrue(pool.getAgentInterestOwed(agentID) >= interestOwed, "Interest owed should not decrease");
+            // interest owed should not have changed (using relative approximation of 99.9999%)
+            assertApproxEqRel(
+                pool.getAgentInterestOwed(agentID), interestOwed, 99e16, "Interest owed should not have changed"
+            );
+        }
+
+        // when we move forward in time, the interest owed should increase
+        vm.roll(block.number + rollFwd);
+
+        assertGt(
+            pool.getAgentInterestOwed(agentID),
+            interestOwed,
+            "Agent interest owed should be greater than initial interest owed after time passes"
+        );
+    }
+
     function _mockAgentFactoryAgentsCalls() internal {
         for (uint256 i = 0; i < agents.length; i++) {
             address agent = agents[i];
