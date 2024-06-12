@@ -215,17 +215,16 @@ contract PoolAPRTests is PoolTestState {
         assertEq(testRate, chargedRatePerEpoch, "Test rates should match");
 
         // here we can fake borrow 1 FIL from the pool, fast forward a year, and measure the returns of the pool
-        agentBorrow(agent, poolID, issueGenericBorrowCred(agent.id(), borrowAmt));
+        agentBorrow(agent, poolID, _issueGenericBorrowCred(agent.id(), borrowAmt));
 
         // fast forward a year
         vm.roll(block.number + EPOCHS_IN_YEAR);
-
         _invIFILWorthAssetsOfPool(pool, "testGetRateAppliedAnnually");
 
         // compute the interest owed
         assertEq(
             pool.totalAssets(),
-            totalAssets + totalAssets.mulWadDown(KNOWN_RATE),
+            totalAssets + totalAssets.mulWadDown(KNOWN_RATE).mulWadUp(1e18 - pool.treasuryFeeRate()),
             "Pool should have KNOWN RATE increase worth of asset"
         );
     }
@@ -240,7 +239,7 @@ contract PoolAPRTests is PoolTestState {
         assertEq(chargedRatePerEpoch.mulWadUp(EPOCHS_IN_YEAR * 10), KNOWN_RATE * 10, "APR should be known APR value");
 
         // here we can fake borrow 1 FIL from the pool, fast forward a year, and measure the returns of the pool
-        agentBorrow(agent, poolID, issueGenericBorrowCred(agent.id(), borrowAmt));
+        agentBorrow(agent, poolID, _issueGenericBorrowCred(agent.id(), borrowAmt));
 
         // fast forward a year
         vm.roll(block.number + EPOCHS_IN_YEAR * 10);
@@ -250,16 +249,18 @@ contract PoolAPRTests is PoolTestState {
         // compute the interest owed
         assertEq(
             pool.totalAssets(),
-            totalAssets + totalAssets.mulWadDown(KNOWN_RATE * 10),
+            totalAssets + totalAssets.mulWadDown(KNOWN_RATE * 10).mulWadUp(1e18 - pool.treasuryFeeRate()),
             "Pool should have KNOWN RATE increase worth of asset"
         );
     }
 
-    function testAPRKnownCREDSinglePayment(uint256 principal, uint256 collateralValue) public {
+    function testCashBasisAPYSinglePayment(uint256 principal, uint256 collateralValue) public {
         principal = bound(principal, WAD, MAX_FIL / 2);
         collateralValue = bound(collateralValue, principal * 2, MAX_FIL);
 
         uint256 interestOwed = startSimulation(principal);
+        // move forward a year
+        vm.roll(block.number + EPOCHS_IN_YEAR);
 
         Account memory accountBefore = AccountHelpers.getAccount(router, agentID, poolID);
 
@@ -272,12 +273,12 @@ contract PoolAPRTests is PoolTestState {
         Account memory accountAfter = AccountHelpers.getAccount(router, agentID, poolID);
 
         assertEq(accountAfter.principal, accountBefore.principal, "Principal should not change");
-        assertEq(accountAfter.epochsPaid, block.number - 1, "Epochs paid should be up to date");
+        assertEq(accountAfter.epochsPaid, block.number, "Epochs paid should be up to date");
 
         assertPoolFundsSuccess(principal, interestOwed, prePaymentPoolBal);
     }
 
-    function testAPRKnownGCRED(uint256 principal, uint256 collateralValue, uint256 numPayments) public {
+    function testCashBasisAPYManyPayments(uint256 principal, uint256 collateralValue, uint256 numPayments) public {
         principal = bound(principal, WAD, MAX_FIL / 2);
         collateralValue = bound(collateralValue, principal * 2, MAX_FIL);
         // test APR when making payments twice a week to once every two weeks
@@ -286,15 +287,24 @@ contract PoolAPRTests is PoolTestState {
         // borrow an amount
         uint256 interestOwed = startSimulation(principal);
 
-        uint256 payment = interestOwed / numPayments;
-
         Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
         uint256 prePaymentPoolBal = wFIL.balanceOf(address(pool));
+
         // since each payment is for the same amount, we memoize the first payment amount and assert the others against it
-        uint256 epochsCreditForPayment;
         Account memory prevAccount = AccountHelpers.getAccount(router, agentID, poolID);
-        for (uint256 i = 0; i < numPayments; i++) {
-            SignedCredential memory payCred = issuePayCred(agentID, principal, collateralValue, payment);
+        uint256 startBlock = block.number;
+        uint256 endBlock = startBlock + EPOCHS_IN_YEAR;
+        uint256 epochsCreditForPayment;
+        for (uint256 i = 0; i <= numPayments; i++) {
+            // if we're already at the end of the year, we can't make any more payments
+            if (block.number >= endBlock) break;
+            uint256 rollTo = block.number + (EPOCHS_IN_YEAR / numPayments);
+            // reset the rollto block to be at the exact year end epoch for test assertion precision
+            if (rollTo > endBlock) rollTo = endBlock;
+            vm.roll(rollTo);
+            SignedCredential memory payCred =
+                issuePayCred(agentID, principal, collateralValue, pool.getAgentInterestOwed(agentID));
+
             // pay back the amount
             agentPay(agent, pool, payCred);
 
@@ -303,59 +313,30 @@ contract PoolAPRTests is PoolTestState {
             assertEq(updatedAccount.principal, prevAccount.principal, "Account principal not should have changed");
             assertGt(updatedAccount.epochsPaid, prevAccount.epochsPaid, "Account epochs paid should have increased");
 
-            uint256 _epochsCreditForPayment = updatedAccount.epochsPaid - prevAccount.epochsPaid;
-            if (i == 0) {
-                epochsCreditForPayment = _epochsCreditForPayment;
-            }
-
-            if (_epochsCreditForPayment == 0) {
-                // break the test early if it fails
-                break;
-            }
+            epochsCreditForPayment = updatedAccount.epochsPaid - prevAccount.epochsPaid;
             assertGt(epochsCreditForPayment, 0, "Payment should have been made");
-            assertEq(
-                epochsCreditForPayment,
-                _epochsCreditForPayment,
-                "Payment should have been made for the same number of epochs"
-            );
-            if (epochsCreditForPayment != _epochsCreditForPayment) {
-                break;
-            }
 
             prevAccount = updatedAccount;
         }
 
         Account memory newAccount = AccountHelpers.getAccount(router, agentID, poolID);
 
+        assertEq(endBlock, block.number, "Should have rolled to the end of the year");
         assertEq(newAccount.principal, account.principal, "Principal should not change");
-
-        assertApproxEqAbs(
-            newAccount.epochsPaid,
-            // each payment shifts block.number forward by 1 by issuing a new cred, so we subtract that here for the assertion
-            block.number - numPayments,
-            // here our acceptance criteria is the number of payments because each payment moves the block.number forward (and some rounding)
-            100,
-            "Epochs paid should be up to date"
-        );
+        assertEq(pool.getAgentInterestOwed(agentID), 0, "Interest owed should be 0");
+        assertEq(newAccount.epochsPaid, block.number, "Epochs paid should be up to date");
 
         assertPoolFundsSuccess(principal, interestOwed, prePaymentPoolBal);
     }
 
     function assertPoolFundsSuccess(uint256 principal, uint256 interestOwed, uint256 prePaymentPoolBal) internal {
-        // 10,000,000 represents a factor of 10 larger than the years worth of epochs
-        // so we lose 1 digit of precision for 10 years of epochs (since 1 year of epochs is roughly 1 million epochs, the next significant digit is at 10 million epochs)
-        uint256 MAX_PRECISION_DELTA = 1e8;
-
         uint256 poolEarnings = wFIL.balanceOf(address(pool)) - prePaymentPoolBal;
         // ensures the pool got the interest
         assertApproxEqAbs(poolEarnings, interestOwed, DUST, "Pool should have received the owed interest");
 
         // ensures the interest the pool got is what we'd expect
         assertApproxEqAbs(
-            poolEarnings,
-            KNOWN_RATE.mulWadUp(principal),
-            MAX_PRECISION_DELTA,
-            "Pool should have received the expected known amount"
+            poolEarnings, KNOWN_RATE.mulWadUp(principal), DUST, "Pool should have received the expected known amount"
         );
 
         uint256 treasuryFeeRate = GetRoute.poolRegistry(router).treasuryFeeRate();
@@ -375,19 +356,16 @@ contract PoolAPRTests is PoolTestState {
             pool.treasuryFeesReserved(),
             // fees collected should be treasury fee % of the interest earned
             knownTreasuryFeeAmount,
-            MAX_PRECISION_DELTA,
+            DUST,
             "Treasury should have received the known amount of fees portion of principal delta precision"
         );
     }
 
     function startSimulation(uint256 principal) internal returns (uint256 interestOwed) {
         depositFundsIntoPool(pool, principal + WAD, makeAddr("Investor1"));
-        SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, principal);
+        SignedCredential memory borrowCred = _issueGenericBorrowCred(agentID, principal);
         uint256 epochStart = block.number;
         agentBorrow(agent, poolID, borrowCred);
-
-        // move forward a year
-        vm.roll(block.number + EPOCHS_IN_YEAR);
 
         // compute how much we should owe in interest
         uint256 adjustedRate = _getAdjustedRate();
@@ -396,8 +374,7 @@ contract PoolAPRTests is PoolTestState {
         assertEq(account.startEpoch, epochStart, "Account should have correct start epoch");
         assertEq(account.principal, principal, "Account should have correct principal");
 
-        uint256 epochsToPay = block.number - account.epochsPaid;
-        interestOwed = account.principal.mulWadUp(adjustedRate).mulWadUp(epochsToPay);
+        interestOwed = account.principal.mulWadUp(adjustedRate).mulWadUp(EPOCHS_IN_YEAR);
         assertGt(principal, interestOwed, "principal should be greater than interest owed");
     }
 
@@ -405,10 +382,6 @@ contract PoolAPRTests is PoolTestState {
         internal
         returns (SignedCredential memory)
     {
-        // here we temporarily roll forward so we don't get an identical credential that's already been used
-        // then we roll it back to where it was so that we don't creep over a year's worth of epochs
-        vm.roll(block.number + 1);
-
         uint256 adjustedRate = _getAdjustedRate();
 
         AgentData memory agentData = createAgentData(
@@ -429,9 +402,6 @@ contract PoolAPRTests is PoolTestState {
             0,
             abi.encode(agentData)
         );
-
-        // roll back in time to not mess with the "annual" part of the APR
-        // vm.roll(block.number - index);
 
         return signCred(vc);
     }
@@ -1200,17 +1170,15 @@ contract PoolIsolationTests is BaseTest {
     address[] public agents = [makeAddr("AGENT1")];
 
     // charge 1% of borrow amount per epoch in these tests to simply math assertions
-    uint256 public rentalFeesPerEpoch = 1e34;
+    uint256 public rentalFeesPerEpoch;
 
     function setUp() public {
         pool = createPool();
-        // first we set the rentalFeesOwedPerEpoch to a known value to make the math easier to make assertions
-        vm.prank(systemAdmin);
-        pool.setRentalFeesOwedPerEpoch(rentalFeesPerEpoch);
+        rentalFeesPerEpoch = pool.getRate();
     }
 
     // this test goes through various states of the pool with a single depositor and borrower to make assertions about totalAssets
-    function testTotalAssets(uint256 depositAmount, uint256 rollFwd) public {
+    function testFuzzTotalAssets(uint256 depositAmount, uint256 rollFwd) public {
         _mockAgentFactoryAgentsCalls();
         uint64 agentID = 1;
         address agent = agents[agentID - 1];
@@ -1314,7 +1282,7 @@ contract PoolIsolationTests is BaseTest {
 
     function _testTotalAssetsAfterLiquidationFullRecovery() public {}
 
-    function testAccruedRentalFeesEqualTotalDebtAccruedOnAccounts(
+    function testFuzzAccruedRentalFeesEqualTotalDebtAccruedOnAccounts(
         uint256 agentCount,
         uint256 depositAmt,
         uint256 rollFwd
@@ -1461,6 +1429,65 @@ contract PoolIsolationTests is BaseTest {
             _DUST,
             "Total assets should equal the deposit amount plus the expected interest"
         );
+    }
+
+    // test ensures that even if we make a lot of payments, the pool accounting holds up
+    function testFuzzManyPaymentsTotalAssets(uint256 numPayments, uint256 rollFwd) public {
+        numPayments = bound(numPayments, 3, 100);
+        rollFwd = bound(rollFwd, numPayments, EPOCHS_IN_YEAR);
+        _mockAgentFactoryAgentsCalls();
+        uint256 agentID = 1;
+        address agent = agents[agentID - 1];
+        uint256 startBlock = block.number;
+
+        uint256 depositAmount = 100e18;
+        uint256 borrowAmount = 100e18;
+
+        // after a deposit, total assets should equal the deposit amount
+        vm.deal(investor, depositAmount);
+        pool.deposit{value: depositAmount}(investor);
+
+        // after a borrow, total assets should not change
+        VerifiableCredential memory vc = _issueGenericBorrowCred(agentID, borrowAmount).vc;
+        vm.startPrank(agent);
+        pool.borrow(vc);
+        vm.stopPrank();
+
+        // make interest payments over numpayments
+        uint256 expectedTotalInterest = borrowAmount.mulWadUp(rentalFeesPerEpoch).mulWadUp(rollFwd);
+        vm.deal(agent, expectedTotalInterest);
+        vm.startPrank(agent);
+        // make sure we have enough WFIL to pay the interest
+        wFIL.deposit{value: expectedTotalInterest}();
+        wFIL.approve(address(pool), expectedTotalInterest + borrowAmount);
+
+        uint256 totalPayments;
+        for (uint256 i = 0; i < numPayments; i++) {
+            // if this is the last payment, roll forward to the end of the period to get to the end of the rollfwd period
+            if (i == numPayments - 1) {
+                vm.roll(rollFwd + startBlock);
+            } else {
+                vm.roll(block.number + (rollFwd / numPayments));
+            }
+            uint256 paymentAmt = pool.getAgentInterestOwed(agentID);
+            totalPayments += paymentAmt;
+            vc = _issueGenericPayCred(agentID, paymentAmt).vc;
+            pool.pay(vc);
+        }
+
+        vm.stopPrank();
+        uint256 expectedAccruedRentalFees = expectedTotalInterest.mulWadUp(1e18 - pool.treasuryFeeRate());
+        uint256 totalFeesPaid = pool.paidRentalFees();
+        assertApproxEqAbs(
+            totalFeesPaid, expectedTotalInterest, _DUST, "Total fees paid should equal the expected interest"
+        );
+        assertApproxEqAbs(
+            pool.totalAssets(),
+            depositAmount + expectedAccruedRentalFees,
+            _DUST,
+            "Total assets should equal the deposit amount plus the expected interest"
+        );
+        assertEq(pool.getAgentInterestOwed(agentID), 0, "Agent interest owed should be 0 after all payments");
     }
 
     function _mockAgentFactoryAgentsCalls() internal {
