@@ -711,6 +711,7 @@ contract BaseTest is Test {
     }
 
     function _invIFILWorthAssetsOfPool(IPool pool, string memory label) internal {
+        uint256 MAX_PRECISION_DELTA = 1;
         // this invariant knows that iFIL should represent the total value of the pool, which is composed of:
         // 1. all funds given to miners + agents
         // 2. balance of wfil held by the pool
@@ -742,9 +743,10 @@ contract BaseTest is Test {
             string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: accrued rewards calculations should match"))
         );
 
-        assertEq(
+        assertApproxEqAbs(
             accruedRewards,
             pool.accruedRentalFees(),
+            MAX_PRECISION_DELTA,
             string(
                 abi.encodePacked(
                     label,
@@ -758,14 +760,16 @@ contract BaseTest is Test {
         // if we take the total supply of iFIL and convert it to assets, we should get the total pools assets + lent out funds
         uint256 totalIFILSupply = pool.liquidStakingToken().totalSupply();
 
-        assertEq(
+        assertApproxEqAbs(
             poolAssets + totalDebtFromAccounts - pool.treasuryFeesReserved(),
             pool.totalAssets(),
+            MAX_PRECISION_DELTA,
             string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: pool total assets invariant wrong"))
         );
-        assertEq(
+        assertApproxEqAbs(
             pool.convertToAssets(totalIFILSupply),
             poolAssets + totalDebtFromAccounts - pool.treasuryFeesReserved(),
+            MAX_PRECISION_DELTA,
             string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: iFIL convert to total assets invariant wrong"))
         );
         assertEq(

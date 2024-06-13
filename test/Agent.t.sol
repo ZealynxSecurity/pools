@@ -857,8 +857,10 @@ contract AgentPayTest is BaseTest {
     }
 
     function testPayInterestOnly(uint256 borrowAmount, uint256 payAmount, uint256 rollFwdAmt) public {
-        rollFwdAmt = bound(rollFwdAmt, 1, EPOCHS_IN_WEEK * 3);
-        borrowAmount = bound(borrowAmount, 1e18, depositAmt);
+        rollFwdAmt = bound(rollFwdAmt, 1, EPOCHS_IN_YEAR * 3);
+        depositAmt = MAX_FIL;
+        depositFundsIntoPool(pool, depositAmt, minerOwner);
+        borrowAmount = bound(borrowAmount, 1e18, MAX_FIL);
 
         SignedCredential memory borrowCred = _issueGenericBorrowCred(agent.id(), borrowAmount);
         (uint256 interestOwed, uint256 interestOwedPerEpoch) = calculateInterestOwed(borrowAmount, rollFwdAmt);

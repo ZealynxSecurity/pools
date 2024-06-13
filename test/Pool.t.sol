@@ -193,6 +193,7 @@ contract PoolFeeTests is PoolTestState {
         uint256 treasuryFeesOwed = pool.treasuryFeesReserved();
         pool.harvestFees(treasuryFeesOwed);
         assertEq(asset.balanceOf(treasury), treasuryFeesOwed);
+        testInvariants(pool, "testHarvestFees");
     }
 }
 
@@ -699,6 +700,8 @@ contract PoolAdminTests is PoolTestState {
             treasuryBalance + harvestAmount,
             "Treasury should have received harvest amount"
         );
+
+        testInvariants(pool, "testHarvestFeesTreasury");
     }
 }
 
@@ -1587,6 +1590,186 @@ contract PoolIsolationTests is BaseTest {
             pool.getAgentInterestOwed(agentID),
             interestOwed,
             "Agent interest owed should be greater than initial interest owed after time passes"
+        );
+    }
+
+    function testTotalAssetsAfterPrincipalRepaidNoInterest(uint256 depositAmount, uint256 borrowAmount) public {
+        _mockAgentFactoryAgentsCalls();
+        uint256 agentID = 1;
+        address agent = agents[agentID - 1];
+        depositAmount = bound(depositAmount, 1e18, MAX_FIL);
+        borrowAmount = bound(borrowAmount, 1e18, depositAmount);
+        uint256 payAmount = borrowAmount;
+
+        // after a deposit, total assets should equal the deposit amount
+        vm.deal(investor, depositAmount);
+        pool.deposit{value: depositAmount}(investor);
+
+        // after a borrow, total assets should not change
+        VerifiableCredential memory vc = _issueGenericBorrowCred(agentID, borrowAmount).vc;
+        vm.startPrank(agent);
+        pool.borrow(vc);
+        vm.stopPrank();
+
+        Account memory account = AccountHelpers.getAccount(router, agentID, 0);
+        uint256 debt = pool.getAgentDebt(agentID);
+        assertEq(account.principal, borrowAmount, "Account should have borrowed amount");
+        assertEq(debt, borrowAmount, "Agent debt should equal the borrow amount");
+
+        uint256 totalAssets = pool.totalAssets();
+        uint256 accRentalFees = pool.accruedRentalFees();
+
+        // after a payment, total assets should decrease
+        vc = _issueGenericPayCred(1, payAmount).vc;
+        vm.deal(agent, payAmount);
+        vm.startPrank(agent);
+        wFIL.approve(address(pool), payAmount);
+        wFIL.deposit{value: payAmount}();
+        pool.pay(vc);
+        vm.stopPrank();
+
+        Account memory postPayAccount = AccountHelpers.getAccount(router, agentID, 0);
+        assertEq(postPayAccount.principal, 0, "Account should have been paid off");
+
+        assertEq(
+            pool.totalAssets(),
+            totalAssets,
+            "Total assets should not change after a principal payment (no interest) is made"
+        );
+
+        assertEq(
+            pool.accruedRentalFees(), accRentalFees, "Total accrued rental fees should not change if no interest earned"
+        );
+    }
+
+    function testTotalDebtDecreaseAfterPayment() public {
+        _mockAgentFactoryAgentsCalls();
+        uint256 agentID = 1;
+        address agent = agents[agentID - 1];
+        uint256 depositAmount = MAX_FIL;
+        uint256 borrowAmount = 115871100014879547627;
+        uint256 payAmount = 999999999999990000;
+
+        // after a deposit, total assets should equal the deposit amount
+        vm.deal(investor, depositAmount);
+        pool.deposit{value: depositAmount}(investor);
+
+        // after a borrow, total assets should not change
+        vm.roll(block.number + 1);
+        VerifiableCredential memory vc = _issueGenericBorrowCred(agentID, borrowAmount).vc;
+        vm.startPrank(agent);
+        pool.borrow(vc);
+        vm.stopPrank();
+
+        uint256 debtAfterBorrow = pool.getAgentDebt(agentID);
+        assertEq(debtAfterBorrow, borrowAmount, "Agent debt should equal the borrow amount");
+
+        // roll forward to generate some interest
+        vm.roll(block.number + (EPOCHS_IN_WEEK * 3) + 1);
+        uint256 debtAfterRoll = pool.getAgentDebt(agentID);
+
+        // after a payment, total assets should decrease
+        vc = _issueGenericPayCred(agentID, payAmount).vc;
+        vm.deal(agent, payAmount);
+        vm.startPrank(agent);
+        wFIL.approve(address(pool), payAmount);
+        wFIL.deposit{value: payAmount}();
+        uint256 prePayBal = wFIL.balanceOf(agent);
+        pool.pay(vc);
+        vm.stopPrank();
+
+        uint256 newDebt = pool.getAgentDebt(agentID);
+
+        payAmount = prePayBal - wFIL.balanceOf(agent);
+
+        assertEq(
+            newDebt + payAmount,
+            // the debt should decrease by the payment amount - note the payment amount can be lessened to account for precision around epoch time
+            debtAfterRoll,
+            "Agent debt should decrease by the payment amount"
+        );
+    }
+
+    function testFuzzTotalAssetsAfterPaymentWithInterest(uint256 borrowAmount, uint256 payAmount) public {
+        _mockAgentFactoryAgentsCalls();
+        uint256 agentID = 1;
+        address agent = agents[agentID - 1];
+        uint256 depositAmount = MAX_FIL;
+        borrowAmount = bound(borrowAmount, 1e18, depositAmount);
+        // make sure we can pay at least 1 epoch of interest
+        payAmount = bound(payAmount, borrowAmount.mulWadUp(rentalFeesPerEpoch).mulWadUp(1), borrowAmount);
+
+        // after a deposit, total assets should equal the deposit amount
+        vm.deal(investor, depositAmount);
+        pool.deposit{value: depositAmount}(investor);
+
+        // after a borrow, total assets should not change
+        VerifiableCredential memory vc = _issueGenericBorrowCred(agentID, borrowAmount).vc;
+        vm.startPrank(agent);
+        pool.borrow(vc);
+        vm.stopPrank();
+
+        assertEq(
+            AccountHelpers.getAccount(router, agentID, 0).principal, borrowAmount, "Account should have borrowed amount"
+        );
+        assertEq(pool.getAgentDebt(agentID), borrowAmount, "Agent debt should equal the borrow amount");
+
+        uint256 startTotalAssets = pool.totalAssets();
+
+        // roll forward to generate some interest
+        vm.roll(block.number + (EPOCHS_IN_DAY * 2));
+
+        /// ensure we are covering more than our interest owed
+        uint256 interestAfterRoll = pool.getAgentInterestOwed(agentID);
+        uint256 debtAfterRoll = pool.getAgentDebt(agentID);
+
+        // agent should owe interest after roll fwd
+        assertEq(
+            pool.getAgentInterestOwed(agentID),
+            pool.accruedRentalFees(),
+            "Agent interest owed should be the total accrued rental fees"
+        );
+        uint256 newAccruedFees = pool.accruedRentalFees();
+        uint256 newTotalAssets = pool.totalAssets();
+        assertEq(
+            pool.totalAssets(),
+            startTotalAssets + newAccruedFees - pool.treasuryFeesReserved(),
+            "Total assets should increase after interest accrues"
+        );
+
+        // after a payment, total assets should decrease
+        vc = _issueGenericPayCred(agentID, payAmount).vc;
+        vm.deal(agent, payAmount);
+        vm.startPrank(agent);
+        wFIL.approve(address(pool), payAmount);
+        wFIL.deposit{value: payAmount}();
+        uint256 prePayBal = wFIL.balanceOf(agent);
+        pool.pay(vc);
+        vm.stopPrank();
+
+        assertEq(
+            pool.totalAssets(),
+            newTotalAssets,
+            "Total assets should not change after a principal payment (no interest) is made"
+        );
+
+        payAmount = prePayBal - wFIL.balanceOf(agent);
+
+        assertEq(
+            pool.paidRentalFees(),
+            // avoid stack too deep errors with ternary - assert the portion of payment towards interest matches the contract's paid fees
+            payAmount > interestAfterRoll ? interestAfterRoll : payAmount,
+            "Paid fees should equal the payment amount minus interest"
+        );
+        assertApproxEqAbs(
+            debtAfterRoll, pool.getAgentDebt(agentID) + payAmount, _DUST, "Debt should decrease by the payment amount"
+        );
+
+        assertApproxEqAbs(
+            pool.accruedRentalFees(),
+            pool.getAgentDebt(agentID) + pool.paidRentalFees() - pool.totalBorrowed(),
+            _DUST,
+            "Total accrued rental fees incorrect"
         );
     }
 

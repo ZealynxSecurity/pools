@@ -263,10 +263,11 @@ contract InfinityPool is IPool, Ownable {
      */
     function getLiquidAssets() public view returns (uint256) {
         uint256 balance = asset.balanceOf(address(this));
+        uint256 treasuryFeesRes = treasuryFeesReserved();
         // ensure we dont pay out treasury fees
-        if (balance <= treasuryFeesReserved()) return 0;
+        if (balance <= treasuryFeesRes) return 0;
 
-        return balance - treasuryFeesReserved();
+        return balance - treasuryFeesRes;
     }
 
     /**
@@ -456,19 +457,22 @@ contract InfinityPool is IPool, Ownable {
             // ensure the payment is greater than or equal to at least 1 epochs worth of interest
             // NOTE - we multiply by WAD here because the interestPerEpoch has an extra WAD to maintain precision
             if (vc.value * WAD < interestPerEpoch) revert InvalidParams();
-            // compute the total interest owed by multiplying how many epochs to pay, by the per epoch interest payment
-            // using WAD math here ends up canceling out the extra WAD in the interestPerEpoch
-            interestOwed = interestPerEpoch.mulWadUp(block.number - account.epochsPaid);
         }
         // if the payment is less than the interest owed, pay interest only
         if (vc.value <= interestOwed) {
             // compute the amount of epochs this payment covers
             // vc.value is not WAD yet, so divWadDown cancels the extra WAD in interestPerEpoch
             uint256 epochsForward = vc.value.divWadDown(interestPerEpoch);
+
+            // here we recalculate how much interest should be paid based on the epochsForward, so we don't overcharge the user for interest that does not bring the account over the next epochsPaid cursor
+            uint256 recomputedInterestOwed = epochsForward.mulWadUp(interestPerEpoch);
+
+            feeBasis = vc.value;
+            // if the recomputed interest owed is greater than the payment, adjust the payment to be the recomputed interest owed
+            if (recomputedInterestOwed < vc.value) feeBasis = recomputedInterestOwed;
             // update the account's `epochsPaid` cursor
             account.epochsPaid += epochsForward;
             // since the entire payment is interest, the entire payment is used to compute the fee (principal payments are fee-free)
-            feeBasis = vc.value;
         } else {
             // the portion of the payment that will go towards principal
             uint256 principalPayment = vc.value - interestOwed;
@@ -500,7 +504,7 @@ contract InfinityPool is IPool, Ownable {
         // realize fees paid to the pool
         paidRentalFees += feeBasis;
         // transfer the assets into the pool
-        asset.transferFrom(msg.sender, address(this), vc.value - refund);
+        asset.transferFrom(msg.sender, address(this), feeBasis + principalPaid - refund);
         // call out to the LM hook to accrue rewards for this agent
         if (address(lm) != address(0)) lm.onPaymentMade(vc.subject, feeBasis);
 
