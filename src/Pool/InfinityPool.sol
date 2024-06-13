@@ -504,7 +504,7 @@ contract InfinityPool is IPool, Ownable {
         // realize fees paid to the pool
         paidRentalFees += feeBasis;
         // transfer the assets into the pool
-        asset.transferFrom(msg.sender, address(this), feeBasis + principalPaid - refund);
+        asset.transferFrom(msg.sender, address(this), feeBasis + principalPaid);
         // call out to the LM hook to accrue rewards for this agent
         if (address(lm) != address(0)) lm.onPaymentMade(vc.subject, feeBasis);
 
