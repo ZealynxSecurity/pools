@@ -732,10 +732,10 @@ contract PoolErrorBranches is PoolTestState {
         paymentAmt = bound(paymentAmt, minPayment + DUST, initialBorrow - DUST);
         assertGt(pool.getLiquidAssets(), 0, "Liquid assets should be greater than zero before pool is shut down");
         // Our first borrow is based on the payment amount to generate fees
-        agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, initialBorrow));
+        agentBorrow(agent, poolID, _issueGenericBorrowCred(agentID, initialBorrow));
         // Roll foward enough that at least _some_ payment is interest
         vm.roll(block.number + EPOCHS_IN_WEEK * 3);
-        agentPay(agent, pool, issueGenericPayCred(agentID, paymentAmt));
+        agentPay(agent, pool, _issueGenericPayCred(agentID, paymentAmt));
 
         // if we dont have enough to borrow, deposit enough to borrow the rest
         if (pool.totalBorrowableAssets() < WAD) {
@@ -746,9 +746,9 @@ contract PoolErrorBranches is PoolTestState {
         }
         // pay back principal so we can borrow again
         Account memory account = AccountHelpers.getAccount(router, agentID, poolID);
-        agentPay(agent, pool, issueGenericPayCred(agentID, account.principal));
+        agentPay(agent, pool, _issueGenericPayCred(agentID, account.principal));
         // borrow the rest of the assets
-        agentBorrow(agent, poolID, issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
+        agentBorrow(agent, poolID, _issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
         assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when liquid assets less than fees");
         assertGt(pool.treasuryFeesReserved(), 0, "Pool should have generated fees");
     }
@@ -872,18 +872,13 @@ contract PoolAccountingTest is BaseTest {
         uint64 liquidatorID = 1;
         depositFundsIntoPool(pool, stakeAmount, investor);
 
-        // borrow half the pool's assets, default, then pay everything back to the pool (as interest)
-        agentBorrow(agent, pool.id(), issueGenericBorrowCred(agent.id(), stakeAmount / 2));
-
-        vm.roll(block.number + EPOCHS_IN_YEAR);
-
         uint256 toAssets = pool.convertToAssets(WAD);
         uint256 toShares = pool.convertToShares(WAD);
 
         IAgentPolice police = GetRoute.agentPolice(router);
-        vm.startPrank(systemAdmin);
-        // TODO: fix this
-        // police.setAgentDefaulted(address(agent));
+
+        setAgentDefaulted(agent);
+        vm.startPrank(IAuth(address(police)).owner());
         police.prepareMinerForLiquidation(address(agent), miner, liquidatorID);
         police.distributeLiquidatedFunds(address(agent), 0);
         vm.stopPrank();

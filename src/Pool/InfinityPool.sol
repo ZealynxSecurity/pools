@@ -469,7 +469,11 @@ contract InfinityPool is IPool, Ownable {
 
             feeBasis = vc.value;
             // if the recomputed interest owed is greater than the payment, adjust the payment to be the recomputed interest owed
-            if (recomputedInterestOwed < vc.value) feeBasis = recomputedInterestOwed;
+            if (recomputedInterestOwed < vc.value) {
+                feeBasis = recomputedInterestOwed;
+                // mark the excess as a refund to the agent
+                refund = vc.value - recomputedInterestOwed;
+            }
             // update the account's `epochsPaid` cursor
             account.epochsPaid += epochsForward;
             // since the entire payment is interest, the entire payment is used to compute the fee (principal payments are fee-free)

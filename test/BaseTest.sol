@@ -592,6 +592,8 @@ contract BaseTest is Test {
 
         prePayState = _snapshot(address(agent), pool.id());
 
+        uint256 totalDebt = pool.getAgentDebt(agent.id());
+
         (rate, epochsPaid, principalPaid, refund) = agent.pay(pool.id(), sc);
 
         vm.stopPrank();
@@ -600,8 +602,7 @@ contract BaseTest is Test {
 
         assertGt(rate, 0, "Should not have a 0 rate");
 
-        // there is an unlikely case where these tests fail when the amount paid is _exactly_ the amount needed to exit - meaning refund is 0
-        if (refund > 0) {
+        if (sc.vc.value >= totalDebt) {
             assertEq(
                 account.epochsPaid,
                 0,
