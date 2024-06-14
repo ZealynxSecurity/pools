@@ -33,6 +33,8 @@ interface IAgentPolice {
 
     function dtlLiquidationThreshold() external view returns (uint256);
 
+    function liquidationFee() external view returns (uint256);
+
     function maxDTI() external view returns (uint256);
 
     function sectorFaultyTolerancePercent() external view returns (uint256);
@@ -68,6 +70,8 @@ interface IAgentPolice {
     function setMaxDTL(uint256 dtl) external;
 
     function setMaxDTI(uint256 dti) external;
+
+    function setLiquidationFee(uint256 liquidationFee) external;
 
     function prepareMinerForLiquidation(address agent, uint64 miner, uint64 liquidator) external;
 

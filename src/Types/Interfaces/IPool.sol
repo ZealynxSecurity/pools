@@ -73,7 +73,7 @@ interface IPool {
 
     function paidRentalFees() external view returns (uint256);
 
-    function lostAssets() external view returns (uint256);
+    function lostRentalFees() external view returns (uint256);
 
     function lastAccountingUpdateEpoch() external view returns (uint256);
 

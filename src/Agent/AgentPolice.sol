@@ -65,6 +65,9 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     /// @notice `sectorFaultyTolerancePercent` is the percentage of sectors that can be faulty before an agent is considered in a faulty state. 1e18 = 100%
     uint256 public sectorFaultyTolerancePercent = 1e15;
 
+    /// @notice `liquidationFee` is the fee charged to liquidate an agent, only charged if LPs are made whole first
+    uint256 public liquidationFee = 1e17;
+
     /// @notice `paused` is a flag that determines whether the protocol is paused
     bool public paused = false;
 
@@ -185,10 +188,33 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
         if (agentLiquidated(agentID)) revert Unauthorized();
         // transfer the assets into the agent police
         _wFIL.transferFrom(msg.sender, address(this), amount);
-        uint256 excessAmount = _writeOffPools(agentID, amount);
 
-        // transfer the excess assets to the Agent's owner
-        _wFIL.transfer(IAuth(agent).owner(), excessAmount);
+        IPool pool = _pool();
+        // approve the pool to spend the recovered funds
+        _wFIL.approve(address(pool), amount);
+        // handle the liquidation in the pool, transferring the amount of wFIL owed to the pool
+        pool.writeOff(agentID, amount);
+
+        // calculate the excess amount of wFIL that wasn't used in the liquidation
+        uint256 excessAmount = _wFIL.balanceOf(address(this));
+        // if there is any excess recovered funds.. to use transfer it to the Agent's owner
+        if (excessAmount > 0) {
+            // calculate how much FIL was needed to make LPs whole
+            uint256 owedToPool = amount - excessAmount;
+
+            // liquidation fee, based on interest + principal of agent's position in the pool
+            uint256 liquidatorFee = owedToPool.mulWadDown(liquidationFee);
+
+            if (excessAmount > liquidatorFee) {
+                // transfer the liquidation fee to the treasury
+                _wFIL.transfer(GetRoute.treasury(router), liquidatorFee);
+                // transfer anything remaining to the agent's owner
+                _wFIL.transfer(IAuth(agent).owner(), excessAmount - liquidatorFee);
+            } else {
+                // transfer a portion of the liquidation fee to the treasury
+                _wFIL.transfer(GetRoute.treasury(router), excessAmount);
+            }
+        }
     }
 
     /**
@@ -292,6 +318,13 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     }
 
     /**
+     * @notice `setLiquidationFee` sets the liquidation fee charged on liquidations
+     */
+    function setLiquidationFee(uint256 _liquidationFee) external onlyOwner {
+        liquidationFee = _liquidationFee;
+    }
+
+    /**
      * @notice `setMaxDTI` sets the maximum DTI for withdrawals and removing miners
      */
     function setMaxDTI(uint256 _maxDTI) external onlyOwner {
@@ -340,17 +373,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
     //////////////////////////////////////////////*/
-
-    /// @dev computes the pro-rata split of a total amount based on principal
-    function _writeOffPools(uint256 _agentID, uint256 _recoveredAmount) internal returns (uint256 excessFunds) {
-        IPool pool = _pool();
-        _wFIL.approve(address(pool), _recoveredAmount);
-        // track balance of wFIL before and after liquidation to know how much of the recovered funds were used
-        // later we send any remainder to the Agent owner
-        uint256 preWriteOffBal = _wFIL.balanceOf(address(this));
-        pool.writeOff(_agentID, _recoveredAmount);
-        return _wFIL.balanceOf(address(this)) - preWriteOffBal;
-    }
 
     /// @dev returns true if pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid). Account must have existing principal
     function _epochsPaidBehindTarget(uint256 _agentID, uint256 _targetEpoch) internal view returns (bool) {

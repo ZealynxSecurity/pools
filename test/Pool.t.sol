@@ -751,6 +751,7 @@ contract PoolErrorBranches is PoolTestState {
         agentBorrow(agent, poolID, _issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
         assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when liquid assets less than fees");
         assertGt(pool.treasuryFeesReserved(), 0, "Pool should have generated fees");
+        testInvariants(pool, "testLiquidAssetsLessThanFees");
     }
 
     function testMintZeroShares() public {
@@ -877,7 +878,7 @@ contract PoolAccountingTest is BaseTest {
 
         IAgentPolice police = GetRoute.agentPolice(router);
 
-        setAgentDefaulted(agent);
+        setAgentDefaulted(agent, stakeAmount / 2);
         vm.startPrank(IAuth(address(police)).owner());
         police.prepareMinerForLiquidation(address(agent), miner, liquidatorID);
         police.distributeLiquidatedFunds(address(agent), 0);
@@ -900,25 +901,27 @@ contract PoolAccountingTest is BaseTest {
         assertEq(toSharesAfterLiquidating, toShares * 2, "iFIL should be worth half");
         assertEq(pool.totalBorrowableAssets(), stakeAmount / 2, "Pool should have half as many total borrowable assets");
 
+        uint256 totalAssetsBeforePay = pool.totalAssets();
+
         vm.deal(address(agent), payAmount);
         vm.startPrank(_agentOperator(agent));
         agent.pay(pool.id(), issueGenericPayCred(agent.id(), payAmount));
         vm.stopPrank();
 
         assertEq(pool.totalBorrowed(), 0, "Pool should still have no total borrowed");
-
-        uint256 fee = GetRoute.poolRegistry(router).treasuryFeeRate().mulWadUp(payAmount);
-        uint256 payAmountLessFee = payAmount - fee;
+        assertEq(
+            pool.totalAssets(), totalAssetsBeforePay + payAmount, "Pool should have payAmount added to its total assets"
+        );
 
         assertApproxEqAbs(
             pool.getLiquidAssets(),
-            (stakeAmount / 2) + payAmountLessFee,
+            (stakeAmount / 2) + payAmount,
             1e16,
             "Pool should have payAmount added to its liquid assets"
         );
         assertApproxEqAbs(
             pool.totalBorrowableAssets(),
-            (stakeAmount / 2) + payAmountLessFee,
+            (stakeAmount / 2) + payAmount,
             1e16,
             "Pool should have payAmount added to total borrowable assets"
         );
@@ -1275,10 +1278,6 @@ contract PoolIsolationTests is BaseTest {
             "Total assets should equal the deposit amount plus the expected interest - 2"
         );
     }
-
-    function _testTotalAssetsAfterLiquidationPartialRecovery() public {}
-
-    function _testTotalAssetsAfterLiquidationFullRecovery() public {}
 
     function testFuzzAccruedRentalFeesEqualTotalDebtAccruedOnAccounts(
         uint256 agentCount,

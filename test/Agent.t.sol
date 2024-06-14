@@ -1102,7 +1102,7 @@ contract AgentPoliceTest is BaseTest {
 
     function testSetAgentDefaulted() public {
         // helper includes assertions
-        setAgentDefaulted(agent);
+        setAgentDefaulted(agent, 1e18);
     }
 
     function testSetAdministrationNonAgentPolice(uint256 rollFwdPeriod) public {
@@ -1128,7 +1128,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testSetAgentDefaultedNonAgentPolice() public {
-        try police.setAgentDefaultDTL(address(agent), issueGenericSetDefaultCred(agent.id())) {
+        try police.setAgentDefaultDTL(address(agent), issueGenericSetDefaultCred(agent.id(), 1e18)) {
             assertTrue(false, "only agent police owner operator should be able to call setAgentInDefault");
         } catch (bytes memory e) {
             assertEq(errorSelector(e), Unauthorized.selector);
@@ -1142,7 +1142,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testPrepareMinerForLiquidation() public {
-        setAgentDefaulted(agent);
+        setAgentDefaulted(agent, 1e18);
 
         address terminator = makeAddr("liquidator");
         uint64 liquidatorID = idStore.addAddr(terminator);
@@ -1160,7 +1160,7 @@ contract AgentPoliceTest is BaseTest {
     }
 
     function testDistributeLiquidatedFundsNonAgentPolice() public {
-        setAgentDefaulted(agent);
+        setAgentDefaulted(agent, 1e18);
 
         address prankster = makeAddr("prankster");
         vm.startPrank(prankster);
@@ -1169,15 +1169,18 @@ contract AgentPoliceTest is BaseTest {
         testInvariants(pool, "testDistributeLiquidatedFundsNonAgentPolice");
     }
 
-    function testDistributeLiquidatedFunds(uint256 borrowAmount, uint256 recoveredFunds) public {
-        vm.startPrank(policeOwner);
-        // set the agent in default
-        police.setAgentDefaultDTL(address(agent), issueGenericSetDefaultCred(agent.id()));
+    function testDistributeLiquidatedFundsPartialRecoveryNoInterest(uint256 borrowAmount, uint256 recoveredFunds)
+        public
+    {
+        borrowAmount = bound(borrowAmount, WAD + 1, stakeAmount);
+        recoveredFunds = bound(recoveredFunds, WAD, borrowAmount - 1);
 
-        uint256 borrowedBefore = pool.totalBorrowed();
+        setAgentDefaulted(agent, borrowAmount);
+
         uint256 totalAssetsBefore = pool.totalAssets();
 
         vm.deal(policeOwner, recoveredFunds);
+        vm.startPrank(policeOwner);
         wFIL.deposit{value: recoveredFunds}();
         wFIL.approve(address(police), recoveredFunds);
 
@@ -1185,10 +1188,9 @@ contract AgentPoliceTest is BaseTest {
         // distribute the recovered funds
         police.distributeLiquidatedFunds(address(agent), recoveredFunds);
 
-        uint256 borrowedAfter = pool.totalBorrowed();
         uint256 totalAssetsAfter = pool.totalAssets();
 
-        uint256 lostAmount = totalAssetsBefore - pool.totalAssets();
+        uint256 lostAmount = totalAssetsBefore - totalAssetsAfter;
         uint256 recoverPercent = (totalAssetsBefore - lostAmount) * WAD / totalAssetsBefore;
 
         uint256 poolTokenSupply = pool.liquidStakingToken().totalSupply();
@@ -1201,12 +1203,14 @@ contract AgentPoliceTest is BaseTest {
             totalAssetsBefore + recoveredFunds - borrowAmount, totalAssetsAfter, "Pool should have recovered funds"
         );
         assertEq(lostAmount, borrowAmount - recoveredFunds, "lost amount should be correct");
+        assertEq(pool.lostRentalFees(), 0, "lost rental fees should be 0 because no interest");
 
         assertEq(
-            borrowedBefore - borrowedAfter,
+            lostAmount,
             AccountHelpers.getAccount(router, agent.id(), pool.id()).principal,
             "Pool should have written down assets correctly"
         );
+        assertEq(pool.totalBorrowed(), 0, "Pool should have nothing borrwed after the liquidation");
         assertEq(wFIL.balanceOf(address(police)), 0, "Agent police should not have funds");
         assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
         testInvariants(pool, "testDistributeLiquidatedFunds");
@@ -1215,55 +1219,218 @@ contract AgentPoliceTest is BaseTest {
         }
     }
 
-    function testDistributeLiquidatedFundsFullRecovery(
-        uint256 rollFwdPeriod,
-        uint256 borrowAmount,
-        uint256 recoveredFunds
-    ) public {
+    function testDistributeLiquidatedFundsFullRecoveryNoInterest(uint256 borrowAmount, uint256 recoveredFunds) public {
         borrowAmount = bound(borrowAmount, WAD, stakeAmount);
-        rollFwdPeriod = bound(rollFwdPeriod, EPOCHS_IN_WEEK * 3 + 1, EPOCHS_IN_WEEK * 3 * 10);
-        vm.assume(recoveredFunds > WAD);
-
-        uint256 balanceAfter;
-        uint256 balanceBefore;
-        (uint256 interestOwed,) = calculateInterestOwed(borrowAmount, rollFwdPeriod);
         recoveredFunds = bound(recoveredFunds, borrowAmount, stakeAmount);
-        balanceBefore = wFIL.balanceOf(address(pool));
+
+        setAgentDefaulted(agent, borrowAmount);
+
         uint256 totalAssetsBefore = pool.totalAssets();
-        setAgentDefaulted(agent);
+        uint256 totalBorrowedBefore = pool.totalBorrowed();
 
         vm.deal(policeOwner, recoveredFunds);
         vm.startPrank(policeOwner);
         wFIL.deposit{value: recoveredFunds}();
         wFIL.approve(address(police), recoveredFunds);
+
+        assertPegInTact(pool);
+
         // distribute the recovered funds
         police.distributeLiquidatedFunds(address(agent), recoveredFunds);
+
+        uint256 totalAssetsAfter = pool.totalAssets();
+
+        assertPegInTact(pool);
+
         Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
         assertTrue(account.defaulted, "Agent should be defaulted");
-        balanceAfter = wFIL.balanceOf(address(pool));
-        uint256 balanceChange =
-            borrowAmount + interestOwed > recoveredFunds ? recoveredFunds : borrowAmount + interestOwed;
-        assertEq(balanceAfter - balanceBefore, balanceChange, "Pool should have received the correct amount of funds");
+        assertEq(totalAssetsBefore, totalAssetsAfter, "Pool should have recovered fully");
         assertEq(
-            wFIL.balanceOf(IAuth(address(agent)).owner()),
-            recoveredFunds - balanceChange,
-            "Police owner should only have paid the amount owed"
+            wFIL.balanceOf(address(pool)), totalAssetsAfter, "Pool should have received the correct amount of wFIL"
         );
+
+        // compute the extra amount that should be paid back to the owner and the treasury
+        // we use the borrowAmountBefore because no debt has accrued, really this should be totalBorrowed+interestOwed
+        uint256 liquidationFee = totalBorrowedBefore.mulWadDown(police.liquidationFee());
+        // the owner should get back excess and the treasury should get back its 10% liquidation fee
+        if (recoveredFunds > totalBorrowedBefore + liquidationFee) {
+            assertEq(
+                wFIL.balanceOf(IAuth(address(agent)).owner()),
+                recoveredFunds - totalBorrowedBefore - liquidationFee,
+                "Police owner should only have paid the amount owed"
+            );
+            assertEq(
+                wFIL.balanceOf(GetRoute.treasury(router)),
+                liquidationFee,
+                "Police should have received the treasury fee"
+            );
+        } else if (recoveredFunds > totalBorrowedBefore) {
+            assertEq(
+                wFIL.balanceOf(IAuth(address(agent)).owner()),
+                0,
+                "Owner should not get funds back if liquidation fee isnt fully paid"
+            );
+            assertEq(
+                wFIL.balanceOf(GetRoute.treasury(router)),
+                recoveredFunds - totalBorrowedBefore,
+                "Police should have received some liquidation fee"
+            );
+        } else {
+            // no liquidation fee should be paid if the recovered funds are less than the total borrowed
+            assertEq(
+                wFIL.balanceOf(IAuth(address(agent)).owner()),
+                0,
+                "Owner should not get funds back if liquidation fee isnt fully paid"
+            );
+            assertEq(wFIL.balanceOf(GetRoute.treasury(router)), 0, "No liquidation fees should have been paid");
+        }
         assertTrue(police.agentLiquidated(agent.id()), "Agent should be marked as liquidated");
         testInvariants(pool, "testDistributeLiquidatedFundsFullRecovery");
+    }
 
-        uint256 gainAmount = pool.totalAssets() - totalAssetsBefore;
-        uint256 gainPercent = (totalAssetsBefore + gainAmount) * WAD / totalAssetsBefore;
+    function testDistributeLiquidationFundsPartialRecoveryWithInterest(uint256 borrowAmount, uint256 recoveredFunds)
+        public
+    {
+        borrowAmount = bound(borrowAmount, WAD + 1, stakeAmount);
+        recoveredFunds = bound(recoveredFunds, WAD, borrowAmount - 1);
+        setAgentDefaulted(agent, borrowAmount);
 
-        uint256 poolTokenSupply = pool.liquidStakingToken().totalSupply();
-        uint256 tokenPrice = poolTokenSupply * WAD / (totalAssetsBefore + gainAmount);
-        // by checking converting 1 poolToken to its asset equivalent should mirror the recoverPercent
+        // roll forward a year to get some interest
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        uint256 interestOwed = pool.getAgentInterestOwed(agent.id());
+        uint256 interestOwedLessTFees = interestOwed.mulWadUp(1e18 - pool.treasuryFeeRate());
+
+        vm.deal(policeOwner, recoveredFunds);
+        vm.startPrank(policeOwner);
+        wFIL.deposit{value: recoveredFunds}();
+        wFIL.approve(address(police), recoveredFunds);
+
+        uint256 totalAssetsBefore = pool.totalAssets();
+        uint256 totalBorrowedBefore = pool.totalBorrowed();
+        uint256 filValOf1iFILBeforeLiquidation = pool.convertToAssets(WAD);
+
         assertEq(
-            pool.convertToAssets(WAD),
-            gainPercent,
-            "IFILtoFIL should increase by the fees pay on top of the recovery amount"
+            totalAssetsBefore, stakeAmount + interestOwedLessTFees, "Total assets before should exclude treasury fees"
         );
-        assertEq(pool.convertToShares(WAD), tokenPrice, "FILtoIFIL should be 1");
+
+        // distribute the recovered funds
+        police.distributeLiquidatedFunds(address(agent), recoveredFunds);
+
+        uint256 totalAssetsAfter = pool.totalAssets();
+        uint256 totalAccrued = pool.accruedRentalFees();
+        uint256 interestAccruedLessTFees = totalAccrued.mulWadUp(1e18 - pool.treasuryFeeRate());
+
+        uint256 lostAssets = totalBorrowedBefore + interestAccruedLessTFees - recoveredFunds;
+        uint256 recoverPercent = (totalAssetsBefore - lostAssets).divWadDown(totalAssetsBefore);
+
+        assertEq(
+            totalAssetsAfter,
+            stakeAmount + recoveredFunds + interestAccruedLessTFees - totalBorrowedBefore - interestOwedLessTFees,
+            "Pool should have lost all interest and princpal"
+        );
+
+        Account memory account = AccountHelpers.getAccount(router, agent.id(), pool.id());
+
+        assertEq(
+            account.principal,
+            interestOwed + borrowAmount - recoveredFunds,
+            "no principal was paid, so account.principal should be the original principal amount lost"
+        );
+        assertEq(pool.treasuryFeesReserved(), 0, "Treasury fees should be 0 after a partial liquidation");
+        assertApproxEqAbs(
+            pool.convertToAssets(WAD),
+            filValOf1iFILBeforeLiquidation.mulWadDown(recoverPercent),
+            1e3,
+            "IFIL should have devalued correctly"
+        );
+        assertEq(pool.totalBorrowed(), 0, "Pool should have nothing borrowed after liquidation");
+        assertEq(totalAssetsBefore - totalAssetsAfter, lostAssets, "lost assets should be correct");
+        if (recoveredFunds >= interestOwed) {
+            assertEq(pool.lostRentalFees(), 0, "pool should not lose rental fees");
+            assertEq(pool.paidRentalFees(), interestOwed, "pool should have paid rental fees");
+        } else {
+            assertEq(
+                pool.paidRentalFees(),
+                recoveredFunds,
+                "paid rental fees should be the full recover amount when the recover amount is less than the interest owed"
+            );
+            assertEq(pool.lostRentalFees(), interestOwed - recoveredFunds, "lost assets should be correct");
+        }
+    }
+
+    function testDistributeLiquidationFundsFullRecoveryWithInterest(uint256 borrowAmount, uint256 recoveredFunds)
+        public
+    {
+        borrowAmount = bound(borrowAmount, WAD, stakeAmount);
+
+        setAgentDefaulted(agent, borrowAmount);
+
+        // roll forward a year to get some interest
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        uint256 interestOwed = pool.getAgentInterestOwed(agent.id());
+        uint256 interestOwedLessTFees = interestOwed.mulWadUp(1e18 - pool.treasuryFeeRate());
+        // here its important to test the range where the recovered funds are enough to cover principal + interest owed to LPs ( but not enough to pay off the full interest owed, which includes t fees)
+        recoveredFunds = bound(recoveredFunds, borrowAmount + interestOwedLessTFees, MAX_FIL);
+
+        vm.deal(policeOwner, recoveredFunds);
+        vm.startPrank(policeOwner);
+        wFIL.deposit{value: recoveredFunds}();
+        wFIL.approve(address(police), recoveredFunds);
+
+        uint256 totalAssetsBefore = pool.totalAssets();
+        uint256 filValOf1iFILBeforeLiquidation = pool.convertToAssets(WAD);
+        uint256 totalDebtLessTFees = interestOwedLessTFees + borrowAmount;
+
+        assertEq(
+            totalAssetsBefore, stakeAmount + interestOwedLessTFees, "Total assets before should exclude treasury fees"
+        );
+
+        // distribute the recovered funds
+        police.distributeLiquidatedFunds(address(agent), recoveredFunds);
+
+        uint256 totalAssetsAfter = pool.totalAssets();
+
+        assertEq(totalAssetsBefore, totalAssetsAfter, "Pool should have recovered fully");
+
+        // compute the extra amount that should be paid back to the owner and the treasury
+        // we use the borrowAmountBefore because no debt has accrued, really this should be totalBorrowed+interestOwed
+        uint256 liquidationFee = totalDebtLessTFees.mulWadDown(police.liquidationFee());
+        // the owner should get back excess and the treasury should get back its 10% liquidation fee
+        if (recoveredFunds > totalDebtLessTFees + liquidationFee) {
+            assertEq(
+                wFIL.balanceOf(IAuth(address(agent)).owner()),
+                recoveredFunds - totalDebtLessTFees - liquidationFee,
+                "Police owner should only have paid the amount owed"
+            );
+            assertEq(
+                wFIL.balanceOf(GetRoute.treasury(router)),
+                liquidationFee,
+                "Police should have received the treasury fee"
+            );
+        } else if (recoveredFunds > totalDebtLessTFees) {
+            assertEq(
+                wFIL.balanceOf(IAuth(address(agent)).owner()),
+                0,
+                "Owner should not get funds back if liquidation fee isnt fully paid"
+            );
+            assertEq(
+                wFIL.balanceOf(GetRoute.treasury(router)),
+                recoveredFunds - totalDebtLessTFees,
+                "Police should have received some liquidation fee"
+            );
+        } else {
+            // no liquidation fee should be paid if the recovered funds are less than the total borrowed
+            assertEq(
+                wFIL.balanceOf(IAuth(address(agent)).owner()),
+                0,
+                "Owner should not get funds back if liquidation fee isnt fully paid"
+            );
+            assertEq(wFIL.balanceOf(GetRoute.treasury(router)), 0, "No liquidation fees should have been paid");
+        }
+
+        assertEq(filValOf1iFILBeforeLiquidation, pool.convertToAssets(WAD), "IFILtoFIL should not change");
     }
 }
 

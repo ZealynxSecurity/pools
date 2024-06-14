@@ -82,8 +82,8 @@ contract InfinityPool is IPool, Ownable {
     /// @dev `paidRentalFees` tracks the amount of fees paid to this pool
     uint256 public paidRentalFees = 0;
 
-    /// @dev `lostAssets` tracks the amount of assets that were lost as a result of a liquidation
-    uint256 public lostAssets = 0;
+    /// @dev `lostRentalFees` tracks the amount of assets that were lost as a result of a liquidation, not included in the totalAssets calculation
+    uint256 public lostRentalFees = 0;
 
     /// @dev `lastAccountingUpdateEpoch` is the epoch at which the pool's accounting was last updated
     uint256 public lastAccountingUpdateEpoch = 0;
@@ -99,6 +99,9 @@ contract InfinityPool is IPool, Ownable {
 
     /// @dev `treasuryFeesPaid` is the total fees paid to the treasury in this pool, aggregated
     uint256 private _treasuryFeesPaid = 0;
+
+    /// @dev `treasuryFeesLost` is the total fees lost to the treasury in this pool, aggregated
+    uint256 private _treasuryFeesLost = 0;
 
     /// @dev `rentalFeesOwedPerEpoch` is the % of FIL charged to Agents on a per epoch basis
     /// @dev this param uses an extra WAD of precision to maintain precision in the math when applied over long durations
@@ -213,7 +216,7 @@ contract InfinityPool is IPool, Ownable {
      */
     function treasuryFeesReserved() public view returns (uint256) {
         (, uint256 newTreasuryFeesOwed) = _computeNewFeesAccrued();
-        return newTreasuryFeesOwed + _treasuryFeesOwed - _treasuryFeesPaid;
+        return newTreasuryFeesOwed + _treasuryFeesOwed - _treasuryFeesPaid - _treasuryFeesLost;
     }
 
     /**
@@ -222,18 +225,19 @@ contract InfinityPool is IPool, Ownable {
      */
     function totalAssets() public view override returns (uint256) {
         // pseudo accounting update to make sure our values are correct
-        (uint256 newRentalFeesAccrued, uint256 newTreasuryFeesOwed) = _computeNewFeesAccrued();
+        (uint256 newRentalFeesAccrued,) = _computeNewFeesAccrued();
         uint256 totalRentalFeesAccrued = _accruedRentalFees + newRentalFeesAccrued;
-        uint256 totalTreasuryFeesOwed = _treasuryFeesOwed + newTreasuryFeesOwed;
+        uint256 tFeesReserved = treasuryFeesReserved();
         // using accrual basis accounting, the assets of the pool are:
         // assets currently in the pool
         // total borrowed from agents
         // total accrued rental fees
+        // total treasury fees lost
         // subtract total rental fees paid
-        // subtract lost assets from liquidations
         // subtract total treasury fees left unpaid
-        return asset.balanceOf(address(this)) + totalBorrowed + totalRentalFeesAccrued + _treasuryFeesPaid
-            - paidRentalFees - lostAssets - totalTreasuryFeesOwed;
+        // subtract lost rental fees
+        return asset.balanceOf(address(this)) + totalBorrowed + totalRentalFeesAccrued - paidRentalFees - lostRentalFees
+            - tFeesReserved;
     }
 
     /**
@@ -282,7 +286,11 @@ contract InfinityPool is IPool, Ownable {
      * @notice writeOff writes down the Agent's account and the Pool's borrowed amount after a liquidation
      * @param agentID The ID of the Agent
      * @param recoveredFunds The amount of funds recovered from the liquidation. This is the total amount the Police was able to recover from the Agent's Miner Actors
-     * @dev the treasury fees go unpaid on a writeOff
+     * @dev the capital stack works as follows on a write off:
+     *  1. pay off interest
+     *  2. pay off principal
+     *  3. with any excess, treasury takes a 10% fee on the total liquidated value
+     *  4. With any excess after liquidation fee, the agent's owner gets the remainder
      */
     function writeOff(uint256 agentID, uint256 recoveredFunds) external {
         // only the agent police can call this function
@@ -297,9 +305,11 @@ contract InfinityPool is IPool, Ownable {
         account.defaulted = true;
 
         uint256 interestOwed = 0;
+        uint256 treasuryFeesOwed = 0;
         // if the account is not "current", compute the amount of interest owed based on the penalty rate
         if (account.epochsPaid < block.number) {
             (interestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
+            treasuryFeesOwed = interestOwed.mulWadDown(treasuryFeeRate);
         }
 
         // compute the amount of fees and principal we can pay off
@@ -308,40 +318,47 @@ contract InfinityPool is IPool, Ownable {
         uint256 feeBasis = 0;
         // the amount of principal that will be paid
         uint256 principalPaid = 0;
-        // the amount of funds that will be refunded to the agent
-        uint256 remainder = 0;
-        // the amount of funds that was lost in this write-off
-        uint256 lost = 0;
+        // the amount of rental fees lost in this write-off
+        uint256 lostFees = 0;
+        // the amount of principal lost in this write-off
+        uint256 lostPrincipal = 0;
         if (recoveredFunds <= interestOwed) {
             // if we can't cover the whole interest payment, we cover what we can
             feeBasis = recoveredFunds;
-            // we lost the full principal + unpaid interest
-            lost = account.principal + interestOwed - recoveredFunds;
-        } else if (recoveredFunds <= totalOwed) {
-            // if we can't cover the whole total owed, we apply everything to interest first
+            // we lost interest
+            lostFees = interestOwed - recoveredFunds;
+            // we lost full principal
+            lostPrincipal = account.principal;
+            // pull in only the assets we need - in this case, the full recovery amount
+            asset.transferFrom(msg.sender, address(this), recoveredFunds);
+        } else if (recoveredFunds <= totalOwed - treasuryFeesOwed) {
+            // in this case we do not have enough recovered funds to make everyone whole
+            // no interest lost
             feeBasis = interestOwed;
             // cover any principal with the remainder
             principalPaid = recoveredFunds - interestOwed;
-            // we lost the unpaid principal
-            lost = account.principal - principalPaid;
+            // we lost some principal
+            lostPrincipal = account.principal - principalPaid;
+            // pull in only the assets we need - in this case, the full recovery amount
+            asset.transferFrom(msg.sender, address(this), recoveredFunds);
         } else {
             // we can cover everything
             feeBasis = interestOwed;
             principalPaid = account.principal;
-            remainder = recoveredFunds - totalOwed;
-            // we lost nothing
+            // in this case, we want to avoid pulling in excess fees that would go to the treasury to avoid adding treasury fees to LP rewards through the balanceOf check in totalAssets
+            asset.transferFrom(msg.sender, address(this), feeBasis.mulWadUp(1e18 - treasuryFeeRate) + principalPaid);
         }
 
         // write off the pool's account so that the pool's total borrowed is accurate
         totalBorrowed -= account.principal;
         // since this account's principal still accrues debt up to this point in time, we need to update the paidRentalFees one last time
         paidRentalFees += feeBasis;
-        // add the lost assets to the pool's lost assets
-        lostAssets += lost;
+        // add the lost fees to the pool's lost fees
+        lostRentalFees += lostFees;
+        // update lost treasury fees
+        _treasuryFeesLost += interestOwed.mulWadDown(treasuryFeeRate);
         // set the account with the funds the pool lost, this isn't used anywhere else in the protocol, just for querying later
-        account.principal = lost;
-        // pull in only the assets we need
-        asset.transferFrom(msg.sender, address(this), feeBasis + principalPaid);
+        account.principal = lostFees + lostPrincipal;
 
         account.save(_router, agentID, id);
 
@@ -350,7 +367,7 @@ contract InfinityPool is IPool, Ownable {
             lm.onDefault(agentID);
         }
 
-        emit WriteOff(agentID, recoveredFunds, lost, feeBasis);
+        emit WriteOff(agentID, recoveredFunds, lostFees + lostPrincipal, feeBasis);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -442,7 +459,7 @@ contract InfinityPool is IPool, Ownable {
         // if the account is "defaulted", we treat everything as interest
         // here we would have already forfeited the agent's LM reward tokens, so we dont interact with the LM contract in this case
         if (account.defaulted) {
-            // here we explicitly do not update the paidRentalFees
+            // here we explicitly do not update the paidRentalFees, the balanceOf check ecompasses the increase in assetss
             // transfer the assets into the pool
             asset.transferFrom(msg.sender, address(this), vc.value);
 

@@ -350,13 +350,12 @@ contract BaseTest is Test {
         return signCred(vc);
     }
 
-    function issueGenericSetDefaultCred(uint256 agent) internal returns (SignedCredential memory) {
+    function issueGenericSetDefaultCred(uint256 agent, uint256 principal) internal returns (SignedCredential memory) {
         // roll forward so we don't get an identical credential that's already been used
         vm.roll(block.number + 1);
 
         // create a cred where DTL >100%
         uint256 collateralValue = 0;
-        uint256 principal = 10e18;
 
         AgentData memory ad = AgentData(
             1e18,
@@ -666,12 +665,12 @@ contract BaseTest is Test {
         assertEq(agent.administration(), administration);
     }
 
-    function setAgentDefaulted(IAgent agent) internal {
+    function setAgentDefaulted(IAgent agent, uint256 principal) internal {
         IAgentPolice police = GetRoute.agentPolice(router);
-        SignedCredential memory defaultCred = issueGenericSetDefaultCred(agent.id());
+        SignedCredential memory defaultCred = issueGenericSetDefaultCred(agent.id(), principal);
 
         // set an account in storage with some principal
-        agentBorrow(agent, 0, issueGenericBorrowCred(agent.id(), 10e18));
+        agentBorrow(agent, 0, issueGenericBorrowCred(agent.id(), principal));
 
         vm.startPrank(IAuth(address(police)).owner());
         police.setAgentDefaultDTL(address(agent), defaultCred);
