@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {RewardAccrual} from "src/Types/Structs/RewardAccrual.sol";
 import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 
 library FinMath {
@@ -80,5 +81,33 @@ library FinMath {
     /// @dev returns the interest owed per epoch of a particular Account based on its principal
     function interestPerEpoch(Account memory account, uint256 rate) internal pure returns (uint256) {
         return account.principal.mulWadUp(rate);
+    }
+}
+
+/// @dev a simple helper library for dealing with reward accrual
+/// used to track treasury and LP rewards
+library AccrualMath {
+    error OverMath(uint256 paid, uint256 accrued, uint256 diff);
+
+    function accrue(RewardAccrual memory ra, uint256 newAccruedRewards) internal pure returns (RewardAccrual memory) {
+        ra.accrued += newAccruedRewards;
+        return ra;
+    }
+
+    function payout(RewardAccrual memory ra, uint256 paidOutRewards) internal pure returns (RewardAccrual memory) {
+        ra.paid += paidOutRewards;
+        return ra;
+    }
+
+    function writeoff(RewardAccrual memory ra, uint256 lostRewards) internal pure returns (RewardAccrual memory) {
+        ra.lost += lostRewards;
+        return ra;
+    }
+
+    function owed(RewardAccrual memory ra) internal pure returns (uint256) {
+        // in certain rounding edge cases, ra.paid can be tiny dust bits bigger than ra.accrued
+        // the rounding errors should never exceed 1e2 - see testing invariants
+        if (ra.paid + ra.lost >= ra.accrued) return 0;
+        return ra.accrued - ra.paid - ra.lost;
     }
 }

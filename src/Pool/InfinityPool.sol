@@ -8,7 +8,8 @@ import {FilAddress} from "shim/FilAddress.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
-import {FinMath} from "src/Pool/FinMath.sol";
+import {RewardAccrual} from "src/Types/Structs/RewardAccrual.sol";
+import {FinMath, AccrualMath} from "src/Pool/FinMath.sol";
 
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -41,6 +42,7 @@ contract InfinityPool is IPool, Ownable {
     using FilAddress for address;
     using FilAddress for address payable;
     using FixedPointMathLib for uint256;
+    using AccrualMath for RewardAccrual;
 
     error InsufficientLiquidity();
     error AccountDNE();
@@ -79,33 +81,21 @@ contract InfinityPool is IPool, Ownable {
     /// @dev `minimumLiquidity` is the percentage of total assets that should be reserved for exits
     uint256 public minimumLiquidity = 0;
 
-    /// @dev `paidRentalFees` tracks the amount of fees paid to this pool
-    uint256 public paidRentalFees = 0;
-
-    /// @dev `lostRentalFees` tracks the amount of assets that were lost as a result of a liquidation, not included in the totalAssets calculation
-    uint256 public lostRentalFees = 0;
-
     /// @dev `lastAccountingUpdateEpoch` is the epoch at which the pool's accounting was last updated
     uint256 public lastAccountingUpdateEpoch = 0;
 
     /// @dev `isShuttingDown` is a boolean that, when true, halts deposits and borrows. Once set, it cannot be unset.
     bool public isShuttingDown = false;
 
-    /// @dev `_accruedRentalFees` tracks the amount of fees accrued based on borrowed FIL in the pool
-    uint256 private _accruedRentalFees = 0;
-
-    /// @dev `treasuryFeesOwed` is the total fees owed to the treasury in this pool, aggregated
-    uint256 private _treasuryFeesOwed = 0;
-
-    /// @dev `treasuryFeesPaid` is the total fees paid to the treasury in this pool, aggregated
-    uint256 private _treasuryFeesPaid = 0;
-
-    /// @dev `treasuryFeesLost` is the total fees lost to the treasury in this pool, aggregated
-    uint256 private _treasuryFeesLost = 0;
-
     /// @dev `rentalFeesOwedPerEpoch` is the % of FIL charged to Agents on a per epoch basis
     /// @dev this param uses an extra WAD of precision to maintain precision in the math when applied over long durations
     uint256 private _rentalFeesOwedPerEpoch = FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
+
+    /// @dev _lpRewards tracks the accrual math for LP rewards
+    RewardAccrual private _lpRewards;
+
+    /// @dev _treasuryRewards tracks the accrual math for treasury rewards
+    RewardAccrual private _treasuryRewards;
 
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
@@ -201,33 +191,32 @@ contract InfinityPool is IPool, Ownable {
         return _interestOwed;
     }
 
-    /**
-     * @dev Returns the amount of rewards have accrued for the entire pool
-     * @return totalAccruedFees The total rewards that have accrued in this pool, without accounting for fees or payments
-     */
-    function accruedRentalFees() external view returns (uint256) {
-        (uint256 newRentalFeesAccrued,) = _computeNewFeesAccrued();
-        return _accruedRentalFees + newRentalFeesAccrued;
+    function lpRewards() external view returns (RewardAccrual memory) {
+        (uint256 newRentalFees,) = _computeNewFeesAccrued();
+        return _lpRewards.accrue(newRentalFees);
+    }
+
+    function treasuryRewards() external view returns (RewardAccrual memory) {
+        (, uint256 newTreasuryFeesOwed) = _computeNewFeesAccrued();
+        return _treasuryRewards.accrue(newTreasuryFeesOwed);
     }
 
     /**
      * @dev Returns the amount of liquid FIL in this pool that is reserved for the treasury due to fees
      * @return treasuryFeesReserved The total treasury rewards that have accrued in this pool
      */
-    function treasuryFeesReserved() public view returns (uint256) {
+    function treasuryFeesOwed() public view returns (uint256) {
         (, uint256 newTreasuryFeesOwed) = _computeNewFeesAccrued();
-        return newTreasuryFeesOwed + _treasuryFeesOwed - _treasuryFeesPaid - _treasuryFeesLost;
+        return _treasuryRewards.accrue(newTreasuryFeesOwed).owed();
     }
 
     /**
      * @dev Returns the totalAssets of the pool
-     * @return totalBorrowed The total borrowed from the agent
+     * @return totalAssets The total assets of the pool
      */
     function totalAssets() public view override returns (uint256) {
         // pseudo accounting update to make sure our values are correct
-        (uint256 newRentalFeesAccrued,) = _computeNewFeesAccrued();
-        uint256 totalRentalFeesAccrued = _accruedRentalFees + newRentalFeesAccrued;
-        uint256 tFeesReserved = treasuryFeesReserved();
+        (uint256 newRentalFeesAccrued, uint256 newTFeesAccrued) = _computeNewFeesAccrued();
         // using accrual basis accounting, the assets of the pool are:
         // assets currently in the pool
         // total borrowed from agents
@@ -236,8 +225,8 @@ contract InfinityPool is IPool, Ownable {
         // subtract total rental fees paid
         // subtract total treasury fees left unpaid
         // subtract lost rental fees
-        return asset.balanceOf(address(this)) + totalBorrowed + totalRentalFeesAccrued - paidRentalFees - lostRentalFees
-            - tFeesReserved;
+        return asset.balanceOf(address(this)) + totalBorrowed + _lpRewards.accrue(newRentalFeesAccrued).owed()
+            - _treasuryRewards.accrue(newTFeesAccrued).owed();
     }
 
     /**
@@ -246,7 +235,7 @@ contract InfinityPool is IPool, Ownable {
      */
     function totalBorrowableAssets() public view returns (uint256) {
         if (isShuttingDown) return 0;
-        uint256 _assets = asset.balanceOf(address(this)) - treasuryFeesReserved();
+        uint256 _assets = asset.balanceOf(address(this));
         uint256 _absMinLiquidity = getAbsMinLiquidity();
 
         if (_assets < _absMinLiquidity) return 0;
@@ -267,11 +256,11 @@ contract InfinityPool is IPool, Ownable {
      */
     function getLiquidAssets() public view returns (uint256) {
         uint256 balance = asset.balanceOf(address(this));
-        uint256 treasuryFeesRes = treasuryFeesReserved();
+        uint256 _treasuryFeesOwed = treasuryFeesOwed();
         // ensure we dont pay out treasury fees
-        if (balance <= treasuryFeesRes) return 0;
+        if (balance <= _treasuryFeesOwed) return 0;
 
-        return balance - treasuryFeesRes;
+        return balance - _treasuryFeesOwed;
     }
 
     /**
@@ -305,11 +294,11 @@ contract InfinityPool is IPool, Ownable {
         account.defaulted = true;
 
         uint256 interestOwed = 0;
-        uint256 treasuryFeesOwed = 0;
+        uint256 _treasuryFeesOwed = 0;
         // if the account is not "current", compute the amount of interest owed based on the penalty rate
         if (account.epochsPaid < block.number) {
             (interestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
-            treasuryFeesOwed = interestOwed.mulWadDown(treasuryFeeRate);
+            _treasuryFeesOwed = interestOwed.mulWadDown(treasuryFeeRate);
         }
 
         // compute the amount of fees and principal we can pay off
@@ -331,7 +320,7 @@ contract InfinityPool is IPool, Ownable {
             lostPrincipal = account.principal;
             // pull in only the assets we need - in this case, the full recovery amount
             asset.transferFrom(msg.sender, address(this), recoveredFunds);
-        } else if (recoveredFunds <= totalOwed - treasuryFeesOwed) {
+        } else if (recoveredFunds <= totalOwed - _treasuryFeesOwed) {
             // in this case we do not have enough recovered funds to make everyone whole
             // no interest lost
             feeBasis = interestOwed;
@@ -351,12 +340,10 @@ contract InfinityPool is IPool, Ownable {
 
         // write off the pool's account so that the pool's total borrowed is accurate
         totalBorrowed -= account.principal;
-        // since this account's principal still accrues debt up to this point in time, we need to update the paidRentalFees one last time
-        paidRentalFees += feeBasis;
-        // add the lost fees to the pool's lost fees
-        lostRentalFees += lostFees;
+        // since this account's principal still accrues debt up to this point in time, we need to update the paid fees one last time, and mark the lost amount
+        _lpRewards = _lpRewards.payout(feeBasis).writeoff(lostFees);
         // update lost treasury fees
-        _treasuryFeesLost += interestOwed.mulWadDown(treasuryFeeRate);
+        _treasuryRewards = _treasuryRewards.writeoff(interestOwed.mulWadDown(treasuryFeeRate));
         // set the account with the funds the pool lost, this isn't used anywhere else in the protocol, just for querying later
         account.principal = lostFees + lostPrincipal;
 
@@ -408,7 +395,7 @@ contract InfinityPool is IPool, Ownable {
             if (interestOwed > 0 && (interestOwed <= interestPerEpochAfter.mulWadUp(1))) {
                 account.epochsPaid = block.number - 1;
                 // add the difference between the new interest owed (after divving out the extra WAD) and previousInterestOwed to the accruedFees of the pool
-                _accruedRentalFees += interestPerEpochAfter.mulWadUp(1) - interestOwed;
+                _lpRewards = _lpRewards.accrue(interestPerEpochAfter.mulWadUp(1) - interestOwed);
             } else if (interestOwed > 0) {
                 // if the interestOwed is bigger than 0 and the interestPerEpochAfter, we need to adjust the epochsPaid cursor forward
                 // given a new interest per epoch owed with the new borrow amount applied, we need to solve for the number of epochs (at the new interestPerEpochRate) that will result in the same amount of interest owed
@@ -417,7 +404,7 @@ contract InfinityPool is IPool, Ownable {
                 (uint256 newInterestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
                 if (newInterestOwed != interestOwed) {
                     // add the difference between the new interest owed and previousInterestOwed to the accruedFees of the pool
-                    _accruedRentalFees += newInterestOwed - interestOwed;
+                    _lpRewards = _lpRewards.accrue(newInterestOwed - interestOwed);
                 }
             }
             // if we dont owe any interest we leave the account epoch's paid cursor alone to maintain the same amount of total interest owed
@@ -485,7 +472,7 @@ contract InfinityPool is IPool, Ownable {
             uint256 recomputedInterestOwed = epochsForward.mulWadUp(interestPerEpoch);
 
             feeBasis = vc.value;
-            // if the recomputed interest owed is greater than the payment, adjust the payment to be the recomputed interest owed
+            // if the recomputed interest owed is less than the payment, adjust the payment to be the recomputed interest owed
             if (recomputedInterestOwed < vc.value) {
                 feeBasis = recomputedInterestOwed;
                 // mark the excess as a refund to the agent
@@ -523,7 +510,7 @@ contract InfinityPool is IPool, Ownable {
         // update the account in storage
         account.save(_router, vc.subject, id);
         // realize fees paid to the pool
-        paidRentalFees += feeBasis;
+        _lpRewards = _lpRewards.payout(feeBasis);
         // transfer the assets into the pool
         asset.transferFrom(msg.sender, address(this), feeBasis + principalPaid);
         // call out to the LM hook to accrue rewards for this agent
@@ -542,15 +529,15 @@ contract InfinityPool is IPool, Ownable {
         if (block.number > lastAccountingUpdateEpoch) {
             (uint256 newRentalFeesAccrued, uint256 newTreasuryFeesOwed) = _computeNewFeesAccrued();
             // accrue rewards to the treasury fees owed
-            _treasuryFeesOwed += newTreasuryFeesOwed;
-            _accruedRentalFees += newRentalFeesAccrued;
+            _treasuryRewards = _treasuryRewards.accrue(newTreasuryFeesOwed);
+            _lpRewards = _lpRewards.accrue(newRentalFeesAccrued);
             uint256 previousAccountingUpdatingEpoch = lastAccountingUpdateEpoch;
             lastAccountingUpdateEpoch = block.number;
 
             emit UpdateAccounting(
                 msg.sender,
                 newRentalFeesAccrued,
-                _accruedRentalFees,
+                _lpRewards.accrued,
                 previousAccountingUpdatingEpoch,
                 lastAccountingUpdateEpoch,
                 convertToAssets(WAD)
@@ -795,10 +782,10 @@ contract InfinityPool is IPool, Ownable {
     function harvestFees(uint256 harvestAmount) public {
         updateAccounting();
         // if we dont have enough to pay out the harvest amount, revert
-        if (harvestAmount > asset.balanceOf(address(this)) || harvestAmount > treasuryFeesReserved()) {
+        if (harvestAmount > asset.balanceOf(address(this)) || harvestAmount > treasuryFeesOwed()) {
             revert InsufficientLiquidity();
         }
-        _treasuryFeesPaid += harvestAmount;
+        _treasuryRewards = _treasuryRewards.payout(harvestAmount);
         asset.transfer(GetRoute.treasury(_router), harvestAmount);
     }
 
@@ -813,7 +800,7 @@ contract InfinityPool is IPool, Ownable {
     function decommissionPool(IPool newPool) external onlyPoolRegistry returns (uint256 borrowedAmount) {
         if (newPool.id() != id || !isShuttingDown) revert InvalidState();
         // forward fees to the treasury
-        harvestFees(treasuryFeesReserved());
+        harvestFees(treasuryFeesOwed());
 
         asset.transfer(address(newPool), asset.balanceOf(address(this)));
 

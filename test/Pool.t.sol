@@ -190,7 +190,7 @@ contract PoolFeeTests is PoolTestState {
         agentPay(agent, pool, issueGenericPayCred(agentID, amount));
         // Some of these numbers are inconsistent - we should calculate this value
         // instead of getting it from the contract once the calculations are stable
-        uint256 treasuryFeesOwed = pool.treasuryFeesReserved();
+        uint256 treasuryFeesOwed = pool.treasuryFeesOwed();
         pool.harvestFees(treasuryFeesOwed);
         assertEq(asset.balanceOf(treasury), treasuryFeesOwed);
         testInvariants(pool, "testHarvestFees");
@@ -343,7 +343,7 @@ contract PoolAPRTests is PoolTestState {
         uint256 treasuryFeeRate = GetRoute.poolRegistry(router).treasuryFeeRate();
         // ensures the pool got the right amount of fees
         assertApproxEqAbs(
-            pool.treasuryFeesReserved(),
+            pool.treasuryFeesOwed(),
             // fees collected should be treasury fee % of the interest earned
             poolEarnings.mulWadUp(treasuryFeeRate),
             DUST,
@@ -354,7 +354,7 @@ contract PoolAPRTests is PoolTestState {
 
         // ensures the pool got the right amount of fees
         assertApproxEqAbs(
-            pool.treasuryFeesReserved(),
+            pool.treasuryFeesOwed(),
             // fees collected should be treasury fee % of the interest earned
             knownTreasuryFeeAmount,
             DUST,
@@ -597,7 +597,7 @@ contract PoolAdminTests is PoolTestState {
 
         // Generate some fees to harvest
         _generateFees(paymentAmt, initialBorrow);
-        uint256 fees = pool.treasuryFeesReserved();
+        uint256 fees = pool.treasuryFeesOwed();
         uint256 treasuryBalance = asset.balanceOf(address(treasury));
 
         IPool newPool = IPool(
@@ -686,7 +686,7 @@ contract PoolAdminTests is PoolTestState {
         // Generate some fees to harvest
         _generateFees(paymentAmt, initialBorrow);
 
-        uint256 fees = pool.treasuryFeesReserved();
+        uint256 fees = pool.treasuryFeesOwed();
         assertGt(fees, 0, "Fees should be greater than 0");
         uint256 treasuryBalance = asset.balanceOf(address(treasury));
         harvestAmount = bound(harvestAmount, 0, fees);
@@ -694,7 +694,7 @@ contract PoolAdminTests is PoolTestState {
         vm.prank(systemAdmin);
         pool.harvestFees(harvestAmount);
 
-        assertEq(pool.treasuryFeesReserved(), fees - harvestAmount, "Fees should be reduced by harvest amount");
+        assertEq(pool.treasuryFeesOwed(), fees - harvestAmount, "Fees should be reduced by harvest amount");
         assertEq(
             asset.balanceOf(address(treasury)),
             treasuryBalance + harvestAmount,
@@ -750,7 +750,7 @@ contract PoolErrorBranches is PoolTestState {
         // borrow the rest of the assets
         agentBorrow(agent, poolID, _issueGenericBorrowCred(agentID, pool.totalBorrowableAssets()));
         assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when liquid assets less than fees");
-        assertGt(pool.treasuryFeesReserved(), 0, "Pool should have generated fees");
+        assertGt(pool.treasuryFeesOwed(), 0, "Pool should have generated fees");
         testInvariants(pool, "testLiquidAssetsLessThanFees");
     }
 
@@ -1249,7 +1249,7 @@ contract PoolIsolationTests is BaseTest {
 
         // after harvesting treasury fees, total assets should stay the same
         vm.prank(systemAdmin);
-        pool.harvestFees(pool.treasuryFeesReserved());
+        pool.harvestFees(pool.treasuryFeesOwed());
 
         assertApproxEqAbs(
             pool.totalAssets(),
@@ -1330,12 +1330,12 @@ contract PoolIsolationTests is BaseTest {
 
         // check that the total accrued rental fees match the expected interest
         assertEq(
-            pool.accruedRentalFees(),
+            pool.lpRewards().accrued,
             expectedTotalInterest,
             "Total accrued rental fees should equal the expected interest"
         );
         assertApproxEqAbs(
-            pool.accruedRentalFees(),
+            pool.lpRewards().accrued,
             expectedTotalInterestFromAccounts,
             _DUST,
             "Total accrued rental fees should equal the expected interest from accounts"
@@ -1367,12 +1367,12 @@ contract PoolIsolationTests is BaseTest {
 
         // check that the total accrued rental fees match the expected interest
         assertEq(
-            pool.accruedRentalFees(),
+            pool.lpRewards().accrued,
             expectedTotalInterest,
             "Total accrued rental fees should equal the expected interest"
         );
         assertApproxEqAbs(
-            pool.accruedRentalFees(),
+            pool.lpRewards().accrued,
             expectedTotalInterestFromAccounts,
             _DUST,
             "Total accrued rental fees should equal the expected interest from accounts"
@@ -1384,7 +1384,7 @@ contract PoolIsolationTests is BaseTest {
             "Total assets should equal the deposit amount plus the expected interest"
         );
         assertApproxEqAbs(
-            pool.paidRentalFees(), expectedTotalInterest, _DUST, "Paid rental fees should equal the expected interest"
+            pool.lpRewards().paid, expectedTotalInterest, _DUST, "Paid rental fees should equal the expected interest"
         );
 
         // roll forward to accrue more interest
@@ -1402,13 +1402,13 @@ contract PoolIsolationTests is BaseTest {
 
         // check that the total accrued rental fees match the expected interest
         assertApproxEqAbs(
-            pool.accruedRentalFees(),
+            pool.lpRewards().accrued,
             expectedTotalInterest,
             _DUST,
             "Total accrued rental fees should equal the expected interest"
         );
         assertApproxEqAbs(
-            pool.accruedRentalFees(),
+            pool.lpRewards().accrued,
             expectedTotalInterestFromAccounts + totalPayments,
             _DUST,
             "Total accrued rental fees should equal the expected interest from accounts + total payments"
@@ -1474,7 +1474,7 @@ contract PoolIsolationTests is BaseTest {
 
         vm.stopPrank();
         uint256 expectedAccruedRentalFees = expectedTotalInterest.mulWadUp(1e18 - pool.treasuryFeeRate());
-        uint256 totalFeesPaid = pool.paidRentalFees();
+        uint256 totalFeesPaid = pool.lpRewards().paid;
         assertApproxEqAbs(
             totalFeesPaid, expectedTotalInterest, _DUST, "Total fees paid should equal the expected interest"
         );
@@ -1611,7 +1611,7 @@ contract PoolIsolationTests is BaseTest {
         assertEq(debt, borrowAmount, "Agent debt should equal the borrow amount");
 
         uint256 totalAssets = pool.totalAssets();
-        uint256 accRentalFees = pool.accruedRentalFees();
+        uint256 accRentalFees = pool.lpRewards().accrued;
 
         // after a payment, total assets should decrease
         vc = _issueGenericPayCred(1, payAmount).vc;
@@ -1632,7 +1632,7 @@ contract PoolIsolationTests is BaseTest {
         );
 
         assertEq(
-            pool.accruedRentalFees(), accRentalFees, "Total accrued rental fees should not change if no interest earned"
+            pool.lpRewards().accrued, accRentalFees, "Total accrued rental fees should not change if no interest earned"
         );
     }
 
@@ -1720,14 +1720,14 @@ contract PoolIsolationTests is BaseTest {
         // agent should owe interest after roll fwd
         assertEq(
             pool.getAgentInterestOwed(agentID),
-            pool.accruedRentalFees(),
+            pool.lpRewards().accrued,
             "Agent interest owed should be the total accrued rental fees"
         );
-        uint256 newAccruedFees = pool.accruedRentalFees();
+        uint256 newAccruedFees = pool.lpRewards().accrued;
         uint256 newTotalAssets = pool.totalAssets();
         assertEq(
             pool.totalAssets(),
-            startTotalAssets + newAccruedFees - pool.treasuryFeesReserved(),
+            startTotalAssets + newAccruedFees - pool.treasuryFeesOwed(),
             "Total assets should increase after interest accrues"
         );
 
@@ -1750,7 +1750,7 @@ contract PoolIsolationTests is BaseTest {
         payAmount = prePayBal - wFIL.balanceOf(agent);
 
         assertEq(
-            pool.paidRentalFees(),
+            pool.lpRewards().paid,
             // avoid stack too deep errors with ternary - assert the portion of payment towards interest matches the contract's paid fees
             payAmount > interestAfterRoll ? interestAfterRoll : payAmount,
             "Paid fees should equal the payment amount minus interest"
@@ -1760,8 +1760,8 @@ contract PoolIsolationTests is BaseTest {
         );
 
         assertApproxEqAbs(
-            pool.accruedRentalFees(),
-            pool.getAgentDebt(agentID) + pool.paidRentalFees() - pool.totalBorrowed(),
+            pool.lpRewards().accrued,
+            pool.getAgentDebt(agentID) + pool.lpRewards().paid - pool.totalBorrowed(),
             _DUST,
             "Total accrued rental fees incorrect"
         );

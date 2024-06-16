@@ -1203,7 +1203,7 @@ contract AgentPoliceTest is BaseTest {
             totalAssetsBefore + recoveredFunds - borrowAmount, totalAssetsAfter, "Pool should have recovered funds"
         );
         assertEq(lostAmount, borrowAmount - recoveredFunds, "lost amount should be correct");
-        assertEq(pool.lostRentalFees(), 0, "lost rental fees should be 0 because no interest");
+        assertEq(pool.lpRewards().lost, 0, "lost rental fees should be 0 because no interest");
 
         assertEq(
             lostAmount,
@@ -1318,7 +1318,7 @@ contract AgentPoliceTest is BaseTest {
         police.distributeLiquidatedFunds(address(agent), recoveredFunds);
 
         uint256 totalAssetsAfter = pool.totalAssets();
-        uint256 totalAccrued = pool.accruedRentalFees();
+        uint256 totalAccrued = pool.lpRewards().accrued;
         uint256 interestAccruedLessTFees = totalAccrued.mulWadUp(1e18 - pool.treasuryFeeRate());
 
         uint256 lostAssets = totalBorrowedBefore + interestAccruedLessTFees - recoveredFunds;
@@ -1337,7 +1337,7 @@ contract AgentPoliceTest is BaseTest {
             interestOwed + borrowAmount - recoveredFunds,
             "no principal was paid, so account.principal should be the original principal amount lost"
         );
-        assertEq(pool.treasuryFeesReserved(), 0, "Treasury fees should be 0 after a partial liquidation");
+        assertEq(pool.treasuryFeesOwed(), 0, "Treasury fees should be 0 after a partial liquidation");
         assertApproxEqAbs(
             pool.convertToAssets(WAD),
             filValOf1iFILBeforeLiquidation.mulWadDown(recoverPercent),
@@ -1347,15 +1347,15 @@ contract AgentPoliceTest is BaseTest {
         assertEq(pool.totalBorrowed(), 0, "Pool should have nothing borrowed after liquidation");
         assertEq(totalAssetsBefore - totalAssetsAfter, lostAssets, "lost assets should be correct");
         if (recoveredFunds >= interestOwed) {
-            assertEq(pool.lostRentalFees(), 0, "pool should not lose rental fees");
-            assertEq(pool.paidRentalFees(), interestOwed, "pool should have paid rental fees");
+            assertEq(pool.lpRewards().lost, 0, "pool should not lose rental fees");
+            assertEq(pool.lpRewards().paid, interestOwed, "pool should have paid rental fees");
         } else {
             assertEq(
-                pool.paidRentalFees(),
+                pool.lpRewards().paid,
                 recoveredFunds,
                 "paid rental fees should be the full recover amount when the recover amount is less than the interest owed"
             );
-            assertEq(pool.lostRentalFees(), interestOwed - recoveredFunds, "lost assets should be correct");
+            assertEq(pool.lpRewards().lost, interestOwed - recoveredFunds, "lost assets should be correct");
         }
     }
 

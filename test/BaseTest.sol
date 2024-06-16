@@ -734,8 +734,8 @@ contract BaseTest is Test {
 
         // the difference between what our current debt is and what we've borrowed is the total amount we've accrued
         // we add back what had paid in interest to get the total amount of rewards we've accrued
-        uint256 accruedRewards = totalDebtFromAccounts - totalBorrowedFromAccounts + pool.paidRentalFees();
-        uint256 accruedRewards2 = totalInterestFromAccounts + pool.paidRentalFees();
+        uint256 accruedRewards = totalDebtFromAccounts - totalBorrowedFromAccounts + pool.lpRewards().paid;
+        uint256 accruedRewards2 = totalInterestFromAccounts + pool.lpRewards().paid;
 
         assertEq(
             accruedRewards,
@@ -745,7 +745,7 @@ contract BaseTest is Test {
 
         assertApproxEqAbs(
             accruedRewards,
-            pool.accruedRentalFees(),
+            pool.lpRewards().accrued,
             MAX_PRECISION_DELTA,
             string(
                 abi.encodePacked(
@@ -761,14 +761,14 @@ contract BaseTest is Test {
         uint256 totalIFILSupply = pool.liquidStakingToken().totalSupply();
 
         assertApproxEqAbs(
-            poolAssets + totalDebtFromAccounts - pool.treasuryFeesReserved(),
+            poolAssets + totalDebtFromAccounts - pool.treasuryFeesOwed(),
             pool.totalAssets(),
             MAX_PRECISION_DELTA,
             string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: pool total assets invariant wrong"))
         );
         assertApproxEqAbs(
             pool.convertToAssets(totalIFILSupply),
-            poolAssets + totalDebtFromAccounts - pool.treasuryFeesReserved(),
+            poolAssets + totalDebtFromAccounts - pool.treasuryFeesOwed(),
             MAX_PRECISION_DELTA,
             string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: iFIL convert to total assets invariant wrong"))
         );

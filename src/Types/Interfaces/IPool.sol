@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
+import {RewardAccrual} from "src/Types/Structs/RewardAccrual.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
@@ -61,19 +62,17 @@ interface IPool {
 
     function getLiquidAssets() external view returns (uint256);
 
-    function treasuryFeesReserved() external view returns (uint256);
+    function lpRewards() external view returns (RewardAccrual memory);
+
+    function treasuryRewards() external view returns (RewardAccrual memory);
+
+    function treasuryFeesOwed() external view returns (uint256);
 
     function getRate() external view returns (uint256);
 
     function credParser() external view returns (address);
 
     function treasuryFeeRate() external view returns (uint256);
-
-    function accruedRentalFees() external view returns (uint256);
-
-    function paidRentalFees() external view returns (uint256);
-
-    function lostRentalFees() external view returns (uint256);
 
     function lastAccountingUpdateEpoch() external view returns (uint256);
 
