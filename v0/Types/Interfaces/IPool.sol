@@ -10,45 +10,21 @@ import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
 import {IERC20} from "v0/Types/Interfaces/IERC20.sol";
 
 interface IPool {
-
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event Borrow(
-        uint256 indexed agent,
-        uint256 amount
-    );
+    event Borrow(uint256 indexed agent, uint256 amount);
 
-    event Pay(
-        uint256 indexed agent,
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    );
+    event Pay(uint256 indexed agent, uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund);
 
-    event Deposit(
-        address indexed caller,
-        address indexed owner,
-        uint256 assets,
-        uint256 shares
-    );
+    event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
     event Withdraw(
-        address indexed caller,
-        address indexed receiver,
-        address indexed owner,
-        uint256 assets,
-        uint256 shares
+        address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares
     );
 
-    event WriteOff(
-      uint256 indexed agentID,
-      uint256 recoveredFunds,
-      uint256 lostFunds,
-      uint256 interestPaid
-    );
+    event WriteOff(uint256 indexed agentID, uint256 recoveredFunds, uint256 lostFunds, uint256 interestPaid);
 
     /*////////////////////////////////////////////////////////
                             GETTERS
@@ -80,14 +56,9 @@ interface IPool {
 
     function feesCollected() external view returns (uint256);
 
-    function getRate(
-        VerifiableCredential calldata vc
-    ) external view returns (uint256);
+    function getRate(VerifiableCredential calldata vc) external view returns (uint256);
 
-    function isApproved(
-        Account calldata account,
-        VerifiableCredential calldata vc
-    ) external view returns (bool);
+    function isApproved(Account calldata account, VerifiableCredential calldata vc) external view returns (bool);
 
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS
@@ -95,14 +66,9 @@ interface IPool {
 
     function borrow(VerifiableCredential calldata vc) external;
 
-    function pay(
-        VerifiableCredential calldata vc
-    ) external returns (
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    );
+    function pay(VerifiableCredential calldata vc)
+        external
+        returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund);
 
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC
@@ -125,6 +91,22 @@ interface IPool {
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
 
     function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
+
+    function redeem(uint256 shares, address receiver, address owner, uint256 totalAssets)
+        external
+        returns (uint256 assets);
+
+    function withdraw(uint256 assets, address receiver, address owner, uint256 totalAssets)
+        external
+        returns (uint256 shares);
+
+    function redeemF(uint256 shares, address receiver, address owner, uint256 totalAssets)
+        external
+        returns (uint256 assets);
+
+    function withdrawF(uint256 assets, address receiver, address owner, uint256 totalAssets)
+        external
+        returns (uint256 shares);
 
     /*//////////////////////////////////////////////////////////////
                             ACCOUNTING LOGIC
@@ -176,4 +158,3 @@ interface IPool {
 
     function writeOff(uint256 agentID, uint256 recoveredDebt) external returns (uint256 totalOwed);
 }
-

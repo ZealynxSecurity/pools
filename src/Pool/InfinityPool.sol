@@ -245,9 +245,10 @@ contract InfinityPool is IPool, Ownable {
     /**
      * @dev Returns the amount of FIL the Pool aims to keep in reserves at the current epoch
      * @return minLiquidity The minimum amount of FIL to keep in reserves
+     * @dev the minimumLiquidity percentage is multiplied by the totalAssets, less accrued interest and accrued treasury fees, to arrive at the basis in which the minLiquidity % should be applied
      */
     function getAbsMinLiquidity() public view returns (uint256) {
-        return (totalAssets().mulWadUp(minimumLiquidity));
+        return (asset.balanceOf(address(this)) + totalBorrowed).mulWadUp(minimumLiquidity);
     }
 
     /**
@@ -618,6 +619,27 @@ contract InfinityPool is IPool, Ownable {
      * @return shares - the number of shares burned
      */
     function withdraw(uint256 assets, address receiver, address owner) public isOpen returns (uint256 shares) {
+        return _withdraw(assets, receiver, owner);
+    }
+
+    /**
+     * @notice Allows Staker to withdraw assets
+     * @param assets The assets to withdraw
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     *  @param (unused) A patch to match the old Offramp interface
+     * @return shares - the number of shares burned
+     */
+    function withdraw(uint256 assets, address receiver, address owner, uint256)
+        public
+        isOpen
+        returns (uint256 shares)
+    {
+        return _withdraw(assets, receiver, owner);
+    }
+
+    /// @dev _withdraw is an internal method that handles the withdrawal logic
+    function _withdraw(uint256 assets, address receiver, address owner) internal returns (uint256 shares) {
         updateAccounting();
         shares = previewWithdraw(assets);
         _processExit(owner, receiver, shares, assets, false);
@@ -632,6 +654,23 @@ contract InfinityPool is IPool, Ownable {
      * @return assets The assets received from burning the shares
      */
     function redeem(uint256 shares, address receiver, address owner) public isOpen returns (uint256 assets) {
+        return _redeem(shares, receiver, owner);
+    }
+
+    /**
+     * @notice Allows the Staker to redeem their shares for assets
+     * @param shares The number of shares to burn
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     *  @param (unused) A patch to match the old Offramp interface
+     * @return assets The assets received from burning the shares
+     */
+    function redeem(uint256 shares, address receiver, address owner, uint256) public isOpen returns (uint256 assets) {
+        return _redeem(shares, receiver, owner);
+    }
+
+    /// @dev _redeem is an internal method that handles the redeem logic
+    function _redeem(uint256 shares, address receiver, address owner) internal returns (uint256 assets) {
         updateAccounting();
         assets = previewRedeem(shares);
         _processExit(owner, receiver, shares, assets, false);

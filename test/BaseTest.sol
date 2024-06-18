@@ -475,9 +475,9 @@ contract BaseTest is Test {
                 0
             )
         );
-        vm.prank(systemAdmin);
-        liquidStakingToken.setMinter(address(_pool));
         vm.startPrank(systemAdmin);
+        liquidStakingToken.setMinter(address(_pool));
+        liquidStakingToken.setBurner(address(_pool));
         IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));
         IRouter(router).pushRoute(ROUTE_POOL_REGISTRY, address(_pool));
         vm.stopPrank();

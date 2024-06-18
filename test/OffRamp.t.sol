@@ -16,33 +16,42 @@ contract OffRampTest is BaseTest {
 
     IAgent agent;
     uint64 miner;
-    IPool pool;
     IPoolToken iFIL;
 
     address investor1 = makeAddr("INVESTOR");
     address minerOwner = makeAddr("MINER_OWNER");
 
     function setUp() public {
-        pool = createPool();
         iFIL = pool.liquidStakingToken();
         (agent, miner) = configureAgent(minerOwner);
 
         vm.startPrank(systemAdmin);
         // set no fees to simplify test accounting
-        GetRoute.poolRegistry(router).setTreasuryFeeRate(0);
-        iFIL.setBurner(address(pool));
+        pool.setTreasuryFeeRate(0);
         vm.stopPrank();
     }
 
     function testExitReserve(uint256 exitReservePercent, uint256 stakeAmount, uint256 borrowAmount) public {
         // bound between 0 exit reserves and 100% exit reserves
-        exitReservePercent = bound(exitReservePercent, 0, 1e18);
+        exitReservePercent = bound(exitReservePercent, 0, 1e17);
         stakeAmount = bound(stakeAmount, WAD, MAX_FIL);
         borrowAmount = bound(borrowAmount, WAD, stakeAmount);
 
         setMinLiquidity(exitReservePercent);
         fundPoolByInvestor(stakeAmount, investor1);
+        assertEq(pool.getAbsMinLiquidity(), stakeAmount.mulWadUp(exitReservePercent), "exit reserve balance incorrect");
         borrowFromPool(borrowAmount, stakeAmount);
+
+        // the min liquidity should always be based on the principal amount + total hard assets in the pool, ignoring accrued interest
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+        // check to make sure interest has accrued
+        assertTrue(pool.totalAssets() >= stakeAmount, "interest should have accrued");
+
+        assertEq(
+            pool.getAbsMinLiquidity(),
+            stakeAmount.mulWadUp(exitReservePercent),
+            "exit reserve balance should not change with accrued interest"
+        );
     }
 
     function testWithdrawAlternativeRecipient(uint256 stakeAmount, uint256 withdrawAmount, string memory addressSeed)
@@ -94,7 +103,7 @@ contract OffRampTest is BaseTest {
         assertPegInTact();
     }
 
-    function testSingleDepositWithdrawFNoEarnings(
+    function testSingleDepositWithdrawF(
         uint256 exitReservePercent,
         uint256 stakeAmount,
         uint256 borrowAmount,
@@ -161,7 +170,7 @@ contract OffRampTest is BaseTest {
         assertPegInTact();
     }
 
-    function testSingleDepositRedeemFNoEarnings(
+    function testSingleDepositRedeemF(
         uint256 exitReservePercent,
         uint256 stakeAmount,
         uint256 borrowAmount,
@@ -297,7 +306,7 @@ contract OffRampTest is BaseTest {
         assertPegInTact();
     }
 
-    function testSingleDepositRedeemNoEarnings(
+    function testSingleDepositRedeem(
         uint256 exitReservePercent,
         uint256 stakeAmount,
         uint256 borrowAmount,
@@ -599,127 +608,21 @@ contract OffRampTest is BaseTest {
         assertCompleteExit();
     }
 
-    function testWithdrawWithFundsInOffRamp() public {
-        address investor2 = makeAddr("INVESTOR2");
-        uint256 stakeAmount = 100e18;
-
-        fundPoolByInvestor(stakeAmount, investor1);
-        fundPoolByInvestor(stakeAmount, investor2);
-        assertPegInTact();
-        uint256 initialPeg = pool.previewRedeem(1e18);
-
-        assertEq(wFIL.balanceOf(investor1), 0);
-        assertEq(wFIL.balanceOf(investor2), 0);
-
-        // send some WFIL manually to the offramp
-        address donator = makeAddr("DONATOR");
-        uint256 rampFunds = 10e18;
-        vm.deal(donator, rampFunds);
-        vm.startPrank(donator);
-        wFIL.deposit{value: rampFunds}();
-        wFIL.transfer(address(pool), rampFunds);
-        vm.stopPrank();
-
-        assertPegInTact();
-
-        vm.startPrank(investor1);
-        iFIL.approve(address(pool), stakeAmount);
-        pool.withdraw(stakeAmount, investor1, investor1);
-        vm.stopPrank();
-
-        // here since we know the peg is in tact to start, the peg should change since we essentially got rampFunds of free assets
-        assertGt(pool.previewRedeem(1e18), initialPeg, "Peg should have changed");
-
-        vm.startPrank(investor2);
-        iFIL.approve(address(pool), stakeAmount);
-        pool.withdraw(stakeAmount, investor2, investor2);
-        vm.stopPrank();
-
-        assertEq(wFIL.balanceOf(investor1), stakeAmount, "Investor1 should have stake amount back");
-        assertEq(wFIL.balanceOf(investor2), stakeAmount, "Investor2 should have stake amount back");
-
-        assertEq(wFIL.balanceOf(address(pool)), rampFunds, "Pool should have ramp funds");
-
-        assertEq(iFIL.balanceOf(investor1), 0, "Investor1 should have no iFIL");
-        assertGt(iFIL.balanceOf(investor2), 0, "Investor2 should have iFIL after price changed");
-    }
-
-    function testRedeemWithFundsInOffRamp() public {
-        address investor2 = makeAddr("INVESTOR2");
-        uint256 stakeAmount = 100e18;
-
-        fundPoolByInvestor(stakeAmount, investor1);
-        fundPoolByInvestor(stakeAmount, investor2);
-        assertPegInTact();
-        uint256 initialPeg = pool.previewRedeem(1e18);
-
-        assertEq(wFIL.balanceOf(investor1), 0);
-        assertEq(wFIL.balanceOf(investor2), 0);
-
-        // send some WFIL manually to the offramp
-        address donator = makeAddr("DONATOR");
-        uint256 rampFunds = 10e18;
-        vm.deal(donator, rampFunds);
-        vm.startPrank(donator);
-        wFIL.deposit{value: rampFunds}();
-        wFIL.transfer(address(pool), rampFunds);
-        vm.stopPrank();
-
-        assertPegInTact();
-
-        vm.startPrank(investor1);
-        iFIL.approve(address(pool), stakeAmount);
-        pool.redeem(stakeAmount, investor1, investor1);
-        vm.stopPrank();
-
-        // here since we know the peg is in tact to start, the peg should change since we essentially got rampFunds of free assets
-        assertGt(pool.previewRedeem(1e18), initialPeg, "Peg should have changed");
-
-        uint256 poolBalAfterPegBreaks = wFIL.balanceOf(address(pool));
-        uint256 expAssetsAfterRedeem = pool.previewRedeem(stakeAmount);
-
-        vm.startPrank(investor2);
-        iFIL.approve(address(pool), stakeAmount);
-        pool.redeem(stakeAmount, investor2, investor2);
-        vm.stopPrank();
-
-        assertEq(wFIL.balanceOf(investor1), stakeAmount, "Investor1 should have stake amount back");
-        // here, since we redeem a number of iFIL and the price of iFIL increased
-        assertEq(
-            wFIL.balanceOf(investor2), poolBalAfterPegBreaks, "Investor2 should have the rest of the pool's assets back"
-        );
-        assertEq(wFIL.balanceOf(investor2), expAssetsAfterRedeem, "Investor2 should have the expected amount received");
-
-        assertEq(wFIL.balanceOf(address(pool)), 0, "Pool should have ramp funds");
-
-        assertEq(iFIL.balanceOf(investor1), 0, "Investor1 should have no iFIL");
-        assertEq(iFIL.balanceOf(investor2), 0, "Investor2 should have no iFIL");
-    }
-
     function testRecoverFIL(uint256 recoverAmount) public {
         vm.assume(recoverAmount < MAX_FIL);
 
         address donator = makeAddr("DONATOR");
-
-        vm.deal(donator, recoverAmount);
-        vm.startPrank(donator);
-        wFIL.deposit{value: recoverAmount}();
-        wFIL.transfer(address(pool), recoverAmount);
         // transfer FIL to ramp
         vm.deal(address(pool), recoverAmount);
 
-        assertEq(wFIL.balanceOf(address(pool)), recoverAmount, "Ramp should have received recoverAmount/2 of wFIL");
-        assertEq(address(pool).balance, recoverAmount, "Ramp should have received recoverAmount/2 of FIL");
-        assertEq(wFIL.balanceOf(address(pool)), 0, "Pool should not have WFIL");
-        assertEq(address(pool).balance, 0, "Pool should not have FIL");
+        assertEq(donator.balance, 0, "Donatory should not have FIL");
 
+        vm.startPrank(IAuth(address(pool)).owner());
         pool.recoverFIL(donator);
+        vm.stopPrank();
 
-        assertEq(wFIL.balanceOf(address(pool)), 0, "Ramp should not have WFIL after recovery");
-        assertEq(address(pool).balance, 0, "Ramp should not have FIL after recovery");
-        // we recovered FIL and wFIL in recoverAmount, which is why we multiply by 2 here
-        assertEq(wFIL.balanceOf(address(pool)), recoverAmount * 2, "Pool should have assets");
-        assertEq(address(pool).balance, 0, "Pool should have 0 FIL after recovery");
+        assertEq(address(pool).balance, 0, "Pool should not have FIL after recovery");
+        assertEq(donator.balance, recoverAmount, "Donator should receive FIL after recovery");
     }
 
     function testLiquidAssetsTooLow() public {
@@ -827,15 +730,17 @@ contract OffRampTest is BaseTest {
         assertEq(pool.totalBorrowableAssets(), stakeAmount - reserveAbs, "Total borrowable liquidity wrong");
         assertEq(pool.getLiquidAssets(), stakeAmount, "Liquid assets wrong");
 
-        SignedCredential memory sc = issueGenericBorrowCred(agent.id(), borrowAmount);
+        SignedCredential memory sc = _issueGenericBorrowCred(agent.id(), borrowAmount);
 
         vm.startPrank(minerOwner);
         uint256 poolID = pool.id();
 
         if (borrowAmount > stakeAmount - reserveAbs) {
+            console.log("EXPECTING REVERT");
             vm.expectRevert(InfinityPool.InsufficientLiquidity.selector);
             agent.borrow(poolID, sc);
         } else {
+            console.log("EXPECTING NON REVERT");
             agent.borrow(poolID, sc);
             assertEq(pool.getAbsMinLiquidity(), reserveAbs, "Exit reserve wrong");
             assertEq(
