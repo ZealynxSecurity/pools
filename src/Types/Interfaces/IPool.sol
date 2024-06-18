@@ -161,4 +161,6 @@ interface IPool {
     function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 
     function setRentalFeesOwedPerEpoch(uint256 _rentalFeesOwedPerEpoch) external;
+
+    function recoverFIL(address receiver) external;
 }
