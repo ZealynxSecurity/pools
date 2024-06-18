@@ -5,20 +5,16 @@ import {FilAddress} from "fevmate/utils/FilAddress.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Ownable} from "src/auth/Ownable.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
-import {AccountHelpers} from "src/Pool/Account.sol";
-import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
-import {Account} from "src/Types/Structs/Account.sol";
 import {ROUTE_INFINITY_POOL} from "src/Constants/Routes.sol";
-import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IERC20} from "src/types/Interfaces/IERC20.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
-import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
 
 interface ERC20Burnable is IERC20 {
-    function burn(uint256 amount) external;
+    function burn(address from, uint256 value) external;
 }
 
 contract LiquidityMineSP is ILiquidityMineSP, Ownable {
@@ -111,11 +107,14 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
         // increase the amount of forfeited rewards
         uint256 toForfeit = info.unclaimedRewards;
         // burn the forfeited rewards
-        ERC20Burnable(address(rewardToken)).burn(toForfeit);
-        // update accounting so its easy to track how many rewards have been forfeited
-        rewardTokensForfeited += toForfeit;
+        ERC20Burnable(address(rewardToken)).burn(address(this), toForfeit);
+        // decrease the allocated amount of rewards and reward cap after burning
+        rewardTokensAllocated -= toForfeit;
+        totalRewardCap -= toForfeit;
         // set the unclaimed rewards to 0
         info.unclaimedRewards = 0;
+        // update accounting so its easy to track how many rewards have been forfeited
+        rewardTokensForfeited += toForfeit;
         // emit
         emit TokensForfeited(agentID, toForfeit);
     }
@@ -130,6 +129,8 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
         AgentLMInfo storage info = _agentInfo[IAgent(agent).id()];
         // only the Agent's owner can harvest rewards on behalf of an Agent
         if (msg.sender != IAuth(agent).owner()) revert Unauthorized();
+        // if an Agent is in default, but the onDefault has yet to be called, the call should revert
+        if (IAgent(agent).defaulted()) revert Unauthorized();
         if (info.unclaimedRewards == 0) revert InsufficientRewards();
         // if the requested amount is greater than the unclaimed rewards, reduce the amount to the unclaimed rewards
         if (amount > info.unclaimedRewards) amount = info.unclaimedRewards;
@@ -146,15 +147,15 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
     }
 
     /// @notice allows the owner of this contract to set the rewards per FIL paid ratio
-    function setRewardPerFIL(uint256 rewardPerFil_) external onlyOwner {
-        rewardPerFIL = rewardPerFil_;
+    function setRewardPerFIL(uint256 rewardPerFIL_) external onlyOwner {
+        if (rewardPerFIL_ >= totalRewardCap - rewardTokensAllocated) revert InsufficientRewards();
+        rewardPerFIL = rewardPerFIL_;
     }
-
-    /// @notice allows the owner of this contract to burn any forfeited rewards
 
     /// @notice allows the owner of this contract to set the pool address
     function setPool(address pool_) external onlyOwner {
-        pool = pool_;
+        if (pool_ == address(0)) pool = IRouter(_router).getRoute(ROUTE_INFINITY_POOL);
+        else pool = pool_;
     }
 
     /// @notice allows the owner of this contract to load more rewards into the contract, extending the liquidity mine
