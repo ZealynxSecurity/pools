@@ -16,7 +16,6 @@ struct ContractRoutes {
     address wFIL;
     address minerRegistry;
     address agentFactory;
-    address poolRegistry;
     address vcIssuer;
     address agentPolice;
     address credParser;
@@ -43,7 +42,6 @@ contract RouterTest is BaseTest {
             makeAddr("MINER_REGISTRY"),
             makeAddr("AGENT_FACTORY"),
             makeAddr("AGENT_POLICE"),
-            makeAddr("POOL_REGISTRY"),
             makeAddr("VC_ISSUER"),
             makeAddr("CRED_PARSER"),
             makeAddr("AGENT_DEPLOYER")
@@ -59,17 +57,12 @@ contract RouterTest is BaseTest {
             contractRouteAddrs[4],
             contractRouteAddrs[5],
             contractRouteAddrs[6],
-            contractRouteAddrs[7],
-            contractRouteAddrs[8]
+            contractRouteAddrs[7]
         );
     }
 
     function testGetAgentFactory() public {
         assertEq(routerInstance.getRoute(ROUTE_AGENT_FACTORY), contractRoutes.agentFactory);
-    }
-
-    function testGetPoolRegistry() public {
-        assertEq(routerInstance.getRoute(ROUTE_POOL_REGISTRY), contractRoutes.poolRegistry);
     }
 
     function testGetMinerRegistry() public {
@@ -112,12 +105,12 @@ contract RouterTest is BaseTest {
 
         bytes4[] memory routeIDs = new bytes4[](2);
         routeIDs[0] = ROUTE_AGENT_FACTORY;
-        routeIDs[1] = ROUTE_POOL_REGISTRY;
+        routeIDs[1] = ROUTE_INFINITY_POOL;
 
         vm.prank(routerAdmin);
         routerInstance.pushRoutes(routeIDs, routes);
         assertEq(routerInstance.getRoute(ROUTE_AGENT_FACTORY), newRoute);
-        assertEq(routerInstance.getRoute(ROUTE_POOL_REGISTRY), newRoute2);
+        assertEq(routerInstance.getRoute(ROUTE_INFINITY_POOL), newRoute2);
     }
 
     function testSetAccountNoAuth() public {
@@ -125,8 +118,8 @@ contract RouterTest is BaseTest {
         uint256 poolId = pool.id();
         vm.prank(address(pool));
         Router(router).setAccount(0, poolId, Account(0, 0, 0, false));
-        IPool badPool = createPool();
-        vm.prank(address(badPool));
+        address badPool = makeAddr("BAD_POOL");
+        vm.prank(badPool);
         vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
         Router(router).setAccount(0, poolId, Account(0, 0, 0, false));
     }

@@ -868,6 +868,13 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
+     * @notice setTreasuryFeeRate sets the treasury fee rate
+     */
+    function setTreasuryFeeRate(uint256 _treasuryFeeRate) external onlyOwner {
+        treasuryFeeRate = _treasuryFeeRate;
+    }
+
+    /**
      * @notice shutDown sets the isShuttingDown variable to true, effectively halting all deposits and borrows
      */
     function shutDown() external onlyOwner {
@@ -974,5 +981,20 @@ contract InfinityPool is IPool, Ownable {
 
     function _onlyAgentPolice() internal view {
         if (address(GetRoute.agentPolice(_router)) != msg.sender) revert Unauthorized();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        POOL REGISTRY FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+    /// @dev these functions patch the pool registry interface in areas that are hard to upgrade (specifically calls to setAccount in the router)
+
+    /// @dev allPoolsLength is hardcoded to 1 as there will now only ever be 1 pool (this one)
+    function allPoolsLength() external pure returns (uint256) {
+        return 1;
+    }
+
+    /// @dev allPools is hardcoded to return the pool itself
+    function allPools(uint256) external view returns (address) {
+        return address(this);
     }
 }

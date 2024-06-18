@@ -18,7 +18,6 @@ import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
-import {PoolRegistry} from "src/Pool/PoolRegistry.sol";
 import {Router} from "src/Router/Router.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
@@ -88,6 +87,7 @@ contract BaseTest is Test {
     WFIL wFIL = new WFIL(systemAdmin);
     MockIDAddrStore idStore;
     address credParser = address(new CredParser());
+    IPool public pool;
 
     constructor() {
         vm.startPrank(systemAdmin);
@@ -96,8 +96,6 @@ contract BaseTest is Test {
         IRouter(router).pushRoute(ROUTE_WFIL_TOKEN, address(wFIL));
 
         address agentFactory = address(new AgentFactory(router));
-        // 1e17 = 10% treasury fee on yield
-        address poolRegistry = address(new PoolRegistry(10e16, systemAdmin, router));
 
         vcIssuer = vm.addr(vcIssuerPk);
         Deployer.setupContractRoutes(
@@ -107,7 +105,6 @@ contract BaseTest is Test {
             address(new MinerRegistry(router, IAgentFactory(agentFactory))),
             agentFactory,
             address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, systemAdmin, systemAdmin, router)),
-            poolRegistry,
             vcIssuer,
             credParser,
             address(new AgentDeployer())
@@ -123,6 +120,8 @@ contract BaseTest is Test {
             address(idStore) == MinerHelper.ID_STORE_ADDR, "ID_STORE_ADDR must be set to the address of the IDAddrStore"
         );
         vm.stopPrank();
+
+        pool = createPool();
     }
 
     function configureAgent(address minerOwner) public returns (Agent, uint64 minerID) {
@@ -463,10 +462,9 @@ contract BaseTest is Test {
         return SignedCredential(vc, v, r, s);
     }
 
-    function createPool() internal returns (IPool pool) {
-        IPoolRegistry poolRegistry = GetRoute.poolRegistry(router);
+    function createPool() internal returns (IPool) {
         PoolToken liquidStakingToken = new PoolToken(systemAdmin);
-        pool = IPool(
+        IPool _pool = IPool(
             new InfinityPool(
                 systemAdmin,
                 router,
@@ -474,36 +472,17 @@ contract BaseTest is Test {
                 address(liquidStakingToken),
                 ILiquidityMineSP(address(0)),
                 0,
-                GetRoute.poolRegistry(router).allPoolsLength()
+                0
             )
         );
         vm.prank(systemAdmin);
-        liquidStakingToken.setMinter(address(pool));
+        liquidStakingToken.setMinter(address(_pool));
         vm.startPrank(systemAdmin);
-        poolRegistry.attachPool(pool);
-        IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(pool));
+        IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));
+        IRouter(router).pushRoute(ROUTE_POOL_REGISTRY, address(_pool));
         vm.stopPrank();
-    }
 
-    function createAndFundPool(uint256 amount, address investor) internal returns (IPool pool) {
-        pool = createPool();
-        depositFundsIntoPool(pool, amount, investor);
-    }
-
-    function poolBasicSetup(uint256 stakeAmount, uint256 borrowAmount, address investor1, address minerOwner)
-        internal
-        returns (
-            IPool pool,
-            Agent agent,
-            uint64 miner,
-            SignedCredential memory borrowCredBasic,
-            VerifiableCredential memory vcBasic
-        )
-    {
-        pool = createAndFundPool(stakeAmount, investor1);
-        (agent, miner) = configureAgent(minerOwner);
-        borrowCredBasic = issueGenericBorrowCred(agent.id(), borrowAmount);
-        vcBasic = borrowCredBasic.vc;
+        return _pool;
     }
 
     function createAccount(uint256 amount) internal view returns (Account memory account) {
@@ -511,7 +490,7 @@ contract BaseTest is Test {
         account = Account(currentBlock, amount, currentBlock, false);
     }
 
-    function depositFundsIntoPool(IPool pool, uint256 amount, address investor) internal {
+    function depositFundsIntoPool(uint256 amount, address investor) internal {
         IERC4626 pool4626 = IERC4626(address(pool));
         // `investor` stakes `amount` FIL
         vm.deal(investor, amount);
@@ -522,10 +501,10 @@ contract BaseTest is Test {
         vm.stopPrank();
     }
 
-    function agentBorrow(IAgent agent, uint256 poolID, SignedCredential memory sc) internal {
-        IPool pool = GetRoute.pool(GetRoute.poolRegistry(router), poolID);
+    function agentBorrow(IAgent agent, SignedCredential memory sc) internal {
+        uint256 poolID = pool.id();
         uint256 preTotalBorrowed = pool.totalBorrowed();
-        testInvariants(pool, "agentBorrow Start");
+        testInvariants("agentBorrow Start");
         vm.startPrank(_agentOwner(agent));
         // Establsh the state before the borrow
         StateSnapshot memory preBorrowState = _snapshot(address(agent), poolID);
@@ -563,10 +542,10 @@ contract BaseTest is Test {
                 "Pool totalBorrowed should be correct"
             );
         }
-        testInvariants(pool, "agentBorrow End");
+        testInvariants("agentBorrow End");
     }
 
-    function agentPay(IAgent agent, IPool pool, SignedCredential memory sc)
+    function agentPay(IAgent agent, SignedCredential memory sc)
         internal
         returns (
             uint256 rate,
@@ -576,7 +555,7 @@ contract BaseTest is Test {
             StateSnapshot memory prePayState
         )
     {
-        testInvariants(pool, "agentPay Start");
+        testInvariants("agentPay Start");
         vm.startPrank(address(agent));
         vm.deal(address(agent), sc.vc.value);
         wFIL.deposit{value: sc.vc.value}();
@@ -615,10 +594,10 @@ contract BaseTest is Test {
             assertGt(account.epochsPaid, prePayEpochsPaid, "Should have paid more epochs");
         }
 
-        testInvariants(pool, "agentPay End");
+        testInvariants("agentPay End");
     }
 
-    function assertPegInTact(IPool pool) internal {
+    function assertPegInTact() internal {
         uint256 FILtoIFIL = pool.convertToShares(WAD);
         uint256 IFILtoFIL = pool.convertToAssets(WAD);
         assertEq(FILtoIFIL, IFILtoFIL, "Peg should be 1:1");
@@ -644,17 +623,13 @@ contract BaseTest is Test {
         interestOwedPerEpoch = _interestOwedPerEpoch / WAD;
     }
 
-    function putAgentOnAdministration(
-        IAgent agent,
-        address administration,
-        uint256 rollFwdPeriod,
-        uint256 borrowAmount,
-        uint256 poolID
-    ) internal {
+    function putAgentOnAdministration(IAgent agent, address administration, uint256 rollFwdPeriod, uint256 borrowAmount)
+        internal
+    {
         IAgentPolice police = GetRoute.agentPolice(router);
         SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
 
-        agentBorrow(agent, poolID, borrowCred);
+        agentBorrow(agent, borrowCred);
 
         vm.roll(block.number + rollFwdPeriod);
 
@@ -670,19 +645,15 @@ contract BaseTest is Test {
         SignedCredential memory defaultCred = issueGenericSetDefaultCred(agent.id(), principal);
 
         // set an account in storage with some principal
-        agentBorrow(agent, 0, issueGenericBorrowCred(agent.id(), principal));
+        agentBorrow(agent, issueGenericBorrowCred(agent.id(), principal));
 
         vm.startPrank(IAuth(address(police)).owner());
         police.setAgentDefaultDTL(address(agent), defaultCred);
         vm.stopPrank();
 
-        testInvariants(IPool(IRouter(router).getRoute(ROUTE_INFINITY_POOL)), "setAgentDefaultDTL");
+        testInvariants("setAgentDefaultDTL");
 
         assertTrue(agent.defaulted(), "Agent should be put into default");
-    }
-
-    function _borrowedPoolsCount(uint256 agentID) internal view returns (uint256) {
-        return GetRoute.poolRegistry(router).poolIDs(agentID).length;
     }
 
     function _agentOwner(IAgent agent) internal view returns (address) {
@@ -699,18 +670,17 @@ contract BaseTest is Test {
         snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
         snapshot.agentBorrowed = account.principal;
         snapshot.accountEpochsPaid = account.epochsPaid;
-        snapshot.agentPoolBorrowCount = _borrowedPoolsCount(IAgent(agent).id());
     }
 
     function _getAdjustedRate() internal pure returns (uint256) {
         return FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
     }
 
-    function testInvariants(IPool pool, string memory label) internal {
-        _invIFILWorthAssetsOfPool(pool, label);
+    function testInvariants(string memory label) internal {
+        _invIFILWorthAssetsOfPool(label);
     }
 
-    function _invIFILWorthAssetsOfPool(IPool pool, string memory label) internal {
+    function _invIFILWorthAssetsOfPool(string memory label) internal {
         uint256 MAX_PRECISION_DELTA = 1;
         // this invariant knows that iFIL should represent the total value of the pool, which is composed of:
         // 1. all funds given to miners + agents
