@@ -3,7 +3,7 @@ pragma solidity 0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
 import {MAX_FIL} from "./BaseTest.sol";
-import {LiquidityMineSP} from "src/Pool/LiquidityMineSP.sol";
+import {LiquidityMineSP} from "src/Token/LiquidityMineSP.sol";
 import {Router, GetRoute} from "src/Router/Router.sol";
 import {MockERC20} from "solmate/test/utils/mocks/MockERC20.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
