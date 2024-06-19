@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 // Interface for the Pool Deployer contract
 import {IPool} from "src/Types/Interfaces/IPool.sol";

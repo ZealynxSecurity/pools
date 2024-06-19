@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 // solhint-disable private-vars-leading-underscore
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {Account} from "src/Types/Structs/Account.sol";

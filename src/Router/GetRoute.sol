@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
