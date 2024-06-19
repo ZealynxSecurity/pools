@@ -7,9 +7,8 @@ import {Token} from "src/Token/Token.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-interface MintBurnERC20 is IERC20 {
+interface MintERC20 is IERC20 {
     function mint(address to, uint256 value) external;
-    function burn(address from, uint256 value) external;
 }
 
 // constants
@@ -35,8 +34,8 @@ contract LiquidityMineLPTest is Test {
     function setUp() public {
         rewardPerEpoch = 1_000_000e18;
         totalRewards = 100_000_000e18;
-        rewardToken = IERC20(address(new Token("GLIF", "GLF", sysAdmin, address(this), address(this))));
-        lockToken = IERC20(address(new Token("iFIL", "iFIL", sysAdmin, address(this), address(this))));
+        rewardToken = IERC20(address(new Token("GLIF", "GLF", sysAdmin, address(this))));
+        lockToken = IERC20(address(new Token("iFIL", "iFIL", sysAdmin, address(this))));
 
         deployBlock = block.number;
         lm = new LiquidityMineLP(rewardToken, lockToken, rewardPerEpoch, sysAdmin);
@@ -190,7 +189,7 @@ contract LiquidityMineLPTest is Test {
         uint256 depositAmt = 1e18;
 
         _loadRewards(totalRewards);
-        MintBurnERC20(address(lockToken)).mint(investor, 1e18 * 2);
+        MintERC20(address(lockToken)).mint(investor, 1e18 * 2);
 
         assertUserInfo(investor, 0, 0, 0, "test_DepositTwoTimes1");
 
@@ -280,8 +279,8 @@ contract LiquidityMineLPTest is Test {
 
         assertRewardCapInvariant("test_SplitRewardsEven1");
 
-        MintBurnERC20(address(lockToken)).mint(investor, 1e18);
-        MintBurnERC20(address(lockToken)).mint(investor2, 1e18);
+        MintERC20(address(lockToken)).mint(investor, 1e18);
+        MintERC20(address(lockToken)).mint(investor2, 1e18);
 
         assertUserInfo(investor, 0, 0, 0, "test_SplitRewardsEven1");
         assertUserInfo(investor2, 0, 0, 0, "test_SplitRewardsEven2");
@@ -341,8 +340,8 @@ contract LiquidityMineLPTest is Test {
         address investor2 = makeAddr("investor2");
         uint256 totalFundedEpochs = lm.fundedEpochsLeft();
 
-        MintBurnERC20(address(lockToken)).mint(investor, 1e18);
-        MintBurnERC20(address(lockToken)).mint(investor2, 1e18);
+        MintERC20(address(lockToken)).mint(investor, 1e18);
+        MintERC20(address(lockToken)).mint(investor2, 1e18);
 
         assertUserInfo(investor, 0, 0, 0, "test_DualDepositSplitRewardsEvenStaggered1");
         assertUserInfo(investor2, 0, 0, 0, "test_DualDepositSplitRewardsEvenStaggered2");
@@ -606,8 +605,8 @@ contract LiquidityMineLPTest is Test {
 
         _loadRewards(totalRewards);
 
-        MintBurnERC20(address(lockToken)).mint(investor, 1e18);
-        MintBurnERC20(address(lockToken)).mint(investor2, 1e18);
+        MintERC20(address(lockToken)).mint(investor, 1e18);
+        MintERC20(address(lockToken)).mint(investor2, 1e18);
 
         assertRewardCapInvariant("test_DualDepositSplitRewardsUneven1");
         assertUserInfo(investor, 0, 0, 0, "test_DualDepositSplitRewardsUneven1");
@@ -699,7 +698,7 @@ contract LiquidityMineLPTest is Test {
 
         _loadRewards(totalRewards);
 
-        MintBurnERC20(address(lockToken)).mint(investor, depositAmount);
+        MintERC20(address(lockToken)).mint(investor, depositAmount);
         vm.startPrank(investor);
         lockToken.approve(address(lm), depositAmount);
         lm.deposit(depositAmount);
@@ -818,7 +817,7 @@ contract LiquidityMineLPTest is Test {
     }
 
     function _loadRewards(uint256 totalRewardsToDistribute) internal {
-        MintBurnERC20(address(rewardToken)).mint(address(this), totalRewardsToDistribute);
+        MintERC20(address(rewardToken)).mint(address(this), totalRewardsToDistribute);
         rewardToken.approve(address(lm), totalRewardsToDistribute);
 
         uint256 preloadBal = rewardToken.balanceOf(address(lm));
@@ -840,7 +839,7 @@ contract LiquidityMineLPTest is Test {
     }
 
     function _depositLockTokens(address user, uint256 amount) internal {
-        MintBurnERC20(address(lockToken)).mint(user, amount);
+        MintERC20(address(lockToken)).mint(user, amount);
         uint256 preLockTokens = lm.userInfo(user).lockedTokens;
         vm.startPrank(user);
         lockToken.approve(address(lm), amount);

@@ -5,7 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {MAX_FIL} from "./BaseTest.sol";
 import {LiquidityMineSP} from "src/Token/LiquidityMineSP.sol";
 import {Router, GetRoute} from "src/Router/Router.sol";
-import {MockERC20} from "solmate/test/utils/mocks/MockERC20.sol";
+import {Token} from "src/Token/Token.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {IERC20} from "src/types/Interfaces/IERC20.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
@@ -13,9 +13,8 @@ import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 import {ROUTE_INFINITY_POOL} from "src/Constants/Routes.sol";
 
-interface MintBurnERC20 is IERC20 {
+interface MintERC20 is IERC20 {
     function mint(address to, uint256 value) external;
-    function burn(address from, uint256 value) external;
 }
 
 contract LiquidityMineSPTest is Test {
@@ -23,7 +22,7 @@ contract LiquidityMineSPTest is Test {
 
     LiquidityMineSP public lm;
     Router public router;
-    IERC20 public rewardToken;
+    Token public rewardToken;
 
     address public pool = makeAddr("pool");
     address public sysAdmin = makeAddr("system admin");
@@ -37,12 +36,12 @@ contract LiquidityMineSPTest is Test {
 
     function setUp() public {
         router = new Router(sysAdmin);
-        rewardToken = IERC20(address(new MockERC20("GLIF", "GLF", 18)));
+        rewardToken = new Token("GLIF", "GLF", sysAdmin, address(this));
         vm.startPrank(sysAdmin);
         router.pushRoute(ROUTE_INFINITY_POOL, pool);
         vm.stopPrank();
 
-        lm = new LiquidityMineSP(rewardToken, sysAdmin, address(router), rewardsPerFIL);
+        lm = new LiquidityMineSP(IERC20(address(rewardToken)), sysAdmin, address(router), rewardsPerFIL);
 
         vm.mockCall(agent, abi.encodeWithSelector(bytes4(keccak256("id()"))), abi.encode(agentID));
         vm.mockCall(agent, abi.encodeWithSelector(IAuth.owner.selector), abi.encode(agentOwner));
@@ -257,7 +256,7 @@ contract LiquidityMineSPTest is Test {
     }
 
     function _loadRewards(uint256 totalRewardsToDistribute) internal {
-        MintBurnERC20(address(rewardToken)).mint(address(this), totalRewardsToDistribute);
+        MintERC20(address(rewardToken)).mint(address(this), totalRewardsToDistribute);
         rewardToken.approve(address(lm), totalRewardsToDistribute);
 
         uint256 preloadBal = rewardToken.balanceOf(address(lm));

@@ -14,7 +14,7 @@ import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
 
 interface ERC20Burnable is IERC20 {
-    function burn(address from, uint256 value) external;
+    function burn(uint256 value) external;
 }
 
 contract LiquidityMineSP is ILiquidityMineSP, Ownable {
@@ -107,7 +107,7 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
         // increase the amount of forfeited rewards
         uint256 toForfeit = info.unclaimedRewards;
         // burn the forfeited rewards
-        ERC20Burnable(address(rewardToken)).burn(address(this), toForfeit);
+        ERC20Burnable(address(rewardToken)).burn(toForfeit);
         // decrease the allocated amount of rewards and reward cap after burning
         rewardTokensAllocated -= toForfeit;
         totalRewardCap -= toForfeit;
