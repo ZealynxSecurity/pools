@@ -1016,7 +1016,7 @@ contract AgentPoliceTest is BaseTest {
 
         vm.startPrank(minerOwner);
         uint256 poolID = pool.id();
-        vm.expectRevert("ECDSA: invalid signature 's' value");
+        vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignatureS.selector, flippedS));
         agent.borrow(poolID, replayedCred);
 
         vm.stopPrank();

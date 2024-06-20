@@ -4,6 +4,7 @@ pragma solidity ^0.8.17;
 import {Test, console} from "forge-std/Test.sol";
 import {LiquidityMineLP, MIN_REWARD_PER_EPOCH} from "src/Token/LiquidityMineLP.sol";
 import {Token} from "src/Token/Token.sol";
+import {PoolToken} from "shim/PoolToken.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {UserInfo} from "src/Types/Structs/UserInfo.sol";
@@ -36,7 +37,9 @@ contract LiquidityMineLPTest is Test {
         rewardPerEpoch = 1_000_000e18;
         totalRewards = 100_000_000e18;
         rewardToken = IERC20(address(new Token("GLIF", "GLF", sysAdmin, address(this))));
-        lockToken = IERC20(address(new Token("iFIL", "iFIL", sysAdmin, address(this))));
+        PoolToken pt = new PoolToken(address(this));
+        pt.setMinter(address(this));
+        lockToken = IERC20(address(pt));
 
         deployBlock = block.number;
         lm = new LiquidityMineLP(rewardToken, lockToken, rewardPerEpoch, sysAdmin);
