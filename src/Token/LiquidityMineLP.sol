@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.17;
+pragma solidity 0.8.20;
 
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {FilAddress} from "fevmate/utils/FilAddress.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 import {ILiquidityMineLP} from "src/Types/Interfaces/ILiquidityMineLP.sol";
+import {IERC20Burnable} from "src/Types/Interfaces/IERC20Burnable.sol";
 import {UserInfo} from "src/Types/Structs/UserInfo.sol";
 
 uint256 constant MIN_REWARD_PER_EPOCH = 1e10;
@@ -23,6 +24,7 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     error NoRewardsToHarvest();
     error InsufficientRewardTokenBalance();
     error RewardPerEpochTooSmall();
+    error LMShutdown();
 
     /// @notice the token that gets paid out as a reward (GLIF)
     IERC20 public immutable rewardToken;
@@ -41,6 +43,8 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     uint256 public rewardTokensClaimed;
     /// @notice the total funding amount of the contract
     uint256 public totalRewardCap;
+    /// @notice shutdown is a one way flag that, once set, ends the LM
+    bool public shutdown = false;
     /// @notice userInfo tracks information about each user that deposits locked tokens
     mapping(address => UserInfo) private _userInfo;
 
@@ -52,6 +56,7 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     event LogUpdateAccounting(
         uint64 lastRewardBlock, uint256 lockTokenSupply, uint256 accRewardsPerLockToken, uint256 accRewardsTotal
     );
+    event Shutdown(uint256 rewardTokensBurned);
 
     constructor(IERC20 _rewardToken, IERC20 _lockToken, uint256 _rewardPerEpoch, address _owner) Ownable(_owner) {
         rewardToken = _rewardToken;
@@ -72,18 +77,21 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
 
     /// @notice fundedEpochsLeft returns the number of epochs left until the LM is over
     function fundedEpochsLeft() external view returns (uint256) {
+        if (shutdown) return 0;
         (, uint256 accRewardsTotal_,) = _computeAccRewards();
         return (totalRewardCap - accRewardsTotal_) / rewardPerEpoch;
     }
 
     /// @notice rewardsLeft returns the number of reward tokens that are left to issue in the LM
     function rewardsLeft() external view returns (uint256) {
+        if (shutdown) return 0;
         (, uint256 accRewardsTotal_,) = _computeAccRewards();
         return totalRewardCap - accRewardsTotal_;
     }
 
     /// @notice pendingRewards returns the amount of rewards that a user can harvest
     function pendingRewards(address user) external view returns (uint256) {
+        if (shutdown) return 0;
         (uint256 accRewardsPerLockToken_,,) = _computeAccRewards();
         UserInfo storage u = _userInfo[user.normalize()];
         return u.lockedTokens.mulWadDown(accRewardsPerLockToken_) + u.unclaimedRewards - u.rewardDebt;
@@ -97,6 +105,8 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     /// @notice deposit allows a user to deposit lockTokens into the LM, specifying a beneficiary other than the caller
     function deposit(uint256 amount, address beneficiary) public {
         updateAccounting();
+
+        if (shutdown) revert LMShutdown();
 
         beneficiary = beneficiary.normalize();
         UserInfo storage user = _userInfo[beneficiary];
@@ -164,6 +174,7 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     /// @notice loadRewards pulls reward tokens from the caller into this contract and updates the totalRewardCap
     /// @dev loadRewards triggers an accounting update as to prevent rewards from accruing in blocks where there are no rewards
     function loadRewards(uint256 amount) external {
+        if (shutdown) revert LMShutdown();
         // first update the accounting such that the new rewards don't get included in historical accRewardsPerLockToken
         updateAccounting();
         // add the new reward tokens to our internal balance tracker
@@ -215,6 +226,8 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     }
 
     function _harvest(uint256 amount, UserInfo storage user, address receiver) internal {
+        if (shutdown) revert LMShutdown();
+
         // totalRewardDebt is the total amount of rewards that the user is entitled to based on their locked tokens
         uint256 totalRewardDebt = user.lockedTokens.mulWadDown(accRewardsPerLockToken);
         // pending is the total amount of rewards that the user can claim
@@ -254,5 +267,17 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
         updateAccounting();
 
         rewardPerEpoch = _rewardsPerEpoch;
+    }
+
+    /// @notice shutdownLM allows the owner to end the LM and burn any remaining rewards
+    /// @dev this is a one way operation
+    function shutdownLM() external onlyOwner {
+        updateAccounting();
+        shutdown = true;
+
+        uint256 toBurn = rewardToken.balanceOf(address(this));
+        IERC20Burnable(address(rewardToken)).burn(toBurn);
+
+        emit Shutdown(toBurn);
     }
 }

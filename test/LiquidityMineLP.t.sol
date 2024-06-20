@@ -746,7 +746,7 @@ contract LiquidityMineLPTest is Test {
 
         // pick random users to harvest at 10 random epochs along the way
         uint256 fundedEpochsLeft = lm.fundedEpochsLeft();
-        uint256 chunks = 10;
+        uint256 chunks = 100;
         if (accounts < chunks) {
             chunks = accounts;
         }
@@ -785,7 +785,19 @@ contract LiquidityMineLPTest is Test {
             );
         }
 
+        // at this point, all the tokens should have been claimed, and the rewards left should be 0, there should not be any balance of tokens on the LM
+        // @audit this is the most worrying test bc we are not 100% certain as to how bad the dust at the end can get
+        // < 1 reward token at the end is completely acceptable, but where does it stop?
+        assertApproxEqAbs(rewardToken.balanceOf(address(lm)), 0, 1e18, "reward tokens should be fully paid out");
         assertRewardCapInvariant("testFuzz_MultiUserDepositHarvest3");
+
+        vm.prank(sysAdmin);
+        lm.shutdownLM();
+
+        assertEq(rewardToken.balanceOf(address(lm)), 0, "reward tokens should be 0 after shutdown");
+        assertTrue(lm.shutdown());
+        // at this point, the reward cap invariant should break, as the LM is shut down and excess tokens burnt
+        // assertRewardCapInvariant("testFuzz_MultiUserDepositHarvest4");
     }
 
     // this test ensures that rewards do not accrue if there would be a problem with rounding down on accRewardsPerLockToken

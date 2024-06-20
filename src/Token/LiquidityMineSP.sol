@@ -12,14 +12,13 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
-
-interface ERC20Burnable is IERC20 {
-    function burn(uint256 value) external;
-}
+import {IERC20Burnable} from "src/Types/Interfaces/IERC20Burnable.sol";
 
 contract LiquidityMineSP is ILiquidityMineSP, Ownable {
     using FixedPointMathLib for uint256;
     using FilAddress for address;
+
+    error LMShutdown();
 
     /// @notice the router contract that is responsible for routing messages to the correct contracts
     address private immutable _router;
@@ -37,12 +36,15 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
     uint256 public rewardTokensForfeited;
     /// @notice the total amount of rewardTokens that are allocatd per FIL in fees paid
     uint256 public rewardPerFIL;
+    /// @notice shutdown is a one way flag that, once set, ends the LM
+    bool public shutdown = false;
     /// @notice maps an agent ID to their reward info
     mapping(uint256 => AgentLMInfo) private _agentInfo;
 
     event TokensAllocated(uint256 indexed agent, uint256 amount);
     event TokensForfeited(uint256 indexed agent, uint256 amount);
     event Harvest(address indexed caller, address indexed receiver, uint256 amount, uint256 rewardsUnclaimed);
+    event Shutdown(uint256 rewardTokensBurned);
 
     modifier onlyPool() {
         if (pool != msg.sender) revert Unauthorized();
@@ -59,6 +61,7 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
 
     /// @notice returns the amount of rewards that an agent ID can claim
     function pendingRewards(uint256 agentId) public view returns (uint256) {
+        if (shutdown) return 0;
         return _agentInfo[agentId].unclaimedRewards;
     }
 
@@ -69,6 +72,8 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
 
     /// @notice returns the amount of rewards that the system has left to allocate to Agents
     function rewardsLeft() external view returns (uint256) {
+        if (shutdown) return 0;
+
         return totalRewardCap - rewardTokensAllocated;
     }
 
@@ -84,6 +89,9 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
 
     /// @notice hook that is called when an Agent makes a payment
     function onPaymentMade(uint256 agentID, uint256 feePayment) external onlyPool {
+        // here we dont want to revert because we dont want to block the pool from continuing to operate
+        if (shutdown) return;
+
         AgentLMInfo storage info = _agentInfo[agentID];
         // increase the fees paid by the Agent
         info.feesPaid += feePayment;
@@ -103,11 +111,14 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
 
     /// @notice onDefault forfeits the rewards of an Agent that has defaulted
     function onDefault(uint256 agentID) external onlyPool {
+        // here we dont want to revert because we dont want to block the pool from continuing to operate
+        if (shutdown) return;
+
         AgentLMInfo storage info = _agentInfo[agentID];
         // increase the amount of forfeited rewards
         uint256 toForfeit = info.unclaimedRewards;
         // burn the forfeited rewards
-        ERC20Burnable(address(rewardToken)).burn(toForfeit);
+        IERC20Burnable(address(rewardToken)).burn(toForfeit);
         // decrease the allocated amount of rewards and reward cap after burning
         rewardTokensAllocated -= toForfeit;
         totalRewardCap -= toForfeit;
@@ -126,6 +137,8 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
 
     /// @notice allows the owner of an Agent to harvest rewards on behalf of a recipient
     function harvest(address agent, address receiver, uint256 amount) public {
+        if (shutdown) revert LMShutdown();
+
         AgentLMInfo storage info = _agentInfo[IAgent(agent).id()];
         // only the Agent's owner can harvest rewards on behalf of an Agent
         if (msg.sender != IAuth(agent).owner()) revert Unauthorized();
@@ -160,9 +173,21 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
 
     /// @notice allows the owner of this contract to load more rewards into the contract, extending the liquidity mine
     function loadRewards(uint256 amount) external {
+        if (shutdown) revert LMShutdown();
         // update the total reward cap in the contract
         totalRewardCap += amount;
         // pull the tokens into this contract from the sender
         rewardToken.transferFrom(msg.sender, address(this), amount);
+    }
+
+    /// @notice shutdownLM allows the owner to end the LM and burn any remaining rewards
+    /// @dev this is a one way operation
+    function shutdownLM() external onlyOwner {
+        shutdown = true;
+
+        uint256 toBurn = rewardToken.balanceOf(address(this));
+        IERC20Burnable(address(rewardToken)).burn(toBurn);
+
+        emit Shutdown(toBurn);
     }
 }
