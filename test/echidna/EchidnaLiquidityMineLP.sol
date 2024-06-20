@@ -56,7 +56,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
     // ==                DEPOSIT                 ==
     // ============================================
 
-    function test_locked_tokens_increase(uint256 amount) public {
+    function echtest_locked_tokens_increase(uint256 amount) public {
         if (amount == 0) return;
         if (amount > 1e24) return;
 
@@ -77,7 +77,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
         assert(finalLockedTokens == amount + initialLockedTokens);
     }
 
-    function test_unclaimed_rewards_calculation(uint256 amount) public {
+    function echtest_unclaimed_rewards_calculation(uint256 amount) public {
         if (amount == 0) return;
         if (amount > 1e24) return;
 
@@ -99,7 +99,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
         assert(user.unclaimedRewards == expectedUnclaimedRewards);
     }
 
-    function test_reward_debt_calculation(uint256 amount) public {
+    function echtest_reward_debt_calculation(uint256 amount) public {
         if (amount == 0) return;
         if (amount > 1e24) return;
 
@@ -113,7 +113,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
         assert(userInfo.rewardDebt == expectedRewardDebt);
     }
 
-    function test_deposit_transfer_successful(uint256 amount) public {
+    function echtest_deposit_transfer_successful(uint256 amount) public {
         if (amount == 0) return;
         if (amount > 1e24) return;
 
@@ -145,7 +145,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
     // ==               WITHDRAW                 ==
     // ============================================
 
-    function test_locked_tokens_decrease(uint256 depositAmount, uint256 withdrawAmount) public {
+    function echtest_locked_tokens_decrease(uint256 depositAmount, uint256 withdrawAmount) public {
         if (depositAmount == 0 || depositAmount > 1e24) return;
         if (withdrawAmount > depositAmount) return;
 
@@ -169,7 +169,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
         assert(finalLockedTokens == currentLockedTokens);
     }
 
-    function test_unclaimed_rewards_update(uint256 depositAmount, uint256 withdrawAmount) public {
+    function echtest_unclaimed_rewards_update(uint256 depositAmount, uint256 withdrawAmount) public {
         if (depositAmount == 0 || depositAmount > 1e24) return;
         if (withdrawAmount > depositAmount) return;
 
@@ -194,7 +194,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
         assert(finalUnclaimedRewards == expectedUnclaimedRewards);
     }
 
-    function test_reward_debt_update(uint256 depositAmount, uint256 withdrawAmount) public {
+    function echtest_reward_debt_update(uint256 depositAmount, uint256 withdrawAmount) public {
         if (depositAmount == 0 || depositAmount > 1e24) return;
         if (withdrawAmount > depositAmount) return;
 
@@ -213,7 +213,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
         assert(userInfoAfter.rewardDebt == expectedRewardDebt);
     }
 
-    function test_withdraw_transfer_successful(uint256 depositAmount, uint256 withdrawAmount) public {
+    function echtest_withdraw_transfer_successful(uint256 depositAmount, uint256 withdrawAmount) public {
         if (depositAmount == 0 || depositAmount > 1e24) return;
         if (withdrawAmount > depositAmount) return;
 
@@ -244,7 +244,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
     //  @audit-issue fails due to precision loss
     //  Debug("currentUnclaimedRewards", 23945999999999999999994)
     //  Debug("expectedUnclaimedRewards", 23865999999999999999995)
-    function test_harvest_rewards_update(uint256 depositAmount, uint256 harvestAmount, uint256 nextBlocks) public {
+    function echtest_harvest_rewards_update(uint256 depositAmount, uint256 harvestAmount, uint256 nextBlocks) public {
         if (depositAmount == 0 || depositAmount > 1e24) return;
         if (harvestAmount > depositAmount) return;
 
@@ -287,7 +287,9 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
         assert(currentUnclaimedRewards == expectedUnclaimedRewards);
     }
 
-    function test_reward_debt_after_harvest(uint256 depositAmount, uint256 harvestAmount, uint256 nextBlocks) public {
+    function echtest_reward_debt_after_harvest(uint256 depositAmount, uint256 harvestAmount, uint256 nextBlocks)
+        public
+    {
         if (depositAmount == 0 || depositAmount > 1e24) return;
         if (harvestAmount > depositAmount) return;
 
@@ -323,7 +325,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
     // ==          WITHDRAW & HARVEST            ==
     // ============================================
 
-    function test_withdraw_and_harvest_basic(uint256 depositAmount, uint256 withdrawAmount, uint256 nextBlocks)
+    function echtest_withdraw_and_harvest_basic(uint256 depositAmount, uint256 withdrawAmount, uint256 nextBlocks)
         public
     {
         if (depositAmount == 0 || withdrawAmount == 0) return;
@@ -363,7 +365,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
     // ==           _COMPUTE ACC REWARDS         ==
     // ============================================
 
-    function test_multiple_deposits_accrual(uint256 depositAmount1, uint256 depositAmount2, uint256 blocks) public {
+    function echtest_multiple_deposits_accrual(uint256 depositAmount1, uint256 depositAmount2, uint256 blocks) public {
         if (depositAmount1 == 0 || depositAmount2 == 0 || blocks == 0) return;
         if (depositAmount1 > 1e24 || depositAmount2 > 1e24 || blocks > 1000) return;
 
@@ -427,7 +429,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
         assert(lockTokenSupply == totalDepositAmount + initialLockTokenSupply);
     }
 
-    function test_reward_cap_exceeded(uint256 depositAmount, uint256 blocks) public {
+    function echtest_reward_cap_exceeded(uint256 depositAmount, uint256 blocks) public {
         // Validate input parameters
         if (depositAmount == 0 || depositAmount > 1e24) return;
         if (blocks == 0) return;
@@ -466,7 +468,7 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
     // ==             setRewardPerEpoch          ==
     // ============================================
 
-    function test_set_reward_per_epoch(
+    function echtest_set_reward_per_epoch(
         uint256 depositAmount,
         uint256 initialBlocks,
         uint256 newRewardPerEpoch,

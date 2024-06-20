@@ -123,4 +123,4 @@ medusa:
 	medusa fuzz
 
 echidna:
-	echidna . --contract EchidnaLiquidityMineLP --config config.yaml
+	echidna test/echidna/EchidnaLiquidityMineLP.sol --contract EchidnaLiquidityMineLP --config config.yaml
