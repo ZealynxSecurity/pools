@@ -65,5 +65,18 @@ optimizer_details.yul = false
 
 [fuzz]
 runs = 1024
+max_test_rejects = 1_000_000
+
+[invariant]
+# Number of runs for each invariant test
+runs = 256
+
+# Depth of each invariant run
+depth = 10
+
+# Whether to fail if a revert occurs during the invariant testing
+# fail_on_revert = true
+
+call_override = false   # reentrancy-check
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

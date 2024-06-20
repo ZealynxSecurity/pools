@@ -5,6 +5,8 @@ import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {FilAddress} from "fevmate/utils/FilAddress.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
+import {ILiquidityMineLP} from "src/Types/Interfaces/ILiquidityMineLP.sol";
+import {UserInfo} from "src/Types/Structs/UserInfo.sol";
 
 uint256 constant MIN_REWARD_PER_EPOCH = 1e10;
 
@@ -13,7 +15,7 @@ uint256 constant MIN_REWARD_PER_EPOCH = 1e10;
  * @author GLIF
  * @notice Responsible for distributing GLIF token rewards to users who lock iFIL tokens in the contract
  */
-contract LiquidityMineLP is Ownable {
+contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     using FixedPointMathLib for uint256;
     using FilAddress for address;
 
@@ -21,20 +23,6 @@ contract LiquidityMineLP is Ownable {
     error NoRewardsToHarvest();
     error InsufficientRewardTokenBalance();
     error RewardPerEpochTooSmall();
-
-    /**
-     * @notice Info of each LM user.
-     * `lockedTokens` is the total amount of lockTokens locked by the User
-     * `rewardDebt` tracks both:
-     *   (1) rewards that the user is not entitled to because they were not locking tokens while rewards were accruing, and
-     *   (2) rewards that the user has already claimed
-     * `unclaimedRewards` is the amount of rewards that the user has not yet claimed
-     */
-    struct UserInfo {
-        uint256 lockedTokens;
-        uint256 rewardDebt;
-        uint256 unclaimedRewards;
-    }
 
     /// @notice the token that gets paid out as a reward (GLIF)
     IERC20 public immutable rewardToken;

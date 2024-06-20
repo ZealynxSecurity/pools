@@ -6,13 +6,14 @@ import {LiquidityMineLP, MIN_REWARD_PER_EPOCH} from "src/Token/LiquidityMineLP.s
 import {Token} from "src/Token/Token.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {UserInfo} from "src/Types/Structs/UserInfo.sol";
 
 interface MintERC20 is IERC20 {
     function mint(address to, uint256 value) external;
 }
 
 // constants
-uint256 constant DUST = 1e11;
+uint256 constant DUST = 1e5;
 uint256 constant MAX_UINT256 = type(uint256).max;
 uint256 constant MAX_FIL = 2_000_000_000e18;
 uint256 constant EPOCHS_IN_DAY = 2880;
@@ -776,10 +777,10 @@ contract LiquidityMineLPTest is Test {
                 }
             }
             vm.stopPrank();
-            assertApproxEqAbs(
+            assertApproxEqRel(
                 rewardToken.balanceOf(user),
                 totalRewards.divWadDown(accounts * 1e18),
-                DUST,
+                1e5,
                 "Received Rewards: User should receive proportionate rewards"
             );
         }
@@ -813,7 +814,7 @@ contract LiquidityMineLPTest is Test {
 
         assertEq(lm.rewardsLeft(), 0, "rewardsLeft should be 0");
         assertEq(lm.fundedEpochsLeft(), 0, "fundedEpochsLeft should be 0");
-        assertApproxEqAbs(lm.pendingRewards(investor), totalRewards, DUST, "Investor should receive all rewards");
+        assertApproxEqRel(lm.pendingRewards(investor), totalRewards, 1e2, "Investor should receive all rewards");
     }
 
     function _loadRewards(uint256 totalRewardsToDistribute) internal {
@@ -858,7 +859,7 @@ contract LiquidityMineLPTest is Test {
         uint256 unclaimedRewards,
         string memory label
     ) internal {
-        LiquidityMineLP.UserInfo memory u = lm.userInfo(user);
+        UserInfo memory u = lm.userInfo(user);
         assertEq(
             u.lockedTokens,
             lockedTokens,
