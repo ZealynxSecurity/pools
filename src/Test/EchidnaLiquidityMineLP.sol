@@ -336,18 +336,13 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
         advanceBlocks(nextBlocks);
         lm.updateAccounting();
 
-        UserInfo memory userOneInfoBefore = lm.userInfo(USER1);
+        UserInfo memory userOneInfoBefore = lm.userInfo(USER1); //
         uint256 initialLockedTokens = userOneInfoBefore.lockedTokens;
-        uint256 initialRewardDebt = userOneInfoBefore.rewardDebt;
         Debugger.log("initialLockedTokens", initialLockedTokens);
 
-        uint256 accRewardsPerLockTokenUserOne = lm.accRewardsPerLockToken();
-        uint256 expectedRewardDebt = initialLockedTokens.mulWadDown(accRewardsPerLockTokenUserOne) - initialRewardDebt;
         uint256 actualHarvestAmount =
             (withdrawAmount > lm.pendingRewards(USER1)) ? lm.pendingRewards(USER1) : withdrawAmount;
 
-        UserInfo memory userInfoTwoBefore = lm.userInfo(USER2);
-        uint256 initialLockedTokensUserTwo = userInfoTwoBefore.lockedTokens;
         uint256 initialRewardTokenBalanceUserTwo = rewardToken.balanceOf(USER2);
 
         hevm.prank(USER1);
@@ -355,11 +350,9 @@ contract EchidnaLiquidityMineLP is EchidnaSetup {
 
         lm.updateAccounting();
 
-        uint256 finalLockedTokens = initialLockedTokens - actualHarvestAmount;
         uint256 finalRewardTokenBalanceUserTwo = rewardToken.balanceOf(USER2);
 
         UserInfo memory userOneInfoAfter = lm.userInfo(USER1);
-        uint256 currentLockedTokens = userOneInfoAfter.lockedTokens;
 
         // Assertions
         assert(userOneInfoAfter.lockedTokens == userOneInfoBefore.lockedTokens - withdrawAmount);
