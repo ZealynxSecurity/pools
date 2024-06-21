@@ -10,7 +10,7 @@ import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
-import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
+import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {Credentials, SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";

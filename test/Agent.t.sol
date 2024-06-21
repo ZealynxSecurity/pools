@@ -32,9 +32,9 @@ import {EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 import {errorSelector} from "test/helpers/Utils.sol";
 import {FlipSig} from "test/helpers/FlipSig.sol";
 
-import "./BaseTest.sol";
+import "./ProtocolTest.sol";
 
-contract AgentBasicTest is BaseTest {
+contract AgentBasicTest is ProtocolTest {
     using Credentials for VerifiableCredential;
     using MinerHelper for uint64;
 
@@ -42,7 +42,7 @@ contract AgentBasicTest is BaseTest {
     address minerOwner1 = makeAddr("MINER_OWNER_1");
 
     uint64 miner;
-    Agent agent;
+    IAgent agent;
 
     function setUp() public {
         miner = _newMiner(minerOwner1);
@@ -89,26 +89,28 @@ contract AgentBasicTest is BaseTest {
 
     function testTransferOwner() public {
         address owner = makeAddr("OWNER");
+        IAuth authAgent = IAuth(address(agent));
         vm.prank(minerOwner1);
-        agent.transferOwnership(owner);
-        assertEq(agent.pendingOwner(), owner);
+        authAgent.transferOwnership(owner);
+        assertEq(authAgent.pendingOwner(), owner);
         vm.prank(owner);
-        agent.acceptOwnership();
-        assertEq(agent.owner(), owner);
+        authAgent.acceptOwnership();
+        assertEq(authAgent.owner(), owner);
     }
 
     function testTransferOperator() public {
         address operator = makeAddr("OPERATOR");
+        IAuth authAgent = IAuth(address(agent));
         vm.prank(minerOwner1);
-        agent.transferOperator(operator);
-        assertEq(agent.pendingOperator(), operator);
+        authAgent.transferOperator(operator);
+        assertEq(authAgent.pendingOperator(), operator);
         vm.prank(operator);
-        agent.acceptOperator();
-        assertEq(agent.operator(), operator);
+        authAgent.acceptOperator();
+        assertEq(authAgent.operator(), operator);
     }
 
     function testSetAdoRequestKey(address pubKey) public {
-        vm.startPrank(agent.owner());
+        vm.startPrank(_agentOwner(agent));
         agent.setAdoRequestKey(pubKey);
         assertEq(agent.adoRequestKey(), pubKey);
     }
@@ -117,7 +119,7 @@ contract AgentBasicTest is BaseTest {
         uint256 transferAmt = 1e18;
 
         vm.deal(investor1, transferAmt);
-        (Agent agent1,) = configureAgent(investor1);
+        (IAgent agent1,) = configureAgent(investor1);
         uint256 agentFILBal = address(agent1).balance;
 
         vm.prank(investor1);
@@ -130,7 +132,7 @@ contract AgentBasicTest is BaseTest {
         uint256 transferAmt = 1e18;
 
         vm.deal(investor1, transferAmt);
-        (Agent _agent,) = configureAgent(investor1);
+        (IAgent _agent,) = configureAgent(investor1);
         uint256 agentFILBal = address(_agent).balance;
 
         vm.prank(investor1);
@@ -158,7 +160,7 @@ contract AgentBasicTest is BaseTest {
     }
 }
 
-contract AgentPushPullFundsTest is BaseTest {
+contract AgentPushPullFundsTest is ProtocolTest {
     using Credentials for VerifiableCredential;
     using MinerHelper for uint64;
 
@@ -166,7 +168,7 @@ contract AgentPushPullFundsTest is BaseTest {
     address minerOwner1 = makeAddr("MINER_OWNER_1");
 
     uint64 miner;
-    Agent agent;
+    IAgent agent;
 
     function setUp() public {
         miner = _newMiner(minerOwner1);
@@ -241,7 +243,7 @@ contract AgentPushPullFundsTest is BaseTest {
     }
 }
 
-contract AgentRmEquityTest is BaseTest {
+contract AgentRmEquityTest is ProtocolTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
@@ -630,7 +632,7 @@ contract AgentRmEquityTest is BaseTest {
     }
 }
 
-contract AgentBorrowingTest is BaseTest {
+contract AgentBorrowingTest is ProtocolTest {
     using FixedPointMathLib for uint256;
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
@@ -779,7 +781,7 @@ contract AgentBorrowingTest is BaseTest {
     }
 }
 
-contract AgentPayTest is BaseTest {
+contract AgentPayTest is ProtocolTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
@@ -919,7 +921,7 @@ contract AgentPayTest is BaseTest {
 
         vm.roll(block.number + rollFwdAmt);
 
-        (,, uint256 principalPaid, uint256 refund, StateSnapshot memory prePayState) =
+        (, uint256 principalPaid, uint256 refund, StateSnapshot memory prePayState) =
             agentPay(_agent, _issueGenericPayCred(agentID, payAmount));
 
         assertPmtSuccess(_agent, prePayState, payAmount, principalPaid, refund);
@@ -964,7 +966,7 @@ contract AgentPayTest is BaseTest {
     }
 }
 
-contract AgentPoliceTest is BaseTest {
+contract AgentPoliceTest is ProtocolTest {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
     using FixedPointMathLib for uint256;
@@ -1068,8 +1070,8 @@ contract AgentPoliceTest is BaseTest {
         SignedCredential memory sc = issueGenericPayCred(agent.id(), address(agent).balance);
 
         // here we are exiting the pool by overpaying so much
-        (, uint256 epochsPaid,,,) = agentPay(agent, sc);
-
+        (uint256 epochsPaid,,,) = agentPay(agent, sc);
+        
         require(epochsPaid == 0, "Should have exited from the pool");
 
         sc = issueGenericRecoverCred(agent.id(), 0, 1e18);
@@ -1416,7 +1418,7 @@ contract AgentPoliceTest is BaseTest {
     }
 }
 
-contract AgentUpgradeTest is BaseTest {
+contract AgentUpgradeTest is ProtocolTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
     using MinerHelper for uint64;
@@ -1627,7 +1629,7 @@ contract AgentUpgradeTest is BaseTest {
     }
 }
 
-contract AgentDataTest is BaseTest {
+contract AgentDataTest is ProtocolTest {
     using Credentials for VerifiableCredential;
 
     function testGreenScore(uint32 greenScore) public {

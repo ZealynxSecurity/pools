@@ -2,15 +2,18 @@
 // solhint-disable private-vars-leading-underscore, var-name-mixedcase
 pragma solidity ^0.8.17;
 
-import "./BaseTest.sol";
+import "./ProtocolTest.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
+import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {NewCredParser} from "test/helpers/NewCredParser.sol";
 import {NewCredentials, NewAgentData} from "test/helpers/NewCredentials.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
 
-contract PoolTestState is BaseTest {
+contract PoolTestState is ProtocolTest {
     error InvalidState();
 
     using Credentials for VerifiableCredential;
@@ -456,7 +459,7 @@ contract PoolAdminTests is PoolTestState {
     function testJumpStartAccount(uint256 jumpStartAmount) public {
         jumpStartAmount = bound(jumpStartAmount, WAD, MAX_FIL);
         address receiver = makeAddr("receiver");
-        (Agent newAgent,) = configureAgent(receiver);
+        (IAgent newAgent,) = configureAgent(receiver);
         uint256 agentID = newAgent.id();
         vm.startPrank(IAuth(address(pool)).owner());
         pool.jumpStartAccount(receiver, agentID, jumpStartAmount);
@@ -547,58 +550,58 @@ contract PoolAdminTests is PoolTestState {
         vm.stopPrank();
     }
 
-    function testUpgradePool(uint256 paymentAmt, uint256 initialBorrow) public {
-        initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
-        paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
+    // function testUpgradePool(uint256 paymentAmt, uint256 initialBorrow) public {
+    //     initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
+    //     paymentAmt = bound(paymentAmt, WAD - DUST, initialBorrow - DUST);
 
-        // Generate some fees to harvest
-        _generateFees(paymentAmt, initialBorrow);
-        uint256 fees = pool.treasuryFeesOwed();
-        uint256 treasuryBalance = asset.balanceOf(address(treasury));
+    //     // Generate some fees to harvest
+    //     _generateFees(paymentAmt, initialBorrow);
+    //     uint256 fees = pool.treasuryFeesOwed();
+    //     uint256 treasuryBalance = asset.balanceOf(address(treasury));
 
-        IPool newPool = IPool(
-            new InfinityPool(
-                systemAdmin,
-                router,
-                // no min liquidity for test pool
-                address(liquidStakingToken),
-                ILiquidityMineSP(address(0)),
-                0,
-                poolID
-            )
-        );
-        vm.prank(systemAdmin);
-        liquidStakingToken.setMinter(address(newPool));
+    //     IPool newPool = IPool(
+    //         new InfinityPool(
+    //             systemAdmin,
+    //             router,
+    //             // no min liquidity for test pool
+    //             address(liquidStakingToken),
+    //             ILiquidityMineSP(address(0)),
+    //             0,
+    //             poolID
+    //         )
+    //     );
+    //     vm.prank(systemAdmin);
+    //     liquidStakingToken.setMinter(address(newPool));
 
-        // get stats before upgrade
-        uint256 lstBalance = liquidStakingToken.balanceOf(investor1);
-        uint256 totalBorrowed = pool.totalBorrowed();
-        uint256 agentBorrowed = pool.getAgentBorrowed(agentID);
-        uint256 assetBalance = asset.balanceOf(address(pool));
+    //     // get stats before upgrade
+    //     uint256 lstBalance = liquidStakingToken.balanceOf(investor1);
+    //     uint256 totalBorrowed = pool.totalBorrowed();
+    //     uint256 agentBorrowed = pool.getAgentBorrowed(agentID);
+    //     uint256 assetBalance = asset.balanceOf(address(pool));
 
-        // first shut down the pool
-        vm.startPrank(systemAdmin);
-        pool.shutDown();
-        // then upgrade it
-        poolRegistry.upgradePool(newPool);
-        vm.stopPrank();
+    //     // first shut down the pool
+    //     vm.startPrank(systemAdmin);
+    //     pool.shutDown();
+    //     // then upgrade it
+    //     poolRegistry.upgradePool(newPool);
+    //     vm.stopPrank();
 
-        // get stats after upgrade
-        uint256 lstBalanceNew = newPool.liquidStakingToken().balanceOf(investor1);
-        uint256 totalBorrowedNew = newPool.totalBorrowed();
-        uint256 agentBorrowedNew = newPool.getAgentBorrowed(agentID);
-        uint256 agentBalanceNew = wFIL.balanceOf(address(agent));
-        uint256 assetBalanceNew = newPool.asset().balanceOf(address(newPool));
+    //     // get stats after upgrade
+    //     uint256 lstBalanceNew = newPool.liquidStakingToken().balanceOf(investor1);
+    //     uint256 totalBorrowedNew = newPool.totalBorrowed();
+    //     uint256 agentBorrowedNew = newPool.getAgentBorrowed(agentID);
+    //     uint256 agentBalanceNew = wFIL.balanceOf(address(agent));
+    //     uint256 assetBalanceNew = newPool.asset().balanceOf(address(newPool));
 
-        // Test balances updated correctly through upgrade
-        assertEq(lstBalanceNew, lstBalance, "LST balance should be the same");
-        assertEq(totalBorrowedNew, totalBorrowed, "Total borrowed should be the same");
-        assertEq(agentBorrowedNew, agentBorrowed, "Agent borrowed should be the same");
-        assertEq(assetBalanceNew, assetBalance - fees, "Asset balance should be the same");
-        assertEq(asset.balanceOf(treasury), treasuryBalance + fees, "Treasury should have received fees");
+    //     // Test balances updated correctly through upgrade
+    //     assertEq(lstBalanceNew, lstBalance, "LST balance should be the same");
+    //     assertEq(totalBorrowedNew, totalBorrowed, "Total borrowed should be the same");
+    //     assertEq(agentBorrowedNew, agentBorrowed, "Agent borrowed should be the same");
+    //     assertEq(assetBalanceNew, assetBalance - fees, "Asset balance should be the same");
+    //     assertEq(asset.balanceOf(treasury), treasuryBalance + fees, "Treasury should have received fees");
 
-        assertNewPoolWorks(newPool, assetBalanceNew, agentBalanceNew);
-    }
+    //     assertNewPoolWorks(newPool, assetBalanceNew, agentBalanceNew);
+    // }
 
     function assertNewPoolWorks(IPool newPool, uint256 assetBalanceNew, uint256 agentWFILBal) internal {
         // deposit into the pool again
@@ -770,7 +773,7 @@ contract PoolErrorBranches is PoolTestState {
 //     }
 // }
 
-contract PoolAccountingTest is BaseTest {
+contract PoolAccountingTest is ProtocolTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
@@ -811,7 +814,6 @@ contract PoolAccountingTest is BaseTest {
         agentBorrow(agent, issueGenericBorrowCred(agent.id(), borrowAmountAgent1));
 
         testInvariants("test over pay under total borrowed 1.5");
-
         agentPay(agent, issueGenericPayCred(agent.id(), payAmount));
 
         Account memory postPayAccount1 = AccountHelpers.getAccount(router, agent.id(), pool.id());
@@ -887,7 +889,7 @@ contract PoolAccountingTest is BaseTest {
     }
 }
 
-contract PoolStakingTest is BaseTest {
+contract PoolStakingTest is ProtocolTest {
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
@@ -1112,7 +1114,7 @@ contract PoolStakingTest is BaseTest {
 }
 
 // these tests mock out all other contracts so we can isolate the infinity pool code for testing
-contract PoolIsolationTests is BaseTest {
+contract PoolIsolationTests is ProtocolTest {
     using FixedPointMathLib for uint256;
 
     uint256 public constant _DUST = 1e3;

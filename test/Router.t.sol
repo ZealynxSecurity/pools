@@ -9,7 +9,7 @@ import "src/Types/Interfaces/IRouter.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {Deployer} from "deploy/Deployer.sol";
-import {BaseTest} from "./BaseTest.sol";
+import {ProtocolTest} from "./ProtocolTest.sol";
 
 struct ContractRoutes {
     address treasury;
@@ -22,7 +22,7 @@ struct ContractRoutes {
     address agentDeployer;
 }
 
-contract RouterTest is BaseTest {
+contract RouterTest is ProtocolTest {
     error Unauthorized();
 
     Router routerInstance;

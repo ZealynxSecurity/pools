@@ -17,7 +17,7 @@ import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
-import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
+import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";

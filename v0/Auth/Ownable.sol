@@ -2,7 +2,7 @@
 // Inspired by OpenZeppelin Contracts (last updated v4.7.0) (access/Ownable.sol)
 
 // solhint-disable
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 import {FilAddress} from "shim/FilAddress.sol";
 
@@ -20,6 +20,7 @@ import {FilAddress} from "shim/FilAddress.sol";
 abstract contract Ownable {
     error Unauthorized();
     error InvalidParams();
+
     using FilAddress for address;
 
     address public owner;
@@ -29,25 +30,25 @@ abstract contract Ownable {
      * @dev Initializes the contract setting `owner` as the initial owner.
      */
     constructor(address _initialOwner) {
-      _initialOwner = _initialOwner.normalize();
-      if (_initialOwner == address(0)) revert InvalidParams();
+        _initialOwner = _initialOwner.normalize();
+        if (_initialOwner == address(0)) revert InvalidParams();
 
-      _transferOwnership(_initialOwner);
+        _transferOwnership(_initialOwner);
     }
 
     /**
      * @dev Throws if called by any account other than the owner.
      */
     modifier onlyOwner() {
-      _checkOwner();
-      _;
+        _checkOwner();
+        _;
     }
 
     /**
      * @dev Throws if the sender is not the owner.
      */
     function _checkOwner() internal view virtual {
-      if (owner != msg.sender) revert Unauthorized();
+        if (owner != msg.sender) revert Unauthorized();
     }
 
     /**
@@ -58,21 +59,20 @@ abstract contract Ownable {
         pendingOwner = newOwner.normalize();
     }
 
-
     /**
      * @dev Transfers ownership of the contract to a new account (`newOwner`).
      * Internal function without access restriction.
      */
     function _transferOwnership(address newOwner) internal virtual {
-      delete pendingOwner;
-      owner = newOwner.normalize();
+        delete pendingOwner;
+        owner = newOwner.normalize();
     }
 
     /**
      * @dev The new owner accepts the ownership transfer.
      */
     function acceptOwnership() external {
-      if (pendingOwner != msg.sender) revert Unauthorized();
-      _transferOwnership(msg.sender);
+        if (pendingOwner != msg.sender) revert Unauthorized();
+        _transferOwnership(msg.sender);
     }
 }

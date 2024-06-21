@@ -2,7 +2,7 @@
 // Inspired by OpenZeppelin Contracts (last updated v4.7.0) (access/Ownable.sol)
 
 // solhint-disable
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 import {FilAddress} from "shim/FilAddress.sol";
 import {Ownable} from "v0/Auth/Ownable.sol";
@@ -28,9 +28,9 @@ abstract contract Operatable is Ownable {
      * @dev Initializes the contract setting `_initialOperator` as the initial operator.
      */
     constructor(address _owner, address _initialOperator) Ownable(_owner) {
-      _initialOperator = _initialOperator.normalize();
-      if (_initialOperator == address(0)) revert InvalidParams();
-      _transferOperator(_initialOperator);
+        _initialOperator = _initialOperator.normalize();
+        if (_initialOperator == address(0)) revert InvalidParams();
+        _transferOperator(_initialOperator);
     }
 
     /**
@@ -39,15 +39,15 @@ abstract contract Operatable is Ownable {
      * Modifier overriden by the Agent
      */
     modifier onlyOwnerOperator() virtual {
-      _checkOwnerOperator();
-      _;
+        _checkOwnerOperator();
+        _;
     }
 
     /**
      * @dev Throws if the sender is not the owner or the operator.
      */
     function _checkOwnerOperator() internal view virtual {
-      if (operator != msg.sender && owner != msg.sender) revert Unauthorized();
+        if (operator != msg.sender && owner != msg.sender) revert Unauthorized();
     }
 
     /**
@@ -58,21 +58,20 @@ abstract contract Operatable is Ownable {
         pendingOperator = newOperator;
     }
 
-
     /**
      * @dev Transfers operator role of the contract to a new account (`newOperator`).
      * Internal function without access restriction.
      */
     function _transferOperator(address newOperator) internal virtual {
-      delete pendingOperator;
-      operator = newOperator.normalize();
+        delete pendingOperator;
+        operator = newOperator.normalize();
     }
 
     /**
      * @dev The new operator accepts the ownership transfer.
      */
     function acceptOperator() external {
-      if (pendingOperator != msg.sender) revert Unauthorized();
-      _transferOperator(msg.sender);
+        if (pendingOperator != msg.sender) revert Unauthorized();
+        _transferOperator(msg.sender);
     }
 }

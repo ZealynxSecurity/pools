@@ -6,7 +6,7 @@ import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
 
 library MinerHelper {
     // the ID store gets deployed at the same address every time in a test env
-    address constant ID_STORE_ADDR = address(0xFE78678167C79da49E0598a110773b4124189ad5);
+    address constant ID_STORE_ADDR = address(0x21D90cbF036A63634BA3c18e6553C2a0035a5Dc8);
 
     /// @param target The miner actor id you want to interact with
     /// @param addr Expected owner address

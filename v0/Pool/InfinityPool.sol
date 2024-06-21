@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // solhint-disable
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
@@ -10,21 +10,21 @@ import {GetRoute} from "v0/Router/GetRoute.sol";
 import {Ownable} from "v0/Auth/Ownable.sol";
 import {AccountHelpers} from "v0/Pool/Account.sol";
 
-import {IAgentFactory} from "v0/Types/Interfaces/IAgentFactory.sol";
-import {IAgent} from "v0/Types/Interfaces/IAgent.sol";
+import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IAgentPolice} from "v0/Types/Interfaces/IAgentPolice.sol";
-import {IRouter} from "v0/Types/Interfaces/IRouter.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
 import {IOffRamp} from "v0/Types/Interfaces/IOffRamp.sol";
 import {IPool} from "v0/Types/Interfaces/IPool.sol";
-import {IPoolToken} from "v0/Types/Interfaces/IPoolToken.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
-import {IWFIL} from "v0/Types/Interfaces/IWFIL.sol";
-import {IERC20} from "v0/Types/Interfaces/IERC20.sol";
+import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPreStake} from "v0/Types/Interfaces/IPreStake.sol";
-import {Account} from "v0/Types/Structs/Account.sol";
-import {Credentials} from "v0/Types/Structs/Credentials.sol";
-import {SignedCredential, VerifiableCredential} from "v0/Types/Structs/Credentials.sol";
+import {Account} from "src/Types/Structs/Account.sol";
+import {Credentials} from "src/Types/Structs/Credentials.sol";
+import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {EPOCHS_IN_DAY} from "v0/Constants/Epochs.sol";
 
 /**
@@ -206,7 +206,7 @@ contract InfinityPool is IPool, Ownable {
      * @return liquidFunds The amount of total liquid assets held in the Pool
      */
     function getLiquidAssets() public view returns (uint256) {
-        if(isShuttingDown) return 0;
+        if (isShuttingDown) return 0;
 
         uint256 balance = asset.balanceOf(address(this));
         // ensure we dont pay out treasury fees
@@ -221,9 +221,7 @@ contract InfinityPool is IPool, Ownable {
      * @return rate The rate for the Agent's current position and base rate
      * @dev rate is determined by the `rateModule`
      */
-    function getRate(
-        VerifiableCredential calldata vc
-    ) public view returns (uint256 rate) {
+    function getRate(VerifiableCredential calldata vc) public view returns (uint256 rate) {
         return rateModule.getRate(vc);
     }
 
@@ -234,10 +232,11 @@ contract InfinityPool is IPool, Ownable {
      * @return approved Whether the Agent is approved
      * @dev approval criteria are determined by the `rateModule`
      */
-    function isApproved(
-        Account calldata account,
-        VerifiableCredential calldata vc
-    ) external view returns (bool approved) {
+    function isApproved(Account calldata account, VerifiableCredential calldata vc)
+        external
+        view
+        returns (bool approved)
+    {
         return rateModule.isApproved(account, vc);
     }
 
@@ -247,7 +246,7 @@ contract InfinityPool is IPool, Ownable {
      * @param recoveredFunds The amount of funds recovered from the liquidation. This is the total amount the Police was able to recover from the Agent's Miner Actors
      * @dev If `recoveredFunds` > `principal` owed on the Agent's account, then the remaining amount gets applied as interest according to a penalty rate
      */
-    function writeOff(uint256 agentID, uint256 recoveredFunds) external returns (uint256 totalOwed){
+    function writeOff(uint256 agentID, uint256 recoveredFunds) external returns (uint256 totalOwed) {
         // only the agent police can call this function
         _onlyAgentPolice();
 
@@ -285,11 +284,7 @@ contract InfinityPool is IPool, Ownable {
         totalOwed = interestPaid + principalOwed;
 
         // transfer the assets into the pool
-        asset.transferFrom(
-          msg.sender,
-          address(this),
-          totalOwed > recoveredFunds ? recoveredFunds : totalOwed
-        );
+        asset.transferFrom(msg.sender, address(this), totalOwed > recoveredFunds ? recoveredFunds : totalOwed);
         // write off the pool's account
         totalBorrowed -= account.principal;
         // set the account with the funds the pool lost
@@ -324,9 +319,9 @@ contract InfinityPool is IPool, Ownable {
             account.epochsPaid = currentEpoch;
             poolRegistry.addPoolToList(vc.subject, id);
         } else if (account.epochsPaid + maxEpochsOwedTolerance < block.number) {
-          // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
-          // this is to prevent the agent overpaying on previously borrowed amounts
-          revert PayUp();
+            // ensure the account's epochsPaid is at most maxEpochsOwedTolerance behind the current epoch height
+            // this is to prevent the agent overpaying on previously borrowed amounts
+            revert PayUp();
         }
 
         account.principal += vc.value;
@@ -350,14 +345,12 @@ contract InfinityPool is IPool, Ownable {
      * @dev The pay function applies the payment amount to the interest owed on the account first. If the entire interest owed is paid off by the payment, then the remainder is applied to the principal owed on the account.
      * @dev Treasury fees only apply to interest payments, not principal payments
      */
-    function pay(
-        VerifiableCredential calldata vc
-    ) external isOpen subjectIsAgentCaller(vc) returns (
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    ) {
+    function pay(VerifiableCredential calldata vc)
+        external
+        isOpen
+        subjectIsAgentCaller(vc)
+        returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
+    {
         // grab this Agent's account from storage
         Account memory account = _getAccount(vc.subject);
         // ensure we're not making payments to a non-existent account
@@ -421,7 +414,6 @@ contract InfinityPool is IPool, Ownable {
                 // move the `epochsPaid` cursor to mark the account as "current"
                 account.epochsPaid = block.number;
             }
-          
         }
         // update the account in storage
         account.save(router, vc.subject, id);
@@ -467,7 +459,7 @@ contract InfinityPool is IPool, Ownable {
     function mint(uint256 shares, address receiver) public isOpen returns (uint256 assets) {
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
-        if(assets == 0 || shares == 0) revert InvalidParams();
+        if (assets == 0 || shares == 0) revert InvalidParams();
         asset.transferFrom(msg.sender, address(this), assets);
         liquidStakingToken.mint(receiver, shares);
 
@@ -481,11 +473,7 @@ contract InfinityPool is IPool, Ownable {
      * @param owner The owner of the shares
      * @return shares - the number of shares burned
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public requiresRamp returns (uint256 shares) {
+    function withdraw(uint256 assets, address receiver, address owner) public requiresRamp returns (uint256 shares) {
         shares = ramp.withdraw(assets, receiver, owner, totalAssets());
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -497,11 +485,7 @@ contract InfinityPool is IPool, Ownable {
      * @param owner The owner of the shares
      * @return assets The assets received from burning the shares
      */
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) public requiresRamp returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address owner) public requiresRamp returns (uint256 assets) {
         assets = ramp.redeem(shares, receiver, owner, totalAssets());
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -598,7 +582,6 @@ contract InfinityPool is IPool, Ownable {
         return ramp.maxRedeem(owner);
     }
 
-
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC
     //////////////////////////////////////////////////////////////*/
@@ -615,10 +598,7 @@ contract InfinityPool is IPool, Ownable {
         if (rampAssets < exitDemand) {
             // distribute the difference between the min liquidity reserve requirement and our liquidity reserves
             // if our liquid funds are not enough to cover, send the max amount of funds
-            uint256 toDistribute = Math.min(
-                exitDemand - rampAssets,
-                getLiquidAssets()
-            );
+            uint256 toDistribute = Math.min(exitDemand - rampAssets, getLiquidAssets());
             asset.approve(address(ramp), toDistribute);
             ramp.distribute(address(this), toDistribute);
         }
@@ -647,10 +627,8 @@ contract InfinityPool is IPool, Ownable {
      * @notice decomissionPool shuts down the pool and transfers all assets to the new pool
      * @param newPool The address of new pool to transfer assets to
      */
-    function decommissionPool(
-        IPool newPool
-    ) external onlyPoolRegistry returns(uint256 borrowedAmount) {
-      if (newPool.id() != id || !isShuttingDown) revert InvalidState();
+    function decommissionPool(IPool newPool) external onlyPoolRegistry returns (uint256 borrowedAmount) {
+        if (newPool.id() != id || !isShuttingDown) revert InvalidState();
         // forward fees to the treasury
         harvestFees(feesCollected);
 
@@ -664,19 +642,19 @@ contract InfinityPool is IPool, Ownable {
      * @dev this can only occur on FEVM through a raw send to this actor
      */
     function recoverFIL(address receiver) external onlyOwner {
-      if (address(this).balance > 0) {
-        payable(receiver).sendValue(address(this).balance);
-      }
+        if (address(this).balance > 0) {
+            payable(receiver).sendValue(address(this).balance);
+        }
     }
 
     /**
      * @notice recoverERC20 recovers any ERC20 that was accidentally sent to this contract
      */
     function recoverERC20(address receiver, IERC20 token) external onlyOwner {
-      // cannot unstuck the Pool's native asset (wFIL)
-      if (token == asset) revert Unauthorized();
+        // cannot unstuck the Pool's native asset (wFIL)
+        if (token == asset) revert Unauthorized();
 
-      token.transfer(receiver.normalize(), token.balanceOf(address(this)));
+        token.transfer(receiver.normalize(), token.balanceOf(address(this)));
     }
 
     /**
@@ -791,7 +769,7 @@ contract InfinityPool is IPool, Ownable {
 
         liquidStakingToken.mint(receiver, lstAmount);
 
-        emit Deposit(msg.sender, receiver.normalize(),  msg.value, lstAmount);
+        emit Deposit(msg.sender, receiver.normalize(), msg.value, lstAmount);
     }
 
     function _requiresRamp() internal view {
@@ -799,10 +777,7 @@ contract InfinityPool is IPool, Ownable {
     }
 
     function _subjectIsAgentCaller(VerifiableCredential calldata vc) internal view {
-        if (
-            vc.subject == 0 ||
-            agentFactory.agents(msg.sender) != vc.subject
-        ) revert Unauthorized();
+        if (vc.subject == 0 || agentFactory.agents(msg.sender) != vc.subject) revert Unauthorized();
     }
 
     function _isOpen() internal view {
@@ -817,4 +792,3 @@ contract InfinityPool is IPool, Ownable {
         if (address(agentPolice) != msg.sender) revert Unauthorized();
     }
 }
-

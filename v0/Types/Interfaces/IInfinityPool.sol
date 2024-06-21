@@ -1,47 +1,28 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // solhint-disable
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPool} from "v0/Types/Interfaces/IPool.sol";
-import {IPoolToken} from "v0/Types/Interfaces/IPoolToken.sol";
-import {VerifiableCredential} from "v0/Types/Structs/Credentials.sol";
-import {Account} from "v0/Types/Structs/Account.sol";
+import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {Account} from "src/Types/Structs/Account.sol";
 import {IOffRamp} from "v0/Types/Interfaces/IOffRamp.sol";
 import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
-import {IERC20} from "v0/Types/Interfaces/IERC20.sol";
 
 interface IInfinityPool {
-
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event Borrow(
-        uint256 indexed agent,
-        uint256 amount
-    );
+    event Borrow(uint256 indexed agent, uint256 amount);
 
-    event Pay(
-        uint256 indexed agent,
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    );
+    event Pay(uint256 indexed agent, uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund);
 
-    event Deposit(
-        address indexed caller,
-        address indexed owner,
-        uint256 assets,
-        uint256 shares
-    );
+    event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
     event Withdraw(
-        address indexed caller,
-        address indexed receiver,
-        address indexed owner,
-        uint256 assets,
-        uint256 shares
+        address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares
     );
 
     event WriteOff(uint256 agentID, uint256 recoveredDebt, uint256 lostAmount);
@@ -78,15 +59,9 @@ interface IInfinityPool {
 
     function feesCollected() external view returns (uint256);
 
-    function getRate(
-        Account calldata account,
-        VerifiableCredential calldata vc
-    ) external view returns (uint256);
+    function getRate(Account calldata account, VerifiableCredential calldata vc) external view returns (uint256);
 
-    function isApproved(
-        Account calldata account,
-        VerifiableCredential calldata vc
-    ) external view returns (bool);
+    function isApproved(Account calldata account, VerifiableCredential calldata vc) external view returns (bool);
 
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS
@@ -94,14 +69,9 @@ interface IInfinityPool {
 
     function borrow(VerifiableCredential calldata vc) external;
 
-    function pay(
-        VerifiableCredential calldata vc
-    ) external returns (
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    );
+    function pay(VerifiableCredential calldata vc)
+        external
+        returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund);
 
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC
@@ -183,4 +153,3 @@ interface IInfinityPool {
 
     function recoverERC20(address receiver, IERC20 token) external;
 }
-

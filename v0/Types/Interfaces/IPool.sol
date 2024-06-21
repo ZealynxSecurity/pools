@@ -1,13 +1,12 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// solhint-disable
-pragma solidity 0.8.17;
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity ^0.8.17;
 
-import {IPoolToken} from "v0/Types/Interfaces/IPoolToken.sol";
-import {VerifiableCredential} from "v0/Types/Structs/Credentials.sol";
-import {Account} from "v0/Types/Structs/Account.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
+import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
+import {Account} from "src/Types/Structs/Account.sol";
 import {IOffRamp} from "v0/Types/Interfaces/IOffRamp.sol";
 import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
-import {IERC20} from "v0/Types/Interfaces/IERC20.sol";
 
 interface IPool {
     /*//////////////////////////////////////////////////////////////
@@ -91,22 +90,6 @@ interface IPool {
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
 
     function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
-
-    function redeem(uint256 shares, address receiver, address owner, uint256 totalAssets)
-        external
-        returns (uint256 assets);
-
-    function withdraw(uint256 assets, address receiver, address owner, uint256 totalAssets)
-        external
-        returns (uint256 shares);
-
-    function redeemF(uint256 shares, address receiver, address owner, uint256 totalAssets)
-        external
-        returns (uint256 assets);
-
-    function withdrawF(uint256 assets, address receiver, address owner, uint256 totalAssets)
-        external
-        returns (uint256 shares);
 
     /*//////////////////////////////////////////////////////////////
                             ACCOUNTING LOGIC

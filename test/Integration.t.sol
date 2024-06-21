@@ -2,7 +2,7 @@
 // solhint-disable private-vars-leading-underscore, var-name-mixedcase
 pragma solidity 0.8.20;
 
-import "./BaseTest.sol";
+import "./ProtocolTest.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
@@ -12,7 +12,7 @@ import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 
 // This contract contains 1 test and a ton of helper funcs to make assertions
-contract IntegrationTest is BaseTest {
+contract IntegrationTest is ProtocolTest {
     error InsufficientFunds();
     error AccountDNE();
 

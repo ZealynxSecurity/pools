@@ -2,7 +2,7 @@
 pragma solidity 0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
-import {MAX_FIL} from "./BaseTest.sol";
+import {MAX_FIL} from "./ProtocolTest.sol";
 import {LiquidityMineSP} from "src/Token/LiquidityMineSP.sol";
 import {Router, GetRoute} from "src/Router/Router.sol";
 import {Token} from "src/Token/Token.sol";

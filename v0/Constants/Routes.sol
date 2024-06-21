@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 // solhint-disable
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 bytes4 constant ROUTE_AGENT_FACTORY = bytes4(keccak256(bytes("ROUTER_AGENT_FACTORY")));
 bytes4 constant ROUTE_POOL_REGISTRY = bytes4(keccak256(bytes("ROUTER_POOL_REGISTRY")));

@@ -5,11 +5,12 @@ import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
-import "./BaseTest.sol";
+import "./ProtocolTest.sol";
 
-contract OffRampTest is BaseTest {
+contract OffRampTest is ProtocolTest {
     using FixedPointMathLib for uint256;
     using Credentials for VerifiableCredential;
     using AccountHelpers for Account;

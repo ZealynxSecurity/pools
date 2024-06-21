@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // solhint-disable
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Ownable} from "v0/Auth/Ownable.sol";
 import {GetRoute} from "v0/Router/GetRoute.sol";
 import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
-import {IRouter} from "v0/Types/Interfaces/IRouter.sol";
-import {Account} from "v0/Types/Structs/Account.sol";
-import {Credentials, VerifiableCredential} from "v0/Types/Structs/Credentials.sol";
+import {IRouter} from "src/Types/Interfaces/IRouter.sol";
+import {Account} from "src/Types/Structs/Account.sol";
+import {Credentials, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {EPOCHS_IN_DAY} from "v0/Constants/Epochs.sol";
 
 /**
@@ -17,10 +17,8 @@ import {EPOCHS_IN_DAY} from "v0/Constants/Epochs.sol";
  * @notice RateModule is a contract that the Infinity Pool outsource's its financial math related to getting rates and approving borrow requests
  *
  * The primary responsibility of this contract is the `isApproved` function, which is used to determine whether an Agent is in "good standing". An Agent is in good standing if:
-
  */
 contract RateModule is IRateModule, Ownable {
-
     using Credentials for VerifiableCredential;
     using FixedPointMathLib for uint256;
 
@@ -54,12 +52,9 @@ contract RateModule is IRateModule, Ownable {
     /// @dev `router` is the cached router address
     address internal immutable router;
 
-    constructor(
-        address _owner,
-        address _router,
-        uint256[61] memory _rateLookup,
-        uint256[10] memory _levels
-    ) Ownable(_owner) {
+    constructor(address _owner, address _router, uint256[61] memory _rateLookup, uint256[10] memory _levels)
+        Ownable(_owner)
+    {
         router = _router;
         credParser = address(GetRoute.credParser(router));
         rateLookup = _rateLookup;
@@ -73,9 +68,7 @@ contract RateModule is IRateModule, Ownable {
      * @return rate - the rate for the Agent's current position within the Pool
      * @dev getRate returns a per epoch rate with an additional WAD for precision
      */
-    function getRate(
-        VerifiableCredential calldata vc
-    ) external view returns (uint256 rate) {
+    function getRate(VerifiableCredential calldata vc) external view returns (uint256 rate) {
         return _getRate(vc.getGCRED(credParser));
     }
 
@@ -98,15 +91,11 @@ contract RateModule is IRateModule, Ownable {
      * 5. The Agent's expected daily interest payments divided by its expected daily rewards must be less than `maxDTI`. This check exists to ensure that a SP can meet its expected payments solely from its block rewards.
      *
      */
-    function isApproved(
-        Account calldata account,
-        VerifiableCredential calldata vc
-    ) external view returns (bool) {
+    function isApproved(Account calldata account, VerifiableCredential calldata vc) external view returns (bool) {
         // if you're behind on your payments, you're not approved
         if (account.epochsPaid + GetRoute.agentPolice(router).defaultWindow() < block.number) {
             return false;
         }
-
         // if you're attempting to borrow above your level limit, you're not approved
         if (account.principal > levels[accountLevel[vc.subject]]) {
             return false;
@@ -132,52 +121,56 @@ contract RateModule is IRateModule, Ownable {
         }
 
         // if DTI is greater than `maxDTI`, Agent cannot meet its payments solely from block rewards
-        return computeDTI(
-            vc.getExpectedDailyRewards(credParser),
-            _getRate(gcred),
-            account.principal,
-            totalPrincipal
-        ) <= maxDTI;
+        return computeDTI(vc.getExpectedDailyRewards(credParser), _getRate(gcred), account.principal, totalPrincipal)
+            <= maxDTI;
     }
 
     /// @dev sets the max DTI score to be considered approved
     function setMaxDTI(uint256 _maxDTI) external onlyOwner {
         maxDTI = _maxDTI;
     }
+
     /// @dev sets the max DTE score to be considered approved
     function setMaxDTE(uint256 _maxDTE) external onlyOwner {
         maxDTE = _maxDTE;
     }
+
     /// @dev sets the max LTV to be considered approved
     function setMaxLTV(uint256 _maxLTV) external onlyOwner {
         maxLTV = _maxLTV;
     }
+
     /// @dev sets the min GCRED score to be considered approved
     function setMinGCRED(uint256 _minGCRED) external onlyOwner {
         minGCRED = _minGCRED;
     }
+
     /// @dev sets the base rate
     function setBaseRate(uint256 _baseRate) external onlyOwner {
         baseRate = _baseRate;
     }
+
     /// @dev sets the rate lookup table. The rateLookup table is a table of perEpoch rate multipliers that get mulWad'd with the base rate to get the final rate
     function setRateLookup(uint256[61] calldata _rateLookup) external onlyOwner {
         rateLookup = _rateLookup;
     }
+
     /// @dev sets the credentialParser in case we need to update a data type
     function updateCredParser() external onlyOwner {
         credParser = address(GetRoute.credParser(router));
     }
+
     /// @dev sets the array of max borrow amounts for each level
     function setLevels(uint256[10] calldata _levels) external onlyOwner {
         levels = _levels;
     }
+
     /// @dev sets the array of max borrow amounts for each level
     function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external onlyOwner {
         if (agentIDs.length != level.length) revert InvalidParams();
         uint256 i = 0;
         for (; i < agentIDs.length; i++) {
-          accountLevel[agentIDs[i]] = level[i];
+            accountLevel[agentIDs[i]] = level[i];
         }
     }
 
@@ -187,10 +180,7 @@ contract RateModule is IRateModule, Ownable {
      * @param collateralValue - the total collateral value of the Agent
      * @dev collateral value is computed on the server as: vesting funds + (locked funds * termination risk discount)
      */
-    function computeLTV(
-        uint256 principal,
-        uint256 collateralValue
-    ) public pure returns (uint256) {
+    function computeLTV(uint256 principal, uint256 collateralValue) public pure returns (uint256) {
         return principal.divWadDown(collateralValue);
     }
 
@@ -203,12 +193,11 @@ contract RateModule is IRateModule, Ownable {
      * @dev the DTI is weighted by the Agent's borrow amount from the pool relative to any other pools
      * @dev the rate is WAD based
      */
-    function computeDTI(
-        uint256 expectedDailyRewards,
-        uint256 rate,
-        uint256 accountPrincipal,
-        uint256 totalPrincipal
-    ) public pure returns (uint256) {
+    function computeDTI(uint256 expectedDailyRewards, uint256 rate, uint256 accountPrincipal, uint256 totalPrincipal)
+        public
+        pure
+        returns (uint256)
+    {
         // equityPercentage now has an extra WAD factor for precision
         uint256 equityPercentage = accountPrincipal.divWadDown(totalPrincipal);
         // compute the % of EDR this pool can rely on
@@ -231,10 +220,7 @@ contract RateModule is IRateModule, Ownable {
      * @param agentTotalValue - the total value of the Agent
      * @dev agent total value includes principal borrowed by the Agent
      */
-    function computeDTE(
-        uint256 principal,
-        uint256 agentTotalValue
-    ) public pure returns (uint256) {
+    function computeDTE(uint256 principal, uint256 agentTotalValue) public pure returns (uint256) {
         // since agentTotalValue includes borrowed funds (principal),
         // agentTotalValue should always be greater than principal
         // however, this assumption could break if the agent is severely slashed over long durations

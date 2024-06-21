@@ -5,7 +5,7 @@ pragma solidity 0.8.20;
 
 import "src/VCVerifier/VCVerifier.sol";
 import {errorSelector} from "./helpers/Utils.sol";
-import "./BaseTest.sol";
+import "./ProtocolTest.sol";
 
 contract VCVerifierMock is VCVerifier {
     constructor(address _router, string memory verifiedName, string memory verifiedVersion)
@@ -13,7 +13,7 @@ contract VCVerifierMock is VCVerifier {
     {}
 }
 
-contract VCVerifierTest is BaseTest {
+contract VCVerifierTest is ProtocolTest {
     VCVerifierMock public vcv;
     uint256 public agentID = 1;
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 // solhint-disable
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 // Interface for the Pool Deployer contract
 import {IPool} from "v0/Types/Interfaces/IPool.sol";

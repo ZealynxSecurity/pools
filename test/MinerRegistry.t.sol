@@ -4,9 +4,9 @@ pragma solidity 0.8.20;
 
 import {AuthController} from "src/Auth/AuthController.sol";
 import {errorSelector} from "./helpers/Utils.sol";
-import "./BaseTest.sol";
+import "./ProtocolTest.sol";
 
-contract MinerRegistryTest is BaseTest {
+contract MinerRegistryTest is ProtocolTest {
     using MinerHelper for uint64;
 
     IMinerRegistry public registry;
@@ -17,12 +17,12 @@ contract MinerRegistryTest is BaseTest {
     }
 
     function testAddMiner() public {
-        (Agent agent, uint64 miner) = configureAgent(agentOwner);
+        (IAgent agent, uint64 miner) = configureAgent(agentOwner);
         assertTrue(registry.minerRegistered(agent.id(), miner), "Miner not registered");
     }
 
     function testRmMiner() public {
-        (Agent agent, uint64 miner1) = configureAgent(agentOwner);
+        (IAgent agent, uint64 miner1) = configureAgent(agentOwner);
         uint64 miner2 = configureMiner(address(agent), agentOwner);
 
         uint256 minerCount = registry.minersCount(agent.id());
