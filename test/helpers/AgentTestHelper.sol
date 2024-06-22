@@ -14,7 +14,6 @@ import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
-import {FinMath} from "src/Pool/FinMath.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
@@ -185,7 +184,7 @@ contract AgentTestHelper is CoreTestHelper {
 
         prePayState = _snapshot(address(agent), 0);
 
-        uint256 totalDebt = FinMath.computeDebt(AccountHelpers.getAccount(router, agent.id(), 0), perEpochRate);
+        uint256 totalDebt = _agentDebt(agent, perEpochRate);
         (, epochsPaid, principalPaid, refund) = agent.pay(0, sc);
 
         vm.stopPrank();
@@ -209,17 +208,14 @@ contract AgentTestHelper is CoreTestHelper {
         testInvariants("agentPay End");
     }
 
-    function calculateInterestOwed(uint256 borrowAmount, uint256 rollFwdAmt)
+    function calculateInterestOwed(uint256 borrowAmount, uint256 rollFwdAmt, uint256 perEpochRate)
         internal
-        view
+        pure
         returns (uint256 interestOwed, uint256 interestOwedPerEpoch)
     {
-        // since gcred is hardcoded in the credential, we know the rate ahead of time (rate does not change if gcred does not change, even if other financial statistics change)
-        // rate here is WAD based
-        uint256 rate = IPool(IRouter(router).getRoute(ROUTE_INFINITY_POOL)).getRate();
         // note we add 1 more bock of interest owed to account for the roll forward of 1 epoch inside agentBorrow helper
         // since borrowAmount is also WAD based, the _interestOwedPerEpoch is also WAD based (e18 * e18 / e18)
-        uint256 _interestOwedPerEpoch = borrowAmount.mulWadUp(rate);
+        uint256 _interestOwedPerEpoch = borrowAmount.mulWadUp(perEpochRate);
         // _interestOwedPerEpoch is mulWadUp by epochs (not WAD based), which cancels the WAD out for interestOwed
         interestOwed = (_interestOwedPerEpoch.mulWadUp(rollFwdAmt));
         // when setting the interestOwedPerEpoch, we div out the WAD manually here
@@ -274,9 +270,5 @@ contract AgentTestHelper is CoreTestHelper {
         snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
         snapshot.agentBorrowed = account.principal;
         snapshot.accountEpochsPaid = account.epochsPaid;
-    }
-
-    function _getAdjustedRate() internal pure returns (uint256) {
-        return FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
     }
 }

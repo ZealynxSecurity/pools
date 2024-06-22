@@ -8,6 +8,7 @@ import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {PoolToken} from "shim/PoolToken.sol";
 import {WFIL} from "shim/WFIL.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
+import {FinMath} from "src/Pool/FinMath.sol";
 
 import {CredParser} from "src/Credentials/CredParser.sol";
 import {Router} from "src/Router/Router.sol";
@@ -19,6 +20,8 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
+import {IPool} from "src/Types/Interfaces/IPool.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
@@ -31,6 +34,8 @@ import "./Constants.sol";
 
 // an interface with common methods for V1 and V2 pools
 interface IMiniPool {
+    function liquidStakingToken() external view returns (IPoolToken);
+
     function convertToShares(uint256) external view returns (uint256);
 
     function convertToAssets(uint256) external view returns (uint256);
@@ -395,80 +400,114 @@ contract CoreTestHelper is Test {
         snapshot.accountEpochsPaid = account.epochsPaid;
     }
 
+    function _getAdjustedRate() internal pure returns (uint256) {
+        return FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
+    }
+
     function testInvariants(string memory label) internal {
         _invIFILWorthAssetsOfPool(label);
     }
 
-    // TODO
     function _invIFILWorthAssetsOfPool(string memory label) internal {
-        //     uint256 MAX_PRECISION_DELTA = 1;
-        //     // this invariant knows that iFIL should represent the total value of the pool, which is composed of:
-        //     // 1. all funds given to miners + agents
-        //     // 2. balance of wfil held by the pool
-        //     // 3. minus any fees held temporarily by the pool
-        //     uint256 agentCount = GetRoute.agentFactory(router).agentCount();
-        //     uint256 poolID = 0;
-        //     IMiniPool pool = IMiniPool(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
+        uint256 MAX_PRECISION_DELTA = 1;
+        // this invariant knows that iFIL should represent the total value of the pool, which is composed of:
+        // 1. all funds given to miners + agents
+        // 2. balance of wfil held by the pool
+        // 3. minus any fees held temporarily by the pool
+        uint256 agentCount = GetRoute.agentFactory(router).agentCount();
+        IMiniPool pool = IMiniPool(address(GetRoute.pool(GetRoute.poolRegistry(router), 0)));
 
-        //     uint256 totalDebtFromAccounts = 0;
-        //     uint256 totalInterestFromAccounts = 0;
-        //     uint256 totalBorrowedFromAccounts = 0;
+        uint256 totalDebtFromAccounts = 0;
+        uint256 totalInterestFromAccounts = 0;
+        uint256 totalBorrowedFromAccounts = 0;
 
-        //     for (uint256 i = 1; i <= agentCount; i++) {
-        //         Account memory account = AccountHelpers.getAccount(router, i, 0);
-        //         // the invariant breaks when an account is in default, we no longer expect to get that amount back
-        //         if (!account.defaulted) {
-        //             totalBorrowedFromAccounts += pool.getAgentBorrowed(i);
-        //             totalDebtFromAccounts += pool.getAgentDebt(i);
-        //             totalInterestFromAccounts += pool.getAgentInterestOwed(i);
-        //         }
-        //     }
+        for (uint256 i = 1; i <= agentCount; i++) {
+            Account memory account = AccountHelpers.getAccount(router, i, 0);
+            // the invariant breaks when an account is in default, we no longer expect to get that amount back
+            if (!account.defaulted) {
+                totalBorrowedFromAccounts += pool.getAgentBorrowed(i);
+                totalDebtFromAccounts += _agentDebt(i, _getAdjustedRate());
+                totalInterestFromAccounts += _agentInterest(i, _getAdjustedRate());
+            }
+        }
 
-        //     // the difference between what our current debt is and what we've borrowed is the total amount we've accrued
-        //     // we add back what had paid in interest to get the total amount of rewards we've accrued
-        //     uint256 accruedRewards = totalDebtFromAccounts - totalBorrowedFromAccounts + pool.lpRewards().paid;
-        //     uint256 accruedRewards2 = totalInterestFromAccounts + pool.lpRewards().paid;
+        assertEq(
+            pool.totalBorrowed(),
+            totalBorrowedFromAccounts,
+            "total borrowed from accounts should match pool totalBorrowed"
+        );
 
-        //     assertEq(
-        //         accruedRewards,
-        //         accruedRewards2,
-        //         string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: accrued rewards calculations should match"))
-        //     );
+        // here we try to get the total amount of rewards we've accrued
+        // but if were in a first generation pool, this call does not exist, so we just move along without it
+        try IPool(address(pool)).lpRewards() {
+            IPool _pool = IPool(address(pool));
+            // now we know we're in a v2 pool
+            uint256 paid = _pool.lpRewards().paid;
+            // the difference between what our current debt is and what we've borrowed is the total amount we've accrued
+            // we add back what had paid in interest to get the total amount of rewards we've accrued
+            uint256 accruedRewards = totalDebtFromAccounts - totalBorrowedFromAccounts + paid;
 
-        //     assertApproxEqAbs(
-        //         accruedRewards,
-        //         pool.lpRewards().accrued,
-        //         MAX_PRECISION_DELTA,
-        //         string(
-        //             abi.encodePacked(
-        //                 label,
-        //                 " _invIFILWorthAssetsOfPool: accrued rewards in each account should match total pool accrued rewards"
-        //             )
-        //         )
-        //     );
+            assertEq(
+                accruedRewards,
+                totalInterestFromAccounts + paid,
+                string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: accrued rewards calculations should match"))
+            );
 
-        //     uint256 poolAssets = wFIL.balanceOf(address(pool));
+            assertApproxEqAbs(
+                accruedRewards,
+                _pool.lpRewards().accrued,
+                MAX_PRECISION_DELTA,
+                string(
+                    abi.encodePacked(
+                        label,
+                        " _invIFILWorthAssetsOfPool: accrued rewards in each account should match total pool accrued rewards"
+                    )
+                )
+            );
+            uint256 poolAssets = wFIL.balanceOf(address(pool));
 
-        //     // if we take the total supply of iFIL and convert it to assets, we should get the total pools assets + lent out funds
-        //     uint256 totalIFILSupply = pool.liquidStakingToken().totalSupply();
+            // if we take the total supply of iFIL and convert it to assets, we should get the total pools assets + lent out funds
+            uint256 totalIFILSupply = pool.liquidStakingToken().totalSupply();
 
-        //     assertApproxEqAbs(
-        //         poolAssets + totalDebtFromAccounts - pool.treasuryFeesOwed(),
-        //         pool.totalAssets(),
-        //         MAX_PRECISION_DELTA,
-        //         string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: pool total assets invariant wrong"))
-        //     );
-        //     assertApproxEqAbs(
-        //         pool.convertToAssets(totalIFILSupply),
-        //         poolAssets + totalDebtFromAccounts - pool.treasuryFeesOwed(),
-        //         MAX_PRECISION_DELTA,
-        //         string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: iFIL convert to total assets invariant wrong"))
-        //     );
-        //     assertEq(
-        //         pool.totalBorrowed(),
-        //         totalBorrowedFromAccounts,
-        //         string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: total borrowed invariant wrong"))
-        //     );
+            assertApproxEqAbs(
+                poolAssets + totalDebtFromAccounts - _pool.treasuryFeesOwed(),
+                pool.totalAssets(),
+                MAX_PRECISION_DELTA,
+                string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: pool total assets invariant wrong"))
+            );
+            assertApproxEqAbs(
+                pool.convertToAssets(totalIFILSupply),
+                poolAssets + totalDebtFromAccounts - _pool.treasuryFeesOwed(),
+                MAX_PRECISION_DELTA,
+                string(
+                    abi.encodePacked(label, " _invIFILWorthAssetsOfPool: iFIL convert to total assets invariant wrong")
+                )
+            );
+            assertEq(
+                pool.totalBorrowed(),
+                totalBorrowedFromAccounts,
+                string(abi.encodePacked(label, " _invIFILWorthAssetsOfPool: total borrowed invariant wrong"))
+            );
+        } catch Error(string memory) {
+            // now we know we're in a v1 pool
+        }
+    }
+
+    function _agentDebt(IAgent agent, uint256 perEpochRate) internal view returns (uint256) {
+        return _agentDebt(agent.id(), perEpochRate);
+    }
+
+    function _agentDebt(uint256 agentID, uint256 perEpochRate) internal view returns (uint256) {
+        return FinMath.computeDebt(AccountHelpers.getAccount(router, agentID, 0), perEpochRate);
+    }
+
+    function _agentInterest(IAgent agent, uint256 perEpochRate) internal view returns (uint256) {
+        return _agentInterest(agent.id(), perEpochRate);
+    }
+
+    function _agentInterest(uint256 agentID, uint256 perEpochRate) internal view returns (uint256) {
+        (uint256 interestOwed,) = FinMath.interestOwed(AccountHelpers.getAccount(router, agentID, 0), perEpochRate);
+        return interestOwed;
     }
 
     uint256[10] levels = [

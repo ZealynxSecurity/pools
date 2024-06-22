@@ -257,7 +257,7 @@ contract AgentRmEquityTest is ProtocolTest {
     IAgentPolice agentPolice;
 
     function setUp() public {
-        depositFundsIntoPool(depositAmt, investor1);
+        _depositFundsIntoPool(depositAmt, investor1);
         (agent, miner) = configureAgent(minerOwner);
         agentPolice = GetRoute.agentPolice(router);
     }
@@ -315,7 +315,7 @@ contract AgentRmEquityTest is ProtocolTest {
         principal = bound(principal, equity.mulWadDown(agentPolice.maxDTE() + 1), MAX_FIL * 3);
         uint256 withdrawAmt = principal;
         // make sure there is enough funds in the pool to cover principal
-        depositFundsIntoPool(principal, investor1);
+        _depositFundsIntoPool(principal, investor1);
         agentBorrow(agent, issueGenericBorrowCred(agent.id(), principal));
 
         (address receiver, SignedCredential memory withdrawCred) = customWithdrawCred(
@@ -337,7 +337,7 @@ contract AgentRmEquityTest is ProtocolTest {
         liquidationValue = bound(liquidationValue, 2e18, MAX_FIL);
         principal = bound(principal, liquidationValue.mulWadUp(agentPolice.maxDTL() + 1), MAX_FIL * 2);
         uint256 withdrawAmt = principal;
-        depositFundsIntoPool(principal, investor1);
+        _depositFundsIntoPool(principal, investor1);
         agentBorrow(agent, issueGenericBorrowCred(agent.id(), principal));
         // create a withdraw credential
         (address receiver, SignedCredential memory withdrawCred) = customWithdrawCred(
@@ -359,7 +359,7 @@ contract AgentRmEquityTest is ProtocolTest {
         principal = bound(principal, 1e18, MAX_FIL);
         uint256 withdrawAmt = principal;
 
-        depositFundsIntoPool(principal, investor1);
+        _depositFundsIntoPool(principal, investor1);
         agentBorrow(agent, issueGenericBorrowCred(agent.id(), principal));
 
         uint256 badEDRUpper =
@@ -538,19 +538,14 @@ contract AgentRmEquityTest is ProtocolTest {
     function withdrawAndAssertRevert(address receiver, SignedCredential memory withdrawCred, bytes4 errorSelectorValue)
         internal
     {
-        console.log("HETERERERT");
         uint256 preAgentLiquidFunds = agent.liquidAssets();
         // withdraw
         vm.startPrank(minerOwner);
-        console.log("HERE");
         vm.expectRevert(abi.encodeWithSelector(errorSelectorValue));
         agent.withdraw(receiver, withdrawCred);
         vm.stopPrank();
 
-        console.log("HFNDOSFDS");
-
         assertEq(agent.liquidAssets(), preAgentLiquidFunds, "No funds should have been withdrawn");
-        console.log("YOOOO");
         testInvariants("withdrawAndAssertRevert");
     }
 
@@ -645,7 +640,7 @@ contract AgentBorrowingTest is ProtocolTest {
     uint64 miner;
 
     function setUp() public {
-        depositFundsIntoPool(depositAmt, investor1);
+        _depositFundsIntoPool(depositAmt, investor1);
         (agent, miner) = configureAgent(minerOwner);
     }
 
@@ -796,7 +791,7 @@ contract AgentPayTest is ProtocolTest {
     uint64 miner;
 
     function setUp() public {
-        depositFundsIntoPool(depositAmt, investor1);
+        _depositFundsIntoPool(depositAmt, investor1);
         (agent, miner) = configureAgent(minerOwner);
     }
 
@@ -809,7 +804,7 @@ contract AgentPayTest is ProtocolTest {
         SignedCredential memory borrowCred = issueGenericBorrowCred(agentId, borrowAmount);
 
         // We're just going to use the full amount of interest owed as our pay amount
-        (uint256 payAmount,) = calculateInterestOwed(borrowAmount, rollFwdAmt);
+        (uint256 payAmount,) = calculateInterestOwed(borrowAmount, rollFwdAmt, _getAdjustedRate());
         // Set fuzzed values to logical test limits - in this case anyone but the agent should be unauthorized
         address payer = makeAddr(payerSeed);
         vm.assume(payer != address(agent));
@@ -858,11 +853,12 @@ contract AgentPayTest is ProtocolTest {
     function testPayInterestOnly(uint256 borrowAmount, uint256 payAmount, uint256 rollFwdAmt) public {
         rollFwdAmt = bound(rollFwdAmt, 1, EPOCHS_IN_YEAR * 3);
         depositAmt = MAX_FIL;
-        depositFundsIntoPool(depositAmt, minerOwner);
+        _depositFundsIntoPool(depositAmt, minerOwner);
         borrowAmount = bound(borrowAmount, 1e18, MAX_FIL);
 
         SignedCredential memory borrowCred = _issueGenericBorrowCred(agent.id(), borrowAmount);
-        (uint256 interestOwed, uint256 interestOwedPerEpoch) = calculateInterestOwed(borrowAmount, rollFwdAmt);
+        (uint256 interestOwed, uint256 interestOwedPerEpoch) =
+            calculateInterestOwed(borrowAmount, rollFwdAmt, _getAdjustedRate());
 
         if (interestOwed + DUST > interestOwedPerEpoch) {
             payAmount = interestOwed;
@@ -887,7 +883,7 @@ contract AgentPayTest is ProtocolTest {
 
         SignedCredential memory borrowCred = _issueGenericBorrowCred(agent.id(), borrowAmount);
 
-        (uint256 interestOwed,) = calculateInterestOwed(borrowAmount, rollFwdAmt);
+        (uint256 interestOwed,) = calculateInterestOwed(borrowAmount, rollFwdAmt, _getAdjustedRate());
         // bind the pay amount to in between the interest owed and less than the principal
         payAmount = bound(payAmount, interestOwed + DUST, interestOwed + borrowAmount - DUST);
 
@@ -986,7 +982,7 @@ contract AgentPoliceTest is ProtocolTest {
     address policeOwner;
 
     function setUp() public {
-        depositFundsIntoPool(stakeAmount, investor1);
+        _depositFundsIntoPool(stakeAmount, investor1);
         (agent, miner) = configureAgent(minerOwner);
         police = GetRoute.agentPolice(router);
         policeOwner = IAuth(address(police)).owner();
@@ -1071,7 +1067,7 @@ contract AgentPoliceTest is ProtocolTest {
 
         // here we are exiting the pool by overpaying so much
         (uint256 epochsPaid,,,) = agentPay(agent, sc);
-        
+
         require(epochsPaid == 0, "Should have exited from the pool");
 
         sc = issueGenericRecoverCred(agent.id(), 0, 1e18);
@@ -1431,7 +1427,7 @@ contract AgentUpgradeTest is ProtocolTest {
     address prevAgentAddr;
 
     function setUp() public {
-        depositFundsIntoPool(stakeAmount, investor1);
+        _depositFundsIntoPool(stakeAmount, investor1);
         (agent, miner) = configureAgent(minerOwner);
         prevAgentAddr = address(agent);
     }

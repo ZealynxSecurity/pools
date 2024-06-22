@@ -52,15 +52,24 @@ contract PoolTestHelper is CoreTestHelper {
         return _pool;
     }
 
-    function depositFundsIntoPool(uint256 amount, address investor) internal {
+    function _depositFundsIntoPool(uint256 amount, address investor) internal {
+        vm.deal(investor, amount);
         address pool = address(GetRoute.pool(GetRoute.poolRegistry(router), 0));
         IERC4626 pool4626 = IERC4626(address(pool));
+        uint256 investorBalBefore = wFIL.balanceOf(investor) + payable(address(investor)).balance;
+        uint256 poolBalBefore = wFIL.balanceOf(pool);
         // `investor` stakes `amount` FIL
-        vm.deal(investor, amount);
         vm.startPrank(investor);
         wFIL.deposit{value: amount}();
         wFIL.approve(address(pool), amount);
         pool4626.deposit(amount, investor);
         vm.stopPrank();
+
+        assertEq(
+            investorBalBefore,
+            wFIL.balanceOf(investor) + payable(address(investor)).balance + amount,
+            "Investor balance should decrease by amount"
+        );
+        assertEq(poolBalBefore + amount, wFIL.balanceOf(pool), "Pool balance should increase by amount");
     }
 }

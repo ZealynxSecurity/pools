@@ -36,7 +36,7 @@ contract PoolTestState is ProtocolTest {
     address newCredParser;
 
     function setUp() public virtual {
-        depositFundsIntoPool(stakeAmount, investor1);
+        _depositFundsIntoPool(stakeAmount, investor1);
         (agent, miner) = configureAgent(minerOwner);
         borrowCredBasic = issueGenericBorrowCred(agent.id(), borrowAmount);
         vcBasic = borrowCredBasic.vc;
@@ -322,7 +322,7 @@ contract PoolAPRTests is PoolTestState {
     }
 
     function startSimulation(uint256 principal) internal returns (uint256 interestOwed) {
-        depositFundsIntoPool(principal + WAD, makeAddr("Investor1"));
+        _depositFundsIntoPool(principal + WAD, makeAddr("Investor1"));
         SignedCredential memory borrowCred = _issueGenericBorrowCred(agentID, principal);
         uint256 epochStart = block.number;
         agentBorrow(agent, borrowCred);
@@ -609,7 +609,7 @@ contract PoolAdminTests is PoolTestState {
         uint256 newStakeAmount = borrowAmount;
         uint256 newLSTBal = newPool.previewDeposit(newStakeAmount);
 
-        depositFundsIntoPool(WAD, newInvestor);
+        _depositFundsIntoPool(WAD, newInvestor);
 
         assertEq(
             newPool.liquidStakingToken().balanceOf(newInvestor),
@@ -800,7 +800,7 @@ contract PoolAccountingTest is ProtocolTest {
         uint256 payAmount = 20e18;
         uint256 borrowAmountAgent2 = 100e18;
 
-        depositFundsIntoPool(MAX_FIL, investor);
+        _depositFundsIntoPool(MAX_FIL, investor);
 
         // totalBorrowed should be a large number for this assertion
         agentBorrow(agent2, issueGenericBorrowCred(agent2.id(), borrowAmountAgent2));
@@ -827,7 +827,7 @@ contract PoolAccountingTest is ProtocolTest {
         payAmount = bound(payAmount, 1, MAX_FIL);
         uint256 stakeAmount = 100e18;
         uint64 liquidatorID = 1;
-        depositFundsIntoPool(stakeAmount, investor);
+        _depositFundsIntoPool(stakeAmount, investor);
 
         uint256 toAssets = pool.convertToAssets(WAD);
         uint256 toShares = pool.convertToShares(WAD);
@@ -925,7 +925,7 @@ contract PoolStakingTest is ProtocolTest {
     function testDepositTwice(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
-        vm.deal(investor, MAX_FIL);
+        vm.deal(investor, MAX_FIL + WAD);
         vm.startPrank(investor);
 
         wFIL.deposit{value: stakeAmount + WAD}();
@@ -944,7 +944,7 @@ contract PoolStakingTest is ProtocolTest {
     function testMintTwice(uint256 mintAmount) public {
         mintAmount = bound(mintAmount, 1, MAX_FIL);
 
-        vm.deal(investor, MAX_FIL);
+        vm.deal(investor, MAX_FIL + WAD);
         vm.startPrank(investor);
 
         wFIL.deposit{value: mintAmount + WAD}();
