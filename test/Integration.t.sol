@@ -25,7 +25,6 @@ contract IntegrationTest is ProtocolTest {
     uint64 miner;
     address minerAddr;
     uint256 poolID;
-    IPoolToken iFIL;
 
     address investor = makeAddr("INVESTOR");
     address minerOwner = makeAddr("MINER_OWNER");

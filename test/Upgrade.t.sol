@@ -54,7 +54,6 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
 
     IPool oldPool;
     IOffRamp ramp;
-    IPoolToken iFIL;
     IAgentFactory agentFactory;
 
     IAgent agent;

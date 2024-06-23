@@ -17,13 +17,11 @@ contract OffRampTest is ProtocolTest {
 
     IAgent agent;
     uint64 miner;
-    IPoolToken iFIL;
 
     address investor1 = makeAddr("INVESTOR");
     address minerOwner = makeAddr("MINER_OWNER");
 
     function setUp() public {
-        iFIL = pool.liquidStakingToken();
         (agent, miner) = configureAgent(minerOwner);
 
         vm.startPrank(systemAdmin);

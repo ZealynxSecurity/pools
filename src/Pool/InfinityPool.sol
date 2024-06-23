@@ -113,11 +113,6 @@ contract InfinityPool is IPool, Ownable, Pausable {
         _;
     }
 
-    modifier onlyPoolRegistry() {
-        _onlyPoolRegistry();
-        _;
-    }
-
     modifier isOpen() {
         _isOpen();
         _;
@@ -871,8 +866,8 @@ contract InfinityPool is IPool, Ownable, Pausable {
      * @notice decomissionPool shuts down the pool and transfers all assets to the new pool
      * @param newPool The address of new pool to transfer assets to
      */
-    function decommissionPool(IPool newPool) external onlyPoolRegistry returns (uint256 borrowedAmount) {
-        if (newPool.id() != id || !isShuttingDown) revert InvalidState();
+    function decommissionPool(address newPool) external onlyOwner returns (uint256 borrowedAmount) {
+        if (IPool(newPool).id() != id || !isShuttingDown) revert InvalidState();
         // forward fees to the treasury
         harvestFees(treasuryFeesOwed());
 
@@ -905,7 +900,9 @@ contract InfinityPool is IPool, Ownable, Pausable {
      * @notice jumpStartTotalBorrowed sets the totalBorrowed variable to the given amount in the pool
      * @dev this is only called in a pool upgrade scenario
      */
-    function jumpStartTotalBorrowed(uint256 amount) external onlyPoolRegistry {
+    function jumpStartTotalBorrowed(uint256 amount) external {
+        // this function gets called from the v0 pool registry in the initial upgrade to v2
+        if (address(GetRoute.poolRegistry(_router)) != msg.sender) revert Unauthorized();
         if (totalBorrowed != 0) revert InvalidState();
         // set the lastAccountingUpdateEpoch, effectively starting the pool's accounting
         lastAccountingUpdateEpoch = block.number;
@@ -1067,11 +1064,7 @@ contract InfinityPool is IPool, Ownable, Pausable {
     }
 
     function _isOpen() internal view {
-        if (isShuttingDown) revert InvalidState();
-    }
-
-    function _onlyPoolRegistry() internal view {
-        if (address(GetRoute.poolRegistry(_router)) != msg.sender) revert Unauthorized();
+        if (isShuttingDown) revert PoolShuttingDown();
     }
 
     function _onlyAgentPolice() internal view {

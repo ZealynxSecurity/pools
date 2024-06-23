@@ -91,4 +91,12 @@ contract ProtocolTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
     {
         return _agentPay(agent, sc, _getAdjustedRate());
     }
+
+    function _loadApproveWFIL(uint256 amount, address investor) internal {
+        vm.deal(investor, amount);
+        vm.startPrank(investor);
+        wFIL.deposit{value: amount}();
+        wFIL.approve(address(pool), amount);
+        vm.stopPrank();
+    }
 }

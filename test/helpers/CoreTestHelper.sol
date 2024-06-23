@@ -60,6 +60,8 @@ contract MockIDAddrStore {
 }
 
 contract CoreTestHelper is Test {
+    using FixedPointMathLib for uint256;
+
     // just used for testing
     uint256 public vcIssuerPk = 1;
     address public vcIssuer;
@@ -208,22 +210,25 @@ contract CoreTestHelper is Test {
         return _issueGenericPayCred(agent, amount);
     }
 
-    function _issueGenericPayCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
+    function _issuePayCred(uint256 agentID, uint256 principal, uint256 collateralValue, uint256 paymentAmount)
+        internal
+        returns (SignedCredential memory)
+    {
+        uint256 adjustedRate = _getAdjustedRate();
+
         AgentData memory agentData = createAgentData(
-            // collateralValue => 2x the borrowAmount
-            amount * 2,
+            collateralValue,
             // good EDR
-            1000,
-            // principal = borrowAmount
-            amount
+            adjustedRate.mulWadUp(principal).mulWadUp(EPOCHS_IN_DAY) * 5,
+            principal
         );
 
         VerifiableCredential memory vc = VerifiableCredential(
             vcIssuer,
-            agent,
+            agentID,
             block.number,
             block.number + 100,
-            amount,
+            paymentAmount,
             IAgent.pay.selector,
             // minerID irrelevant for pay action
             0,
@@ -231,6 +236,10 @@ contract CoreTestHelper is Test {
         );
 
         return signCred(vc);
+    }
+
+    function _issueGenericPayCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
+        return _issuePayCred(agent, amount, amount * 2, amount);
     }
 
     function issueGenericRecoverCred(uint256 agent, uint256 faultySectors, uint256 liveSectors)

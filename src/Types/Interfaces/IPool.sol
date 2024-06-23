@@ -148,7 +148,7 @@ interface IPool {
 
     function shutDown() external;
 
-    function decommissionPool(IPool newPool) external returns (uint256 borrowedAmount);
+    function decommissionPool(address newPool) external returns (uint256 borrowedAmount);
 
     function jumpStartAccount(address receiver, uint256 agentID, uint256 principal) external;
 

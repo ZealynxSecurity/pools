@@ -13,6 +13,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
 import {IVCVerifier} from "src/Types/Interfaces/IVCVerifier.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
+import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -21,7 +22,7 @@ import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Struc
 import {CredParser} from "src/Credentials/CredParser.sol";
 import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
-import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
+import {EPOCHS_IN_WEEK, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
 import {CoreTestHelper} from "test/helpers/CoreTestHelper.sol";
 import {AgentTestHelper} from "test/helpers/AgentTestHelper.sol";
@@ -30,14 +31,16 @@ import "src/Constants/Routes.sol";
 import "test/helpers/Constants.sol";
 
 contract PoolTestHelper is CoreTestHelper {
+    IPoolToken iFIL;
+
     function createPool() internal returns (IPool) {
-        PoolToken liquidStakingToken = new PoolToken(systemAdmin);
+        iFIL = IPoolToken(address(new PoolToken(systemAdmin)));
         IPool _pool = IPool(
             new InfinityPool(
                 systemAdmin,
                 router,
                 // no min liquidity for test pool
-                address(liquidStakingToken),
+                address(iFIL),
                 address(0),
                 0,
                 0
@@ -46,8 +49,8 @@ contract PoolTestHelper is CoreTestHelper {
         vm.startPrank(systemAdmin);
         // the pool starts paused in prod
         IPausable(address(_pool)).unpause();
-        liquidStakingToken.setMinter(address(_pool));
-        liquidStakingToken.setBurner(address(_pool));
+        iFIL.setMinter(address(_pool));
+        iFIL.setBurner(address(_pool));
         IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));
         IRouter(router).pushRoute(ROUTE_POOL_REGISTRY, address(_pool));
         vm.stopPrank();
