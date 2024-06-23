@@ -164,9 +164,6 @@ contract CoreTestHelper is Test {
         internal
         returns (SignedCredential memory)
     {
-        // roll forward so we don't get an identical credential that's already been used
-        vm.roll(block.number + 1);
-
         VerifiableCredential memory vc = VerifiableCredential(
             vcIssuer,
             agent,
@@ -186,9 +183,6 @@ contract CoreTestHelper is Test {
         internal
         returns (SignedCredential memory)
     {
-        // roll forward so we don't get an identical credential that's already been used
-        vm.roll(block.number + 1);
-
         VerifiableCredential memory vc = VerifiableCredential(
             vcIssuer,
             agent,
@@ -440,8 +434,8 @@ contract CoreTestHelper is Test {
         uint256 FILtoIFIL = pool.convertToShares(WAD);
         uint256 IFILtoFIL = pool.convertToAssets(WAD);
         assertEq(FILtoIFIL, IFILtoFIL, "Peg should be 1:1");
-        assertEq(FILtoIFIL, WAD, "Peg should be 1:1");
-        assertEq(IFILtoFIL, WAD, "Peg should be 1:1");
+        assertEq(FILtoIFIL, WAD, "FIL to iFIL should be 1:1");
+        assertEq(IFILtoFIL, WAD, "iFIL to FIL should be 1:1");
     }
 
     function _snapshot(address agent) internal view returns (StateSnapshot memory snapshot) {

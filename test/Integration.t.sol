@@ -187,7 +187,7 @@ contract IntegrationTest is ProtocolTest {
         uint256 investorIFILBalStart = iFIL.balanceOf(investor);
         uint256 agentWFILBalStart = wFIL.balanceOf(address(agent));
 
-        SignedCredential memory borrowCred = issueGenericBorrowCred(agentID, borrowAmount);
+        SignedCredential memory borrowCred = _issueGenericBorrowCred(agentID, borrowAmount);
         // must meet the minimum borrow amount
         if (borrowAmount < WAD) {
             vm.expectRevert(InvalidParams.selector);
@@ -299,7 +299,7 @@ contract IntegrationTest is ProtocolTest {
     }
 
     function payAndAssert(uint256 payAmount) internal {
-        SignedCredential memory payCred = issueGenericPayCred(agentID, payAmount);
+        SignedCredential memory payCred = _issueGenericPayCred(agentID, payAmount);
         vm.startPrank(_agentOperator(agent));
 
         Account memory account = AccountHelpers.getAccount(router, address(agent), poolID);
@@ -308,7 +308,7 @@ contract IntegrationTest is ProtocolTest {
 
         uint256 interestPerEpoch = account.principal.mulWadUp(pool.getRate());
 
-        bool underPaid = payAmount * WAD < interestPerEpoch;
+        bool underPaid = epochsOwed > 0 && payAmount * WAD < interestPerEpoch;
         bool paidMoreThanAvail = payAmount > agent.liquidAssets();
         bool exists = account.exists();
 
@@ -345,7 +345,6 @@ contract IntegrationTest is ProtocolTest {
         assertEq(poolFILBalStart, address(pool).balance, "Pool's FIL balance should not changed");
         assertEq(poolWFILBalStart, wFIL.balanceOf(address(pool)), "Pool should have same WFIL balance");
 
-        assertPegInTact();
         testInvariants("assertInvalidPayment");
     }
 
@@ -358,33 +357,26 @@ contract IntegrationTest is ProtocolTest {
     ) internal {
         uint256 interestOwed = interestPerEpoch.mulWadUp(epochsOwed);
 
-        uint256 iFILtoFILStart = pool.convertToAssets(iFIL.balanceOf(investor));
         uint256 FILtoIFILStart = pool.convertToShares(WAD);
         uint256 agentLiquidAssets = agent.liquidAssets();
         uint256 poolFILBalStart = address(pool).balance;
         uint256 poolWFILBalStart = wFIL.balanceOf(address(pool));
         // valid payment
-        agent.pay(poolID, payCred);
+        (,,, uint256 refund) = agent.pay(poolID, payCred);
         Account memory postPayAccount = AccountHelpers.getAccount(router, address(agent), poolID);
         // assertions
-        uint256 feeBasis;
-        uint256 expIFILAppreciation;
         if (payAmount < interestOwed) {
-            (feeBasis, expIFILAppreciation) =
-                assertInterestOnlyPayment(payAmount, interestPerEpoch, prePayAccount, postPayAccount);
+            assertInterestOnlyPayment(payAmount, interestPerEpoch, prePayAccount, postPayAccount);
         } else {
-            (feeBasis, expIFILAppreciation) =
-                assertPrincipalAndInterestPayment(payAmount, interestOwed, prePayAccount, postPayAccount);
+            assertPrincipalAndInterestPayment(payAmount, interestOwed, prePayAccount, postPayAccount);
         }
-        // pay invariants
-        assertEq(
-            pool.convertToAssets(iFIL.balanceOf(investor)) - iFILtoFILStart,
-            expIFILAppreciation - feeBasis.mulWadUp(GetRoute.poolRegistry(router).treasuryFeeRate()),
-            "Investor's IFIL value should have increased by pay amount"
-        );
+
+        // payAmount gets reset if there was any refund
+        payAmount = payAmount - refund;
+
         uint256 FILtoIFIL = pool.convertToShares(WAD);
-        // we should be getting less than WAD shares because of the payment
-        assertLt(FILtoIFIL, FILtoIFILStart, "Share price should increase");
+        // FILtoIFIL should not increase by pay amount in accrual basis accounting
+        assertEq(FILtoIFIL, FILtoIFILStart, "Share price should increase");
         assertEq(
             agentLiquidAssets - payAmount,
             agent.liquidAssets(),
@@ -402,7 +394,7 @@ contract IntegrationTest is ProtocolTest {
         uint256 interestPerEpoch,
         Account memory prePayAccount,
         Account memory postPayAccount
-    ) internal returns (uint256 feeBasis, uint256 expIFILAppreciation) {
+    ) internal returns (uint256 feeBasis) {
         assertEq(
             payAmount.divWadDown(interestPerEpoch) + prePayAccount.epochsPaid,
             postPayAccount.epochsPaid,
@@ -416,9 +408,7 @@ contract IntegrationTest is ProtocolTest {
         assertGt(postPayAccount.epochsPaid, prePayAccount.epochsPaid, "Epochs paid should have moved up");
         testInvariants("assertInterestOnlyPayment");
 
-        // here we should assume that the entire payAmount should be realized by the investor's IFIL minus treasury fees
-        // so feeBasis and expIFILAppreciation are both applied on the full payAmount
-        return (payAmount, payAmount);
+        return payAmount;
     }
 
     function assertPrincipalAndInterestPayment(
@@ -426,7 +416,7 @@ contract IntegrationTest is ProtocolTest {
         uint256 interestOwed,
         Account memory prePayAccount,
         Account memory postPayAccount
-    ) internal returns (uint256 feeBasis, uint256 expIFILAppreciation) {
+    ) internal returns (uint256 feeBasis) {
         uint256 totalOwed = interestOwed + prePayAccount.principal;
         if (payAmount > totalOwed) {
             // full exit
@@ -444,8 +434,6 @@ contract IntegrationTest is ProtocolTest {
 
         testInvariants("assert principal and interest payment");
 
-        // here we should assume that the entire interestOwed should be realized by the investor's IFIL minus treasury fees
-        // so feeBasis and expIFILAppreciation are both applied on the full interestOwed
-        return (interestOwed, interestOwed);
+        return interestOwed;
     }
 }
