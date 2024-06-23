@@ -37,7 +37,7 @@ contract PoolTestHelper is CoreTestHelper {
                 router,
                 // no min liquidity for test pool
                 address(liquidStakingToken),
-                ILiquidityMineSP(address(0)),
+                address(0),
                 0,
                 0
             )

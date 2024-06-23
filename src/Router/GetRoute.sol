@@ -4,7 +4,7 @@ pragma solidity 0.8.20;
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgentDeployer} from "src/Types/Interfaces/IAgentDeployer.sol";
-import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";

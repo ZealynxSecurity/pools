@@ -18,7 +18,7 @@ contract PoolTestState is ProtocolTest {
 
     using Credentials for VerifiableCredential;
 
-    IPoolRegistry poolRegistry;
+    address poolRegistry;
     uint256 borrowAmount = WAD;
     uint256 stakeAmount = 1000e18;
     uint256 expectedRateBasic = 15e16;
@@ -41,7 +41,7 @@ contract PoolTestState is ProtocolTest {
         borrowCredBasic = issueGenericBorrowCred(agent.id(), borrowAmount);
         vcBasic = borrowCredBasic.vc;
 
-        poolRegistry = GetRoute.poolRegistry(router);
+        poolRegistry = address(GetRoute.poolRegistry(router));
         asset = pool.asset();
         liquidStakingToken = pool.liquidStakingToken();
         agentID = agent.id();
