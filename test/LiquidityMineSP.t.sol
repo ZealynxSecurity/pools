@@ -7,7 +7,7 @@ import {LiquidityMineSP} from "src/Token/LiquidityMineSP.sol";
 import {Router, GetRoute} from "src/Router/Router.sol";
 import {Token} from "src/Token/Token.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {IERC20} from "src/types/Interfaces/IERC20.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";

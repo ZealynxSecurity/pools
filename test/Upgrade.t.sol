@@ -23,7 +23,7 @@ import {AgentPolice} from "v0/Agent/AgentPolice.sol";
 import {MinerRegistry} from "v0/Agent/MinerRegistry.sol";
 import {AuthController} from "v0/Auth/AuthController.sol";
 import {PoolRegistry} from "v0/Pool/PoolRegistry.sol";
-import {SimpleRamp} from "v0/OffRamp/Offramp.sol";
+import {SimpleRamp} from "v0/OffRamp/OffRamp.sol";
 import {RateModule} from "v0/Pool/RateModule.sol";
 import {InfinityPool} from "v0/Pool/InfinityPool.sol";
 import {CredParser} from "v0/Credentials/CredParser.sol";

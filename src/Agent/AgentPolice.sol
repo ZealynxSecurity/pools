@@ -2,7 +2,7 @@
 pragma solidity 0.8.20;
 
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {Pausable} from "@openzeppelin/contracts/Utils/Pausable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";

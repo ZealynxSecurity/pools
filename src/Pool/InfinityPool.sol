@@ -4,7 +4,7 @@ pragma solidity 0.8.20;
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {FilAddress} from "shim/FilAddress.sol";
-import {Pausable} from "@openzeppelin/contracts/Utils/Pausable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";

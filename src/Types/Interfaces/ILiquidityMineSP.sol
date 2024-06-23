@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.20;
 
-import {IERC20} from "src/types/Interfaces/IERC20.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
 interface ILiquidityMineSP {
     error InsufficientRewards();

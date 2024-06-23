@@ -3,10 +3,10 @@ pragma solidity 0.8.20;
 
 import {FilAddress} from "fevmate/utils/FilAddress.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {Ownable} from "src/auth/Ownable.sol";
+import {Ownable} from "src/Auth/Ownable.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {ROUTE_INFINITY_POOL} from "src/Constants/Routes.sol";
-import {IERC20} from "src/types/Interfaces/IERC20.sol";
+import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
