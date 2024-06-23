@@ -17,7 +17,7 @@ import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
-import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
+import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
@@ -141,7 +141,7 @@ contract InfinityPool is IPool, Ownable {
         address owner_,
         address router_,
         address liquidStakingToken_,
-        ILiquidityMineSP lm_,
+        address lm_,
         uint256 minimumLiquidity_,
         uint256 id_
     ) Ownable(owner_) {
@@ -155,7 +155,7 @@ contract InfinityPool is IPool, Ownable {
 
         _agentFactory = GetRoute.agentFactory(router_);
         credParser = address(GetRoute.credParser(router_));
-        lm = lm_;
+        lm = ILiquidityMineSP(lm_);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -218,13 +218,10 @@ contract InfinityPool is IPool, Ownable {
         // pseudo accounting update to make sure our values are correct
         (uint256 newRentalFeesAccrued, uint256 newTFeesAccrued) = _computeNewFeesAccrued();
         // using accrual basis accounting, the assets of the pool are:
-        // assets currently in the pool
+        // assets currently held by the pool
         // total borrowed from agents
-        // total accrued rental fees
-        // total treasury fees lost
-        // subtract total rental fees paid
-        // subtract total treasury fees left unpaid
-        // subtract lost rental fees
+        // total owed rental fees to LPs
+        // subtract owed treasury fees
         return asset.balanceOf(address(this)) + totalBorrowed + _lpRewards.accrue(newRentalFeesAccrued).owed()
             - _treasuryRewards.accrue(newTFeesAccrued).owed();
     }
@@ -872,6 +869,8 @@ contract InfinityPool is IPool, Ownable {
      */
     function jumpStartTotalBorrowed(uint256 amount) external onlyPoolRegistry {
         if (totalBorrowed != 0) revert InvalidState();
+        // set the lastAccountingUpdateEpoch, effectively starting the pool's accounting
+        lastAccountingUpdateEpoch = block.number;
         totalBorrowed = amount;
     }
 

@@ -7,6 +7,8 @@ import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
 import {PoolToken} from "shim/PoolToken.sol";
 import {WFIL} from "shim/WFIL.sol";
+
+import {UpgradeToV2} from "src/Upgrades/UpgradeToV2.sol";
 import {Router} from "src/Router/Router.sol";
 import {EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 import {AgentData, Credentials, SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
@@ -26,25 +28,27 @@ import {RateModule} from "v0/Pool/RateModule.sol";
 import {InfinityPool} from "v0/Pool/InfinityPool.sol";
 import {CredParser} from "v0/Credentials/CredParser.sol";
 
+import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
-import {IAgentPolice} from "v0/Types/Interfaces/IAgentPolice.sol";
+import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
 import {IPool} from "v0/Types/Interfaces/IPool.sol";
 import {IOffRamp} from "v0/Types/Interfaces/IOffRamp.sol";
 
 import {CoreTestHelper} from "test/helpers/CoreTestHelper.sol";
 import {AgentTestHelper} from "test/helpers/AgentTestHelper.sol";
+import {PoolTestHelper} from "test/helpers/PoolTestHelper.sol";
 import {Deployer} from "test/helpers/DeployerV1.sol";
 import {PreStake} from "test/helpers/PreStake.sol";
 import {MockMiner} from "test/helpers/MockMiner.sol";
 import {EPOCHS_IN_WEEK, EPOCHS_IN_DAY, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 import "test/helpers/Constants.sol";
 
-contract UpgradeTest is CoreTestHelper, AgentTestHelper {
+contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
     uint256 public constant DEFAULT_WINDOW = EPOCHS_IN_WEEK * 3;
 
     IPool oldPool;
@@ -54,6 +58,7 @@ contract UpgradeTest is CoreTestHelper, AgentTestHelper {
 
     IAgent agent;
     address agentOwner = makeAddr("AGENT_OWNER");
+    address investor = makeAddr("INVESTOR");
 
     constructor() {
         vm.startPrank(systemAdmin);
@@ -117,12 +122,11 @@ contract UpgradeTest is CoreTestHelper, AgentTestHelper {
         vm.stopPrank();
         // deposit 1e18 FIL to the pool to avoid a donation attack
         address donator = makeAddr("DONATOR");
-        _depositFILToPool(donator, address(oldPool), 1e18);
+        _depositFundsIntoPool(1e18, donator);
     }
 
     function setUp() public {
-        address investor = makeAddr("INVESTOR");
-        _depositFILToPool(investor, address(oldPool), 1e18);
+        _depositFundsIntoPool(1e18, investor);
         _withdrawFILFromPool(investor, address(ramp), 1e18);
         (agent,) = configureAgent(agentOwner);
         SignedCredential memory sc = _issueGenericBorrowCred(agent.id(), 1e18);
@@ -141,7 +145,44 @@ contract UpgradeTest is CoreTestHelper, AgentTestHelper {
     }
 
     function testUpgradeV1ToV2() public {
-        assertTrue(true, "Upgrade test");
+        UpgradeToV2 upgrader = new UpgradeToV2(router, systemAdmin);
+
+        vm.startPrank(systemAdmin);
+
+        (address agentPolice, address pool) = upgrader.deployContracts();
+        assertTrue(agentPolice != address(0), "Agent police deploy failed");
+        assertTrue(pool != address(0), "Pool deploy failed");
+
+        // assign the pool registry, router, lst, and old pool ownership to this contract
+        IAuth(address(oldPool)).transferOwnership(address(upgrader));
+        IAuth(router).transferOwnership(address(upgrader));
+        IAuth(address(iFIL)).transferOwnership(address(upgrader));
+        IAuth(address(GetRoute.poolRegistry(router))).transferOwnership(address(upgrader));
+
+        upgrader.upgrade(agentPolice, pool);
+
+        _depositFundsIntoPool(1e18, investor);
+        _withdrawFILFromPool(investor, pool, 1e18);
+
+        uint256 poolTotalAssets = IPool(pool).totalAssets();
+
+        // roll forward and make sure we're accruing interesting
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        uint256 poolTotalAssets2 = IPool(pool).totalAssets();
+        assertGt(poolTotalAssets2, poolTotalAssets, "Interest should have accrued");
+
+        // make a payment to make sure new agent police is working
+        SignedCredential memory sc = _issueGenericPayCred(agent.id(), 1e18);
+        vm.deal(address(agent), 1e18);
+        vm.prank(agentOwner);
+        agent.pay(0, sc);
+
+        assertEq(IPool(pool).totalAssets(), poolTotalAssets2, "Total assets should not change after payment");
+
+        // make a random call to the new agent police that did not exist on hte old one to make sure the new one is deployed
+        uint256 testVal = IAgentPolice(agentPolice).dtlLiquidationThreshold();
+        assertGt(testVal, 0, "Agent police liquidation threshold should have a value");
     }
 
     function _withdrawFILFromPool(address _investor, address _pool, uint256 amount) internal {
@@ -156,22 +197,6 @@ contract UpgradeTest is CoreTestHelper, AgentTestHelper {
             "Investor balance should increase by amount"
         );
         vm.stopPrank();
-    }
-
-    function _depositFILToPool(address _investor, address _pool, uint256 _amount) internal {
-        vm.deal(_investor, _amount);
-        uint256 investorBalBefore = wFIL.balanceOf(_investor) + payable(address(_investor)).balance;
-        uint256 poolBalBefore = wFIL.balanceOf(_pool);
-        vm.prank(_investor);
-        (bool success,) = _pool.call{value: _amount}("");
-        assertTrue(success, "Deposit failed");
-
-        assertEq(
-            investorBalBefore,
-            wFIL.balanceOf(_investor) + payable(address(_investor)).balance + _amount,
-            "Investor balance should decrease by amount"
-        );
-        assertEq(poolBalBefore + _amount, wFIL.balanceOf(_pool), "Pool balance should increase by amount");
     }
 
     uint256[61] rateArray = [
