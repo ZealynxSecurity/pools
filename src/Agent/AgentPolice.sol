@@ -39,7 +39,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
 
     event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
 
-    IWFIL internal _wFIL;
+    IWFIL internal immutable _wFIL;
 
     /// @notice `administrationWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is eligible for administration
     uint256 public administrationWindow;
@@ -226,11 +226,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
      *      3. the credential has not been used before
      *      4. the credential's `subject` is the `agent`
      */
-    function isValidCredential(uint256 agent, bytes4 action, SignedCredential calldata sc)
-        external
-        view
-        whenNotPaused
-    {
+    function isValidCredential(uint256 agent, bytes4 action, SignedCredential calldata sc) external view {
         // reverts if the credential isn't valid
         validateCred(agent, action, sc);
 
@@ -276,7 +272,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
      * @notice `confirmRmAdministration` checks to ensure an Agent's faulty sectors are in the tolerance range, and they're within the payment tolerance window
      * @param vc the verifiable credential
      */
-    function confirmRmAdministration(VerifiableCredential calldata vc) external view whenNotPaused {
+    function confirmRmAdministration(VerifiableCredential calldata vc) external view {
         if (_epochsPaidBehindTarget(vc.subject, administrationWindow)) revert AgentStateRejected();
 
         address credParser = address(GetRoute.credParser(router));
