@@ -12,6 +12,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
+import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 import {Credentials, SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
 import {FilAddress} from "shim/FilAddress.sol";
@@ -485,7 +486,7 @@ contract Agent is IAgent, Operatable {
     }
 
     function _notPaused() internal view {
-        if (agentPolice.paused()) revert Unauthorized();
+        if (IPausable(address(agentPolice)).paused()) revert Unauthorized();
     }
 
     function _onlyAgentPolice() internal view {

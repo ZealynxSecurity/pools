@@ -19,6 +19,7 @@ import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {CredParser} from "src/Credentials/CredParser.sol";
+import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
 import {EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 
@@ -43,6 +44,8 @@ contract PoolTestHelper is CoreTestHelper {
             )
         );
         vm.startPrank(systemAdmin);
+        // the pool starts paused in prod
+        IPausable(address(_pool)).unpause();
         liquidStakingToken.setMinter(address(_pool));
         liquidStakingToken.setBurner(address(_pool));
         IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));

@@ -3,6 +3,7 @@ pragma solidity 0.8.20;
 
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
+import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 
 interface IAgentPolice {
     /*//////////////////////////////////////////////
@@ -24,8 +25,6 @@ interface IAgentPolice {
     function agentApproved(VerifiableCredential calldata vc) external;
 
     function agentLiquidated(uint256 agentID) external view returns (bool);
-
-    function paused() external view returns (bool);
 
     function maxDTE() external view returns (uint256);
 
@@ -93,5 +92,5 @@ interface IAgentPolice {
 
     function pause() external;
 
-    function resume() external;
+    function unpause() external;
 }

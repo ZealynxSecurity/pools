@@ -7,8 +7,9 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
-
+import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
+
 import {NewCredParser} from "test/helpers/NewCredParser.sol";
 import {NewCredentials, NewAgentData} from "test/helpers/NewCredentials.sol";
 import {AgentPolice} from "src/Agent/AgentPolice.sol";
@@ -451,6 +452,11 @@ contract Pool4626Tests is PoolTestState {
 contract PoolAdminTests is PoolTestState {
     function testJumpStartTotalBorrowed() public {
         uint256 amount = WAD;
+        // make sure the pool is paused, as this is how its setup in prod
+        if (!IPausable(address(pool)).paused()) {
+            vm.prank(systemAdmin);
+            IPausable(address(pool)).pause();
+        }
         vm.prank(address(poolRegistry));
         pool.jumpStartTotalBorrowed(amount);
         assertEq(pool.totalBorrowed(), amount);

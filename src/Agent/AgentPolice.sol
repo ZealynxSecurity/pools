@@ -2,6 +2,7 @@
 pragma solidity 0.8.20;
 
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import {Pausable} from "@openzeppelin/contracts/Utils/Pausable.sol";
 import {FilAddress} from "shim/FilAddress.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Operatable} from "src/Auth/Operatable.sol";
@@ -23,7 +24,7 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {EPOCHS_IN_DAY, EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 import {ROUTE_INFINITY_POOL, ROUTE_WFIL_TOKEN} from "src/Constants/Routes.sol";
 
-contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
+contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
     using Credentials for VerifiableCredential;
@@ -67,9 +68,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
 
     /// @notice `liquidationFee` is the fee charged to liquidate an agent, only charged if LPs are made whole first
     uint256 public liquidationFee = 1e17;
-
-    /// @notice `paused` is a flag that determines whether the protocol is paused
-    bool public paused = false;
 
     /// @notice `_credentialUseBlock` maps a credential's hash to when it was used
     mapping(bytes32 => uint256) private _credentialUseBlock;
@@ -228,7 +226,11 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
      *      3. the credential has not been used before
      *      4. the credential's `subject` is the `agent`
      */
-    function isValidCredential(uint256 agent, bytes4 action, SignedCredential calldata sc) external view {
+    function isValidCredential(uint256 agent, bytes4 action, SignedCredential calldata sc)
+        external
+        view
+        whenNotPaused
+    {
         // reverts if the credential isn't valid
         validateCred(agent, action, sc);
 
@@ -274,7 +276,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
      * @notice `confirmRmAdministration` checks to ensure an Agent's faulty sectors are in the tolerance range, and they're within the payment tolerance window
      * @param vc the verifiable credential
      */
-    function confirmRmAdministration(VerifiableCredential calldata vc) external view {
+    function confirmRmAdministration(VerifiableCredential calldata vc) external view whenNotPaused {
         if (_epochsPaidBehindTarget(vc.subject, administrationWindow)) revert AgentStateRejected();
 
         address credParser = address(GetRoute.credParser(router));
@@ -335,14 +337,14 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
      * @notice `pause` sets this contract paused
      */
     function pause() external onlyOwner {
-        paused = true;
+        _pause();
     }
 
     /**
-     * @notice `resume` resumes this contract
+     * @notice `unpause` resumes this contract
      */
-    function resume() external onlyOwner {
-        paused = false;
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     /**
@@ -384,6 +386,8 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable {
     /// reverting in the case of any non-approvals,
     /// or in the case that an account owes payments over the acceptable threshold
     function _agentApproved(VerifiableCredential calldata vc, Account memory account, IPool pool) internal view {
+        // make sure the agent police isn't paused
+        _requireNotPaused();
         // check to ensure the withdrawal does not bring us over maxDTE, maxDTI, or maxDTL
         address credParser = address(GetRoute.credParser(router));
         // check to make sure the after the withdrawal, the DTE, DTI, DTL are all within the acceptable range

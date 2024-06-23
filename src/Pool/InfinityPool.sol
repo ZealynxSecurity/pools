@@ -4,6 +4,7 @@ pragma solidity 0.8.20;
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {FilAddress} from "shim/FilAddress.sol";
+import {Pausable} from "@openzeppelin/contracts/Utils/Pausable.sol";
 
 import {GetRoute} from "src/Router/GetRoute.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
@@ -36,7 +37,7 @@ uint256 constant WAD = 1e18;
  * @notice The InfinityPool contract is an ERC4626 vault for FIL. It primarily handles depositing, borrowing, and paying FIL.
  * @dev the InfinityPool has some hooks and light integrations with the Offramp. The Offramp will not be enabled during launch.
  */
-contract InfinityPool is IPool, Ownable {
+contract InfinityPool is IPool, Ownable, Pausable {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
     using FilAddress for address;
@@ -129,11 +130,11 @@ contract InfinityPool is IPool, Ownable {
     /// @dev the pool can receive FIL from the WFIL.Withdraw method,
     /// so we make sure to not trigger a deposit in those cases
     /// (when this contract unwraps FIL triggering a receive or fallback)
-    receive() external payable isOpen {
+    receive() external payable isOpen whenNotPaused {
         if (msg.sender != address(asset)) _depositFIL(msg.sender);
     }
 
-    fallback() external payable isOpen {
+    fallback() external payable isOpen whenNotPaused {
         if (msg.sender != address(asset)) _depositFIL(msg.sender);
     }
 
@@ -156,6 +157,9 @@ contract InfinityPool is IPool, Ownable {
         _agentFactory = GetRoute.agentFactory(router_);
         credParser = address(GetRoute.credParser(router_));
         lm = ILiquidityMineSP(lm_);
+
+        // start the contract pause
+        _pause();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -231,7 +235,7 @@ contract InfinityPool is IPool, Ownable {
      * @return totalBorrowed The total borrowed from the agent
      */
     function totalBorrowableAssets() public view returns (uint256) {
-        if (isShuttingDown) return 0;
+        if (isShuttingDown || paused()) return 0;
         uint256 _assets = asset.balanceOf(address(this));
         uint256 _absMinLiquidity = getAbsMinLiquidity();
 
@@ -365,7 +369,7 @@ contract InfinityPool is IPool, Ownable {
      * @dev the Agent must be approved to borrow from the Pool
      * @dev the min borrow amount is 1 FIL
      */
-    function borrow(VerifiableCredential calldata vc) external isOpen subjectIsAgentCaller(vc) {
+    function borrow(VerifiableCredential calldata vc) external isOpen whenNotPaused subjectIsAgentCaller(vc) {
         updateAccounting();
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
@@ -524,7 +528,7 @@ contract InfinityPool is IPool, Ownable {
      */
     function updateAccounting() public {
         // only update the accounting if we're in a new epoch
-        if (block.number > lastAccountingUpdateEpoch) {
+        if (block.number > lastAccountingUpdateEpoch && !paused()) {
             (uint256 newRentalFeesAccrued, uint256 newTreasuryFeesOwed) = _computeNewFeesAccrued();
             // accrue rewards to the treasury fees owed
             _treasuryRewards = _treasuryRewards.accrue(newTreasuryFeesOwed);
@@ -549,7 +553,7 @@ contract InfinityPool is IPool, Ownable {
         returns (uint256 newRentalFeesAccrued, uint256 newTreasuryFeesAccrued)
     {
         // only update the accounting if we're in a new epoch
-        if (block.number > lastAccountingUpdateEpoch) {
+        if (block.number > lastAccountingUpdateEpoch && !paused()) {
             // create a pseudo Account struct for the whole pool to reuse the FinMath library
             (newRentalFeesAccrued,) = FinMath.interestOwed(
                 Account({
@@ -578,7 +582,7 @@ contract InfinityPool is IPool, Ownable {
      * @param receiver The address that will receive the shares
      * @return shares - the number of shares received in exchange for the deposit
      */
-    function deposit(uint256 assets, address receiver) public isOpen returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public isOpen whenNotPaused returns (uint256 shares) {
         return _deposit(assets, receiver);
     }
 
@@ -587,7 +591,7 @@ contract InfinityPool is IPool, Ownable {
      * @param receiver The address that will receive the shares
      * @return shares - the number of shares received in exchange for the deposit
      */
-    function deposit(address receiver) public payable isOpen returns (uint256 shares) {
+    function deposit(address receiver) public payable isOpen whenNotPaused returns (uint256 shares) {
         return _depositFIL(receiver);
     }
 
@@ -597,7 +601,7 @@ contract InfinityPool is IPool, Ownable {
      * @param receiver The address to receive the shares
      * @return assets Number of assets deposited
      */
-    function mint(uint256 shares, address receiver) public isOpen returns (uint256 assets) {
+    function mint(uint256 shares, address receiver) public isOpen whenNotPaused returns (uint256 assets) {
         updateAccounting();
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
@@ -615,7 +619,12 @@ contract InfinityPool is IPool, Ownable {
      * @param owner The owner of the shares
      * @return shares - the number of shares burned
      */
-    function withdraw(uint256 assets, address receiver, address owner) public isOpen returns (uint256 shares) {
+    function withdraw(uint256 assets, address receiver, address owner)
+        public
+        isOpen
+        whenNotPaused
+        returns (uint256 shares)
+    {
         return _withdraw(assets, receiver, owner);
     }
 
@@ -630,6 +639,7 @@ contract InfinityPool is IPool, Ownable {
     function withdraw(uint256 assets, address receiver, address owner, uint256)
         public
         isOpen
+        whenNotPaused
         returns (uint256 shares)
     {
         return _withdraw(assets, receiver, owner);
@@ -650,7 +660,12 @@ contract InfinityPool is IPool, Ownable {
      * @param owner The owner of the shares
      * @return assets The assets received from burning the shares
      */
-    function redeem(uint256 shares, address receiver, address owner) public isOpen returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address owner)
+        public
+        isOpen
+        whenNotPaused
+        returns (uint256 assets)
+    {
         return _redeem(shares, receiver, owner);
     }
 
@@ -662,7 +677,12 @@ contract InfinityPool is IPool, Ownable {
      *  @param (unused) A patch to match the old Offramp interface
      * @return assets The assets received from burning the shares
      */
-    function redeem(uint256 shares, address receiver, address owner, uint256) public isOpen returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address owner, uint256)
+        public
+        isOpen
+        whenNotPaused
+        returns (uint256 assets)
+    {
         return _redeem(shares, receiver, owner);
     }
 
@@ -684,6 +704,7 @@ contract InfinityPool is IPool, Ownable {
     function withdrawF(uint256 assets, address receiver, address owner)
         public
         isOpen
+        whenNotPaused
         ownerIsCaller(owner)
         returns (uint256 shares)
     {
@@ -709,6 +730,7 @@ contract InfinityPool is IPool, Ownable {
     function redeemF(uint256 shares, address receiver, address owner)
         public
         isOpen
+        whenNotPaused
         ownerIsCaller(owner)
         returns (uint256 assets)
     {
@@ -720,12 +742,7 @@ contract InfinityPool is IPool, Ownable {
      * @notice DEPRECATED: Allows the Staker to redeem their shares for assets (FIL)
      * @dev This param is a patch for the Offramp to maintain backwards compatibility
      */
-    function redeemF(uint256 shares, address receiver, address owner, uint256)
-        public
-        isOpen
-        ownerIsCaller(owner)
-        returns (uint256 assets)
-    {
+    function redeemF(uint256 shares, address receiver, address owner, uint256) public returns (uint256 assets) {
         return redeemF(shares, receiver, owner);
     }
 
@@ -761,7 +778,7 @@ contract InfinityPool is IPool, Ownable {
      * @return shares - The amount of shares that would be converted from assets
      * @dev Will revert if the pool is shutting down
      */
-    function previewDeposit(uint256 assets) public view isOpen returns (uint256) {
+    function previewDeposit(uint256 assets) public view isOpen whenNotPaused returns (uint256) {
         return convertToShares(assets);
     }
 
@@ -771,7 +788,7 @@ contract InfinityPool is IPool, Ownable {
      * @return assets - The amount of assets that would be converted from shares
      * @dev Will revert if the pool is shutting down
      */
-    function previewMint(uint256 shares) public view isOpen returns (uint256) {
+    function previewMint(uint256 shares) public view isOpen whenNotPaused returns (uint256) {
         return convertToAssets(shares);
     }
 
@@ -780,7 +797,7 @@ contract InfinityPool is IPool, Ownable {
      * @param assets The amount of assets to withdraw
      * @return shares - The amount of shares to be converted from assets
      */
-    function previewWithdraw(uint256 assets) public view isOpen returns (uint256 shares) {
+    function previewWithdraw(uint256 assets) public view isOpen whenNotPaused returns (uint256 shares) {
         if (assets > getLiquidAssets()) return 0;
 
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
@@ -793,7 +810,7 @@ contract InfinityPool is IPool, Ownable {
      * @param shares The amount of shares to hypothetically burn
      * @return assets - The amount of assets that would be converted from shares
      */
-    function previewRedeem(uint256 shares) public view isOpen returns (uint256 assets) {
+    function previewRedeem(uint256 shares) public view isOpen whenNotPaused returns (uint256 assets) {
         uint256 supply = liquidStakingToken.totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         assets = supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
@@ -893,6 +910,8 @@ contract InfinityPool is IPool, Ownable {
         // set the lastAccountingUpdateEpoch, effectively starting the pool's accounting
         lastAccountingUpdateEpoch = block.number;
         totalBorrowed = amount;
+        // set the pool to unpause to start operations
+        _unpause();
     }
 
     /**
@@ -941,8 +960,25 @@ contract InfinityPool is IPool, Ownable {
         isShuttingDown = true;
     }
 
+    /**
+     * @notice setRentalFeesOwedPerEpoch sets the rental fees owed per epoch
+     */
     function setRentalFeesOwedPerEpoch(uint256 rentalFeesOwedPerEpoch_) external onlyOwner {
         _rentalFeesOwedPerEpoch = rentalFeesOwedPerEpoch_;
+    }
+
+    /**
+     * @notice pause halts all pool activity
+     */
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @notice unpause resumes all pool activity
+     */
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     /// @dev sets the credentialParser in case we need to update a data type
