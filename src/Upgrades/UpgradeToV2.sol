@@ -14,7 +14,12 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
+import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
 import {ROUTE_AGENT_POLICE, ROUTE_INFINITY_POOL, ROUTE_POOL_REGISTRY} from "src/Constants/Routes.sol";
+
+interface IWithRateModule {
+    function rateModule() external view returns (IRateModule);
+}
 
 contract UpgradeToV2 is Ownable {
     using PoolSnapshot for IPool;
@@ -27,6 +32,8 @@ contract UpgradeToV2 is Ownable {
     string constant VERIFIED_VERSION = "1";
 
     event DeployedContracts(address indexed agentPolice, address indexed pool);
+
+    error OldPoolNotShutDownProperly(uint256 oldPoolBalance);
 
     constructor(address _router, address _owner) Ownable(_owner) {
         router = _router;
@@ -56,6 +63,8 @@ contract UpgradeToV2 is Ownable {
         address poolRegistry = address(GetRoute.poolRegistry(router));
         address oldPool = address(GetRoute.pool(IPoolRegistry(poolRegistry), 0));
 
+        address rateModule = address(IWithRateModule(oldPool).rateModule());
+
         PoolSnapshot.PoolState memory oldPoolState = IPool(oldPool).snapshot();
 
         address lst = address(IPool(oldPool).liquidStakingToken());
@@ -64,14 +73,18 @@ contract UpgradeToV2 is Ownable {
         address poolRegOwner = IAuth(poolRegistry).owner();
         address routerOwner = IAuth(router).owner();
         address lstOwner = IAuth(lst).owner();
+        address rmOwner = IAuth(rateModule).owner();
 
         // temporarily accept ownership of the required protocol contracts to upgrade to V2
         IAuth(oldPool).acceptOwnership();
         IAuth(poolRegistry).acceptOwnership();
         IAuth(router).acceptOwnership();
         IAuth(lst).acceptOwnership();
+        IAuth(rateModule).acceptOwnership();
 
-        // first shut down the pool
+        // set max DTL to max uint256 to effectively halt this pool from working
+
+        // shut down the pool
         IPool(oldPool).shutDown();
         // then upgrade the pool
         IPoolRegistry(poolRegistry).upgradePool(IPool(pool));
@@ -89,6 +102,7 @@ contract UpgradeToV2 is Ownable {
         IAuth(poolRegistry).transferOwnership(poolRegOwner);
         IAuth(router).transferOwnership(routerOwner);
         IAuth(lst).transferOwnership(lstOwner);
+        IAuth(rateModule).transferOwnership(rmOwner);
 
         // send a test deposit/withdraw if there was value in this message
         if (msg.value > 0) {
@@ -105,6 +119,12 @@ contract UpgradeToV2 is Ownable {
 
         // throws an error if theres an accounting mismatch
         IPool(pool).mustBeEqual(oldPoolState);
+
+        uint256 oldPoolBalance = payable(oldPool).balance + GetRoute.wFIL(router).balanceOf(oldPool);
+
+        if (oldPoolBalance > 0) {
+            revert OldPoolNotShutDownProperly(oldPoolBalance);
+        }
     }
 
     function refreshProtocolRoutes(address[] calldata agents) external {

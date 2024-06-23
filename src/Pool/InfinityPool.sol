@@ -692,6 +692,14 @@ contract InfinityPool is IPool, Ownable {
     }
 
     /**
+     * @notice DEPRECATED: Allows Staker to withdraw assets (FIL)
+     * @dev This param is a patch for the Offramp to maintain backwards compatibility
+     */
+    function withdrawF(uint256 assets, address receiver, address owner, uint256) public returns (uint256 shares) {
+        return withdrawF(assets, receiver, owner);
+    }
+
+    /**
      * @notice Allows the Staker to redeem their shares for assets (FIL)
      * @param shares The number of shares to burn
      * @param receiver The address to receive the assets
@@ -706,6 +714,19 @@ contract InfinityPool is IPool, Ownable {
     {
         assets = previewRedeem(shares);
         _processExit(owner, receiver, shares, assets, true);
+    }
+
+    /**
+     * @notice DEPRECATED: Allows the Staker to redeem their shares for assets (FIL)
+     * @dev This param is a patch for the Offramp to maintain backwards compatibility
+     */
+    function redeemF(uint256 shares, address receiver, address owner, uint256)
+        public
+        isOpen
+        ownerIsCaller(owner)
+        returns (uint256 assets)
+    {
+        return redeemF(shares, receiver, owner);
     }
 
     /*//////////////////////////////////////////////////////////////

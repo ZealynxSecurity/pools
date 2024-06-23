@@ -38,6 +38,7 @@ import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
 import {IPool} from "v0/Types/Interfaces/IPool.sol";
 import {IOffRamp} from "v0/Types/Interfaces/IOffRamp.sol";
+import {IInfinityPool} from "v0/Types/Interfaces/IInfinityPool.sol";
 
 import {CoreTestHelper} from "test/helpers/CoreTestHelper.sol";
 import {AgentTestHelper} from "test/helpers/AgentTestHelper.sol";
@@ -153,16 +154,21 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
         assertTrue(agentPolice != address(0), "Agent police deploy failed");
         assertTrue(pool != address(0), "Pool deploy failed");
 
+        address rateModule = address(IInfinityPool(address(oldPool)).rateModule());
+        address poolRegistry = address(GetRoute.poolRegistry(router));
         // assign the pool registry, router, lst, and old pool ownership to this contract
         IAuth(address(oldPool)).transferOwnership(address(upgrader));
         IAuth(router).transferOwnership(address(upgrader));
         IAuth(address(iFIL)).transferOwnership(address(upgrader));
-        IAuth(address(GetRoute.poolRegistry(router))).transferOwnership(address(upgrader));
+        IAuth(poolRegistry).transferOwnership(address(upgrader));
+        IAuth(rateModule).transferOwnership(address(upgrader));
 
         upgrader.upgrade(agentPolice, pool);
 
+        vm.stopPrank();
+
         _depositFundsIntoPool(1e18, investor);
-        _withdrawFILFromPool(investor, pool, 1e18);
+        _withdrawFILFromPool(investor, pool, IPool(pool).maxWithdraw(investor));
 
         uint256 poolTotalAssets = IPool(pool).totalAssets();
 
@@ -175,7 +181,14 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
         // make a payment to make sure new agent police is working
         SignedCredential memory sc = _issueGenericPayCred(agent.id(), 1e18);
         vm.deal(address(agent), 1e18);
-        vm.prank(agentOwner);
+        vm.startPrank(agentOwner);
+
+        // first attempt should fail because agent has not refreshed routes
+        vm.expectRevert();
+        agent.pay(0, sc);
+
+        agent.refreshRoutes();
+
         agent.pay(0, sc);
 
         assertEq(IPool(pool).totalAssets(), poolTotalAssets2, "Total assets should not change after payment");
@@ -183,12 +196,26 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
         // make a random call to the new agent police that did not exist on hte old one to make sure the new one is deployed
         uint256 testVal = IAgentPolice(agentPolice).dtlLiquidationThreshold();
         assertGt(testVal, 0, "Agent police liquidation threshold should have a value");
+
+        // try to borrow
+        sc = _issueGenericBorrowCred(agent.id(), 1e18);
+        vm.startPrank(agentOwner);
+        agent.borrow(0, sc);
+        vm.stopPrank();
+
+        vm.startPrank(systemAdmin);
+        IAuth(address(oldPool)).acceptOwnership();
+        IAuth(router).acceptOwnership();
+        IAuth(address(iFIL)).acceptOwnership();
+        IAuth(poolRegistry).acceptOwnership();
+        IAuth(rateModule).acceptOwnership();
+        vm.stopPrank();
     }
 
     function _withdrawFILFromPool(address _investor, address _pool, uint256 amount) internal {
         uint256 investorBalBefore = wFIL.balanceOf(_investor) + payable(address(_investor)).balance;
         vm.startPrank(_investor);
-        iFIL.approve(address(_pool), amount);
+        iFIL.approve(_pool, amount);
         IOffRamp(_pool).withdrawF(amount, _investor, _investor, 0);
 
         assertEq(
