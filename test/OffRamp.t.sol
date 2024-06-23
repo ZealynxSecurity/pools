@@ -137,7 +137,7 @@ contract OffRampTest is ProtocolTest {
             if (exitLiquidity < withdrawAmount) {
                 assertEq(pool.previewWithdraw(withdrawAmount), 0, "preview withdraw should return 0");
 
-                vm.expectRevert(InfinityPool.InsufficientLiquidity.selector);
+                vm.expectRevert(IPool.InsufficientLiquidity.selector);
                 pool.withdrawF(withdrawAmount, investor1, investor1);
             } else {
                 assertEq(pool.previewWithdraw(withdrawAmount), withdrawAmount, "Wrong preview withdraw");
@@ -204,7 +204,7 @@ contract OffRampTest is ProtocolTest {
             if (exitLiquidity < assetsToReceive) {
                 assertEq(pool.previewRedeem(redeemAmount), 0, "Preview redeem should return 0");
 
-                vm.expectRevert(InfinityPool.InsufficientLiquidity.selector);
+                vm.expectRevert(IPool.InsufficientLiquidity.selector);
                 pool.redeemF(redeemAmount, investor1, investor1);
             } else {
                 // handle rounding
@@ -271,7 +271,7 @@ contract OffRampTest is ProtocolTest {
             if (exitLiquidity < withdrawAmount) {
                 assertEq(pool.previewWithdraw(withdrawAmount), 0, "preview withdraw should return 0");
 
-                vm.expectRevert(InfinityPool.InsufficientLiquidity.selector);
+                vm.expectRevert(IPool.InsufficientLiquidity.selector);
                 pool.withdraw(withdrawAmount, investor1, investor1);
             } else {
                 assertEq(pool.previewWithdraw(withdrawAmount), withdrawAmount, "Wrong preview withdraw");
@@ -339,7 +339,7 @@ contract OffRampTest is ProtocolTest {
             if (exitLiquidity < assetsToReceive) {
                 assertEq(pool.previewRedeem(redeemAmount), 0, "Preview redeem should return 0");
 
-                vm.expectRevert(InfinityPool.InsufficientLiquidity.selector);
+                vm.expectRevert(IPool.InsufficientLiquidity.selector);
                 pool.redeem(redeemAmount, investor1, investor1);
             } else {
                 // handle rounding
@@ -655,7 +655,7 @@ contract OffRampTest is ProtocolTest {
         uint256 iFILBal = iFIL.balanceOf(investor1);
         vm.startPrank(investor1);
         iFIL.approve(address(pool), iFILBal);
-        vm.expectRevert(InfinityPool.InsufficientLiquidity.selector);
+        vm.expectRevert(IPool.InsufficientLiquidity.selector);
         pool.withdraw(iFILBal, investor1, investor1);
     }
 
@@ -670,7 +670,7 @@ contract OffRampTest is ProtocolTest {
 
     //     // upgrade the pool
     //     IPool pool2 = IPool(
-    //         new InfinityPool(
+    //         new InfinityPoolV2(
     //             systemAdmin,
     //             router,
     //             address(wFIL),
@@ -736,7 +736,7 @@ contract OffRampTest is ProtocolTest {
 
         if (borrowAmount > stakeAmount - reserveAbs) {
             console.log("EXPECTING REVERT");
-            vm.expectRevert(InfinityPool.InsufficientLiquidity.selector);
+            vm.expectRevert(IPool.InsufficientLiquidity.selector);
             agent.borrow(poolID, sc);
         } else {
             console.log("EXPECTING NON REVERT");

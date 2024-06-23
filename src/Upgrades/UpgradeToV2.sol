@@ -6,8 +6,6 @@ import {FilAddress} from "shim/FilAddress.sol";
 import {PoolSnapshot} from "src/Upgrades/PoolSnapshot.sol";
 import {Ownable} from "src/Auth/Ownable.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
-import {InfinityPool} from "src/Pool/InfinityPool.sol";
-import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
@@ -37,26 +35,6 @@ contract UpgradeToV2 is Ownable {
 
     constructor(address _router, address _owner) Ownable(_owner) {
         router = _router;
-    }
-
-    function deployContracts() external onlyOwner returns (address agentPolice, address pool) {
-        IPoolRegistry poolRegistry = IPoolRegistry(GetRoute.poolRegistry(router));
-        address oldPool = address(GetRoute.pool(poolRegistry, 0));
-        IAuth oldAP = IAuth(address(GetRoute.agentPolice(router)));
-
-        address lst = address(IPool(oldPool).liquidStakingToken());
-
-        agentPolice = address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, oldAP.owner(), oldAP.operator(), router));
-
-        pool = address(
-            new InfinityPool(
-                IAuth(address(oldPool)).owner(), router, lst, address(0), IPool(oldPool).minimumLiquidity(), 0
-            )
-        );
-
-        emit DeployedContracts(agentPolice, pool);
-
-        return (agentPolice, pool);
     }
 
     function upgrade(address agentPolice, address pool) external payable onlyOwner {

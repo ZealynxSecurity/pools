@@ -17,6 +17,16 @@ interface IAgentPolice {
     event FaultySectors(address indexed agentID, uint256 faultEpoch);
 
     /*//////////////////////////////////////////////
+                      ERRORS
+    //////////////////////////////////////////////*/
+    error AgentStateRejected();
+    error OverLimitDTI();
+    error OverLimitDTE();
+    error OverLimitDTL();
+    error OverLimitQuota();
+    error OverFaultySectorLimit();
+
+    /*//////////////////////////////////////////////
                       GETTERS
     //////////////////////////////////////////////*/
 

@@ -12,7 +12,6 @@ import {VCVerifier} from "src/VCVerifier/VCVerifier.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
-import {AgentPolice} from "src/Agent/AgentPolice.sol";
 import {WFIL} from "shim/WFIL.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
@@ -330,7 +329,7 @@ contract AgentRmEquityTest is ProtocolTest {
             type(uint256).max
         );
 
-        withdrawAndAssertRevert(receiver, withdrawCred, AgentPolice.OverLimitDTE.selector);
+        withdrawAndAssertRevert(receiver, withdrawCred, IAgentPolice.OverLimitDTE.selector);
     }
 
     function testWithdrawIntoUnapprovedDTL(uint256 principal, uint256 liquidationValue) public {
@@ -350,7 +349,7 @@ contract AgentRmEquityTest is ProtocolTest {
             WAD
         );
 
-        withdrawAndAssertRevert(receiver, withdrawCred, AgentPolice.OverLimitDTL.selector);
+        withdrawAndAssertRevert(receiver, withdrawCred, IAgentPolice.OverLimitDTL.selector);
     }
 
     function testWithdrawIntoUnapprovedDTI(uint256 principal, uint256 badEDR) public {
@@ -381,7 +380,7 @@ contract AgentRmEquityTest is ProtocolTest {
             badEDR
         );
 
-        withdrawAndAssertRevert(receiver, withdrawCred, AgentPolice.OverLimitDTI.selector);
+        withdrawAndAssertRevert(receiver, withdrawCred, IAgentPolice.OverLimitDTI.selector);
     }
 
     function testWithdrawMoreThanLiquid(uint256 bal, uint256 withdrawAmount) public {

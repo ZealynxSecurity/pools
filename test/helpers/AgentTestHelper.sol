@@ -9,7 +9,6 @@ import {MockMiner} from "test/helpers/MockMiner.sol";
 
 import {PoolToken} from "shim/PoolToken.sol";
 import {WFIL} from "shim/WFIL.sol";
-import {InfinityPool} from "src/Pool/InfinityPool.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
@@ -17,7 +16,7 @@ import {AccountHelpers} from "src/Pool/Account.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
-import {AgentPolice} from "src/Agent/AgentPolice.sol";
+import {AgentPoliceV2} from "src/Agent/AgentPoliceV2.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AuthController} from "src/Auth/AuthController.sol";
 import {Router} from "src/Router/Router.sol";

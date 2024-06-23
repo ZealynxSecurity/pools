@@ -37,19 +37,13 @@ uint256 constant WAD = 1e18;
  * @notice The InfinityPool contract is an ERC4626 vault for FIL. It primarily handles depositing, borrowing, and paying FIL.
  * @dev the InfinityPool has some hooks and light integrations with the Offramp. The Offramp will not be enabled during launch.
  */
-contract InfinityPool is IPool, Ownable, Pausable {
+contract InfinityPoolV2 is IPool, Ownable, Pausable {
     using AccountHelpers for Account;
     using Credentials for VerifiableCredential;
     using FilAddress for address;
     using FilAddress for address payable;
     using FixedPointMathLib for uint256;
     using AccrualMath for RewardAccrual;
-
-    error InsufficientLiquidity();
-    error AccountDNE();
-    error InvalidState();
-    error PoolShuttingDown();
-    error AlreadyDefaulted();
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE

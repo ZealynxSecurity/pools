@@ -12,7 +12,6 @@ import {IAuth} from "src/Types/Interfaces/IAuth.sol";
 
 import {NewCredParser} from "test/helpers/NewCredParser.sol";
 import {NewCredentials, NewAgentData} from "test/helpers/NewCredentials.sol";
-import {AgentPolice} from "src/Agent/AgentPolice.sol";
 
 contract PoolLPTest is ProtocolTest {
     using FixedPointMathLib for uint256;
@@ -299,7 +298,7 @@ contract PoolLPTest is ProtocolTest {
         vm.deal(depositor, WAD);
         uint256 beforeBal = depositor.balance;
         vm.startPrank(depositor);
-        vm.expectRevert(abi.encodeWithSelector(InfinityPool.PoolShuttingDown.selector));
+        vm.expectRevert(abi.encodeWithSelector(IPool.PoolShuttingDown.selector));
         // ignore return value of low-level calls not used compiler warning
         (bool success,) = address(pool).call{value: WAD}("");
         // not sure why this returns true
@@ -808,7 +807,7 @@ contract PoolAdminTests is ProtocolTest {
     function testJumpStartTotalBorrowedBadState() public {
         agentBorrow(agent, issueGenericBorrowCred(agent.id(), WAD));
         vm.prank(address(GetRoute.poolRegistry(router)));
-        vm.expectRevert(abi.encodeWithSelector(InfinityPool.InvalidState.selector));
+        vm.expectRevert(abi.encodeWithSelector(IPool.InvalidState.selector));
         pool.jumpStartTotalBorrowed(WAD);
     }
 

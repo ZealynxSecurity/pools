@@ -11,7 +11,6 @@ import {MockMiner} from "test/helpers/MockMiner.sol";
 
 import {PoolToken} from "shim/PoolToken.sol";
 import {WFIL} from "shim/WFIL.sol";
-import {InfinityPool} from "src/Pool/InfinityPool.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Deployer} from "deploy/Deployer.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
@@ -19,7 +18,7 @@ import {AccountHelpers} from "src/Pool/Account.sol";
 import {Agent} from "src/Agent/Agent.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
 import {AgentDeployer} from "src/Agent/AgentDeployer.sol";
-import {AgentPolice} from "src/Agent/AgentPolice.sol";
+import {AgentPoliceV2} from "src/Agent/AgentPoliceV2.sol";
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {Router} from "src/Router/Router.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
@@ -69,7 +68,7 @@ contract ProtocolTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
             address(wFIL),
             address(new MinerRegistry(router, IAgentFactory(agentFactory))),
             agentFactory,
-            address(new AgentPolice(VERIFIED_NAME, VERIFIED_VERSION, systemAdmin, systemAdmin, router)),
+            address(new AgentPoliceV2(VERIFIED_NAME, VERIFIED_VERSION, systemAdmin, systemAdmin, router)),
             vcIssuer,
             credParser,
             address(new AgentDeployer())

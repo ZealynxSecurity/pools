@@ -9,6 +9,8 @@ import {PoolToken} from "shim/PoolToken.sol";
 import {WFIL} from "shim/WFIL.sol";
 
 import {UpgradeToV2} from "src/Upgrades/UpgradeToV2.sol";
+import {InfinityPoolV2} from "src/Pool/InfinityPoolV2.sol";
+import {AgentPoliceV2} from "src/Agent/AgentPoliceV2.sol";
 import {Router} from "src/Router/Router.sol";
 import {EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 import {AgentData, Credentials, SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
@@ -145,11 +147,11 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
     }
 
     function testUpgradeV1ToV2() public {
+        (address agentPolice, address pool) = _deployContracts();
         UpgradeToV2 upgrader = new UpgradeToV2(router, systemAdmin);
 
         vm.startPrank(systemAdmin);
 
-        (address agentPolice, address pool) = upgrader.deployContracts();
         assertTrue(agentPolice != address(0), "Agent police deploy failed");
         assertTrue(pool != address(0), "Pool deploy failed");
 
@@ -209,6 +211,23 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
         IAuth(poolRegistry).acceptOwnership();
         IAuth(rateModule).acceptOwnership();
         vm.stopPrank();
+    }
+
+    function _deployContracts() internal returns (address agentPolice, address pool) {
+        IAuth oldAP = IAuth(address(GetRoute.agentPolice(router)));
+
+        address lst = address(IPool(oldPool).liquidStakingToken());
+
+        agentPolice =
+            address(new AgentPoliceV2(VERIFIED_NAME, VERIFIED_VERSION, oldAP.owner(), oldAP.operator(), router));
+
+        pool = address(
+            new InfinityPoolV2(
+                IAuth(address(oldPool)).owner(), router, lst, address(0), IPool(oldPool).minimumLiquidity(), 0
+            )
+        );
+
+        return (agentPolice, pool);
     }
 
     function _withdrawFILFromPool(address _investor, address _pool, uint256 amount) internal {

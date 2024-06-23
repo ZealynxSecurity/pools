@@ -7,7 +7,7 @@ import "forge-std/Test.sol";
 import {PoolToken} from "shim/PoolToken.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
-import {InfinityPool} from "src/Pool/InfinityPool.sol";
+import {InfinityPoolV2} from "src/Pool/InfinityPoolV2.sol";
 
 import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
@@ -36,7 +36,7 @@ contract PoolTestHelper is CoreTestHelper {
     function createPool() internal returns (IPool) {
         iFIL = IPoolToken(address(new PoolToken(systemAdmin)));
         IPool _pool = IPool(
-            new InfinityPool(
+            new InfinityPoolV2(
                 systemAdmin,
                 router,
                 // no min liquidity for test pool

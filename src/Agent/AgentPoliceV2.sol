@@ -24,18 +24,11 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {EPOCHS_IN_DAY, EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 import {ROUTE_INFINITY_POOL, ROUTE_WFIL_TOKEN} from "src/Constants/Routes.sol";
 
-contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
+contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
     using Credentials for VerifiableCredential;
     using FilAddress for address;
-
-    error AgentStateRejected();
-    error OverLimitDTI();
-    error OverLimitDTE();
-    error OverLimitDTL();
-    error OverLimitQuota();
-    error OverFaultySectorLimit();
 
     event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
 
