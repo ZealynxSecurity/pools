@@ -20,6 +20,10 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+      - name: Submodule cleanup fix # Bodge for https://github.com/actions/checkout/issues/358
+        run: |
+          git submodule foreach --recursive git clean -ffdx
+          git submodule foreach --recursive git reset --hard
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
