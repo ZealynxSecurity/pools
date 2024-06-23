@@ -277,6 +277,49 @@ contract CoreTestHelper is Test {
         return signCred(vc);
     }
 
+    function issueGenericPutOnAdministrationCred(uint256 agent, uint256 principal)
+        internal
+        returns (SignedCredential memory)
+    {
+        // roll forward so we don't get an identical credential that's already been used
+        vm.roll(block.number + 1);
+
+        // create a cred where DTL >100%
+        uint256 collateralValue = 0;
+
+        AgentData memory ad = AgentData(
+            1e18,
+            collateralValue,
+            // expectedDailyFaultPenalties
+            0,
+            0,
+            0,
+            // qaPower hardcoded
+            0,
+            principal,
+            // faulty sectors
+            0,
+            // live sectors
+            0,
+            // Green Score
+            0
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent,
+            block.number,
+            block.number + 100,
+            0,
+            IAgentPolice.putAgentOnAdministration.selector,
+            // minerID irrelevant for setDefault action
+            0,
+            abi.encode(ad)
+        );
+
+        return signCred(vc);
+    }
+
     function issueGenericSetDefaultCred(uint256 agent, uint256 principal) internal returns (SignedCredential memory) {
         // roll forward so we don't get an identical credential that's already been used
         vm.roll(block.number + 1);

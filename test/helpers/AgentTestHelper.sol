@@ -234,7 +234,9 @@ contract AgentTestHelper is CoreTestHelper {
         vm.roll(block.number + rollFwdPeriod);
 
         vm.startPrank(IAuth(address(police)).owner());
-        police.putAgentOnAdministration(address(agent), administration);
+        police.putAgentOnAdministration(
+            address(agent), issueGenericPutOnAdministrationCred(agent.id(), borrowAmount), administration
+        );
         vm.stopPrank();
 
         assertEq(agent.administration(), administration);

@@ -41,9 +41,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
 
     IWFIL internal immutable _wFIL;
 
-    /// @notice `administrationWindow` is the number of `epochsPaid` from `block.number` that determines if an Agent's account is eligible for administration
-    uint256 public administrationWindow;
-
     /// @notice `maxDTE` is the maximum amount of principal to equity ratio before withdrawals are prohibited
     /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
     /// This variable is populated on deployment and can be updated to match the rate module using an admin func
@@ -103,7 +100,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
         // max dtl before liquidation => 85%
         dtlLiquidationThreshold = 85e16;
 
-        administrationWindow = EPOCHS_IN_WEEK;
         _wFIL = IWFIL(IRouter(_router).getRoute(ROUTE_WFIL_TOKEN));
     }
 
@@ -141,9 +137,19 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
      * @param agent The address of the agent to put on administration
      * @param administration The address of the administration
      */
-    function putAgentOnAdministration(address agent, address administration) external onlyOwner {
-        if (!_epochsPaidBehindTarget(IAgent(agent).id(), administrationWindow)) revert Unauthorized();
+    function putAgentOnAdministration(address agent, SignedCredential calldata sc, address administration)
+        external
+        onlyOwner
+    {
+        // ensure the credential is valid
+        validateCred(IAgent(agent).id(), msg.sig, sc);
+        (uint256 dtl,,) = FinMath.computeDTL(
+            _getAccount(sc.vc.subject), sc.vc, _pool().getRate(), address(GetRoute.credParser(router))
+        );
+        if (dtl < maxDTL) revert Unauthorized();
+
         IAgent(agent).setAdministration(administration.normalize());
+
         emit OnAdministration(agent);
     }
 
@@ -269,12 +275,10 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
     }
 
     /**
-     * @notice `confirmRmAdministration` checks to ensure an Agent's faulty sectors are in the tolerance range, and they're within the payment tolerance window
+     * @notice `confirmRmAdministration` checks to ensure an Agent's DTL is in good standing and the agent's faulty sectors are in the tolerance range before removing the agent from administration
      * @param vc the verifiable credential
      */
     function confirmRmAdministration(VerifiableCredential calldata vc) external view {
-        if (_epochsPaidBehindTarget(vc.subject, administrationWindow)) revert AgentStateRejected();
-
         address credParser = address(GetRoute.credParser(router));
         (uint256 dtl,,) = FinMath.computeDTL(_getAccount(vc.subject), vc, _pool().getRate(), credParser);
         // if were above the DTL ratio, revert
@@ -286,13 +290,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
     /*//////////////////////////////////////////////
                   ADMIN CONTROLS
     //////////////////////////////////////////////*/
-
-    /**
-     * @notice `setAdministrationWindow` changes the administration window epochs
-     */
-    function setAdministrationWindow(uint256 _administrationWindow) external onlyOwner {
-        administrationWindow = _administrationWindow;
-    }
 
     /**
      * @notice `setMaxDTE` sets the maximum DTE for withdrawals and removing miners
@@ -371,12 +368,6 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
     /*//////////////////////////////////////////////
                 INTERNAL FUNCTIONS
     //////////////////////////////////////////////*/
-
-    /// @dev returns true if pool has an `epochsPaid` behind `targetEpoch` (and thus is underpaid). Account must have existing principal
-    function _epochsPaidBehindTarget(uint256 _agentID, uint256 _targetEpoch) internal view returns (bool) {
-        Account memory account = _getAccount(_agentID);
-        return account.principal > 0 && account.epochsPaid < block.number - _targetEpoch;
-    }
 
     /// @dev loops through the pools and calls isApproved on each,
     /// reverting in the case of any non-approvals,

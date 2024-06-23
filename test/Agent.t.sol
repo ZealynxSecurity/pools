@@ -996,12 +996,6 @@ contract AgentPoliceTest is ProtocolTest {
         police.registerCredentialUseBlock(sc);
     }
 
-    function testSetAdministrationWindow(uint256 newAdminWindow) public {
-        vm.prank(systemAdmin);
-        police.setAdministrationWindow(newAdminWindow);
-        assertEq(police.administrationWindow(), newAdminWindow, "administration window should be set");
-    }
-
     function testReplaySignature() public {
         SignedCredential memory sc = issueGenericBorrowCred(agent.id(), WAD);
         agentBorrow(agent, sc);
@@ -1020,18 +1014,18 @@ contract AgentPoliceTest is ProtocolTest {
         vm.stopPrank();
     }
 
-    function testPutAgentOnAdministration(uint256 rollFwdPeriod, uint256 borrowAmount) public {
-        rollFwdPeriod = bound(rollFwdPeriod, police.administrationWindow() + 1, police.administrationWindow() * 10);
-
+    function testPutAgentOnAdministration(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, WAD, stakeAmount);
         // helper includes assertions
-        putAgentOnAdministration(agent, administration, rollFwdPeriod, borrowAmount);
+        putAgentOnAdministration(agent, administration, EPOCHS_IN_DAY, borrowAmount);
         testInvariants("testPutAgentOnAdministration");
     }
 
     function testPutAgentOnAdministrationNoLoans() public {
         vm.startPrank(IAuth(address(police)).owner());
-        try police.putAgentOnAdministration(address(agent), administration) {
+        try police.putAgentOnAdministration(
+            address(agent), issueGenericPutOnAdministrationCred(agent.id(), 1e18), administration
+        ) {
             assertTrue(false, "Agent should not be eligible for administration");
         } catch (bytes memory e) {
             assertEq(errorSelector(e), Unauthorized.selector);
@@ -1046,8 +1040,49 @@ contract AgentPoliceTest is ProtocolTest {
 
         agentBorrow(agent, borrowCred);
 
+        // cv > principal so DTL is in good standing
+        uint256 principal = 1e18;
+        uint256 collateralValue = 10e18;
+
+        AgentData memory ad = AgentData(
+            1e18,
+            collateralValue,
+            // expectedDailyFaultPenalties
+            0,
+            0,
+            0,
+            // qaPower hardcoded
+            0,
+            principal,
+            // faulty sectors
+            0,
+            // live sectors
+            0,
+            // Green Score
+            0
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent.id(),
+            block.number,
+            block.number + 100,
+            0,
+            IAgentPolice.putAgentOnAdministration.selector,
+            // minerID irrelevant for setDefault action
+            0,
+            abi.encode(ad)
+        );
+
+        SignedCredential memory sc = signCred(vc);
+
         vm.startPrank(IAuth(address(police)).owner());
-        try police.putAgentOnAdministration(address(agent), administration) {
+        try police.putAgentOnAdministration(
+            // use credential with 0 borrow amount, DTL should be 0
+            address(agent),
+            sc,
+            administration
+        ) {
             assertTrue(false, "Agent should not be eligible for administration");
         } catch (bytes memory e) {
             assertEq(errorSelector(e), Unauthorized.selector);
@@ -1055,7 +1090,7 @@ contract AgentPoliceTest is ProtocolTest {
     }
 
     function testRmAgentFromAdministration() public {
-        uint256 rollFwdPeriod = police.administrationWindow() + 100;
+        uint256 rollFwdPeriod = EPOCHS_IN_WEEK;
         uint256 borrowAmount = WAD;
 
         putAgentOnAdministration(agent, administration, rollFwdPeriod, borrowAmount);
@@ -1085,16 +1120,16 @@ contract AgentPoliceTest is ProtocolTest {
         setAgentDefaulted(agent, 1e18);
     }
 
-    function testSetAdministrationNonAgentPolice(uint256 rollFwdPeriod) public {
-        rollFwdPeriod = bound(rollFwdPeriod, police.administrationWindow() + 1, police.administrationWindow() * 10);
-
+    function testSetAdministrationNonAgentPolice() public {
         uint256 borrowAmount = WAD;
         SignedCredential memory borrowCred = issueGenericBorrowCred(agent.id(), borrowAmount);
         agentBorrow(agent, borrowCred);
 
-        vm.roll(block.number + rollFwdPeriod);
+        vm.roll(block.number + EPOCHS_IN_WEEK);
 
-        try police.putAgentOnAdministration(address(agent), administration) {
+        try police.putAgentOnAdministration(
+            address(agent), issueGenericPutOnAdministrationCred(agent.id(), 1e18), administration
+        ) {
             assertTrue(false, "only agent police owner should be able to call putAgentOnAdministration");
         } catch (bytes memory e) {
             assertEq(errorSelector(e), Unauthorized.selector);
@@ -1509,15 +1544,11 @@ contract AgentUpgradeTest is ProtocolTest {
         address agentOperator = _agentOperator(agent);
 
         // put the agent into default
-        agentBorrow(agent, issueGenericBorrowCred(agentId, 1e18));
-        vm.roll(block.number + EPOCHS_IN_YEAR);
+        putAgentOnAdministration(agent, administration, EPOCHS_IN_YEAR, 1e18);
 
         IAgentFactory agentFactory = GetRoute.agentFactory(router);
         _upgradeAgentDeployer();
 
-        vm.startPrank(systemAdmin);
-        GetRoute.agentPolice(router).putAgentOnAdministration(address(agent), administration);
-        vm.stopPrank();
         vm.startPrank(administration);
         IAgent newAgent = IAgent(agentFactory.upgradeAgent(prevAgentAddr));
         assertEq(newAgent.id(), agentId);

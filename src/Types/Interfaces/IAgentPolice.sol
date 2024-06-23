@@ -20,8 +20,6 @@ interface IAgentPolice {
                       GETTERS
     //////////////////////////////////////////////*/
 
-    function administrationWindow() external view returns (uint256);
-
     function agentApproved(VerifiableCredential calldata vc) external;
 
     function agentLiquidated(uint256 agentID) external view returns (bool);
@@ -46,19 +44,19 @@ interface IAgentPolice {
                     VC HANDLING
     //////////////////////////////////////////////*/
 
-    function isValidCredential(uint256 agent, bytes4 action, SignedCredential calldata signedCredential) external;
+    function isValidCredential(uint256 agent, bytes4 action, SignedCredential calldata sc) external;
 
     function credentialUsed(VerifiableCredential calldata vc) external view returns (bool);
 
-    function registerCredentialUseBlock(SignedCredential calldata signedCredential) external;
+    function registerCredentialUseBlock(SignedCredential calldata sc) external;
 
     /*//////////////////////////////////////////////
                       POLICING
     //////////////////////////////////////////////*/
 
-    function putAgentOnAdministration(address agent, address administration) external;
+    function putAgentOnAdministration(address agent, SignedCredential calldata sc, address administration) external;
 
-    function setAgentDefaultDTL(address agent, SignedCredential calldata vc) external;
+    function setAgentDefaultDTL(address agent, SignedCredential calldata sc) external;
 
     function setSectorFaultyTolerancePercent(uint256 percent) external;
 
@@ -83,8 +81,6 @@ interface IAgentPolice {
     /*//////////////////////////////////////////////
                   ADMIN CONTROLS
     //////////////////////////////////////////////*/
-
-    function setAdministrationWindow(uint256 administrationWindow) external;
 
     function setLevels(uint256[10] calldata _levels) external;
 
