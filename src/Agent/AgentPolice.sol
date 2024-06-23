@@ -357,7 +357,7 @@ contract AgentPolice is IAgentPolice, VCVerifier, Operatable, Pausable {
     /**
      * @notice sets the array of max borrow amounts for each level
      */
-    function setLevels(uint256[10] calldata _levels) external onlyOwner {
+    function setLevels(uint256[10] calldata _levels) external onlyOwnerOperator {
         levels = _levels;
     }
 
