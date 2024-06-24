@@ -25,6 +25,7 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     error InsufficientRewardTokenBalance();
     error RewardPerEpochTooSmall();
     error LMShutdown();
+    error InvalidReceiver();
 
     /// @notice the token that gets paid out as a reward (GLIF)
     IERC20 public immutable rewardToken;
@@ -57,6 +58,11 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
         uint64 lastRewardBlock, uint256 lockTokenSupply, uint256 accRewardsPerLockToken, uint256 accRewardsTotal
     );
     event Shutdown(uint256 rewardTokensBurned);
+
+    modifier isValidReceiver(address receiver) {
+        if (receiver == address(0) || receiver == address(this)) revert InvalidReceiver();
+        _;
+    }
 
     constructor(IERC20 _rewardToken, IERC20 _lockToken, uint256 _rewardPerEpoch, address _owner) Ownable(_owner) {
         rewardToken = _rewardToken;
@@ -103,7 +109,7 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     }
 
     /// @notice deposit allows a user to deposit lockTokens into the LM, specifying a beneficiary other than the caller
-    function deposit(uint256 amount, address beneficiary) public {
+    function deposit(uint256 amount, address beneficiary) public isValidReceiver(beneficiary) {
         updateAccounting();
 
         if (shutdown) revert LMShutdown();
@@ -136,21 +142,21 @@ contract LiquidityMineLP is Ownable, ILiquidityMineLP {
     }
 
     /// @notice withdraw allows a user to withdraw lockTokens from the LM, specifying a receiver other than the caller
-    function withdraw(uint256 amount, address receiver) external {
+    function withdraw(uint256 amount, address receiver) external isValidReceiver(receiver) {
         updateAccounting();
 
         _withdraw(amount, _userInfo[msg.sender], receiver.normalize());
     }
 
     /// @notice harvest allows a user to withdraw rewards from the LM, specifying a receiver other than the caller
-    function harvest(uint256 amount, address receiver) external {
+    function harvest(uint256 amount, address receiver) external isValidReceiver(receiver) {
         updateAccounting();
 
         _harvest(amount, _userInfo[msg.sender], receiver.normalize());
     }
 
     /// @notice withdrawAndHarvest allows a user to withdraw lockTokens and harvest rewards in a single transaction
-    function withdrawAndHarvest(uint256 amount, address receiver) external {
+    function withdrawAndHarvest(uint256 amount, address receiver) external isValidReceiver(receiver) {
         updateAccounting();
 
         UserInfo storage user = _userInfo[msg.sender];

@@ -33,6 +33,68 @@ contract PoolLPTest is ProtocolTest {
         assertEq(lstBalanceAfter, lstBalanceBefore + predictedLST, "deposit failed -  wrong LST balance");
     }
 
+    function testActionsBadAddr() public {
+        vm.startPrank(investor);
+        // deposit
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.deposit(0, address(0));
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.deposit(address(0));
+        // mint
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.mint(0, address(0));
+
+        // withdraw
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.withdraw(0, address(0), investor, 0);
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.withdraw(0, address(0), investor);
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.withdrawF(0, address(0), investor);
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.withdrawF(0, address(0), investor, 0);
+        // redeem
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.redeem(0, address(0), investor, 0);
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.redeem(0, address(0), investor);
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.redeemF(0, address(0), investor);
+        vm.expectRevert(IPool.InvalidReceiver.selector);
+        pool.redeemF(0, address(0), investor, 0);
+
+        vm.stopPrank();
+    }
+
+    function testExitInvalidCaller() public {
+        _depositFundsIntoPool(10e18, investor);
+        _depositFundsIntoPool(10e18, investor1);
+        vm.startPrank(investor);
+
+        iFIL.approve(address(pool), 10e18);
+
+        // withdraw
+        vm.expectRevert(Unauthorized.selector);
+        pool.withdraw(1e18, investor, investor1, 0);
+        vm.expectRevert(Unauthorized.selector);
+        pool.withdraw(1e18, investor, investor1);
+        vm.expectRevert(Unauthorized.selector);
+        pool.withdrawF(1e18, investor, investor1);
+        vm.expectRevert(Unauthorized.selector);
+        pool.withdrawF(1e18, investor, investor1, 0);
+        // redeem
+        vm.expectRevert(Unauthorized.selector);
+        pool.redeem(1e18, investor, investor1, 0);
+        vm.expectRevert(Unauthorized.selector);
+        pool.redeem(0, investor, investor1);
+        vm.expectRevert(Unauthorized.selector);
+        pool.redeemF(0, investor, investor1);
+        vm.expectRevert(Unauthorized.selector);
+        pool.redeemF(0, investor, investor1, 0);
+
+        vm.stopPrank();
+    }
+
     function testDepositWFILTwice(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 

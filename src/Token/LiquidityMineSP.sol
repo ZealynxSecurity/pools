@@ -19,6 +19,7 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
     using FilAddress for address;
 
     error LMShutdown();
+    error InvalidReceiver();
 
     /// @notice the router contract that is responsible for routing messages to the correct contracts
     address private immutable _router;
@@ -137,6 +138,7 @@ contract LiquidityMineSP is ILiquidityMineSP, Ownable {
 
     /// @notice allows the owner of an Agent to harvest rewards on behalf of a recipient
     function harvest(address agent, address receiver, uint256 amount) public {
+        if (receiver == address(0) || receiver == address(this)) revert InvalidReceiver();
         if (shutdown) revert LMShutdown();
 
         AgentLMInfo storage info = _agentInfo[IAgent(agent).id()];

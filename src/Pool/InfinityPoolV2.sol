@@ -112,6 +112,11 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         _;
     }
 
+    modifier isValidReceiver(address receiver) {
+        if (receiver == address(0) || receiver == address(this)) revert InvalidReceiver();
+        _;
+    }
+
     /*////////////////////////////////////////////////////////
                       Payable Fallbacks
     ////////////////////////////////////////////////////////*/
@@ -571,7 +576,13 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
      * @param receiver The address that will receive the shares
      * @return shares - the number of shares received in exchange for the deposit
      */
-    function deposit(uint256 assets, address receiver) public isOpen whenNotPaused returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver)
+        public
+        isOpen
+        whenNotPaused
+        isValidReceiver(receiver)
+        returns (uint256 shares)
+    {
         return _deposit(assets, receiver);
     }
 
@@ -580,7 +591,14 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
      * @param receiver The address that will receive the shares
      * @return shares - the number of shares received in exchange for the deposit
      */
-    function deposit(address receiver) public payable isOpen whenNotPaused returns (uint256 shares) {
+    function deposit(address receiver)
+        public
+        payable
+        isOpen
+        whenNotPaused
+        isValidReceiver(receiver)
+        returns (uint256 shares)
+    {
         return _depositFIL(receiver);
     }
 
@@ -590,7 +608,13 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
      * @param receiver The address to receive the shares
      * @return assets Number of assets deposited
      */
-    function mint(uint256 shares, address receiver) public isOpen whenNotPaused returns (uint256 assets) {
+    function mint(uint256 shares, address receiver)
+        public
+        isOpen
+        whenNotPaused
+        isValidReceiver(receiver)
+        returns (uint256 assets)
+    {
         updateAccounting();
         // These transfers need to happen before the mint, and this is forcing a higher degree of coupling than is ideal
         assets = previewMint(shares);
@@ -599,47 +623,6 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         liquidStakingToken.mint(receiver, shares);
 
         emit Deposit(msg.sender, receiver, assets, shares);
-    }
-
-    /**
-     * @notice Allows Staker to withdraw assets
-     * @param assets The assets to withdraw
-     * @param receiver The address to receive the assets
-     * @param owner The owner of the shares
-     * @return shares - the number of shares burned
-     */
-    function withdraw(uint256 assets, address receiver, address owner)
-        public
-        isOpen
-        whenNotPaused
-        returns (uint256 shares)
-    {
-        return _withdraw(assets, receiver, owner);
-    }
-
-    /**
-     * @notice Allows Staker to withdraw assets
-     * @param assets The assets to withdraw
-     * @param receiver The address to receive the assets
-     * @param owner The owner of the shares
-     *  @param (unused) A patch to match the old Offramp interface
-     * @return shares - the number of shares burned
-     */
-    function withdraw(uint256 assets, address receiver, address owner, uint256)
-        public
-        isOpen
-        whenNotPaused
-        returns (uint256 shares)
-    {
-        return _withdraw(assets, receiver, owner);
-    }
-
-    /// @dev _withdraw is an internal method that handles the withdrawal logic
-    function _withdraw(uint256 assets, address receiver, address owner) internal returns (uint256 shares) {
-        updateAccounting();
-        shares = previewWithdraw(assets);
-        _processExit(owner, receiver, shares, assets, false);
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
     /**
@@ -653,6 +636,8 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         public
         isOpen
         whenNotPaused
+        isValidReceiver(receiver)
+        ownerIsCaller(owner)
         returns (uint256 assets)
     {
         return _redeem(shares, receiver, owner);
@@ -670,43 +655,11 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         public
         isOpen
         whenNotPaused
+        isValidReceiver(receiver)
+        ownerIsCaller(owner)
         returns (uint256 assets)
     {
         return _redeem(shares, receiver, owner);
-    }
-
-    /// @dev _redeem is an internal method that handles the redeem logic
-    function _redeem(uint256 shares, address receiver, address owner) internal returns (uint256 assets) {
-        updateAccounting();
-        assets = previewRedeem(shares);
-        _processExit(owner, receiver, shares, assets, false);
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
-    }
-
-    /**
-     * @notice Allows Staker to withdraw assets (FIL)
-     * @param assets The assets to withdraw
-     * @param receiver The address to receive the assets
-     * @param owner The owner of the shares
-     * @return shares - the number of shares burned
-     */
-    function withdrawF(uint256 assets, address receiver, address owner)
-        public
-        isOpen
-        whenNotPaused
-        ownerIsCaller(owner)
-        returns (uint256 shares)
-    {
-        shares = previewWithdraw(assets);
-        _processExit(owner, receiver, shares, assets, true);
-    }
-
-    /**
-     * @notice DEPRECATED: Allows Staker to withdraw assets (FIL)
-     * @dev This param is a patch for the Offramp to maintain backwards compatibility
-     */
-    function withdrawF(uint256 assets, address receiver, address owner, uint256) public returns (uint256 shares) {
-        return withdrawF(assets, receiver, owner);
     }
 
     /**
@@ -720,9 +673,11 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         public
         isOpen
         whenNotPaused
+        isValidReceiver(receiver)
         ownerIsCaller(owner)
         returns (uint256 assets)
     {
+        updateAccounting();
         assets = previewRedeem(shares);
         _processExit(owner, receiver, shares, assets, true);
     }
@@ -731,8 +686,111 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
      * @notice DEPRECATED: Allows the Staker to redeem their shares for assets (FIL)
      * @dev This param is a patch for the Offramp to maintain backwards compatibility
      */
-    function redeemF(uint256 shares, address receiver, address owner, uint256) public returns (uint256 assets) {
-        return redeemF(shares, receiver, owner);
+    function redeemF(uint256 shares, address receiver, address owner, uint256)
+        public
+        isOpen
+        whenNotPaused
+        isValidReceiver(receiver)
+        ownerIsCaller(owner)
+        returns (uint256 assets)
+    {
+        updateAccounting();
+        assets = previewRedeem(shares);
+        _processExit(owner, receiver, shares, assets, true);
+    }
+
+    /// @dev _redeem is an internal method that handles the redeem logic
+    function _redeem(uint256 shares, address receiver, address owner) internal returns (uint256 assets) {
+        updateAccounting();
+        assets = previewRedeem(shares);
+        _processExit(owner, receiver, shares, assets, false);
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+    }
+
+    /**
+     * @notice Allows Staker to withdraw assets
+     * @param assets The assets to withdraw
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     * @return shares - the number of shares burned
+     */
+    function withdraw(uint256 assets, address receiver, address owner)
+        public
+        isOpen
+        whenNotPaused
+        isValidReceiver(receiver)
+        ownerIsCaller(owner)
+        returns (uint256 shares)
+    {
+        updateAccounting();
+        shares = previewWithdraw(assets);
+        _processExit(owner, receiver, shares, assets, false);
+    }
+
+    /**
+     * @notice Allows Staker to withdraw assets
+     * @param assets The assets to withdraw
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     *  @param (unused) A patch to match the old Offramp interface
+     * @return shares - the number of shares burned
+     */
+    function withdraw(uint256 assets, address receiver, address owner, uint256)
+        public
+        isOpen
+        whenNotPaused
+        isValidReceiver(receiver)
+        ownerIsCaller(owner)
+        returns (uint256 shares)
+    {
+        updateAccounting();
+        shares = previewWithdraw(assets);
+        _processExit(owner, receiver, shares, assets, false);
+    }
+
+    /**
+     * @notice Allows Staker to withdraw assets (FIL)
+     * @param assets The assets to withdraw
+     * @param receiver The address to receive the assets
+     * @param owner The owner of the shares
+     * @return shares - the number of shares burned
+     */
+    function withdrawF(uint256 assets, address receiver, address owner)
+        public
+        isOpen
+        whenNotPaused
+        isValidReceiver(receiver)
+        ownerIsCaller(owner)
+        returns (uint256 shares)
+    {
+        updateAccounting();
+        shares = previewWithdraw(assets);
+        _processExit(owner, receiver, shares, assets, true);
+    }
+
+    /**
+     * @notice DEPRECATED: Allows Staker to withdraw assets (FIL)
+     * @dev This param is a patch for the Offramp to maintain backwards compatibility
+     */
+    function withdrawF(uint256 assets, address receiver, address owner, uint256)
+        public
+        isOpen
+        whenNotPaused
+        isValidReceiver(receiver)
+        ownerIsCaller(owner)
+        returns (uint256 shares)
+    {
+        updateAccounting();
+        shares = previewWithdraw(assets);
+        _processExit(owner, receiver, shares, assets, true);
+    }
+
+    /// @dev _withdraw is an internal method that handles the withdrawal logic
+    function _withdraw(uint256 assets, address receiver, address owner) internal returns (uint256 shares) {
+        updateAccounting();
+        shares = previewWithdraw(assets);
+        _processExit(owner, receiver, shares, assets, false);
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
     /*//////////////////////////////////////////////////////////////
