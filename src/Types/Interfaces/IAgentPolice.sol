@@ -56,7 +56,7 @@ interface IAgentPolice {
 
     function isValidCredential(uint256 agent, bytes4 action, SignedCredential calldata sc) external;
 
-    function credentialUsed(VerifiableCredential calldata vc) external view returns (bool);
+    function credentialUsed(VerifiableCredential calldata vc) external view returns (uint256);
 
     function registerCredentialUseBlock(SignedCredential calldata sc) external;
 
