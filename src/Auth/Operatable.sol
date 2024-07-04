@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Inspired by OpenZeppelin Contracts (last updated v4.7.0) (access/Ownable.sol)
 
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 import {FilAddress} from "shim/FilAddress.sol";
 import {Ownable} from "src/Auth/Ownable.sol";

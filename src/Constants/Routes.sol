@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 bytes4 constant ROUTE_AGENT_FACTORY = bytes4(keccak256(bytes("ROUTER_AGENT_FACTORY")));
 bytes4 constant ROUTE_POOL_REGISTRY = bytes4(keccak256(bytes("ROUTER_POOL_REGISTRY")));
@@ -11,3 +11,4 @@ bytes4 constant ROUTE_TREASURY = bytes4(keccak256(bytes("ROUTER_TREASURY")));
 bytes4 constant ROUTE_AGENT_POLICE = bytes4(keccak256(bytes("ROUTER_AGENT_POLICE")));
 bytes4 constant ROUTE_CRED_PARSER = bytes4(keccak256(bytes("ROUTER_CRED_PARSER")));
 bytes4 constant ROUTE_AGENT_DEPLOYER = bytes4(keccak256(bytes("ROUTER_AGENT_DEPLOYER")));
+bytes4 constant ROUTE_INFINITY_POOL = bytes4(keccak256(bytes("ROUTER_INFINITY_POOL")));

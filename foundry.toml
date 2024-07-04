@@ -2,7 +2,7 @@
 src = 'src'
 out = 'out'
 libs = ['lib', 'shim/Mock']
-solc_version = "0.8.17"
+solc_version = "0.8.20"
 remappings = [
   "ds-test/=lib/forge-std/lib/ds-test/src/",
   "forge-std/=lib/forge-std/src/",
@@ -21,7 +21,7 @@ remappings = [
 src = 'src'
 out = 'out-fevm'
 libs = ['lib', 'shim/FEVM']
-solc_version = "0.8.17"
+solc_version = "0.8.20"
 remappings = [
   "ds-test/=lib/forge-std/lib/ds-test/src/",
   "forge-std/=lib/forge-std/src/",
@@ -40,7 +40,43 @@ remappings = [
 ]
 optimizer_details.yul = false
 
+[profile.v0]
+src = 'v0'
+out = 'out-v0'
+libs = ['lib', 'shim/FEVM']
+solc_version = "0.8.17"
+remappings = [
+  "ds-test/=lib/forge-std/lib/ds-test/src/",
+  "forge-std/=lib/forge-std/src/",
+  "@openzeppelin/=lib/openzeppelin-contracts/",
+  "solmate/=lib/solmate/src/",
+  "bytes-utils/=lib/solidity-bytes-utils/contracts/",
+  "filecoin-solidity/=lib/filecoin-solidity/contracts/v0.8/",
+  "solidity-cborutils/=lib/solidity-cborutils/",
+  "@ensdomains/buffer/=lib/buffer/",
+  "v0/=v0/",
+  "deploy/=deploy/",
+  "shim/=shim/FEVM/",
+  "fevmate/=lib/fevmate/contracts/",
+  "glifmate/=lib/glifmate/src/",
+  "@zondax/solidity-bignumber/=lib/filecoin-solidity/lib/solidity-bignumber/"
+]
+optimizer_details.yul = false
+
 [fuzz]
 runs = 1024
+max_test_rejects = 1_000_000
+
+[invariant]
+# Number of runs for each invariant test
+runs = 256
+
+# Depth of each invariant run
+depth = 10
+
+# Whether to fail if a revert occurs during the invariant testing
+# fail_on_revert = true
+
+call_override = false   # reentrancy-check
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

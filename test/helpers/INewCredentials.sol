@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 interface INewCredentials {
   function getAgentValue(bytes memory _agentData) external pure returns (uint256);
@@ -9,5 +9,7 @@ interface INewCredentials {
   function getPrincipal(bytes memory _agentData) external pure returns (uint256);
   function getGCRED(bytes memory _agentData) external pure returns (uint256);
   function getLockedFunds(bytes memory _agentData) external pure returns (uint256);
+  function getFaultySectors(bytes memory _agentData) external pure returns (uint256);
+  function getLiveSectors(bytes memory _agentData) external pure returns (uint256);
   function getNewVariable(bytes memory _agentData) external pure returns (uint256);
 }

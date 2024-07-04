@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 import {NewAgentData} from "test/helpers/NewCredentials.sol";
 contract NewCredParser {
   uint256 constant NEW_DATA_LENGTH = 320;
@@ -23,6 +23,12 @@ contract NewCredParser {
   }
   function getQAPower(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(padBytes(_agentData), (NewAgentData)).qaPower;
+  }
+  function getFaultySectors(bytes memory _agentData) external pure returns (uint256) {
+    return abi.decode(padBytes(_agentData), (NewAgentData)).faultySectors;
+  }
+  function getLiveSectors(bytes memory _agentData) external pure returns (uint256) {
+    return abi.decode(padBytes(_agentData), (NewAgentData)).liveSectors;
   }
   function getNewVariable(bytes memory _agentData) external pure returns (uint256) {
     return abi.decode(padBytes(_agentData), (NewAgentData)).newVariable;

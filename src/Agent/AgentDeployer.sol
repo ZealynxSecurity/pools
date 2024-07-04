@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 import {Agent} from "src/Agent/Agent.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";

@@ -118,3 +118,9 @@ sizes:
 
 clean:
 	rm -rf solc-output
+
+medusa:
+	medusa fuzz
+
+echidna:
+	echidna test/echidna/EchidnaLiquidityMineLP.sol --contract EchidnaLiquidityMineLP --config config.yaml

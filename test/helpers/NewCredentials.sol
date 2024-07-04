@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 import {INewCredentials} from "test/helpers/INewCredentials.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 struct NewAgentData {
@@ -46,6 +46,9 @@ struct NewAgentData {
    * @dev The epoch in which the Agent started borrowing FIL
    */
   uint256 startEpoch;
+
+  uint256 faultySectors;
+  uint256 liveSectors;
 
   uint256 newVariable;
 }
@@ -112,6 +115,20 @@ library NewCredentials {
     address credParser
   ) internal pure returns (uint256) {
     return INewCredentials(credParser).getLockedFunds(vc.claim);
+  }
+
+  function getFaultySectors(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return INewCredentials(credParser).getFaultySectors(vc.claim);
+  }
+
+  function getLiveSectors(
+    VerifiableCredential memory vc,
+    address credParser
+  ) internal pure returns (uint256) {
+    return INewCredentials(credParser).getLiveSectors(vc.claim);
   }
   
   function getNewVariable(

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 // this basically just stores a mapping of miners to use as IDs
 contract MockIDAddrStore {

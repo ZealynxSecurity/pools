@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 interface IAgentFactory {
   event CreateAgent(uint256 indexed agentID, address indexed agent, address indexed creator);

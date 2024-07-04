@@ -7,5 +7,6 @@ filecoin-solidity/=lib/filecoin-solidity/contracts/v0.8/
 fevmate/=lib/fevmate/contracts/
 glifmate/=lib/glifmate/src/
 src/=src/
+v0/=v0/
 deploy/=deploy
 shim/=shim/Mock/

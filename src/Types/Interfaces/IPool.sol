@@ -1,53 +1,48 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {IOffRamp} from "src/Types/Interfaces/IOffRamp.sol";
+import {RewardAccrual} from "src/Types/Structs/RewardAccrual.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 
 interface IPool {
-
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event Borrow(
-        uint256 indexed agent,
-        uint256 amount
-    );
+    event Borrow(uint256 indexed agent, uint256 amount);
 
-    event Pay(
-        uint256 indexed agent,
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    );
+    event Pay(uint256 indexed agent, uint256 amount, uint256 interest, uint256 principal, uint256 rate);
 
-    event Deposit(
-        address indexed caller,
-        address indexed owner,
-        uint256 assets,
-        uint256 shares
-    );
+    event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
     event Withdraw(
-        address indexed caller,
-        address indexed receiver,
-        address indexed owner,
-        uint256 assets,
-        uint256 shares
+        address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares
     );
 
-    event WriteOff(
-      uint256 indexed agentID,
-      uint256 recoveredFunds,
-      uint256 lostFunds,
-      uint256 interestPaid
+    event WriteOff(uint256 indexed agentID, uint256 recoveredFunds, uint256 lostFunds, uint256 interestPaid);
+
+    event UpdateAccounting(
+        address indexed caller,
+        uint256 accruedRentalFeesMarginal,
+        uint256 accruedRentalFeesTotal,
+        uint256 previousAccountingUpdatingEpoch,
+        uint256 thisAccountingUpdateEpoch,
+        uint256 iFILPrice
     );
+
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+    error InsufficientLiquidity();
+    error AccountDNE();
+    error InvalidState();
+    error PoolShuttingDown();
+    error AlreadyDefaulted();
+    error InvalidReceiver();
 
     /*////////////////////////////////////////////////////////
                             GETTERS
@@ -56,10 +51,6 @@ interface IPool {
     function asset() external view returns (IERC20);
 
     function liquidStakingToken() external view returns (IPoolToken);
-
-    function ramp() external view returns (IOffRamp);
-
-    function rateModule() external view returns (IRateModule);
 
     function id() external view returns (uint256);
 
@@ -75,18 +66,25 @@ interface IPool {
 
     function getAgentBorrowed(uint256 agentID) external view returns (uint256);
 
+    function getAgentDebt(uint256 agentID) external view returns (uint256);
+
+    function getAgentInterestOwed(uint256 agentID) external view returns (uint256);
+
     function getLiquidAssets() external view returns (uint256);
 
-    function feesCollected() external view returns (uint256);
+    function lpRewards() external view returns (RewardAccrual memory);
 
-    function getRate(
-        VerifiableCredential calldata vc
-    ) external view returns (uint256);
+    function treasuryRewards() external view returns (RewardAccrual memory);
 
-    function isApproved(
-        Account calldata account,
-        VerifiableCredential calldata vc
-    ) external view returns (bool);
+    function treasuryFeesOwed() external view returns (uint256);
+
+    function getRate() external view returns (uint256);
+
+    function credParser() external view returns (address);
+
+    function treasuryFeeRate() external view returns (uint256);
+
+    function lastAccountingUpdateEpoch() external view returns (uint256);
 
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS
@@ -94,22 +92,15 @@ interface IPool {
 
     function borrow(VerifiableCredential calldata vc) external;
 
-    function pay(
-        VerifiableCredential calldata vc
-    ) external returns (
-        uint256 rate,
-        uint256 epochsPaid,
-        uint256 principalPaid,
-        uint256 refund
-    );
+    function pay(VerifiableCredential calldata vc)
+        external
+        returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund);
 
     /*//////////////////////////////////////////////////////////////
                             FEE LOGIC
     //////////////////////////////////////////////////////////////*/
 
     function harvestFees(uint256 harvestAmount) external;
-
-    function harvestToRamp() external;
 
     /*//////////////////////////////////////////////////////////////
                         4626 DEPOSIT/WITHDRAWAL LOGIC
@@ -122,8 +113,14 @@ interface IPool {
     function mint(uint256 shares, address receiver) external returns (uint256 assets);
 
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+    function withdraw(uint256 assets, address receiver, address owner, uint256) external returns (uint256 shares);
+    function withdrawF(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+    function withdrawF(uint256 assets, address receiver, address owner, uint256) external returns (uint256 shares);
 
     function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
+    function redeem(uint256 shares, address receiver, address owner, uint256) external returns (uint256 assets);
+    function redeemF(uint256 shares, address receiver, address owner) external returns (uint256 assets);
+    function redeemF(uint256 shares, address receiver, address owner, uint256) external returns (uint256 assets);
 
     /*//////////////////////////////////////////////////////////////
                             ACCOUNTING LOGIC
@@ -143,6 +140,8 @@ interface IPool {
 
     function previewMint(uint256 shares) external view returns (uint256);
 
+    function updateAccounting() external;
+
     /*//////////////////////////////////////////////////////////////
                      DEPOSIT/WITHDRAWAL LIMIT LOGIC
     //////////////////////////////////////////////////////////////*/
@@ -159,20 +158,23 @@ interface IPool {
                             ADMIN FUNCS
     //////////////////////////////////////////////////////////////*/
 
+    function refreshRoutes() external;
+
     function shutDown() external;
 
-    function decommissionPool(IPool newPool) external returns (uint256 borrowedAmount);
+    function decommissionPool(address newPool) external returns (uint256 borrowedAmount);
 
     function jumpStartAccount(address receiver, uint256 agentID, uint256 principal) external;
 
     function jumpStartTotalBorrowed(uint256 amount) external;
 
-    function setRamp(IOffRamp newRamp) external;
-
     function setMinimumLiquidity(uint256 minLiquidity) external;
 
-    function setRateModule(IRateModule newRateModule) external;
+    function setTreasuryFeeRate(uint256 _treasuryFeeRate) external;
 
-    function writeOff(uint256 agentID, uint256 recoveredDebt) external returns (uint256 totalOwed);
+    function writeOff(uint256 agentID, uint256 recoveredDebt) external;
+
+    function setRentalFeesOwedPerEpoch(uint256 _rentalFeesOwedPerEpoch) external;
+
+    function recoverFIL(address receiver) external;
 }
-

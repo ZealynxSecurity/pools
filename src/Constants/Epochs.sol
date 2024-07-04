@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.17;
+pragma solidity 0.8.20;
 
 uint256 constant EPOCHS_DURATION_SECONDS = 30;
 uint256 constant SECONDS_IN_HOUR = 60 * 60;
