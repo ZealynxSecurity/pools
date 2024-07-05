@@ -425,6 +425,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
     function pay(VerifiableCredential calldata vc)
         external
         subjectIsAgentCaller(vc)
+        whenNotPaused
         returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
     {
         updateAccounting();
