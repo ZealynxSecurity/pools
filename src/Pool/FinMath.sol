@@ -17,34 +17,6 @@ library FinMath {
         return account.principal + _interestOwed;
     }
 
-    function computeDTE(Account memory account, VerifiableCredential calldata vc, uint256 rate, address credParser)
-        internal
-        view
-        returns (uint256 dte, uint256 debt, uint256 equity)
-    {
-        debt = computeDebt(account, rate);
-        uint256 agentTotalValue = vc.getAgentValue(credParser);
-        // if the agent's debt is greater than the entire value of the agent, the DTE is infinite
-        if (debt >= agentTotalValue) return (type(uint256).max, debt, 0);
-        equity = agentTotalValue - debt;
-        // DTE = debt / equity
-        return (debt.divWadDown(equity), debt, equity);
-    }
-
-    function computeDTI(Account memory account, VerifiableCredential calldata vc, uint256 rate, address credParser)
-        internal
-        pure
-        returns (uint256 dti, uint256 dailyRate, uint256 dailyRewards)
-    {
-        // compute the daily expected payment owed by the agent based on current principal
-        dailyRate = account.principal.mulWadUp(rate).mulWadUp(EPOCHS_IN_DAY);
-        dailyRewards = vc.getExpectedDailyRewards(credParser);
-        // if the agent's daily rewards are 0, the DTI is infinite
-        if (dailyRewards == 0) return (type(uint256).max, dailyRate, dailyRewards);
-        // DTI = daily rate / daily rewards
-        return (dailyRate.divWadUp(dailyRewards), dailyRate, dailyRewards);
-    }
-
     function computeDTL(Account memory account, VerifiableCredential calldata vc, uint256 rate, address credParser)
         internal
         view

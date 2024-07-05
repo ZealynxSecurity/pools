@@ -204,18 +204,11 @@ contract CoreTestHelper is Test {
         return _issueGenericPayCred(agent, amount);
     }
 
-    function _issuePayCred(uint256 agentID, uint256 principal, uint256 collateralValue, uint256 paymentAmount)
+    function _issuePayCred(uint256 agentID, uint256 collateralValue, uint256 paymentAmount)
         internal
         returns (SignedCredential memory)
     {
-        uint256 adjustedRate = _getAdjustedRate();
-
-        AgentData memory agentData = createAgentData(
-            collateralValue,
-            // good EDR
-            adjustedRate.mulWadUp(principal).mulWadUp(EPOCHS_IN_DAY) * 5,
-            principal
-        );
+        AgentData memory agentData = createAgentData(collateralValue);
 
         VerifiableCredential memory vc = VerifiableCredential(
             vcIssuer,
@@ -233,7 +226,7 @@ contract CoreTestHelper is Test {
     }
 
     function _issueGenericPayCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
-        return _issuePayCred(agent, amount, amount * 2, amount);
+        return _issuePayCred(agent, amount * 2, amount);
     }
 
     function issueGenericRecoverCred(uint256 agent, uint256 faultySectors, uint256 liveSectors)
@@ -362,17 +355,9 @@ contract CoreTestHelper is Test {
 
     // this is a helper function to allow us to issue a borrow cred without rolling forward
     function _issueGenericBorrowCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
-        uint256 principal = amount;
-        // NOTE: since we don't pull this off the pool it could be out of sync - careful
-        uint256 adjustedRate = FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
-
         AgentData memory agentData = createAgentData(
             // collateralValue => 2x the borrowAmount
-            amount * 2,
-            // good EDR (5x expected payments)
-            (adjustedRate * EPOCHS_IN_DAY * principal * 5) / WAD,
-            // principal = borrowAmount
-            principal
+            amount * 2
         );
 
         VerifiableCredential memory vc = VerifiableCredential(
@@ -390,11 +375,7 @@ contract CoreTestHelper is Test {
         return signCred(vc);
     }
 
-    function createAgentData(uint256 collateralValue, uint256 expectedDailyRewards, uint256 principal)
-        internal
-        pure
-        returns (AgentData memory)
-    {
+    function createAgentData(uint256 collateralValue) internal pure returns (AgentData memory) {
         // lockedFunds = collateralValue * 1.67 (such that CV = 60% of locked funds)
         uint256 lockedFunds = collateralValue * 167 / 100;
         // agent value = lockedFunds * 1.2 (such that locked funds = 83% of locked funds)
@@ -404,12 +385,14 @@ contract CoreTestHelper is Test {
             collateralValue,
             // expectedDailyFaultPenalties
             0,
-            expectedDailyRewards,
+            // edr
+            0,
             // GCRED DEPRECATED
             100,
             // qaPower hardcoded
             10e18,
-            principal,
+            // principal
+            0,
             // faulty sectors
             0,
             // live sectors

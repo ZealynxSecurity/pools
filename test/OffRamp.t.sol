@@ -731,15 +731,15 @@ contract OffRampTest is ProtocolTest {
 
         SignedCredential memory sc = _issueGenericBorrowCred(agent.id(), borrowAmount);
 
+        _fundAgentsMiners(agent, sc.vc);
+
         vm.startPrank(minerOwner);
         uint256 poolID = pool.id();
 
         if (borrowAmount > stakeAmount - reserveAbs) {
-            console.log("EXPECTING REVERT");
             vm.expectRevert(IPool.InsufficientLiquidity.selector);
             agent.borrow(poolID, sc);
         } else {
-            console.log("EXPECTING NON REVERT");
             agent.borrow(poolID, sc);
             assertEq(pool.getAbsMinLiquidity(), reserveAbs, "Exit reserve wrong");
             assertEq(

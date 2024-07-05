@@ -19,12 +19,14 @@ interface IAgentPolice {
     /*//////////////////////////////////////////////
                       ERRORS
     //////////////////////////////////////////////*/
+
     error AgentStateRejected();
-    error OverLimitDTI();
+    error LiquidationValueTooHigh();
     error OverLimitDTE();
     error OverLimitDTL();
     error OverLimitQuota();
     error OverFaultySectorLimit();
+    error MaxMinersReached();
 
     /*//////////////////////////////////////////////
                       GETTERS
@@ -34,15 +36,13 @@ interface IAgentPolice {
 
     function agentLiquidated(uint256 agentID) external view returns (bool);
 
-    function maxDTE() external view returns (uint256);
+    function borrowDTL() external view returns (uint256);
 
-    function maxDTL() external view returns (uint256);
-
-    function dtlLiquidationThreshold() external view returns (uint256);
+    function liquidationDTL() external view returns (uint256);
 
     function liquidationFee() external view returns (uint256);
 
-    function maxDTI() external view returns (uint256);
+    function maxMiners() external view returns (uint32);
 
     function sectorFaultyTolerancePercent() external view returns (uint256);
 
@@ -70,13 +70,9 @@ interface IAgentPolice {
 
     function setSectorFaultyTolerancePercent(uint256 percent) external;
 
-    function setDtlLiquidationThreshold(uint256 threshold) external;
+    function setLiquidationDTL(uint256 threshold) external;
 
-    function setMaxDTE(uint256 dte) external;
-
-    function setMaxDTL(uint256 dtl) external;
-
-    function setMaxDTI(uint256 dti) external;
+    function setBorrowDTL(uint256 dtl) external;
 
     function setLiquidationFee(uint256 liquidationFee) external;
 
@@ -95,6 +91,8 @@ interface IAgentPolice {
     function setLevels(uint256[10] calldata _levels) external;
 
     function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external;
+
+    function setMaxMiners(uint32 maxMiners) external;
 
     function pause() external;
 

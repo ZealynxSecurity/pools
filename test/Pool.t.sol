@@ -708,7 +708,7 @@ contract PoolRequiringAgentTest is ProtocolTest {
 
         uint256 prePaymentPoolBal = wFIL.balanceOf(address(pool));
         uint256 payment = interestOwed;
-        SignedCredential memory payCred = _issuePayCred(agent.id(), principal, collateralValue, payment);
+        SignedCredential memory payCred = _issuePayCred(agent.id(), collateralValue, payment);
         // pay back the amount
         agentPay(agent, payCred);
 
@@ -745,7 +745,7 @@ contract PoolRequiringAgentTest is ProtocolTest {
             if (rollTo > endBlock) rollTo = endBlock;
             vm.roll(rollTo);
             SignedCredential memory payCred =
-                _issuePayCred(agent.id(), principal, collateralValue, pool.getAgentInterestOwed(agent.id()));
+                _issuePayCred(agent.id(), collateralValue, pool.getAgentInterestOwed(agent.id()));
 
             // pay back the amount
             agentPay(agent, payCred);

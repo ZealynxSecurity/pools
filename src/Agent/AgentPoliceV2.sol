@@ -33,31 +33,24 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
     event CredentialUsed(uint256 indexed agentID, VerifiableCredential vc);
 
     IWFIL internal immutable _wFIL;
+    IMinerRegistry internal immutable _minerRegistry;
 
-    /// @notice `maxDTE` is the maximum amount of principal to equity ratio before withdrawals are prohibited
-    /// NOTE this is separate DTE for withdrawing than any DTE that the Infinity Pool relies on
-    /// This variable is populated on deployment and can be updated to match the rate module using an admin func
-    uint256 public maxDTE;
+    /// @notice `borrowDTL` is the maximum amount of debt to collateral value ratio before the agent's borrows and withdrawals are halted
+    /// initially set at 75%, so if the agent is >75% DTL, it cannot borrow or withdraw
+    uint256 public borrowDTL;
 
-    /// @notice `maxDTL` is the maximum amount of principal to collateral value ratio before withdrawals are prohibited
-    /// NOTE this is separate DTL for withdrawing than any DTL that the Infinity Pool relies on
-    /// This variable is populated on deployment and can be updated to match the rate module using an admin func
-    uint256 public maxDTL;
-
-    /// @notice `dtlLiquidationThreshold` is the DTL ratio threshold at which an agent is liquidated
+    /// @notice `liquidationDTL` is the DTL ratio threshold at which an agent is liquidated
     /// initially set at 85%, so if the agent is >85% DTL, it is elligible for liquidation
-    uint256 public dtlLiquidationThreshold;
-
-    /// @notice `maxDTI` is the maximum amount of debt to income ratio before withdrawals are prohibited
-    /// NOTE this is separate DTI for withdrawing than any DTI that the Infinity Pool relies on
-    /// This variable is populated on deployment and can be updated to match the rate module using an admin func
-    uint256 public maxDTI;
+    uint256 public liquidationDTL;
 
     /// @notice `sectorFaultyTolerancePercent` is the percentage of sectors that can be faulty before an agent is considered in a faulty state. 1e18 = 100%
     uint256 public sectorFaultyTolerancePercent = 1e15;
 
     /// @notice `liquidationFee` is the fee charged to liquidate an agent, only charged if LPs are made whole first
     uint256 public liquidationFee = 1e17;
+
+    /// @notice `maxMiners` is the maximum number of miners an agent can have
+    uint32 public maxMiners = 50;
 
     /// @notice `_credentialUseBlock` maps a credential's hash to when it was used
     mapping(bytes32 => uint256) private _credentialUseBlock;
@@ -83,17 +76,13 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
         VCVerifier(_name, _version, _router)
         Operatable(_owner, _operator)
     {
-        // default risk params:
-        // dte => 300%
-        maxDTE = 3e18;
-        // dti => 80%
-        maxDTI = 8e17;
-        // dtl => 80%
-        maxDTL = 8e17;
-        // max dtl before liquidation => 85%
-        dtlLiquidationThreshold = 85e16;
+        // 75%
+        borrowDTL = 75e16;
+        // 85%
+        liquidationDTL = 85e16;
 
         _wFIL = IWFIL(IRouter(_router).getRoute(ROUTE_WFIL_TOKEN));
+        _minerRegistry = GetRoute.minerRegistry(router);
     }
 
     modifier onlyAgent() {
@@ -110,7 +99,7 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
      * @param vc the VerifiableCredential of the agent
      */
     function agentApproved(VerifiableCredential calldata vc) external view {
-        _agentApproved(vc, _getAccount(vc.subject), _pool());
+        _agentApproved(msg.sender, vc, _getAccount(vc.subject), _pool(), 0);
     }
 
     /**
@@ -139,7 +128,7 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
         (uint256 dtl,,) = FinMath.computeDTL(
             _getAccount(sc.vc.subject), sc.vc, _pool().getRate(), address(GetRoute.credParser(router))
         );
-        if (dtl < maxDTL) revert Unauthorized();
+        if (dtl < borrowDTL) revert Unauthorized();
 
         IAgent(agent).setAdministration(administration.normalize());
 
@@ -157,7 +146,7 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
         (uint256 dtl,,) = FinMath.computeDTL(
             _getAccount(sc.vc.subject), sc.vc, _pool().getRate(), address(GetRoute.credParser(router))
         );
-        if (dtl < dtlLiquidationThreshold) revert Unauthorized();
+        if (dtl < liquidationDTL) revert Unauthorized();
 
         IAgent(agent).setInDefault();
         emit Defaulted(agent);
@@ -231,6 +220,12 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
 
         // check to see if this credential has been used for
         if (credentialUsed(sc.vc) > 0) revert InvalidCredential();
+
+        // due to current restrictions in Agent.sol, we have to enforce the max miners per agent here
+        // this is a temporary solution until we upgrade the agent
+        if (action == IAgent.addMiner.selector && _minerRegistry.minersCount(agent) > maxMiners) {
+            revert MaxMinersReached();
+        }
     }
 
     /**
@@ -264,7 +259,15 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
         Account memory account = _getAccount(vc.subject);
         IPool pool = _pool();
         // check to ensure we can withdraw equity from this pool
-        _agentApproved(vc, account, pool);
+        // if the vc.value is > 0, this is a withdrawal amount, so the removingEquity param just uses the value passed in the cred
+        if (vc.value > 0) {
+            _agentApproved(msg.sender, vc, account, pool, vc.value);
+        } else if (vc.target > 0) {
+            _agentApproved(msg.sender, vc, account, pool, _getBuiltInActorBal(vc.target));
+        } else {
+            // if the confirmRmEquity call does not have a value or a target (miner) to remove, it's invalid
+            revert InvalidCredential();
+        }
     }
 
     /**
@@ -275,7 +278,7 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
         address credParser = address(GetRoute.credParser(router));
         (uint256 dtl,,) = FinMath.computeDTL(_getAccount(vc.subject), vc, _pool().getRate(), credParser);
         // if were above the DTL ratio, revert
-        if (dtl > maxDTL) revert AgentStateRejected();
+        if (dtl > borrowDTL) revert AgentStateRejected();
         // if were above faulty sector limit, revert
         if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
     }
@@ -285,24 +288,17 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
     //////////////////////////////////////////////*/
 
     /**
-     * @notice `setMaxDTE` sets the maximum DTE for withdrawals and removing miners
+     * @notice `setborrowDTL` sets the maximum DTL for withdrawals and removing miners
      */
-    function setMaxDTE(uint256 _maxDTE) external onlyOwner {
-        maxDTE = _maxDTE;
+    function setBorrowDTL(uint256 _borrowDTL) external onlyOwner {
+        borrowDTL = _borrowDTL;
     }
 
     /**
-     * @notice `setMaxDTL` sets the maximum DTL for withdrawals and removing miners
+     * @notice `setliquidationDTL` sets the DTL ratio at which an agent can be liquidated
      */
-    function setMaxDTL(uint256 _maxDTL) external onlyOwner {
-        maxDTL = _maxDTL;
-    }
-
-    /**
-     * @notice `setdtlLiquidationThreshold` sets the DTL ratio at which an agent can be liquidated
-     */
-    function setDtlLiquidationThreshold(uint256 _dtlLiquidationThreshold) external onlyOwner {
-        dtlLiquidationThreshold = _dtlLiquidationThreshold;
+    function setLiquidationDTL(uint256 _liquidationDTL) external onlyOwner {
+        liquidationDTL = _liquidationDTL;
     }
 
     /**
@@ -310,13 +306,6 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
      */
     function setLiquidationFee(uint256 _liquidationFee) external onlyOwner {
         liquidationFee = _liquidationFee;
-    }
-
-    /**
-     * @notice `setMaxDTI` sets the maximum DTI for withdrawals and removing miners
-     */
-    function setMaxDTI(uint256 _maxDTI) external onlyOwner {
-        maxDTI = _maxDTI;
     }
 
     /**
@@ -348,6 +337,13 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
     }
 
     /**
+     * @notice sets the maximum number of miners an agent can have
+     */
+    function setMaxMiners(uint32 _maxMiners) external onlyOwnerOperator {
+        maxMiners = _maxMiners;
+    }
+
+    /**
      * @notice sets the array of max borrow amounts for each level
      */
     function setAgentLevels(uint256[] calldata agentIDs, uint256[] calldata level) external onlyOwner {
@@ -362,35 +358,62 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
                 INTERNAL FUNCTIONS
     //////////////////////////////////////////////*/
 
-    /// @dev loops through the pools and calls isApproved on each,
+    /// @dev checks to ensure the agent is in a healthy state
     /// reverting in the case of any non-approvals,
     /// or in the case that an account owes payments over the acceptable threshold
-    function _agentApproved(VerifiableCredential calldata vc, Account memory account, IPool pool) internal view {
+    function _agentApproved(
+        address agent,
+        VerifiableCredential calldata vc,
+        Account memory account,
+        IPool pool,
+        uint256 removingEquity
+    ) internal view {
         // make sure the agent police isn't paused
         _requireNotPaused();
-        // check to ensure the withdrawal does not bring us over maxDTE, maxDTI, or maxDTL
         address credParser = address(GetRoute.credParser(router));
-        // check to make sure the after the withdrawal, the DTE, DTI, DTL are all within the acceptable range
         uint256 principal = account.principal;
         // nothing borrowed, good to go!
         if (principal == 0) return;
 
-        uint256 rate = pool.getRate();
-        (uint256 dte, uint256 debt,) = FinMath.computeDTE(account, vc, rate, credParser);
-        (uint256 dti,,) = FinMath.computeDTI(account, vc, rate, credParser);
-        (uint256 dtl,,) = FinMath.computeDTL(account, vc, rate, credParser);
+        (uint256 dtl, uint256 debt, uint256 liquidationValue) =
+            FinMath.computeDTL(account, vc, pool.getRate(), credParser);
 
-        // compute the interest owed on the principal to add to principal to get total debt
-        // if the DTE is greater than maxDTE, revert
-        if (dte > maxDTE) revert OverLimitDTE();
-        // if the DTL is greater than maxDTL, revert
-        if (dtl > maxDTL) revert OverLimitDTL();
-        // if the DTI is greater than maxDTI, revert
-        if (dti > maxDTI) revert OverLimitDTI();
+        // here we check to ensure the liquidationValue is under the total balance of the agent and all its miners
+        // this is an extra security check that ensures, in the event the ADO is hijacked, that any loss of funds is minimized by the amount of balance actually held on miners + agent
+        _assertLiquidationValueLTETotalValue(agent, vc.subject, liquidationValue, removingEquity);
+
+        // if the DTL is greater than borrowDTL, revert
+        if (dtl > borrowDTL) revert OverLimitDTL();
         // check faulty sector limit
         if (_faultySectorsExceeded(vc, credParser)) revert OverFaultySectorLimit();
         // check if accrued debt has exceeded this agent's quota level
         if (debt > levels[accountLevel[vc.subject]]) revert OverLimitQuota();
+    }
+
+    /// @dev throws an error if the liquidation value is greater than the total balance of the agent and all its miners
+    /// @dev the loop is capped at the maxMiners constant to prevent gas exhaustion
+    /// @param agent the address of the agent
+    /// @param agentID the ID of the agent
+    /// @param liquidationValue the liquidation value of the agent as reported by the VC _after_ the event has taken place
+    /// @param removingEquity the amount of equity being removed from the agent in the event of a withdrawal or remove miner
+    function _assertLiquidationValueLTETotalValue(
+        address agent,
+        uint256 agentID,
+        uint256 liquidationValue,
+        uint256 removingEquity
+    ) internal view {
+        // first get the liquid FIL on the agent
+        uint256 liquidFIL = _wFIL.balanceOf(agent) + agent.balance;
+        // next get the balance from all the agent's miners
+        uint256 totalBal = 0;
+        uint256 minerCount = _minerRegistry.minersCount(agentID);
+        for (uint256 i = 0; i < minerCount; i++) {
+            // here since builtin miners are using ID address, we need to convert to the EVM address type
+            totalBal += _getBuiltInActorBal(_minerRegistry.getMiner(agentID, i));
+        }
+        // if the liquidation value is greater than the total balance of the agent + miners, revert
+        // here we remove the amount of equity being removed from the agent to ensure that we're matching a post-action state (within the credential) against the post-action balance (computed on chain)
+        if (liquidationValue + removingEquity > liquidFIL + totalBal) revert LiquidationValueTooHigh();
     }
 
     /// @dev returns the account of the agent
@@ -399,6 +422,11 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
     /// @dev the pool ID is hardcoded to 0, as this is a relic of our obsolete multipool architecture
     function _getAccount(uint256 agentID) internal view returns (Account memory) {
         return AccountHelpers.getAccount(router, agentID, 0);
+    }
+
+    /// @dev returns the balance of a built-in actor
+    function _getBuiltInActorBal(uint64 target) internal view returns (uint256) {
+        return address(bytes20(abi.encodePacked(hex"ff0000000000000000000000", target))).balance;
     }
 
     /**

@@ -188,6 +188,7 @@ contract IntegrationTest is ProtocolTest {
         uint256 agentWFILBalStart = wFIL.balanceOf(address(agent));
 
         SignedCredential memory borrowCred = _issueGenericBorrowCred(agentID, borrowAmount);
+        _fundAgentsMiners(agent, borrowCred.vc);
         // must meet the minimum borrow amount
         if (borrowAmount < WAD) {
             vm.expectRevert(InvalidParams.selector);
