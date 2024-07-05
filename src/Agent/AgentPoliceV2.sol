@@ -230,14 +230,14 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
         validateCred(agent, action, sc);
 
         // check to see if this credential has been used for
-        if (credentialUsed(sc.vc)) revert InvalidCredential();
+        if (credentialUsed(sc.vc) > 0) revert InvalidCredential();
     }
 
     /**
      * @notice `credentialUsed` returns true if the credential has been used before
      */
-    function credentialUsed(VerifiableCredential calldata vc) public view returns (bool) {
-        return _credentialUseBlock[digest(vc)] > 0;
+    function credentialUsed(VerifiableCredential calldata vc) public view returns (uint256) {
+        return _credentialUseBlock[digest(vc)];
     }
 
     /**
