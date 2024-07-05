@@ -122,5 +122,9 @@ clean:
 medusa:
 	medusa fuzz
 
-echidna:
+.PHONY: echidna-lmlp echidna-pool
+echidna-lmlp:
 	echidna test/echidna/EchidnaLiquidityMineLP.sol --contract EchidnaLiquidityMineLP --config config.yaml
+
+echidna-pool:
+	echidna test/echidna/EchidnaInfinityPoolV2.sol --contract EchidnaInfinityPoolV2 --config config.yaml
