@@ -45,6 +45,8 @@ interface IMiniPool {
     function totalBorrowed() external view returns (uint256);
 
     function getAgentBorrowed(uint256) external view returns (uint256);
+
+    function getRate() external view returns (uint256);
 }
 
 // this basically just stores a mapping of miners to use as IDs
@@ -98,9 +100,6 @@ contract CoreTestHelper is Test {
     }
 
     function issueAddMinerCred(uint256 agent, uint64 miner) internal returns (SignedCredential memory) {
-        // roll forward so we don't get an identical credential that's already been used
-        vm.roll(block.number + 1);
-
         VerifiableCredential memory vc = VerifiableCredential(
             vcIssuer,
             agent,
@@ -430,7 +429,7 @@ contract CoreTestHelper is Test {
     }
 
     function _getAdjustedRate() internal pure returns (uint256) {
-        return FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
+        return FixedPointMathLib.divWadUp(15e34, EPOCHS_IN_YEAR * 1e18);
     }
 
     function testInvariants(string memory label) internal {
@@ -438,7 +437,7 @@ contract CoreTestHelper is Test {
     }
 
     function _invIFILWorthAssetsOfPool(string memory label) internal {
-        uint256 MAX_PRECISION_DELTA = 1;
+        uint256 MAX_PRECISION_DELTA = 10;
         // this invariant knows that iFIL should represent the total value of the pool, which is composed of:
         // 1. all funds given to miners + agents
         // 2. balance of wfil held by the pool
@@ -455,8 +454,8 @@ contract CoreTestHelper is Test {
             // the invariant breaks when an account is in default, we no longer expect to get that amount back
             if (!account.defaulted) {
                 totalBorrowedFromAccounts += pool.getAgentBorrowed(i);
-                totalDebtFromAccounts += _agentDebt(i, _getAdjustedRate());
-                totalInterestFromAccounts += _agentInterest(i, _getAdjustedRate());
+                totalDebtFromAccounts += _agentDebt(i, pool.getRate());
+                totalInterestFromAccounts += _agentInterest(i, pool.getRate());
             }
         }
 

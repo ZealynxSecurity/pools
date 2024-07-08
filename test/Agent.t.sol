@@ -75,6 +75,7 @@ contract AgentBasicTest is ProtocolTest {
         miner.changeOwnerAddress(address(agent));
         vm.stopPrank();
 
+        vm.roll(block.number + 1);
         SignedCredential memory addMinerCred = issueAddMinerCred(agent.id(), miner);
 
         vm.startPrank(minerOwner1);
@@ -322,6 +323,12 @@ contract AgentPoliceApprovalTest is ProtocolTest {
         );
 
         vm.startPrank(address(agent));
+        if (existingPrincipal + newPrincipal == 0) {
+            // this call should not revert
+            agentPolice.agentApproved(vc);
+            return;
+        }
+
         if (liquidationValue > agentTotalValue) {
             vm.expectRevert(IAgentPolice.LiquidationValueTooHigh.selector);
             agentPolice.agentApproved(vc);
