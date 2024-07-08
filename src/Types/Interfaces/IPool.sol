@@ -177,4 +177,6 @@ interface IPool {
     function setRentalFeesOwedPerEpoch(uint256 _rentalFeesOwedPerEpoch) external;
 
     function recoverFIL(address receiver) external;
+
+    function pause() external; //@audit => new
 }

@@ -21,4 +21,10 @@ interface IHevm {
     function prank(address sender) external;
 
     function deal(address usr, uint256 amt) external;
+
+    //new
+    function mockCall(address, bytes calldata, bytes calldata) external;
+    function record() external;
+    function accesses(address) external returns (bytes32[] memory reads, bytes32[] memory writes);
+    function expectRevert(bytes calldata) external;
 }

@@ -41,7 +41,6 @@ import {IMiniPool} from "src/Types/Interfaces/IMiniPool.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
 import "test/helpers/Constants.sol";
 
-
 contract EchidnaSetup is EchidnaConfig {
     Token internal rewardToken;
     PoolToken internal lockToken;
@@ -57,7 +56,7 @@ contract EchidnaSetup is EchidnaConfig {
     address internal constant SYSTEM_ADMIN = address(0x50000);
     address internal constant MOCK_ID_STORE_DEPLOYER = address(0xcfa8b8325023C58cdC322a5D3F74d8779d0a5ef5);
     address internal constant INVESTOR = address(0x60000);
-
+    address internal constant RECEIVER = address(0x70000);
 
     IPool internal pool;
     IPoolToken internal iFIL;
@@ -71,7 +70,6 @@ contract EchidnaSetup is EchidnaConfig {
     // just used for testing
     uint256 internal vcIssuerPk = 1;
 
-    
     constructor() {
         rewardToken = new Token("GLIF", "GLF", address(this), address(this));
         lockToken = new PoolToken(address(this));
