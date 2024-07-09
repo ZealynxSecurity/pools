@@ -669,13 +669,26 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
         uint256 initialInvestorBalance = wFIL.balanceOf(INVESTOR);
 
-        // Withdraw half of the assets
-        uint256 withdrawAmount = stakeAmount / 2;
+        // Withdraw first half of the assets
+        uint256 firstWithdrawAmount = stakeAmount / 2;
         hevm.prank(INVESTOR);
-        pool.withdraw(withdrawAmount, INVESTOR, INVESTOR);
+        pool.withdraw(firstWithdrawAmount, INVESTOR, INVESTOR);
 
-        // Assert balances after withdrawal
-        assert(wFIL.balanceOf(INVESTOR) == initialInvestorBalance - withdrawAmount);
+        uint256 investorBalanceAfterFirstWithdrawal = wFIL.balanceOf(INVESTOR);
+
+        // Withdraw second half of the assets
+        uint256 secondWithdrawAmount = stakeAmount / 2;
+        hevm.prank(INVESTOR);
+        pool.withdraw(secondWithdrawAmount, INVESTOR, INVESTOR);
+
+        uint256 investorBalanceAfterSecondWithdrawal = wFIL.balanceOf(INVESTOR);
+
+        // Calculate the total withdrawn amount
+        uint256 totalWithdrawn = firstWithdrawAmount + secondWithdrawAmount;
+
+        // Assert balances after each withdrawal
+        assert(investorBalanceAfterFirstWithdrawal == initialInvestorBalance - firstWithdrawAmount);
+        assert(investorBalanceAfterSecondWithdrawal == investorBalanceAfterFirstWithdrawal - secondWithdrawAmount);
     }
 
     // Test to verify complete withdrawal
@@ -815,4 +828,218 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     //         address(pool).call(abi.encodeWithSignature("withdraw(uint256,address,address)", 0, INVESTOR, INVESTOR));
     //     assert(!success);
     // }
+
+    // ============================================
+    // ==               WITHDRAWF                 ==
+    // ============================================
+
+    // Test for partial withdrawals handling
+    function test_partialWithdrawals(uint256 stakeAmount) public {
+        stakeAmount = bound(stakeAmount, 2, MAX_FIL / 2); // Ensure stakeAmount is at least 2 to allow partial withdrawal
+
+        // Ensure the investor is funded and has deposited
+        hevm.deal(INVESTOR, MAX_FIL * 3);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: WAD}(INVESTOR);
+
+        hevm.prank(INVESTOR);
+        wFIL.deposit{value: stakeAmount}();
+        hevm.prank(INVESTOR);
+        wFIL.approve(address(pool), stakeAmount);
+        hevm.prank(INVESTOR);
+        pool.deposit(stakeAmount, INVESTOR);
+
+        uint256 initialInvestorBalance = INVESTOR.balance;
+
+        // Perform first partial withdrawal
+        uint256 firstWithdrawAmount = stakeAmount / 2;
+        hevm.prank(INVESTOR);
+        pool.withdrawF(firstWithdrawAmount, INVESTOR, INVESTOR);
+
+        uint256 investorBalanceAfterFirstWithdrawal = INVESTOR.balance;
+
+        // Perform second partial withdrawal
+        uint256 secondWithdrawAmount = stakeAmount / 2;
+        hevm.prank(INVESTOR);
+        pool.withdrawF(secondWithdrawAmount, INVESTOR, INVESTOR);
+
+        uint256 investorBalanceAfterSecondWithdrawal = INVESTOR.balance;
+
+        // Calculate the total withdrawn amount
+        uint256 totalWithdrawn = firstWithdrawAmount + secondWithdrawAmount;
+
+        // Assert total balance is correct after each withdrawal
+        assert(investorBalanceAfterFirstWithdrawal == initialInvestorBalance + firstWithdrawAmount);
+        assert(investorBalanceAfterSecondWithdrawal == investorBalanceAfterFirstWithdrawal + secondWithdrawAmount);
+    }
+
+    // Test for withdrawal reverts when paused
+    function test_withdrawFRevertsWhenPaused(uint256 stakeAmount) public {
+        stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+
+        // Pause the contract
+        hevm.prank(SYSTEM_ADMIN);
+        pool.pause();
+
+        // Ensure the investor is funded and has deposited
+        hevm.deal(INVESTOR, MAX_FIL * 3);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: WAD}(INVESTOR);
+
+        hevm.prank(INVESTOR);
+        wFIL.deposit{value: stakeAmount}();
+        hevm.prank(INVESTOR);
+        wFIL.approve(address(pool), stakeAmount);
+        hevm.prank(INVESTOR);
+        pool.deposit(stakeAmount, INVESTOR);
+
+        // Simulate and verify that withdrawing while paused reverts
+        hevm.prank(INVESTOR);
+        (bool success,) = address(pool).call(
+            abi.encodeWithSignature("withdrawF(uint256,address,address)", stakeAmount, INVESTOR, INVESTOR)
+        );
+        assert(!success);
+    }
+
+    // Test for withdrawal reverts with invalid receiver
+    function test_withdrawFRevertsWithInvalidReceiver(uint256 stakeAmount) public {
+        stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+
+        // Ensure the investor is funded and has deposited
+        hevm.deal(INVESTOR, MAX_FIL * 3);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: WAD}(INVESTOR);
+
+        hevm.prank(INVESTOR);
+        wFIL.deposit{value: stakeAmount}();
+        hevm.prank(INVESTOR);
+        wFIL.approve(address(pool), stakeAmount);
+        hevm.prank(INVESTOR);
+        pool.deposit(stakeAmount, INVESTOR);
+
+        // Simulate and verify that withdrawing to an invalid receiver reverts
+        hevm.prank(INVESTOR);
+        (bool success,) = address(pool).call(
+            abi.encodeWithSignature("withdrawF(uint256,address,address)", stakeAmount, address(0), INVESTOR)
+        );
+        assert(!success);
+    }
+
+    // Test to ensure correct balance transfer after withdraw with conversion
+    function test_withdrawFWithConversion(uint256 stakeAmount) public {
+        stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+
+        // Ensure the investor is funded and has deposited
+        hevm.deal(INVESTOR, MAX_FIL * 3);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: WAD}(INVESTOR);
+
+        hevm.prank(INVESTOR);
+        wFIL.deposit{value: stakeAmount}();
+        hevm.prank(INVESTOR);
+        wFIL.approve(address(pool), stakeAmount);
+        hevm.prank(INVESTOR);
+        pool.deposit(stakeAmount, INVESTOR);
+
+        uint256 initialInvestorBalance = INVESTOR.balance;
+
+        // Withdraw with conversion
+        hevm.prank(INVESTOR);
+        pool.withdrawF(stakeAmount, INVESTOR, INVESTOR);
+
+        uint256 investorBalanceAfterWithdrawal = INVESTOR.balance;
+
+        // Assert balances after withdrawal with conversion
+        assert(investorBalanceAfterWithdrawal == initialInvestorBalance + stakeAmount);
+    }
+
+    // Test to verify InsufficientLiquidity revert
+    function test_insufficientLiquidityRevert(uint256 stakeAmount) public {
+        stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+
+        // Ensure the investor is funded and has deposited
+        hevm.deal(INVESTOR, MAX_FIL * 3);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: WAD}(INVESTOR);
+
+        hevm.prank(INVESTOR);
+        wFIL.deposit{value: stakeAmount}();
+        hevm.prank(INVESTOR);
+        wFIL.approve(address(pool), stakeAmount);
+        hevm.prank(INVESTOR);
+        pool.deposit(stakeAmount, INVESTOR);
+
+        // Withdraw all liquidity first
+        hevm.prank(INVESTOR);
+        pool.withdrawF(stakeAmount, INVESTOR, INVESTOR);
+
+        // Try to withdraw again with insufficient liquidity
+        hevm.prank(INVESTOR);
+        (bool success,) = address(pool).call(
+            abi.encodeWithSignature("withdrawF(uint256,address,address)", stakeAmount, INVESTOR, INVESTOR)
+        );
+        assert(!success);
+    }
+
+    // Test for correct asset transfer during exit
+    function test_assetTransferOnExit(uint256 stakeAmount) public {
+        stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+
+        // Ensure the investor is funded and has deposited
+        hevm.deal(INVESTOR, MAX_FIL * 3);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: WAD}(INVESTOR);
+
+        hevm.prank(INVESTOR);
+        wFIL.deposit{value: stakeAmount}();
+        hevm.prank(INVESTOR);
+        wFIL.approve(address(pool), stakeAmount);
+        hevm.prank(INVESTOR);
+        pool.deposit(stakeAmount, INVESTOR);
+
+        uint256 contractBalanceBefore = wFIL.balanceOf(address(pool));
+        uint256 investorBalanceBefore = INVESTOR.balance;
+
+        // Withdraw with conversion
+        hevm.prank(INVESTOR);
+        pool.withdrawF(stakeAmount, INVESTOR, INVESTOR);
+
+        uint256 contractBalanceAfter = wFIL.balanceOf(address(pool));
+        uint256 investorBalanceAfter = INVESTOR.balance;
+
+        // Assert asset transfer is correct
+        assert(contractBalanceAfter == contractBalanceBefore - stakeAmount);
+        assert(investorBalanceAfter == investorBalanceBefore + stakeAmount);
+    }
+
+    // Test for large withdrawals handling
+    function test_largeWithdrawals(uint256 stakeAmount) public {
+        stakeAmount = bound(stakeAmount, MAX_FIL / 2, MAX_FIL);
+
+        // Ensure the investor is funded and has deposited
+        hevm.deal(INVESTOR, MAX_FIL * 3);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: WAD}(INVESTOR);
+
+        hevm.prank(INVESTOR);
+        wFIL.deposit{value: stakeAmount}();
+        hevm.prank(INVESTOR);
+        wFIL.approve(address(pool), stakeAmount);
+        hevm.prank(INVESTOR);
+        pool.deposit(stakeAmount, INVESTOR);
+
+        uint256 contractBalanceBefore = wFIL.balanceOf(address(pool));
+        uint256 investorBalanceBefore = INVESTOR.balance;
+
+        // Withdraw with conversion
+        hevm.prank(INVESTOR);
+        pool.withdrawF(stakeAmount, INVESTOR, INVESTOR);
+
+        uint256 contractBalanceAfter = wFIL.balanceOf(address(pool));
+        uint256 investorBalanceAfter = INVESTOR.balance;
+
+        // Assert asset transfer is correct
+        assert(contractBalanceAfter == contractBalanceBefore - stakeAmount);
+        assert(investorBalanceAfter == investorBalanceBefore + stakeAmount);
+    }
 }

@@ -1,0 +1,1 @@
+{"data":[[0,{"call_type":"FirstLevelCall","caller":"0x8ef508aca04b32ff3ba5003177cb18bfa6cd79dd","contract":"src/Agent/AgentPoliceV2.sol:AgentPoliceV2(0x9d56003014ea0220980f07b9d0b051b4f5c78d00)","input":"fcad4448","value":"0","source":{"file":"src/Agent/AgentPoliceV2.sol","file_idx":49,"offset":1420,"length":17500},"results":""}]]}

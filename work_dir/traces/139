@@ -1,0 +1,2 @@
+[FirstLevelCall][0x68dd4f5ac792eaaa5e36f4f4e0474e0625dc9024 -> src/Agent/MinerRegistry.sol:MinerRegistry(0x893200d0a1860311a654a400d5c2d66184b1c0b7)] (338891eb) > ()
+  [StaticCall][src/Agent/MinerRegistry.sol:MinerRegistry(0x893200d0a1860311a654a400d5c2d66184b1c0b7) -> src/Router/Router.sol:Router(0x37f800f40924783c053842a38b9f680be7ec98a9)] (1a6e649e29f616da00000000000000000000000000000000000000000000000000000000) > (e6e42cb6)
