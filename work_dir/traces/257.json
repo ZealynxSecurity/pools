@@ -1,1 +1,0 @@
-{"data":[[0,{"call_type":"FirstLevelCall","caller":"0x35c9dfd76bf02107ff4f7128bd69716612d31ddb","contract":"src/Token/Token.sol:Token(0x451e0043b460bfa78c5fff49589ac299f095af31)","input":"fca3b5aa0000000000000000000000004200000000000000000000000000000000000006","value":"0","source":{"file":"src/Token/Token.sol","file_idx":65,"offset":792,"length":6907},"results":""}]]}
