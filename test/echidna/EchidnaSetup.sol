@@ -73,7 +73,6 @@ contract EchidnaSetup is EchidnaConfig {
     constructor() {
         rewardToken = new Token("GLIF", "GLF", address(this), address(this));
         lockToken = new PoolToken(address(this));
-        lockToken.setMinter(address(this));
 
         vcIssuer = hevm.addr(vcIssuerPk);
 
@@ -129,6 +128,11 @@ contract EchidnaSetup is EchidnaConfig {
 
         hevm.roll(block.number + EPOCHS_IN_WEEK);
         pool = createPool();
+
+        // deposit 1 FIL in pool to stop donation attacks
+        hevm.deal(INVESTOR, WAD);
+        hevm.prank(INVESTOR);
+        IPool(address(pool)).deposit{value: WAD}(INVESTOR);
     }
 
     uint256[10] levels = [
@@ -159,8 +163,8 @@ contract EchidnaSetup is EchidnaConfig {
                 0
             )
         );
-        hevm.prank(SYSTEM_ADMIN);
         // the pool starts paused in prod
+        hevm.prank(SYSTEM_ADMIN);
         IPausable(address(_pool)).unpause();
         hevm.prank(SYSTEM_ADMIN);
         iFIL.setMinter(address(_pool));
@@ -169,7 +173,7 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.prank(SYSTEM_ADMIN);
         IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));
         hevm.prank(SYSTEM_ADMIN);
-        IRouter(router).pushRoute(ROUTE_POOL_REGISTRY, address(_pool));
+        IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));
 
         return _pool;
     }

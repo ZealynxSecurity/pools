@@ -31,24 +31,32 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     // ============================================
 
     function test_deposit(uint256 stakeAmount) public {
-        //@audit => It only fails when I run it with more tests
+        stakeAmount = bound(stakeAmount, 1e18, MAX_FIL / 2);
+
         // first make sure the investor is funded
         hevm.deal(INVESTOR, stakeAmount + WAD);
-        hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
 
         uint256 investorBalBefore = wFIL.balanceOf(INVESTOR) + INVESTOR.balance;
+        uint256 investorIFILBalBefore = iFIL.balanceOf(INVESTOR);
+        uint256 iFILSupply = iFIL.totalSupply();
         uint256 poolBalBefore = wFIL.balanceOf(address(pool));
+
         // here we split the stakeAmount into wFIL and FIL for testing purposes
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount / 2}();
+        pool.deposit{value: stakeAmount}(INVESTOR);
         hevm.prank(INVESTOR);
-        wFIL.approve(address(pool), stakeAmount / 2);
+        wFIL.deposit{value: stakeAmount}();
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount / 2, INVESTOR);
+        wFIL.approve(address(pool), stakeAmount);
+        hevm.prank(INVESTOR);
+        pool.deposit(stakeAmount, INVESTOR);
 
-        assert(wFIL.balanceOf(INVESTOR) + INVESTOR.balance - stakeAmount == investorBalBefore);
-        assert(poolBalBefore + stakeAmount == wFIL.balanceOf(address(pool)));
+        uint256 previewDeposit = pool.previewDeposit(stakeAmount * 2);
+
+        assert(investorBalBefore - (stakeAmount * 2) == wFIL.balanceOf(INVESTOR) + INVESTOR.balance);
+        assert(poolBalBefore + stakeAmount * 2 == wFIL.balanceOf(address(pool)));
+        assert(iFIL.balanceOf(INVESTOR) == previewDeposit + investorIFILBalBefore);
+        assert(iFIL.totalSupply() == iFILSupply + previewDeposit);
     }
 
     function test_investorPoolBalanceAfterDeposit(uint256 stakeAmount) public {
