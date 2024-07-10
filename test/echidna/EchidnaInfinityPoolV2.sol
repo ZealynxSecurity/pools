@@ -21,11 +21,6 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         assert(IFILtoFIL == WAD);
     }
 
-    // Cheatcodes helpers
-    function bound(uint256 random, uint256 low, uint256 high) public pure returns (uint256) {
-        return low + random % (high - low);
-    }
-
     // ============================================
     // ==               DEPOSIT                  ==
     // ============================================

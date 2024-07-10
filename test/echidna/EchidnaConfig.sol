@@ -11,6 +11,7 @@ contract EchidnaConfig {
     address internal constant USER1 = address(0x10000);
     address internal constant USER2 = address(0x20000);
     address internal constant USER3 = address(0x30000);
+    address internal constant MOCK_ID_DEPLOYER = address(0x40000);
     uint256 internal constant INITIAL_BALANCE = 1_000_000e18;
 
     ////// MOCK FOR VM.LABEL //////

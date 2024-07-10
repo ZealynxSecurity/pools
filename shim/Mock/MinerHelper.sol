@@ -2,11 +2,11 @@
 pragma solidity 0.8.20;
 
 import "test/helpers/MockMiner.sol";
-import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
+import {MockIDAddrStore, MOCK_ID_STORE_ADDR} from "test/helpers/MockIDAddrStore.sol";
 
 library MinerHelper {
     // the ID store gets deployed at the same address every time in a test env
-    address constant ID_STORE_ADDR = address(0x21D90cbF036A63634BA3c18e6553C2a0035a5Dc8);
+    address constant ID_STORE_ADDR = MOCK_ID_STORE_ADDR;
 
     /// @param target The miner actor id you want to interact with
     /// @param addr Expected owner address
