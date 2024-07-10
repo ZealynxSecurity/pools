@@ -483,34 +483,34 @@ contract PoolRequiringAgentTest is ProtocolTest {
         assertEq(pool.totalBorrowableAssets(), 0, "Total borrowable should be zero");
     }
 
-    function testLiquidAssetsLessThanFees(uint256 initialBorrow, uint256 paymentAmt) public {
-        _depositFundsIntoPool(1000e18, investor);
+    function testLiquidAssetsDoesNotIncludeTFees(uint256 initialAssets, uint256 secondDepositAmnt) public {
+        initialAssets = bound(initialAssets, WAD, MAX_FIL);
+        // in this test, we borrow all the assets of the pool, generate interest (and t fees)
+        // then deposit an amount into the pool
+        // the liquid assets should not be effected by the t fees
+        _depositFundsIntoPool(initialAssets, investor);
 
-        initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
-        // ensure we have enough money to pay some interest
-        uint256 minPayment = _getAdjustedRate().mulWadUp(initialBorrow) / WAD;
-        paymentAmt = bound(paymentAmt, minPayment + DUST, initialBorrow - DUST);
-        assertGt(pool.getLiquidAssets(), 0, "Liquid assets should be greater than zero before pool is shut down");
-        // Our first borrow is based on the payment amount to generate fees
-        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), initialBorrow));
-        // Roll foward enough that at least _some_ payment is interest
-        vm.roll(block.number + EPOCHS_IN_WEEK * 3);
-        agentPay(agent, _issueGenericPayCred(agent.id(), paymentAmt));
+        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), initialAssets));
+        // generate fees
+        vm.roll(block.number + EPOCHS_IN_YEAR);
 
-        // if we dont have enough to borrow, deposit enough to borrow the rest
-        if (pool.totalBorrowableAssets() < WAD) {
-            vm.deal(investor, WAD);
-            vm.prank(investor);
-            pool.deposit{value: WAD}(investor);
-        }
-        // pay back principal so we can borrow again
-        Account memory account = AccountHelpers.getAccount(router, agent.id(), 0);
-        agentPay(agent, _issueGenericPayCred(agent.id(), account.principal));
-        // borrow the rest of the assets
-        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), pool.totalBorrowableAssets()));
-        assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when liquid assets less than fees");
         assertGt(pool.treasuryFeesOwed(), 0, "Pool should have generated fees");
-        testInvariants("testLiquidAssetsLessThanFees");
+
+        secondDepositAmnt = bound(secondDepositAmnt, 2, MAX_FIL);
+
+        _depositFundsIntoPool(secondDepositAmnt, investor);
+
+        // liquid assets should not include treasury fees
+        assertEq(pool.getLiquidAssets(), secondDepositAmnt, "Liquid assets should not include t fees");
+
+        testInvariants("testLiquidAssetsDoesNotIncludeTFees");
+    }
+
+    function testDonationAttackAfterEverythingIsBorrowed() public {
+        _depositFundsIntoPool(1000e18, investor);
+        agentBorrow(agent, issueGenericBorrowCred(agent.id(), 1000e18));
+
+        _depositFundsIntoPool(1, investor);
     }
 
     function testOverPayUnderTotalBorrowed() public {

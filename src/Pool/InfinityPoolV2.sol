@@ -258,16 +258,11 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
     }
 
     /**
-     * @dev Returns the amount of FIL the Pool aims to keep in reserves at the current epoch
+     * @dev Returns the amount of liquid WFIL held by the Pool, used for determining max withdraw/redeem amounts
      * @return liquidFunds The amount of total liquid assets held in the Pool
      */
     function getLiquidAssets() public view returns (uint256) {
-        uint256 balance = asset.balanceOf(address(this));
-        uint256 _treasuryFeesOwed = treasuryFeesOwed();
-        // ensure we dont pay out treasury fees
-        if (balance <= _treasuryFeesOwed) return 0;
-
-        return balance - _treasuryFeesOwed;
+        return asset.balanceOf(address(this));
     }
 
     /**
