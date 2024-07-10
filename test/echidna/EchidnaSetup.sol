@@ -12,6 +12,7 @@ import {IRouter} from "src/Types/Interfaces/IRouter.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
+import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 
 // Types Structs
@@ -25,7 +26,7 @@ import {Router} from "src/Router/Router.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 // Constants
 import "src/Constants/Routes.sol";
-import {EPOCHS_IN_YEAR, EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
+import {EPOCHS_IN_YEAR, EPOCHS_IN_WEEK, EPOCHS_IN_DAY} from "src/Constants/Epochs.sol";
 // Agent
 import {MinerRegistry} from "src/Agent/MinerRegistry.sol";
 import {AgentFactory} from "src/Agent/AgentFactory.sol";
@@ -42,6 +43,8 @@ import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
 import "test/helpers/Constants.sol";
 
 contract EchidnaSetup is EchidnaConfig {
+    using FixedPointMathLib for uint256;
+
     Token internal rewardToken;
     PoolToken internal lockToken;
 
@@ -176,5 +179,146 @@ contract EchidnaSetup is EchidnaConfig {
         IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));
 
         return _pool;
+    }
+
+    function _signCred(VerifiableCredential memory vc) internal returns (SignedCredential memory) {
+        bytes32 digest = GetRoute.vcVerifier(router).digest(vc);
+        (uint8 v, bytes32 r, bytes32 s) = hevm.sign(vcIssuerPk, digest);
+        return SignedCredential(vc, v, r, s);
+    }
+
+    function _issueAddMinerCred(uint256 agent, uint64 miner) internal returns (SignedCredential memory) {
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent,
+            block.number,
+            block.number + 100,
+            1000,
+            IAgent.addMiner.selector,
+            miner,
+            // agent data irrelevant for an add miner cred
+            bytes("")
+        );
+
+        return _signCred(vc);
+    }
+
+    function _issueWithdrawCred(uint256 agent, uint256 amount, uint256 principal, uint256 liquidationValue)
+        internal
+        returns (SignedCredential memory)
+    {
+        AgentData memory agentData = _createAgentData(principal, liquidationValue);
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent,
+            block.number,
+            block.number + 100,
+            amount,
+            IAgent.withdraw.selector,
+            // miner data irrelevant for a withdraw cred
+            0,
+            abi.encode(agentData)
+        );
+
+        return _signCred(vc);
+    }
+
+    function _issueRemoveMinerCred(uint256 agent, uint64 miner, uint256 principal, uint256 liquidationValue)
+        internal
+        returns (SignedCredential memory)
+    {
+        AgentData memory agentData = _createAgentData(principal, liquidationValue);
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent,
+            block.number,
+            block.number + 100,
+            0,
+            IAgent.removeMiner.selector,
+            miner,
+            // agent data irrelevant for an remove miner cred
+            abi.encode(agentData)
+        );
+
+        return _signCred(vc);
+    }
+
+    function _issuePayCred(uint256 agentID, uint256 principal, uint256 collateralValue, uint256 paymentAmount)
+        internal
+        returns (SignedCredential memory)
+    {
+        AgentData memory agentData = _createAgentData(collateralValue, principal);
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agentID,
+            block.number,
+            block.number + 100,
+            paymentAmount,
+            IAgent.pay.selector,
+            // minerID irrelevant for pay action
+            0,
+            abi.encode(agentData)
+        );
+
+        return _signCred(vc);
+    }
+
+    function _issueBorrowCred(uint256 agent, uint256 principal, uint256 liquidationValue)
+        internal
+        returns (SignedCredential memory)
+    {
+        AgentData memory agentData = _createAgentData(
+            // collateralValue => 2x the borrowAmount
+            liquidationValue,
+            // principal = borrowAmount
+            principal
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent,
+            block.number,
+            block.number + 100,
+            principal,
+            IAgent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
+
+        return _signCred(vc);
+    }
+
+    function _createAgentData(uint256 collateralValue, uint256 principal) internal pure returns (AgentData memory) {
+        // lockedFunds = collateralValue * 1.67 (such that CV = 60% of locked funds)
+        uint256 lockedFunds = collateralValue * 167 / 100;
+        // agent value = lockedFunds * 1.2 (such that locked funds = 83% of locked funds)
+        uint256 agentValue = lockedFunds * 120 / 100;
+        return AgentData(
+            agentValue,
+            collateralValue,
+            // expectedDailyFaultPenalties
+            0,
+            // edr not used in in v2
+            0,
+            // GCRED DEPRECATED
+            100,
+            // qaPower hardcoded
+            10e18,
+            principal,
+            // faulty sectors
+            0,
+            // live sectors
+            0,
+            // Green Score
+            0
+        );
+    }
+
+    function _getAdjustedRate() internal pure returns (uint256) {
+        return FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
     }
 }
