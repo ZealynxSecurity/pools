@@ -30,8 +30,9 @@ contract EchidnaAgent is EchidnaSetup {
         hevm.prank(AGENT_OWNER);
         agent.borrow(poolID, sc);
 
-        // never reaches
-        assert(false);
+        uint256 agentLiquidAssetsAfter = agent.liquidAssets();
+
+        assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
     }
 
     function test_credential_actions() public {

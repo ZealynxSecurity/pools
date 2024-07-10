@@ -97,34 +97,35 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.prank(SYSTEM_ADMIN);
         address agentFactory = address(new AgentFactory(router));
 
-        bytes4[] memory routeIDs = new bytes4[](8);
-        address[] memory routeAddrs = new address[](8);
+        hevm.prank(SYSTEM_ADMIN);
+        address minerRegistry = address(new MinerRegistry(router, IAgentFactory(agentFactory)));
+
+        hevm.prank(SYSTEM_ADMIN);
+        IRouter(router).pushRoute(ROUTE_MINER_REGISTRY, minerRegistry);
+
+        bytes4[] memory routeIDs = new bytes4[](6);
+        address[] memory routeAddrs = new address[](6);
 
         routeIDs[0] = ROUTE_TREASURY;
         routeAddrs[0] = TREASURY;
-        // Add miner registry route
-        routeIDs[2] = ROUTE_MINER_REGISTRY;
-        hevm.prank(SYSTEM_ADMIN);
-        address minerRegistry = address(new MinerRegistry(router, IAgentFactory(agentFactory)));
-        routeAddrs[2] = minerRegistry;
         // Add agent factory route
-        routeIDs[3] = ROUTE_AGENT_FACTORY;
-        routeAddrs[3] = agentFactory;
+        routeIDs[1] = ROUTE_AGENT_FACTORY;
+        routeAddrs[1] = agentFactory;
         // Add vc issuer route
-        routeIDs[4] = ROUTE_VC_ISSUER;
-        routeAddrs[4] = vcIssuer;
+        routeIDs[2] = ROUTE_VC_ISSUER;
+        routeAddrs[2] = vcIssuer;
         // Add agent police route
-        routeIDs[5] = ROUTE_AGENT_POLICE;
+        routeIDs[3] = ROUTE_AGENT_POLICE;
         hevm.prank(SYSTEM_ADMIN);
         address agentPolice =
             address(new AgentPoliceV2(VERIFIED_NAME, VERIFIED_VERSION, SYSTEM_ADMIN, SYSTEM_ADMIN, router));
-        routeAddrs[5] = agentPolice;
+        routeAddrs[3] = agentPolice;
         // Add cred parser
-        routeIDs[6] = ROUTE_CRED_PARSER;
-        routeAddrs[6] = credParser;
+        routeIDs[4] = ROUTE_CRED_PARSER;
+        routeAddrs[4] = credParser;
         // Add agent deployer
-        routeIDs[7] = ROUTE_AGENT_DEPLOYER;
-        routeAddrs[7] = address(new AgentDeployer());
+        routeIDs[5] = ROUTE_AGENT_DEPLOYER;
+        routeAddrs[5] = address(new AgentDeployer());
 
         hevm.prank(SYSTEM_ADMIN);
         IRouter(router).pushRoutes(routeIDs, routeAddrs);

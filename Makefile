@@ -128,3 +128,6 @@ echidna-lmlp:
 
 echidna-pool:
 	echidna test/echidna/EchidnaInfinityPoolV2.sol --contract EchidnaInfinityPoolV2 --config config.yaml
+
+echidna-agent:
+	echidna test/echidna/EchidnaAgent.sol --contract EchidnaAgent --config config.yaml
