@@ -195,11 +195,12 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
         assertEq(IPool(pool).totalAssets(), poolTotalAssets2, "Total assets should not change after payment");
 
         // make a random call to the new agent police that did not exist on hte old one to make sure the new one is deployed
-        uint256 testVal = IAgentPolice(agentPolice).dtlLiquidationThreshold();
+        uint256 testVal = IAgentPolice(agentPolice).liquidationDTL();
         assertGt(testVal, 0, "Agent police liquidation threshold should have a value");
 
         // try to borrow
         sc = _issueGenericBorrowCred(agent.id(), 1e18);
+        _fundAgentsMiners(agent, sc.vc);
         vm.startPrank(agentOwner);
         agent.borrow(0, sc);
         vm.stopPrank();

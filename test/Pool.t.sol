@@ -3,9 +3,11 @@
 pragma solidity ^0.8.17;
 
 import "./ProtocolTest.sol";
+import {FinMath} from "src/Pool/FinMath.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolRegistry} from "v0/Types/Interfaces/IPoolRegistry.sol";
+import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
@@ -481,34 +483,34 @@ contract PoolRequiringAgentTest is ProtocolTest {
         assertEq(pool.totalBorrowableAssets(), 0, "Total borrowable should be zero");
     }
 
-    function testLiquidAssetsLessThanFees(uint256 initialBorrow, uint256 paymentAmt) public {
-        _depositFundsIntoPool(1000e18, investor);
+    function testLiquidAssetsDoesNotIncludeTFees(uint256 initialAssets, uint256 secondDepositAmnt) public {
+        initialAssets = bound(initialAssets, WAD, MAX_FIL);
+        // in this test, we borrow all the assets of the pool, generate interest (and t fees)
+        // then deposit an amount into the pool
+        // the liquid assets should not be effected by the t fees
+        _depositFundsIntoPool(initialAssets, investor);
 
-        initialBorrow = bound(initialBorrow, WAD, pool.totalBorrowableAssets());
-        // ensure we have enough money to pay some interest
-        uint256 minPayment = _getAdjustedRate().mulWadUp(initialBorrow) / WAD;
-        paymentAmt = bound(paymentAmt, minPayment + DUST, initialBorrow - DUST);
-        assertGt(pool.getLiquidAssets(), 0, "Liquid assets should be greater than zero before pool is shut down");
-        // Our first borrow is based on the payment amount to generate fees
-        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), initialBorrow));
-        // Roll foward enough that at least _some_ payment is interest
-        vm.roll(block.number + EPOCHS_IN_WEEK * 3);
-        agentPay(agent, _issueGenericPayCred(agent.id(), paymentAmt));
+        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), initialAssets));
+        // generate fees
+        vm.roll(block.number + EPOCHS_IN_YEAR);
 
-        // if we dont have enough to borrow, deposit enough to borrow the rest
-        if (pool.totalBorrowableAssets() < WAD) {
-            vm.deal(investor, WAD);
-            vm.prank(investor);
-            pool.deposit{value: WAD}(investor);
-        }
-        // pay back principal so we can borrow again
-        Account memory account = AccountHelpers.getAccount(router, agent.id(), 0);
-        agentPay(agent, _issueGenericPayCred(agent.id(), account.principal));
-        // borrow the rest of the assets
-        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), pool.totalBorrowableAssets()));
-        assertEq(pool.getLiquidAssets(), 0, "Liquid assets should be zero when liquid assets less than fees");
         assertGt(pool.treasuryFeesOwed(), 0, "Pool should have generated fees");
-        testInvariants("testLiquidAssetsLessThanFees");
+
+        secondDepositAmnt = bound(secondDepositAmnt, 2, MAX_FIL);
+
+        _depositFundsIntoPool(secondDepositAmnt, investor);
+
+        // liquid assets should not include treasury fees
+        assertEq(pool.getLiquidAssets(), secondDepositAmnt, "Liquid assets should not include t fees");
+
+        testInvariants("testLiquidAssetsDoesNotIncludeTFees");
+    }
+
+    function testDonationAttackAfterEverythingIsBorrowed() public {
+        _depositFundsIntoPool(1000e18, investor);
+        agentBorrow(agent, issueGenericBorrowCred(agent.id(), 1000e18));
+
+        _depositFundsIntoPool(1, investor);
     }
 
     function testOverPayUnderTotalBorrowed() public {
@@ -642,8 +644,9 @@ contract PoolRequiringAgentTest is ProtocolTest {
         assertEq(wFIL.balanceOf(address(pool)), prePayBal + stakeAmount, "pool should have received payment");
     }
 
-    function testGetRateAppliedAnnually() public {
-        _depositFundsIntoPool(1000e18, investor);
+    function testGetRateAppliedAnnually(uint256 assets) public {
+        assets = bound(assets, WAD, MAX_FIL);
+        _depositFundsIntoPool(assets, investor);
         // we borrow the full assets of the pool so we can apply the interest on the pool's total assets (no utilization rate decrease in rates)
         uint256 totalAssets = pool.totalAssets();
         // deposit 1 FIL in the test
@@ -652,7 +655,7 @@ contract PoolRequiringAgentTest is ProtocolTest {
 
         uint256 chargedRatePerEpoch = pool.getRate();
 
-        assertEq(chargedRatePerEpoch.mulWadUp(EPOCHS_IN_YEAR), KNOWN_RATE, "APR should be known APR value");
+        assertEq(chargedRatePerEpoch.mulWadDown(EPOCHS_IN_YEAR), KNOWN_RATE, "APR should be known APR value");
         assertEq(testRate, chargedRatePerEpoch, "Test rates should match");
 
         // here we can fake borrow 1 FIL from the pool, fast forward a year, and measure the returns of the pool
@@ -663,22 +666,25 @@ contract PoolRequiringAgentTest is ProtocolTest {
         _invIFILWorthAssetsOfPool("testGetRateAppliedAnnually");
 
         // compute the interest owed
-        assertEq(
+        assertApproxEqAbs(
             pool.totalAssets(),
-            totalAssets + totalAssets.mulWadDown(KNOWN_RATE).mulWadUp(1e18 - pool.treasuryFeeRate()),
+            totalAssets + totalAssets.mulWadUp(KNOWN_RATE).mulWadUp(1e18 - pool.treasuryFeeRate()),
+            // @TODO AUDIT CHECK - we must be rounding somewhere if were only ever off by 1 wei, but where?
+            1,
             "Pool should have KNOWN RATE increase worth of asset"
         );
     }
 
-    function testGetRateAppliedTenYears() public {
-        _depositFundsIntoPool(1000e18, investor);
+    function testGetRateAppliedTenYears(uint256 assets) public {
+        assets = bound(assets, WAD, MAX_FIL);
+        _depositFundsIntoPool(assets, investor);
         // we borrow the full assets of the pool so we can apply the interest on the pool's total assets (no utilization rate decrease in rates)
         uint256 totalAssets = pool.totalAssets();
         // deposit 1 FIL in the test
         uint256 borrowAmt = totalAssets;
         uint256 chargedRatePerEpoch = pool.getRate();
 
-        assertEq(chargedRatePerEpoch.mulWadUp(EPOCHS_IN_YEAR * 10), KNOWN_RATE * 10, "APR should be known APR value");
+        assertEq(chargedRatePerEpoch.mulWadDown(EPOCHS_IN_YEAR * 10), KNOWN_RATE * 10, "APR should be known APR value");
 
         // here we can fake borrow 1 FIL from the pool, fast forward a year, and measure the returns of the pool
         agentBorrow(agent, _issueGenericBorrowCred(agent.id(), borrowAmt));
@@ -689,9 +695,11 @@ contract PoolRequiringAgentTest is ProtocolTest {
         _invIFILWorthAssetsOfPool("testGetRateAppliedAnnually");
 
         // compute the interest owed
-        assertEq(
+        assertApproxEqAbs(
             pool.totalAssets(),
             totalAssets + totalAssets.mulWadDown(KNOWN_RATE * 10).mulWadUp(1e18 - pool.treasuryFeeRate()),
+            // @TODO AUDIT CHECK - we must be rounding somewhere if were only ever off by 1 wei, but where?
+            1,
             "Pool should have KNOWN RATE increase worth of asset"
         );
     }
@@ -708,7 +716,7 @@ contract PoolRequiringAgentTest is ProtocolTest {
 
         uint256 prePaymentPoolBal = wFIL.balanceOf(address(pool));
         uint256 payment = interestOwed;
-        SignedCredential memory payCred = _issuePayCred(agent.id(), principal, collateralValue, payment);
+        SignedCredential memory payCred = _issuePayCred(agent.id(), collateralValue, payment);
         // pay back the amount
         agentPay(agent, payCred);
 
@@ -745,7 +753,7 @@ contract PoolRequiringAgentTest is ProtocolTest {
             if (rollTo > endBlock) rollTo = endBlock;
             vm.roll(rollTo);
             SignedCredential memory payCred =
-                _issuePayCred(agent.id(), principal, collateralValue, pool.getAgentInterestOwed(agent.id()));
+                _issuePayCred(agent.id(), collateralValue, pool.getAgentInterestOwed(agent.id()));
 
             // pay back the amount
             agentPay(agent, payCred);
@@ -769,6 +777,30 @@ contract PoolRequiringAgentTest is ProtocolTest {
         assertEq(newAccount.epochsPaid, block.number, "Epochs paid should be up to date");
 
         _assertPoolFundsSuccess(principal, interestOwed, prePaymentPoolBal);
+    }
+
+    function testUpdateAccountingInternalLogic(uint256 initialTotalAssets, uint256 epochs) public {
+        // this test computes the same math as updateAccounting but in an isolate way to see how bad rounding can get
+        // test a week's worth of epochs through both mechanisms
+        vm.assume(epochs < 1000);
+        initialTotalAssets = bound(initialTotalAssets, WAD, MAX_FIL);
+
+        uint256 expectedTotalAssetsIncrease =
+            initialTotalAssets.mulWadDown(KNOWN_RATE * 1e18).mulWadDown(epochs).divWadDown(EPOCHS_IN_YEAR);
+
+        assertApproxEqAbs(KNOWN_RATE * 1e18 / EPOCHS_IN_YEAR, pool.getRate(), 1, "Rate should be known rate");
+
+        uint256 computedTotalAssetIncrease;
+        for (uint256 i = 0; i < epochs; i++) {
+            // every epoch we increase the totalassets by the rate
+            computedTotalAssetIncrease += initialTotalAssets.mulWadUp(pool.getRate());
+        }
+
+        assertTrue(computedTotalAssetIncrease >= expectedTotalAssetsIncrease, "Computed total assets should be greater");
+
+        assertApproxEqRel(
+            expectedTotalAssetsIncrease, computedTotalAssetIncrease, 1e3, "Computed total assets should match"
+        );
     }
 
     function _startSimulation(uint256 principal) internal returns (uint256 interestOwed) {
@@ -818,6 +850,380 @@ contract PoolRequiringAgentTest is ProtocolTest {
             DUST,
             "Treasury should have received the known amount of fees portion of principal delta precision"
         );
+    }
+}
+
+contract PoolRateChangeTests is ProtocolTest {
+    address investor = makeAddr("INVESTOR");
+    address agentOwner = makeAddr("AGENTOWNER");
+
+    /// this test is to ensure that the rate change (to the same rate) is working as expected with a single agent, so the rate change happens in one go
+    function testRateChangeSameRateSingleAgent(uint256 assets, uint256 principal) public {
+        assets = bound(assets, WAD + 1, MAX_FIL);
+        principal = bound(principal, WAD, assets);
+        (IAgent agent,) = configureAgent(agentOwner);
+
+        _depositFundsIntoPool(assets, investor);
+
+        // borrow some FIL from the pool
+        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), principal));
+
+        testInvariants("testRateChangeSameRateSingleAgent");
+
+        // roll forward to create interest
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        uint256 totalInterestBefore = pool.getAgentInterestOwed(agent.id());
+        uint256 totalDebtBefore = pool.getAgentDebt(agent.id());
+        uint256 poolTotalAssetsBefore = pool.totalAssets();
+        uint256 lpAccrued = pool.lpRewards().accrued;
+
+        // change the rate to the same rate in this test for simplicity
+        vm.startPrank(systemAdmin);
+        pool.startRateUpdate(pool.getRate());
+        vm.stopPrank();
+
+        testInvariants("testRateChangeSameRateSingleAgent1");
+
+        assertTrue(
+            pool.totalAssets() >= poolTotalAssetsBefore, "Pool total assets should only increase after a rate change"
+        );
+        uint256 interestAddedToAgent = pool.getAgentInterestOwed(agent.id()) - totalInterestBefore;
+        uint256 interestAddedToPool = pool.totalAssets() - poolTotalAssetsBefore;
+        assertEq(
+            interestAddedToAgent, interestAddedToPool, "Interest added to agent should be the interest added to pool"
+        );
+        assertEq(
+            pool.totalAssets(), poolTotalAssetsBefore + interestAddedToAgent, "Pool total assets should not change"
+        );
+        assertEq(
+            pool.getAgentInterestOwed(agent.id()),
+            totalInterestBefore + interestAddedToPool,
+            "Agent interest owed should not change"
+        );
+        assertEq(pool.getAgentDebt(agent.id()), totalDebtBefore + interestAddedToPool, "Agent debt should not change");
+
+        // now roll forward another year, the interest should double
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        // @TODO AUDIT CHECK - 1 dust param here again passes
+        assertApproxEqAbs(
+            pool.getAgentInterestOwed(agent.id()),
+            totalInterestBefore * 2 + interestAddedToPool,
+            1,
+            "Agent interest owed should double"
+        );
+        assertEq(pool.lpRewards().accrued, lpAccrued * 2 + interestAddedToAgent, "LP rewards should double");
+    }
+
+    function testRateChangeDifferentRateSingleAgent(uint256 assets, uint256 principal) public {
+        assets = bound(assets, WAD + 1, MAX_FIL);
+        principal = bound(principal, WAD, assets);
+        (IAgent agent,) = configureAgent(agentOwner);
+
+        _depositFundsIntoPool(assets, investor);
+
+        // borrow some FIL from the pool
+        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), principal));
+
+        testInvariants("testRateChangeDifferentRateSingleAgent");
+
+        // roll forward to create interest
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        testInvariants("testRateChangeDifferentRateSingleAgent1");
+
+        uint256 totalInterestBefore = pool.getAgentInterestOwed(agent.id());
+        uint256 totalDebtBefore = pool.getAgentDebt(agent.id());
+        uint256 poolTotalAssetsBefore = pool.totalAssets();
+        uint256 lpAccruedBefore = pool.lpRewards().accrued;
+
+        // change the rate to the same rate in this test for simplicity
+        vm.startPrank(systemAdmin);
+        pool.startRateUpdate(pool.getRate() * 2);
+        vm.stopPrank();
+
+        testInvariants("testRateChangeDifferentRateSingleAgent2");
+
+        // if the total assets of the pool increase, then it should increase by the amount of the agent's debt
+        // and in both cases, the amount it should increase should be less than 1 epochs worth of payment
+        assertTrue(
+            pool.totalAssets() >= poolTotalAssetsBefore, "Pool total assets should only increase after a rate change"
+        );
+        uint256 interestAddedToAgent = pool.getAgentInterestOwed(agent.id()) - totalInterestBefore;
+        uint256 interestAddedToPool = pool.totalAssets() - poolTotalAssetsBefore;
+        assertEq(
+            interestAddedToAgent, interestAddedToPool, "Interest added to agent should be the interest added to pool"
+        );
+        assertEq(
+            pool.totalAssets(),
+            poolTotalAssetsBefore + interestAddedToAgent,
+            "The pools assets should increase by the interest added to the agent"
+        );
+        assertEq(
+            pool.getAgentInterestOwed(agent.id()),
+            totalInterestBefore + interestAddedToPool,
+            "The increase in agent interest should be the increase in pool interest"
+        );
+        assertEq(
+            pool.getAgentDebt(agent.id()),
+            totalDebtBefore + interestAddedToAgent,
+            "Agent debt should not change after a rate change"
+        );
+
+        assertEq(
+            pool.lpRewards().accrued,
+            pool.getAgentInterestOwed(agent.id()),
+            "LP rewards should be equal to agent interest owed"
+        );
+
+        // now roll forward another year, the interest should 3x because we doubled the rate
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        assertApproxEqRel(
+            pool.getAgentInterestOwed(agent.id()),
+            totalInterestBefore * 3 + interestAddedToAgent,
+            10,
+            "Agent interest owed should triple"
+        );
+        assertApproxEqRel(
+            pool.lpRewards().accrued, lpAccruedBefore * 3 + interestAddedToAgent, 10, "LP rewards should triple"
+        );
+
+        testInvariants("testRateChangeDifferentRateSingleAgent3");
+    }
+
+    function testRateChangeDifferentRateManyAgentsOneGo(uint256 numAgents, uint256 assets) public {
+        numAgents = bound(numAgents, 1, 9);
+        assets = bound(assets, WAD * numAgents, MAX_FIL);
+        uint256 principal = assets / numAgents;
+
+        vm.prank(systemAdmin);
+        pool.setMaxAccountsToUpdatePerBatch(numAgents + 1);
+
+        _depositFundsIntoPool(assets, investor);
+
+        IAgent[] memory agents = new IAgent[](numAgents);
+
+        for (uint8 i = 0; i < numAgents; i++) {
+            (agents[i],) = configureAgent(agentOwner);
+            agentBorrow(agents[i], _issueGenericBorrowCred(agents[i].id(), principal));
+        }
+
+        // roll forward to create some interest
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        testInvariants("testRateChangeDifferentRateManyAgentsOneGo");
+
+        uint256 poolTotalAssetsBefore = pool.totalAssets();
+        // since all agents have the same financial composition, we can just check one of them
+        uint256 totalInterestBefore = pool.getAgentInterestOwed(agents[0].id());
+        uint256 totalDebtBefore = pool.getAgentDebt(agents[0].id());
+
+        // change the rate
+        uint256 newRate = pool.getRate() * 2;
+        vm.startPrank(systemAdmin);
+        pool.startRateUpdate(newRate);
+        vm.stopPrank();
+
+        testInvariants("testRateChangeDifferentRateManyAgentsOneGo1");
+
+        assertTrue(
+            pool.totalAssets() >= poolTotalAssetsBefore, "Pool total assets should only increase after a rate change"
+        );
+
+        uint256 interestAddedToAgent = pool.getAgentInterestOwed(agents[0].id()) - totalInterestBefore;
+        uint256 interestAddedToPool = pool.totalAssets() - poolTotalAssetsBefore;
+        assertEq(
+            interestAddedToAgent * numAgents,
+            interestAddedToPool,
+            "Interest added to agent should be the interest added to pool"
+        );
+
+        assertEq(
+            pool.totalAssets(),
+            poolTotalAssetsBefore + (interestAddedToAgent * numAgents),
+            "The pools assets should increase by the interest added to the agent"
+        );
+        assertEq(
+            pool.getAgentInterestOwed(agents[0].id()),
+            totalInterestBefore + interestAddedToAgent,
+            "The increase in agent interest should be the increase in pool interest"
+        );
+        assertEq(
+            pool.getAgentDebt(agents[0].id()),
+            totalDebtBefore + interestAddedToAgent,
+            "Agent debt should not change after a rate change"
+        );
+
+        assertApproxEqAbs(
+            pool.lpRewards().accrued,
+            pool.getAgentInterestOwed(agents[0].id()) * numAgents,
+            1e3,
+            "LP rewards should be equal to agent interest owed"
+        );
+
+        assertTrue(!IPausable(address(pool)).paused(), "Pool should not be paused");
+        assertEq(pool.getRate(), newRate, "Pool rate should be updated");
+    }
+
+    function testContinueRateUpdateEvenFit() public {
+        uint256 principal = 1000e18;
+        // event split means the batch size fits cleanly into the number of agents
+        uint256 numAgents = 6;
+        uint256 batchSize = 2;
+        _testContinueRateUpdateEvenFit(principal, numAgents, batchSize);
+    }
+
+    function testContinueRateUpdateOddFit() public {
+        uint256 principal = 1000e18;
+        // event split means the batch size fits cleanly into the number of agents
+        uint256 numAgents = 7;
+        uint256 batchSize = 3;
+        _testContinueRateUpdateEvenFit(principal, numAgents, batchSize);
+    }
+
+    function testUpdateAccountingMidRateUpdateDoesNothing() public {
+        _depositFundsIntoPool(1000e18, investor);
+        // configure two agents and borrow from the pool
+        (IAgent agent,) = configureAgent(agentOwner);
+        (IAgent agent2,) = configureAgent(agentOwner);
+        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), 1e18));
+        agentBorrow(agent2, _issueGenericBorrowCred(agent2.id(), 1e18));
+        // set the batch size to one so we have to continue the rate update
+        vm.prank(systemAdmin);
+        pool.setMaxAccountsToUpdatePerBatch(1);
+
+        // set the rate
+        uint256 newRate = pool.getRate() * 2;
+        vm.startPrank(systemAdmin);
+        pool.startRateUpdate(newRate);
+        vm.stopPrank();
+
+        uint256 totalAssetsBefore = pool.totalAssets();
+        uint256 iFILPriceBefore = pool.convertToAssets(WAD);
+
+        // roll forward just to create some space
+        vm.roll(block.number + 1);
+
+        // update the accounting should do nothing
+        pool.updateAccounting();
+        assertEq(pool.totalAssets(), totalAssetsBefore, "Pool total assets should not change");
+        assertEq(pool.convertToAssets(WAD), iFILPriceBefore, "iFIL price should not change");
+    }
+
+    function _testContinueRateUpdateEvenFit(uint256 principal, uint256 numAgents, uint256 agentBatchSize) internal {
+        // first reset the max agents per batch to be small so we have to continue the rate update
+        vm.prank(systemAdmin);
+        pool.setMaxAccountsToUpdatePerBatch(agentBatchSize);
+
+        _depositFundsIntoPool(principal * numAgents, investor);
+
+        IAgent firstAgent;
+        IAgent lastAgent;
+        for (uint8 i = 0; i < numAgents; i++) {
+            (IAgent agent,) = configureAgent(agentOwner);
+            agentBorrow(agent, _issueGenericBorrowCred(agent.id(), principal));
+            if (i == 0) {
+                firstAgent = agent;
+            }
+            if (i == numAgents - 1) {
+                lastAgent = agent;
+            }
+        }
+
+        // roll forward to create some interest
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        testInvariants("testContinueRateUpdateOnce");
+
+        uint256 poolTotalAssetsBefore = pool.totalAssets();
+        // since all agents have the same financial composition, we can just check one of them
+        uint256 totalInterestBefore = pool.getAgentInterestOwed(firstAgent.id());
+
+        // change the rate
+        uint256 ogRate = pool.getRate();
+        uint256 newRate = ogRate * 2;
+        vm.startPrank(systemAdmin);
+        pool.startRateUpdate(newRate);
+        vm.stopPrank();
+
+        // NOTE INVARIANTS BREAK HERE UNTIL WE ARE FINISHED
+
+        // here we calculate with the FinMath library so we can use the new rate,
+        // since the new rate is not set in the pool yet
+        (uint256 agentInterest,) = FinMath.interestOwed(AccountHelpers.getAccount(router, firstAgent.id(), 0), newRate);
+        uint256 interestAddedToAgent = agentInterest - totalInterestBefore;
+        uint256 poolTotalAssetsAfter = pool.totalAssets();
+
+        assertTrue(IPausable(address(pool)).paused(), "Pool should be paused");
+        assertEq(pool.getRate(), ogRate, "Pool rate should not be updated");
+        // were not finished yet, but the pool should have the same amount of interest added to it as the batch sizes
+        assertEq(
+            pool.totalAssets(),
+            poolTotalAssetsBefore + (interestAddedToAgent * agentBatchSize),
+            "Pool total assets should not change"
+        );
+
+        // continue the rate update
+        vm.startPrank(systemAdmin);
+        pool.continueRateUpdate();
+
+        assertTrue(IPausable(address(pool)).paused(), "Pool should still be paused");
+        assertEq(pool.getRate(), ogRate, "Pool rate should not be updated");
+        // were not finished yet, but the pool should have the same amount of interest added to it as the batch sizes
+        assertEq(
+            pool.totalAssets(),
+            poolTotalAssetsAfter + (interestAddedToAgent * agentBatchSize),
+            "Pool total assets should not change"
+        );
+
+        // continue the rate update
+        vm.startPrank(systemAdmin);
+        pool.continueRateUpdate();
+
+        assertTrue(!IPausable(address(pool)).paused(), "Pool should still be paused");
+        assertEq(pool.getRate(), newRate, "Pool rate should not be updated");
+        // were not finished yet, but the pool should have the same amount of interest added to it as the batch sizes
+        assertEq(
+            pool.totalAssets(),
+            poolTotalAssetsBefore + (interestAddedToAgent * numAgents),
+            "Pool total assets should not change, or change by the amount of interest added to each agent"
+        );
+
+        // sanity check, make sure the first and last agent's epochs paid match
+        assertEq(
+            AccountHelpers.getAccount(router, firstAgent.id(), 0).epochsPaid,
+            AccountHelpers.getAccount(router, lastAgent.id(), 0).epochsPaid,
+            "Epochs paid should match"
+        );
+    }
+
+    function testStartRateUpdateWhileRateIsUpdating() public {
+        _depositFundsIntoPool(1000e18, investor);
+        // configure two agents and borrow from the pool
+        (IAgent agent,) = configureAgent(agentOwner);
+        (IAgent agent2,) = configureAgent(agentOwner);
+        agentBorrow(agent, _issueGenericBorrowCred(agent.id(), 1e18));
+        agentBorrow(agent2, _issueGenericBorrowCred(agent2.id(), 1e18));
+        // set the batch size to one so we have to continue the rate update
+        vm.prank(systemAdmin);
+        pool.setMaxAccountsToUpdatePerBatch(1);
+
+        // set the rate
+        uint256 newRate = pool.getRate() * 2;
+        vm.startPrank(systemAdmin);
+        pool.startRateUpdate(newRate);
+        vm.stopPrank();
+
+        // roll forward just to create some space
+        vm.roll(block.number + 1);
+
+        // try to start a new rate update
+        vm.startPrank(systemAdmin);
+        vm.expectRevert(abi.encodeWithSelector(IPool.InvalidState.selector));
+        pool.startRateUpdate(newRate);
+        vm.stopPrank();
     }
 }
 

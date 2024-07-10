@@ -56,17 +56,17 @@ contract ProtocolTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
 
     constructor() {
         vm.startPrank(systemAdmin);
-        // deploys the router
-        router = address(new Router(systemAdmin));
-        IRouter(router).pushRoute(ROUTE_WFIL_TOKEN, address(wFIL));
-
         address agentFactory = address(new AgentFactory(router));
+        address minerRegistry = address(new MinerRegistry(router, IAgentFactory(agentFactory)));
+        IRouter(router).pushRoute(ROUTE_WFIL_TOKEN, address(wFIL));
+        // agentPoliceV2 requires router to be set with minerRegistry to deploy
+        IRouter(router).pushRoute(ROUTE_MINER_REGISTRY, minerRegistry);
 
         Deployer.setupContractRoutes(
             address(router),
             treasury,
             address(wFIL),
-            address(new MinerRegistry(router, IAgentFactory(agentFactory))),
+            minerRegistry,
             agentFactory,
             address(new AgentPoliceV2(VERIFIED_NAME, VERIFIED_VERSION, systemAdmin, systemAdmin, router)),
             vcIssuer,

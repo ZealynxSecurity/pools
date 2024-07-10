@@ -24,6 +24,7 @@ import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
 import {Account} from "src/Types/Structs/Account.sol";
+import {RateUpdate} from "src/Types/Structs/RateUpdate.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {EPOCHS_IN_DAY, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
@@ -84,13 +85,19 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
 
     /// @dev `rentalFeesOwedPerEpoch` is the % of FIL charged to Agents on a per epoch basis
     /// @dev this param uses an extra WAD of precision to maintain precision in the math when applied over long durations
-    uint256 private _rentalFeesOwedPerEpoch = FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
+    uint256 private _rentalFeesOwedPerEpoch = FixedPointMathLib.divWadUp(15e34, EPOCHS_IN_YEAR * 1e18);
 
     /// @dev _lpRewards tracks the accrual math for LP rewards
     RewardAccrual private _lpRewards;
 
     /// @dev _treasuryRewards tracks the accrual math for treasury rewards
     RewardAccrual private _treasuryRewards;
+
+    /// @dev _rateUpdate tracks the rate updates for the pool, which may take more than 1 transaction depending on how many accounts are there
+    RateUpdate private _rateUpdate;
+
+    /// @dev _maxAccountsToUpdatePerBatch is the maximum number of accounts that can be updated in a single transaction
+    uint256 private _maxAccountsToUpdatePerBatch = 250;
 
     /*//////////////////////////////////////////////////////////////
                               MODIFIERs
@@ -199,6 +206,10 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         return _treasuryRewards.accrue(newTreasuryFeesOwed);
     }
 
+    function rateUpdate() external view returns (RateUpdate memory) {
+        return _rateUpdate;
+    }
+
     /**
      * @dev Returns the amount of liquid FIL in this pool that is reserved for the treasury due to fees
      * @return treasuryFeesReserved The total treasury rewards that have accrued in this pool
@@ -247,16 +258,11 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
     }
 
     /**
-     * @dev Returns the amount of FIL the Pool aims to keep in reserves at the current epoch
+     * @dev Returns the amount of liquid WFIL held by the Pool, used for determining max withdraw/redeem amounts
      * @return liquidFunds The amount of total liquid assets held in the Pool
      */
     function getLiquidAssets() public view returns (uint256) {
-        uint256 balance = asset.balanceOf(address(this));
-        uint256 _treasuryFeesOwed = treasuryFeesOwed();
-        // ensure we dont pay out treasury fees
-        if (balance <= _treasuryFeesOwed) return 0;
-
-        return balance - _treasuryFeesOwed;
+        return asset.balanceOf(address(this));
     }
 
     /**
@@ -378,32 +384,23 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
             account.epochsPaid = currentEpoch;
             account.principal += vc.value;
         } else {
-            // shift the epochsPaid cursor up, so the account does not end up overpaying interest on previously borrowed funds
+            // if the account already exists, we need to shift the epochsPaid cursor up,
+            // so the account does not end up overpaying interest on previously borrowed funds
             // first we compute the interest owed before the new borrowed amount is applied
             (uint256 interestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
             // then add the new borrowed amount to the account's principal
             account.principal += vc.value;
-            // compute the new interest owed per epoch after the new borrowed amount is applied to the account
-            // note that interestPerEpoch has an extra WAD to maintain precision
-            uint256 interestPerEpochAfter = FinMath.interestPerEpoch(account, _rentalFeesOwedPerEpoch);
-            // if interest exists but it is less than the minimum new interest per epoch, we set the account to the current epoch minus 1
-            // note that this account is now slightly overpaying for interest, so we need to adjust our accrued rewards
-            if (interestOwed > 0 && (interestOwed <= interestPerEpochAfter.mulWadUp(1))) {
-                account.epochsPaid = block.number - 1;
-                // add the difference between the new interest owed (after divving out the extra WAD) and previousInterestOwed to the accruedFees of the pool
-                _lpRewards = _lpRewards.accrue(interestPerEpochAfter.mulWadUp(1) - interestOwed);
-            } else if (interestOwed > 0) {
-                // if the interestOwed is bigger than 0 and the interestPerEpochAfter, we need to adjust the epochsPaid cursor forward
-                // given a new interest per epoch owed with the new borrow amount applied, we need to solve for the number of epochs (at the new interestPerEpochRate) that will result in the same amount of interest owed
-                account.epochsPaid = block.number - interestOwed.divWadUp(interestPerEpochAfter);
-                // since we lost precision by divving into epochs (not wad based), we check for any accounting mismatches, and adjust the accrued rental fees
-                (uint256 newInterestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
-                if (newInterestOwed != interestOwed) {
-                    // add the difference between the new interest owed and previousInterestOwed to the accruedFees of the pool
-                    _lpRewards = _lpRewards.accrue(newInterestOwed - interestOwed);
-                }
+            // recompute the new epochs paid cursor
+            (uint256 newEpochsPaid, uint256 newInterestIncurred) =
+                _resetEpochsPaid(account, _rentalFeesOwedPerEpoch, interestOwed);
+            // update the account's `epochsPaid` cursor
+            account.epochsPaid = newEpochsPaid;
+
+            if (newInterestIncurred > 0) {
+                // accrue any new rewards to the pool (due to dust rounding)
+                _lpRewards = _lpRewards.accrue(newInterestIncurred);
             }
-            // if we dont owe any interest we leave the account epoch's paid cursor alone to maintain the same amount of total interest owed
+            // if we dont owe any interest we leave the account epoch's paid cursor alone
         }
 
         account.save(_router, vc.subject, id);
@@ -425,6 +422,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
     function pay(VerifiableCredential calldata vc)
         external
         subjectIsAgentCaller(vc)
+        whenNotPaused
         returns (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund)
     {
         updateAccounting();
@@ -459,7 +457,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
             if (vc.value * WAD < interestPerEpoch) revert InvalidParams();
         }
         // if the payment is less than the interest owed, pay interest only
-        if (vc.value <= interestOwed) {
+        if (vc.value < interestOwed) {
             // compute the amount of epochs this payment covers
             // vc.value is not WAD yet, so divWadDown cancels the extra WAD in interestPerEpoch
             uint256 epochsForward = vc.value.divWadDown(interestPerEpoch);
@@ -546,7 +544,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         view
         returns (uint256 newRentalFeesAccrued, uint256 newTreasuryFeesAccrued)
     {
-        // only update the accounting if we're in a new epoch
+        // only update the accounting if we're in a new epoch and not paused
         if (block.number > lastAccountingUpdateEpoch && !paused()) {
             // create a pseudo Account struct for the whole pool to reuse the FinMath library
             (newRentalFeesAccrued,) = FinMath.interestOwed(
@@ -953,6 +951,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
      * @dev this is only called in a pool upgrade scenario
      */
     function jumpStartTotalBorrowed(uint256 amount) external {
+        updateAccounting();
         // this function gets called from the v0 pool registry in the initial upgrade to v2
         if (address(GetRoute.poolRegistry(_router)) != msg.sender) revert Unauthorized();
         if (totalBorrowed != 0) revert InvalidState();
@@ -991,6 +990,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
      * @notice setMinimumLiquidity sets the liquidity reserve threshold used for exits
      */
     function setMinimumLiquidity(uint256 _minimumLiquidity) external onlyOwner {
+        updateAccounting();
         minimumLiquidity = _minimumLiquidity;
     }
 
@@ -998,6 +998,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
      * @notice setTreasuryFeeRate sets the treasury fee rate
      */
     function setTreasuryFeeRate(uint256 _treasuryFeeRate) external onlyOwner {
+        updateAccounting();
         treasuryFeeRate = _treasuryFeeRate;
     }
 
@@ -1010,10 +1011,110 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
     }
 
     /**
-     * @notice setRentalFeesOwedPerEpoch sets the rental fees owed per epoch
+     * @notice startRateUpdate sets the rental fees owed per epoch after adjusting accounts
+     * @param rentalFeesOwedPerEpoch_ The new rental fees owed per epoch
      */
-    function setRentalFeesOwedPerEpoch(uint256 rentalFeesOwedPerEpoch_) external onlyOwner {
-        _rentalFeesOwedPerEpoch = rentalFeesOwedPerEpoch_;
+    function startRateUpdate(uint256 rentalFeesOwedPerEpoch_) external onlyOwner {
+        updateAccounting();
+
+        if (_rateUpdate.inProcess) revert InvalidState();
+
+        // pause the contract to ensure that nothing happens after we start updating accounts
+        _pause();
+
+        // loop through each account and update the epochsPaid cursor to maintain the same amount of interest owed at the new rate
+        uint256 totalAgents = _agentFactory.agentCount();
+        // agents are 1 indexed, so we start at 1, until we reach the limit or the total number of agents
+        uint256 aggNewInterestIncurred =
+            _updateAgentAccounts(rentalFeesOwedPerEpoch_, 1, Math.min(_maxAccountsToUpdatePerBatch, totalAgents));
+        if (aggNewInterestIncurred > 0) {
+            // accrue any new rewards to the pool (due to dust)
+            _lpRewards = _lpRewards.accrue(aggNewInterestIncurred);
+        }
+
+        // if we can update all accounts in one go, we unpause the pool and set the new rate to complete the rate update
+        if (_maxAccountsToUpdatePerBatch >= totalAgents) {
+            _unpause();
+            _rentalFeesOwedPerEpoch = rentalFeesOwedPerEpoch_;
+        } else {
+            // if we didnt update all accounts, don't update the rate in storage until the process is complete
+            _rateUpdate = RateUpdate({
+                totalAccountsAtUpdate: totalAgents,
+                totalAccountsClosed: _maxAccountsToUpdatePerBatch,
+                newRate: rentalFeesOwedPerEpoch_,
+                inProcess: true
+            });
+        }
+    }
+
+    /**
+     * @notice continueRateUpdate continues the rate update process
+     */
+    function continueRateUpdate() external onlyOwner {
+        if (!_rateUpdate.inProcess) revert InvalidState();
+
+        uint256 totalClosed = _rateUpdate.totalAccountsClosed;
+        uint256 totalAgents = _rateUpdate.totalAccountsAtUpdate;
+        uint256 maxAgentsToUpdate = _maxAccountsToUpdatePerBatch + totalClosed;
+
+        uint256 stopIdx = Math.min(maxAgentsToUpdate, totalAgents);
+
+        uint256 aggNewInterestIncurred = _updateAgentAccounts(_rateUpdate.newRate, totalClosed + 1, stopIdx);
+        if (aggNewInterestIncurred > 0) {
+            // accrue any new rewards to the pool (due to dust)
+            _lpRewards = _lpRewards.accrue(aggNewInterestIncurred);
+        }
+
+        // if we finish updating all accounts, we unpause the pool, set the new rate, and
+        // update accounting for the epochs when the pool was paused (paused epochs are applied at the new rate)
+        if (stopIdx == totalAgents) {
+            _unpause();
+            _rentalFeesOwedPerEpoch = _rateUpdate.newRate;
+            updateAccounting();
+            // end the rate update
+            _rateUpdate = RateUpdate({totalAccountsAtUpdate: 0, totalAccountsClosed: 0, newRate: 0, inProcess: false});
+        } else {
+            // otherwise we continue with the rate update
+            _rateUpdate = RateUpdate({
+                totalAccountsAtUpdate: totalAgents,
+                totalAccountsClosed: maxAgentsToUpdate,
+                newRate: _rateUpdate.newRate,
+                inProcess: true
+            });
+        }
+    }
+
+    function _updateAgentAccounts(uint256 rate, uint256 startIdx, uint256 stopIdx)
+        internal
+        returns (uint256 aggNewInterestIncurred)
+    {
+        Account memory account;
+        uint256 interestOwed;
+        uint256 newEpochsPaid;
+        uint256 newInterestIncurred;
+        for (uint256 i = startIdx; i <= stopIdx; i++) {
+            account = _getAccount(i);
+            // if  account principal is 0, then the account does not need an update
+            if (account.principal == 0) continue;
+            // get the existing interest owed on the account
+            (interestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
+            // shift the epochs paid cursor forward or backwards depending on the new rate
+            (newEpochsPaid, newInterestIncurred) = _resetEpochsPaid(account, rate, interestOwed);
+            // if we incurred any new debt in the books closing, make sure to account for it in in the LP rewards
+            aggNewInterestIncurred += newInterestIncurred;
+            // update the account's `epochsPaid` cursor
+            account.epochsPaid = newEpochsPaid;
+            // save the account in storage
+            account.save(_router, i, id);
+        }
+
+        return aggNewInterestIncurred;
+    }
+
+    function setMaxAccountsToUpdatePerBatch(uint256 maxAccountsToUpdatePerBatch_) external onlyOwner {
+        updateAccounting();
+
+        _maxAccountsToUpdatePerBatch = maxAccountsToUpdatePerBatch_;
     }
 
     /**
@@ -1078,6 +1179,33 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         liquidStakingToken.mint(receiver, lstAmount);
 
         emit Deposit(msg.sender, receiver.normalize(), msg.value, lstAmount);
+    }
+
+    function _resetEpochsPaid(Account memory account, uint256 perEpochRate, uint256 interestOwed)
+        internal
+        view
+        returns (uint256 newAccountEpochsPaid, uint256 newInterestIncurred)
+    {
+        uint256 interestPerEpoch = FinMath.interestPerEpoch(account, perEpochRate);
+        if (interestOwed > 0 && (interestOwed <= interestPerEpoch.mulWadUp(1))) {
+            // add the difference between the new interest owed (after divving out the extra WAD) and previousInterestOwed to the accruedFees of the pool
+            return (block.number - 1, interestPerEpoch.mulWadUp(1) - interestOwed);
+        } else if (interestOwed > 0) {
+            // if the interestOwed is bigger than 0 and the interestPerEpoch, adjust the epochsPaid cursor forward
+            // given a new interest per epoch owed with the new borrow amount applied, solve for
+            // the number of epochs (at the new interestPerEpochRate) that will result in the same amount of interest owed
+            newAccountEpochsPaid = block.number - interestOwed.divWadUp(interestPerEpoch);
+            account.epochsPaid = newAccountEpochsPaid;
+            (uint256 newInterestOwed,) = FinMath.interestOwed(account, perEpochRate);
+            // since we lost precision by dividing into epochs (not wad based), check for any accounting mismatches
+            if (newInterestOwed != interestOwed) {
+                // add the difference between the new interest owed and previousInterestOwed to the accruedFees of the pool
+                return (newAccountEpochsPaid, newInterestOwed - interestOwed);
+            }
+            return (newAccountEpochsPaid, 0);
+        }
+
+        return (account.epochsPaid, 0);
     }
 
     function _processExit(

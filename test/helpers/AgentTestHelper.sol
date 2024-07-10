@@ -119,7 +119,22 @@ contract AgentTestHelper is CoreTestHelper {
         );
     }
 
+    function _fundAgentsMiners(IAgent agent, VerifiableCredential memory vc) internal {
+        // when we borrow or remove equity, we need to make sure we put enough funds on the agent to match the agent total value or else the borrow will fail
+        // to not interfere with other calls, we put the funds on the agent's first miner
+        uint256 agentTotalValue = vc.getCollateralValue(credParser);
+        uint256 minerID = GetRoute.minerRegistry(router).getMiner(vc.subject, 0);
+        // fund this miner with the required agent's total value
+        if (agentTotalValue > agent.liquidAssets()) {
+            // deal some balance to the miner
+            address miner = address(bytes20(abi.encodePacked(hex"ff0000000000000000000000", uint64(minerID))));
+            vm.deal(miner, agentTotalValue - agent.liquidAssets());
+        }
+    }
+
     function agentBorrow(IAgent agent, SignedCredential memory sc) internal {
+        _fundAgentsMiners(agent, sc.vc);
+
         uint256 poolID = 0;
         IMiniPool pool = IMiniPool(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
         uint256 preTotalBorrowed = pool.totalBorrowed();

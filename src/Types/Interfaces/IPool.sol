@@ -4,6 +4,7 @@ pragma solidity 0.8.20;
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
+import {RateUpdate} from "src/Types/Structs/RateUpdate.sol";
 import {RewardAccrual} from "src/Types/Structs/RewardAccrual.sol";
 import {IRateModule} from "src/Types/Interfaces/IRateModule.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
@@ -85,6 +86,8 @@ interface IPool {
     function treasuryFeeRate() external view returns (uint256);
 
     function lastAccountingUpdateEpoch() external view returns (uint256);
+
+    function rateUpdate() external view returns (RateUpdate memory);
 
     /*//////////////////////////////////////////////////////////////
                             BORROWER FUNCTIONS
@@ -172,9 +175,13 @@ interface IPool {
 
     function setTreasuryFeeRate(uint256 _treasuryFeeRate) external;
 
+    function setMaxAccountsToUpdatePerBatch(uint256 _maxAccountsToUpdatePerBatch) external;
+
     function writeOff(uint256 agentID, uint256 recoveredDebt) external;
 
-    function setRentalFeesOwedPerEpoch(uint256 _rentalFeesOwedPerEpoch) external;
+    function startRateUpdate(uint256 _rentalFeesOwedPerEpoch) external;
+
+    function continueRateUpdate() external;
 
     function recoverFIL(address receiver) external;
 
