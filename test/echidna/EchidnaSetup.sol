@@ -14,6 +14,7 @@ import {IAgentFactory} from "src/Types/Interfaces/IAgentFactory.sol";
 import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IAgent} from "src/Types/Interfaces/IAgent.sol";
 import {IPausable} from "src/Types/Interfaces/IPausable.sol";
+import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 
 // Types Structs
 import {Credentials} from "src/Types/Structs/Credentials.sol";
@@ -40,6 +41,7 @@ import {MinerHelper} from "shim/MinerHelper.sol";
 import {AccountHelpers} from "src/Pool/Account.sol";
 import {IMiniPool} from "src/Types/Interfaces/IMiniPool.sol";
 import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
+import {MockMiner} from "test/helpers/MockMiner.sol";
 import "test/helpers/Constants.sol";
 
 contract EchidnaSetup is EchidnaConfig {
@@ -60,8 +62,10 @@ contract EchidnaSetup is EchidnaConfig {
     address internal constant MOCK_ID_STORE_DEPLOYER = address(0xcfa8b8325023C58cdC322a5D3F74d8779d0a5ef5);
     address internal constant INVESTOR = address(0x60000);
     address internal constant RECEIVER = address(0x70000);
+    address internal AGENT_OWNER = address(0x80000);
 
     IPool internal pool;
+    uint256 internal poolID;
     IPoolToken internal iFIL;
     IWFIL internal wFIL = IWFIL(address(new WFIL(SYSTEM_ADMIN)));
     MockIDAddrStore internal idStore;
@@ -84,15 +88,14 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.prank(SYSTEM_ADMIN);
         IRouter(router).pushRoute(ROUTE_WFIL_TOKEN, address(wFIL));
 
-        hevm.prank(MOCK_ID_STORE_DEPLOYER);
+        hevm.prank(MOCK_ID_DEPLOYER);
         idStore = new MockIDAddrStore();
+        require(
+            address(idStore) == MinerHelper.ID_STORE_ADDR, "ID_STORE_ADDR must be set to the address of the IDAddrStore"
+        );
 
         hevm.prank(SYSTEM_ADMIN);
         address agentFactory = address(new AgentFactory(router));
-
-        // require(
-        //     address(idStore) == MinerHelper.ID_STORE_ADDR, "ID_STORE_ADDR must be set to the address of the IDAddrStore"
-        // );
 
         bytes4[] memory routeIDs = new bytes4[](8);
         address[] memory routeAddrs = new address[](8);
@@ -174,11 +177,35 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.prank(SYSTEM_ADMIN);
         iFIL.setBurner(address(_pool));
         hevm.prank(SYSTEM_ADMIN);
-        IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));
+        IRouter(router).pushRoute(ROUTE_POOL_REGISTRY, address(_pool));
         hevm.prank(SYSTEM_ADMIN);
         IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));
 
         return _pool;
+    }
+
+    function _configureAgent(address agentOwner) internal returns (IAgent) {
+        IMinerRegistry registry = IMinerRegistry(IRouter(router).getRoute(ROUTE_MINER_REGISTRY));
+        IAgentFactory agentFactory = IAgentFactory(GetRoute.agentFactory(router));
+        IAgent agent = IAgent(agentFactory.create(agentOwner, agentOwner, address(0)));
+
+        hevm.prank(AGENT_OWNER);
+        MockMiner miner = new MockMiner(AGENT_OWNER);
+
+        uint64 minerID = MockIDAddrStore(MinerHelper.ID_STORE_ADDR).addAddr(address(miner));
+        miner.setID(minerID);
+
+        hevm.prank(AGENT_OWNER);
+        miner.changeOwnerAddress(address(agent));
+
+        SignedCredential memory addMinerCred = _issueAddMinerCred(agent.id(), minerID);
+        // confirm change owner address (agent now owns miner)
+        hevm.prank(AGENT_OWNER);
+        agent.addMiner(addMinerCred);
+
+        assert(registry.minerRegistered(agent.id(), minerID));
+
+        return agent;
     }
 
     function _signCred(VerifiableCredential memory vc) internal returns (SignedCredential memory) {
@@ -320,5 +347,9 @@ contract EchidnaSetup is EchidnaConfig {
 
     function _getAdjustedRate() internal pure returns (uint256) {
         return FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
+    }
+
+    function bound(uint256 random, uint256 low, uint256 high) public pure returns (uint256) {
+        return low + random % (high - low);
     }
 }

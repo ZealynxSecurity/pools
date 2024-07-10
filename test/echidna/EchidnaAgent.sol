@@ -3,42 +3,78 @@ pragma solidity ^0.8.0;
 
 import "./EchidnaSetup.sol";
 
-import {IAgent} from "src/Types/Interfaces/IAgent.sol";
-import {MockMiner} from "test/helpers/MockMiner.sol";
-import {Agent} from "src/Agent/Agent.sol";
-
 contract EchidnaAgent is EchidnaSetup {
-    using Credentials for VerifiableCredential;
-    using MinerHelper for uint64;
+    constructor() payable {}
 
-    address internal constant INVESTOR_1 = address(0x70000);
-    address internal constant MINER_OWNER_1 = address(0x80000);
+    function test_agent_borrow() public {
+        // borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
+        uint256 borrowAmount = WAD;
 
-    uint64 miner;
-    IAgent agent;
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
 
-    constructor() payable {
-        miner = _newMiner(MINER_OWNER_1);
-        // agent = _configureAgent(MINER_OWNER_1, miner);
+        // ensure theres enough to deposit
+        hevm.deal(INVESTOR, borrowAmount + WAD);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: borrowAmount}(INVESTOR);
+
+        // 2x liquidation value will always pass
+        uint256 liquidationValue = borrowAmount * 2;
+        // fund the agent with its liquidation value to pass the check
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        uint256 agentLiquidAssetsBefore = agent.liquidAssets();
+
+        // @audit this fails, not sure why
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, sc);
+
+        // never reaches
+        assert(false);
     }
 
-    // AgentTestHelper
-    function _newMiner(address minerOwner) internal returns (uint64 id) {
-        hevm.prank(minerOwner);
-        MockMiner mockMiner = new MockMiner(minerOwner);
+    function test_credential_actions() public {
+        uint256 agentID = 1;
+        uint64 minerID = 1;
 
-        id = MockIDAddrStore(MinerHelper.ID_STORE_ADDR).addAddr(address(mockMiner));
-        mockMiner.setID(id);
+        SignedCredential memory sc = _issueAddMinerCred(agentID, minerID);
+        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.addMiner.selector, sc) {
+            assert(true);
+        } catch {
+            assert(false);
+        }
+
+        uint256 principal = 10e18;
+        uint256 liquidationValue = 5e18;
+        sc = _issueBorrowCred(agentID, principal, liquidationValue);
+        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.borrow.selector, sc) {
+            assert(true);
+        } catch {
+            assert(false);
+        }
+
+        uint256 paymentAmount = 1e18;
+        sc = _issuePayCred(agentID, principal, liquidationValue, paymentAmount);
+        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.pay.selector, sc) {
+            assert(true);
+        } catch {
+            assert(false);
+        }
+
+        sc = _issueRemoveMinerCred(agentID, minerID, principal, liquidationValue);
+        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.removeMiner.selector, sc) {
+            assert(true);
+        } catch {
+            assert(false);
+        }
+
+        uint256 amount = 5e18;
+        sc = _issueWithdrawCred(agentID, amount, principal, liquidationValue);
+        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.withdraw.selector, sc) {
+            assert(true);
+        } catch {
+            assert(false);
+        }
     }
-
-    // function _configureAgent(address minerOwner, uint64 _miner) internal returns (IAgent _agent) {
-    //     IAgentFactory agentFactory = IAgentFactory(IRouter(router).getRoute(ROUTE_AGENT_FACTORY));
-    //     hevm.prank(minerOwner);
-    //     _agent = Agent(payable(agentFactory.create(minerOwner, minerOwner, makeAddr("ADO_REQUEST_KEY"))));
-    //     assert(_miner.isOwner(minerOwner));
-    //     hevm.stopPrank();
-
-    //     _agentClaimOwnership(address(agent), _miner, minerOwner);
-    //     return IAgent(address(_agent));
-    // }
 }
