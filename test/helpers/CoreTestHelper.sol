@@ -22,42 +22,17 @@ import {IAgentPolice} from "src/Types/Interfaces/IAgentPolice.sol";
 import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
+import {IMiniPool} from "src/Types/Interfaces/IMiniPool.sol";
 
 import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {ROUTE_WFIL_TOKEN} from "src/Constants/Routes.sol";
 
 import {MockMiner} from "test/helpers/MockMiner.sol";
+import {MockIDAddrStore, MOCK_ID_STORE_ADDR} from "test/helpers/MockIDAddrStore.sol";
 import {EPOCHS_IN_DAY, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 import {StateSnapshot} from "./Constants.sol";
 import "./Constants.sol";
-
-// an interface with common methods for V1 and V2 pools
-interface IMiniPool {
-    function liquidStakingToken() external view returns (IPoolToken);
-
-    function convertToShares(uint256) external view returns (uint256);
-
-    function convertToAssets(uint256) external view returns (uint256);
-
-    function totalAssets() external view returns (uint256);
-
-    function totalBorrowed() external view returns (uint256);
-
-    function getAgentBorrowed(uint256) external view returns (uint256);
-}
-
-// this basically just stores a mapping of miners to use as IDs
-contract MockIDAddrStore {
-    mapping(uint64 => address) public ids;
-    uint64 public count = 1;
-
-    function addAddr(address addr) external returns (uint64 id) {
-        id = count;
-        ids[count] = addr;
-        count++;
-    }
-}
 
 contract CoreTestHelper is Test {
     using FixedPointMathLib for uint256;
@@ -92,9 +67,7 @@ contract CoreTestHelper is Test {
         address mockIDStoreDeployer = makeAddr("MOCK_ID_STORE_DEPLOYER");
         vm.prank(mockIDStoreDeployer);
         idStore = new MockIDAddrStore();
-        require(
-            address(idStore) == MinerHelper.ID_STORE_ADDR, "ID_STORE_ADDR must be set to the address of the IDAddrStore"
-        );
+        vm.etch(MOCK_ID_STORE_ADDR, address(idStore).code);
     }
 
     function issueAddMinerCred(uint256 agent, uint64 miner) internal returns (SignedCredential memory) {
