@@ -15,5 +15,7 @@ interface IMiniPool {
 
     function getAgentBorrowed(uint256) external view returns (uint256);
 
+    function getRate() external view returns (uint256);
+
     function liquidStakingToken() external view returns (IPoolToken);
 }
