@@ -1266,9 +1266,9 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         return address(this);
     }
 
-    //////////
-    //secoalba
-    //////////
+    ////////////
+    //@audit => new
+    ////////////
 
     function getLpRewardsValues() external view returns (uint256, uint256, uint256) {
         return (_lpRewards.accrued, _lpRewards.paid, _lpRewards.lost);
@@ -1280,5 +1280,9 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
 
     function paused() public view override(IPool, Pausable) returns (bool) {
         return super.paused();
+    }
+
+    function getAccount(uint256 agent) external view returns (Account memory) {
+        return AccountHelpers.getAccount(_router, agent, id);
     }
 }
