@@ -2,11 +2,12 @@
 pragma solidity ^0.8.0;
 
 import "./EchidnaSetup.sol";
+import {RewardAccrual} from "src/Types/Structs/RewardAccrual.sol";
 
 contract EchidnaAgent is EchidnaSetup {
     constructor() payable {}
 
-    function test_agent_borrow() public {
+    function echtest_agent_borrow() public {
         // borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
         uint256 borrowAmount = WAD;
 
@@ -35,7 +36,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
     }
 
-    function test_credential_actions() public {
+    function echtest_credential_actions() public {
         uint256 agentID = 1;
         uint64 minerID = 1;
 
@@ -81,7 +82,7 @@ contract EchidnaAgent is EchidnaSetup {
 
     /////////////
 
-    function test_agent_borrow_fuzz(uint256 borrowAmount) public {
+    function echtest_agent_borrow_fuzz(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, 1, MAX_FIL);
 
         IAgent agent = _configureAgent(AGENT_OWNER);
@@ -135,7 +136,7 @@ contract EchidnaAgent is EchidnaSetup {
     //     assert(poolBalanceAfter == poolBalanceBefore - borrowAmount);
     // }
 
-    function test_agent_borrow_min(uint256 borrowAmount) public {
+    function echtest_agent_borrow_min(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, 1, WAD);
 
         IAgent agent = _configureAgent(AGENT_OWNER);
@@ -159,7 +160,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
     }
 
-    function test_agent_borrow_large(uint256 borrowAmount) public {
+    function echtest_agent_borrow_large(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, MAX_FIL / 2, MAX_FIL);
 
         IAgent agent = _configureAgent(AGENT_OWNER);
@@ -183,7 +184,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
     }
 
-    function test_agent_borrow_small(uint256 borrowAmount) public {
+    function echtest_agent_borrow_small(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, 1, WAD / 2);
 
         IAgent agent = _configureAgent(AGENT_OWNER);
@@ -255,7 +256,7 @@ contract EchidnaAgent is EchidnaSetup {
     //     assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore);
     // }
 
-    function test_agent_borrow_invalid_params(uint256 borrowAmount) public {
+    function echtest_agent_borrow_invalid_params(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, 0, WAD - 1);
 
         IAgent agent = _configureAgent(AGENT_OWNER);
@@ -281,7 +282,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore);
     }
 
-    function test_agent_borrow_not_owner(uint256 borrowAmount) public {
+    function echtest_agent_borrow_not_owner(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
 
         IAgent agent = _configureAgent(AGENT_OWNER);
@@ -306,7 +307,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore);
     }
 
-    function test_agent_borrow_expired_credential() public {
+    function echtest_agent_borrow_expired_credential() public {
         uint256 borrowAmount = WAD;
 
         IAgent agent = _configureAgent(AGENT_OWNER);
@@ -342,7 +343,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore);
     }
 
-    function test_agent_borrow_invalid_signature() public {
+    function echtest_agent_borrow_invalid_signature() public {
         uint256 borrowAmount = WAD;
 
         IAgent agent = _configureAgent(AGENT_OWNER);
@@ -378,7 +379,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore);
     }
 
-    function test_agent_borrow_update_epochs_paid(uint256 borrowAmount, uint256 existingPrincipal) public {
+    function echtest_agent_borrow_update_epochs_paid(uint256 borrowAmount, uint256 existingPrincipal) public {
         borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
         existingPrincipal = bound(existingPrincipal, WAD, MAX_FIL);
 
@@ -409,5 +410,106 @@ contract EchidnaAgent is EchidnaSetup {
 
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
         assert(totalBorrowedAfter == totalBorrowedBefore + borrowAmount);
+    }
+
+    function echtest_agent_borrow_rewards(uint256 borrowAmount) public {
+        borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        hevm.deal(INVESTOR, borrowAmount + WAD);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: borrowAmount}(INVESTOR);
+
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        (uint256 lpAccruedBefore, uint256 lpPaidBefore, uint256 lpLostBefore) = pool.getLpRewardsValues();
+        (uint256 treasuryAccruedBefore, uint256 treasuryPaidBefore, uint256 treasuryLostBefore) =
+            pool.getTreasuryRewardsValues();
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, sc);
+
+        (uint256 lpAccruedAfter, uint256 lpPaidAfter, uint256 lpLostAfter) = pool.getLpRewardsValues();
+        (uint256 treasuryAccruedAfter, uint256 treasuryPaidAfter, uint256 treasuryLostAfter) =
+            pool.getTreasuryRewardsValues();
+
+        // Verificar que las recompensas LP se acumularon
+        assert(lpAccruedAfter >= lpAccruedBefore);
+        assert(lpPaidAfter == lpPaidBefore);
+        assert(lpLostAfter == lpLostBefore);
+
+        // Verificar que las recompensas del Tesoro se acumularon
+        assert(treasuryAccruedAfter >= treasuryAccruedBefore);
+        assert(treasuryPaidAfter == treasuryPaidBefore);
+        assert(treasuryLostAfter == treasuryLostBefore);
+    }
+
+    function echtest_agent_borrow_update_accounting(uint256 borrowAmount) public {
+        borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        hevm.deal(INVESTOR, borrowAmount + WAD);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: borrowAmount}(INVESTOR);
+
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        uint256 agentLiquidAssetsBefore = agent.liquidAssets();
+        uint256 lastAccountingUpdateEpochBefore = pool.lastAccountingUpdateEpoch();
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, sc);
+
+        uint256 agentLiquidAssetsAfter = agent.liquidAssets();
+        uint256 lastAccountingUpdateEpochAfter = pool.lastAccountingUpdateEpoch();
+        uint256 currentBlockNumber = block.number;
+
+        // Verify that the agent's liquid assets increased by the borrowed amount
+        assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
+
+        // Verify that the accounting was updated if block number has increased
+        if (currentBlockNumber > lastAccountingUpdateEpochBefore) {
+            assert(lastAccountingUpdateEpochAfter == currentBlockNumber);
+        } else {
+            assert(lastAccountingUpdateEpochAfter == lastAccountingUpdateEpochBefore);
+        }
+    }
+
+    function echtest_agent_borrow_paused(uint256 borrowAmount) public {
+        borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        hevm.deal(INVESTOR, borrowAmount + WAD);
+        hevm.prank(INVESTOR);
+        pool.deposit{value: borrowAmount}(INVESTOR);
+
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        // Pause the pool
+        hevm.prank(AGENT_OWNER);
+        pool.pause();
+
+        // Try to borrow and expect a revert due to the pool being paused
+        hevm.prank(AGENT_OWNER);
+        try agent.borrow(poolID, sc) {
+            assert(false); // Should not reach here as the pool is paused
+        } catch {
+            // Expected revert due to the pool being paused
+        }
+
+        // Verify that the pool is paused
+        assert(pool.paused());
     }
 }

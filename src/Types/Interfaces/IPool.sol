@@ -185,5 +185,11 @@ interface IPool {
 
     function recoverFIL(address receiver) external;
 
+    ///////
+    ///////
+    //secoalba
     function pause() external; //@audit => new
+    function paused() external view returns (bool);
+    function getLpRewardsValues() external view returns (uint256, uint256, uint256);
+    function getTreasuryRewardsValues() external view returns (uint256, uint256, uint256);
 }

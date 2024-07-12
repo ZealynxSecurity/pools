@@ -350,7 +350,7 @@ contract EchidnaSetup is EchidnaConfig {
         return FixedPointMathLib.divWadDown(15e34, EPOCHS_IN_YEAR * 1e18);
     }
 
-    function bound(uint256 random, uint256 low, uint256 high) public pure returns (uint256) {
+    function bound(uint256 random, uint256 low, uint256 high) internal pure returns (uint256) {
         return low + random % (high - low);
     }
 }
