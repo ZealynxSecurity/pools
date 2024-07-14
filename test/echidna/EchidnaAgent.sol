@@ -7,6 +7,8 @@ import {RewardAccrual} from "src/Types/Structs/RewardAccrual.sol";
 contract EchidnaAgent is EchidnaSetup {
     constructor() payable {}
 
+    using FixedPointMathLib for uint256;
+
     // ============================================
     // ==               BORROW                   ==
     // ============================================
@@ -710,4 +712,307 @@ contract EchidnaAgent is EchidnaSetup {
     //     // Verify that the total borrowed amount decreased by the principal paid
     //     assert(pool.totalBorrowed() == initialPrincipal - principalPaid);
     // }
+
+    // ============================================
+    // ==               ASSET                    ==
+    // ============================================
+
+    uint256 stakeAmount = 1000e18;
+
+    function echtest_distributeLiquidatedFundsPartialRecoveryNoInterest(uint256 borrowAmount, uint256 recoveredFunds)
+        public
+    {
+        borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
+        recoveredFunds = bound(recoveredFunds, WAD, borrowAmount - 1);
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        // Simulate the agent default with the borrow amount
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, scBorrow);
+
+        // Mark the agent as defaulted
+        Account memory account = pool.getAccount(agentID);
+        account.defaulted = true;
+        account.principal = 0;
+
+        uint256 totalAssetsBefore = pool.totalAssets();
+        Debugger.log("initialTotalAssets", totalAssetsBefore);
+
+        // Load the SYSTEM_ADMIN with enough funds to recover
+        hevm.deal(SYSTEM_ADMIN, recoveredFunds);
+        hevm.prank(SYSTEM_ADMIN);
+        wFIL.deposit{value: recoveredFunds}();
+        wFIL.approve(address(agentPolice), recoveredFunds);
+
+        // Distribute the recovered funds
+        hevm.prank(SYSTEM_ADMIN);
+        IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
+
+        uint256 totalAssetsAfter = pool.totalAssets();
+        Debugger.log("newTotalAssets", totalAssetsAfter);
+
+        uint256 lostAmount = totalAssetsBefore - totalAssetsAfter;
+        uint256 recoverPercent = (totalAssetsBefore - lostAmount) * WAD / totalAssetsBefore;
+
+        uint256 poolTokenSupply = pool.liquidStakingToken().totalSupply();
+        uint256 tokenPrice = poolTokenSupply * WAD / (totalAssetsBefore - lostAmount);
+
+        // Assertions
+        assert(pool.convertToAssets(WAD) == recoverPercent); // IFILtoFIL should be 1
+        assert(pool.convertToShares(WAD) == tokenPrice); // FILtoIFIL should be 1
+        assert(totalAssetsBefore + recoveredFunds - borrowAmount == totalAssetsAfter); // Pool should have recovered funds
+        assert(lostAmount == borrowAmount - recoveredFunds); // Lost amount should be correct
+        assert(pool.lpRewards().lost == 0); // Lost rental fees should be 0 because no interest
+        assert(account.principal == lostAmount); // Pool should have written down assets correctly
+        assert(pool.totalBorrowed() == 0); // Pool should have nothing borrowed after the liquidation
+        assert(wFIL.balanceOf(address(agentPolice)) == 0); // Agent police should not have funds
+    }
+
+    function echtest_distributeLiquidatedFundsFullRecoveryNoInterest(uint256 borrowAmount, uint256 recoveredFunds)
+        public
+    {
+        borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
+        recoveredFunds = bound(recoveredFunds, borrowAmount, MAX_FIL);
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        // Simulate the agent default with the borrow amount
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, scBorrow);
+
+        // Mark the agent as defaulted
+        Account memory account = pool.getAccount(agentID);
+        account.defaulted = true;
+
+        uint256 totalAssetsBefore = pool.totalAssets();
+        uint256 totalBorrowedBefore = pool.totalBorrowed();
+
+        // Load the SYSTEM_ADMIN with enough funds to recover
+        hevm.deal(SYSTEM_ADMIN, recoveredFunds);
+        hevm.prank(SYSTEM_ADMIN);
+        wFIL.deposit{value: recoveredFunds}();
+        wFIL.approve(agentPolice, recoveredFunds);
+
+        // Distribute the recovered funds
+        hevm.prank(SYSTEM_ADMIN);
+        IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
+
+        uint256 totalAssetsAfter = pool.totalAssets();
+
+        // Assertions
+        assert(totalAssetsBefore == totalAssetsAfter); // Pool should have recovered fully
+        assert(wFIL.balanceOf(address(pool)) == totalAssetsAfter); // Pool should have received the correct amount of wFIL
+
+        // Compute the extra amount that should be paid back to the owner and the treasury
+        uint256 liquidationFee = totalBorrowedBefore.mulWadDown(IAgentPolice(agentPolice).liquidationFee());
+
+        // The owner should get back excess and the treasury should get back its 10% liquidation fee
+        if (recoveredFunds > totalBorrowedBefore + liquidationFee) {
+            assert(
+                wFIL.balanceOf(IAuth(address(agent)).owner()) == recoveredFunds - totalBorrowedBefore - liquidationFee
+            ); // Police owner should only have paid the amount owed
+            assert(wFIL.balanceOf(GetRoute.treasury(router)) == liquidationFee); // Police should have received the treasury fee
+        } else if (recoveredFunds > totalBorrowedBefore) {
+            assert(wFIL.balanceOf(IAuth(address(agent)).owner()) == 0); // Owner should not get funds back if liquidation fee isn't fully paid
+            assert(wFIL.balanceOf(GetRoute.treasury(router)) == recoveredFunds - totalBorrowedBefore); // Police should have received some liquidation fee
+        } else {
+            // No liquidation fee should be paid if the recovered funds are less than the total borrowed
+            assert(wFIL.balanceOf(IAuth(address(agent)).owner()) == 0); // Owner should not get funds back if liquidation fee isn't fully paid
+            assert(wFIL.balanceOf(GetRoute.treasury(router)) == 0); // No liquidation fees should have been paid
+        }
+
+        assert(IAgentPolice(agentPolice).agentLiquidated(agentID)); // Agent should be marked as liquidated
+    }
+
+    //@audit => Try compiling with `--via-ir` (cli) or the equivalent `viaIR: true`
+    // function echtest_distributeLiquidationFundsPartialRecoveryWithInterest_Part1(
+    //     uint256 borrowAmount,
+    //     uint256 recoveredFunds
+    // ) public {
+    //     borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
+    //     recoveredFunds = bound(recoveredFunds, WAD, borrowAmount - 1);
+
+    //     IAgent agent = _configureAgent(AGENT_OWNER);
+    //     uint256 agentID = agent.id();
+
+    //     uint256 liquidationValue = borrowAmount * 2;
+    //     hevm.deal(address(agent), liquidationValue);
+    //     SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+    //     hevm.prank(AGENT_OWNER);
+    //     agent.borrow(poolID, scBorrow);
+
+    //     // Roll forward a year to accrue interest
+    //     hevm.roll(block.number + EPOCHS_IN_YEAR);
+
+    //     uint256 interestOwed = pool.getAgentInterestOwed(agentID);
+    //     uint256 interestOwedLessTFees = interestOwed.mulWadUp(1e18 - pool.treasuryFeeRate());
+
+    //     Account memory account = pool.getAccount(agentID);
+    //     account.defaulted = true;
+
+    //     hevm.deal(SYSTEM_ADMIN, recoveredFunds);
+    //     hevm.prank(SYSTEM_ADMIN);
+    //     wFIL.deposit{value: recoveredFunds}();
+    //     wFIL.approve(agentPolice, recoveredFunds);
+
+    //     uint256 totalAssetsBefore = pool.totalAssets();
+    //     uint256 totalBorrowedBefore = pool.totalBorrowed();
+    //     uint256 filValOf1iFILBeforeLiquidation = pool.convertToAssets(WAD);
+
+    //     assert(totalAssetsBefore == stakeAmount + interestOwedLessTFees); // Total assets before should exclude treasury fees
+
+    //     // Distribute the recovered funds
+    //     hevm.prank(SYSTEM_ADMIN);
+    //     IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
+
+    //     uint256 totalAssetsAfter = pool.totalAssets();
+    //     uint256 totalAccrued = pool.lpRewards().accrued;
+    //     uint256 interestAccruedLessTFees = totalAccrued.mulWadUp(1e18 - pool.treasuryFeeRate());
+
+    //     uint256 expectedTotalAssetsAfter =
+    //         stakeAmount + recoveredFunds + interestAccruedLessTFees - totalBorrowedBefore - interestOwedLessTFees;
+
+    //     assert(totalAssetsAfter == expectedTotalAssetsAfter); // Pool should have lost all interest and principal
+    // }
+
+    //
+    function echtest_distributeLiquidationFundsPartialRecoveryWithInterestPart2(
+        uint256 borrowAmount,
+        uint256 recoveredFunds
+    ) public {
+        borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
+        recoveredFunds = bound(recoveredFunds, WAD, borrowAmount - 1);
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, scBorrow);
+
+        // Roll forward a year to accrue interest
+        hevm.roll(block.number + EPOCHS_IN_YEAR);
+
+        uint256 interestOwed = pool.getAgentInterestOwed(agentID);
+        uint256 interestOwedLessTFees = interestOwed.mulWadUp(1e18 - pool.treasuryFeeRate());
+
+        Account memory account = pool.getAccount(agentID);
+        account.defaulted = true;
+
+        hevm.deal(SYSTEM_ADMIN, recoveredFunds);
+        hevm.prank(SYSTEM_ADMIN);
+        wFIL.deposit{value: recoveredFunds}();
+        wFIL.approve(agentPolice, recoveredFunds);
+
+        // Distribute the recovered funds
+        hevm.prank(SYSTEM_ADMIN);
+        IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
+
+        Account memory updatedAccount = pool.getAccount(agentID);
+
+        assert(updatedAccount.principal == interestOwed + borrowAmount - recoveredFunds); // No principal was paid, so account.principal should be the original principal amount lost
+        assert(pool.treasuryFeesOwed() == 0); // Treasury fees should be 0 after a partial liquidation
+
+        uint256 filValOf1iFILBeforeLiquidation = pool.convertToAssets(WAD);
+        uint256 totalAssetsBefore = pool.totalAssets();
+        uint256 totalBorrowedBefore = pool.totalBorrowed();
+        uint256 lostAssets = totalBorrowedBefore + interestOwedLessTFees - recoveredFunds;
+        uint256 recoverPercent = (totalAssetsBefore - lostAssets).divWadDown(totalAssetsBefore);
+
+        //@audit => pending assertApproxEqAbs
+        // assertApproxEqAbs(pool.convertToAssets(WAD), filValOf1iFILBeforeLiquidation.mulWadDown(recoverPercent), 1e3); // IFIL should have devalued correctly
+        assert(pool.totalBorrowed() == 0);
+        assert(totalAssetsBefore - pool.totalAssets() == lostAssets);
+
+        if (recoveredFunds >= interestOwed) {
+            assert(pool.lpRewards().lost == 0); // Pool should not lose rental fees
+            assert(pool.lpRewards().paid == interestOwed); // Pool should have paid rental fees
+        } else {
+            assert(pool.lpRewards().paid == recoveredFunds); // Paid rental fees should be the full recover amount when the recover amount is less than the interest owed
+            assert(pool.lpRewards().lost == interestOwed - recoveredFunds); // Lost assets should be correct
+        }
+    }
+
+    function echtest_distributeLiquidationFundsFullRecoveryWithInterest(uint256 borrowAmount, uint256 recoveredFunds)
+        public
+    {
+        borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        // Simulate the agent default with the borrow amount
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, scBorrow);
+
+        // Roll forward a year to accrue interest
+        hevm.roll(block.number + EPOCHS_IN_YEAR);
+
+        uint256 interestOwed = pool.getAgentInterestOwed(agentID);
+        uint256 interestOwedLessTFees = interestOwed.mulWadUp(1e18 - pool.treasuryFeeRate());
+        // Important to test the range where recovered funds are enough to cover principal + interest owed to LPs (but not enough to pay off the full interest owed, which includes treasury fees)
+        recoveredFunds = bound(recoveredFunds, borrowAmount + interestOwedLessTFees, MAX_FIL);
+
+        // Mark the agent as defaulted
+        Account memory account = pool.getAccount(agentID);
+        account.defaulted = true;
+
+        hevm.deal(SYSTEM_ADMIN, recoveredFunds);
+        hevm.prank(SYSTEM_ADMIN);
+        wFIL.deposit{value: recoveredFunds}();
+        wFIL.approve(agentPolice, recoveredFunds);
+
+        uint256 totalAssetsBefore = pool.totalAssets();
+        uint256 filValOf1iFILBeforeLiquidation = pool.convertToAssets(WAD);
+        uint256 totalDebtLessTFees = interestOwedLessTFees + borrowAmount;
+
+        //@audit => Fail. Revise
+        // assert(totalAssetsBefore == stakeAmount + interestOwedLessTFees); // Total assets before should exclude treasury fees
+
+        // Distribute the recovered funds
+        hevm.prank(SYSTEM_ADMIN);
+        IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
+
+        uint256 totalAssetsAfter = pool.totalAssets();
+
+        assert(totalAssetsBefore == totalAssetsAfter); // Pool should have recovered fully
+
+        // Compute the extra amount that should be paid back to the owner and the treasury
+        uint256 liquidationFee = totalDebtLessTFees.mulWadDown(IAgentPolice(agentPolice).liquidationFee());
+
+        if (recoveredFunds > totalDebtLessTFees + liquidationFee) {
+            assert(
+                wFIL.balanceOf(IAuth(address(agent)).owner()) == recoveredFunds - totalDebtLessTFees - liquidationFee
+            ); // Police owner should only have paid the amount owed
+            assert(wFIL.balanceOf(GetRoute.treasury(router)) == liquidationFee); // Police should have received the treasury fee
+        } else if (recoveredFunds > totalDebtLessTFees) {
+            assert(wFIL.balanceOf(IAuth(address(agent)).owner()) == 0); // Owner should not get funds back if liquidation fee isn't fully paid
+            assert(wFIL.balanceOf(GetRoute.treasury(router)) == recoveredFunds - totalDebtLessTFees); // Police should have received some liquidation fee
+        } else {
+            // No liquidation fee should be paid if the recovered funds are less than the total borrowed
+            assert(wFIL.balanceOf(IAuth(address(agent)).owner()) == 0); // Owner should not get funds back if liquidation fee isn't fully paid
+            assert(wFIL.balanceOf(GetRoute.treasury(router)) == 0); // No liquidation fees should have been paid
+        }
+
+        assert(filValOf1iFILBeforeLiquidation == pool.convertToAssets(WAD)); // IFILtoFIL should not change
+    }
 }

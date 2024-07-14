@@ -44,6 +44,8 @@ import {MockIDAddrStore} from "test/helpers/MockIDAddrStore.sol";
 import {MockMiner} from "test/helpers/MockMiner.sol";
 import "test/helpers/Constants.sol";
 
+import {IAuth} from "src/Types/Interfaces/IAuth.sol";
+
 contract EchidnaSetup is EchidnaConfig {
     using FixedPointMathLib for uint256;
 
@@ -76,6 +78,9 @@ contract EchidnaSetup is EchidnaConfig {
 
     // just used for testing
     uint256 internal vcIssuerPk = 1;
+
+    // Declare agentPolice
+    address internal agentPolice;
 
     constructor() {
         rewardToken = new Token("GLIF", "GLF", address(this), address(this));
@@ -117,8 +122,7 @@ contract EchidnaSetup is EchidnaConfig {
         // Add agent police route
         routeIDs[3] = ROUTE_AGENT_POLICE;
         hevm.prank(SYSTEM_ADMIN);
-        address agentPolice =
-            address(new AgentPoliceV2(VERIFIED_NAME, VERIFIED_VERSION, SYSTEM_ADMIN, SYSTEM_ADMIN, router));
+        agentPolice = address(new AgentPoliceV2(VERIFIED_NAME, VERIFIED_VERSION, SYSTEM_ADMIN, SYSTEM_ADMIN, router));
         routeAddrs[3] = agentPolice;
         // Add cred parser
         routeIDs[4] = ROUTE_CRED_PARSER;
