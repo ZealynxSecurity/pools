@@ -934,8 +934,10 @@ contract EchidnaAgent is EchidnaSetup {
         uint256 lostAssets = totalBorrowedBefore + interestOwedLessTFees - recoveredFunds;
         uint256 recoverPercent = (totalAssetsBefore - lostAssets).divWadDown(totalAssetsBefore);
 
-        //@audit => pending assertApproxEqAbs
-        // assertApproxEqAbs(pool.convertToAssets(WAD), filValOf1iFILBeforeLiquidation.mulWadDown(recoverPercent), 1e3); // IFIL should have devalued correctly
+        // Manually written assertApproxEqAbs
+        uint256 expectedAssets = filValOf1iFILBeforeLiquidation.mulWadDown(recoverPercent);
+        assertApproxEqAbs(pool.convertToAssets(WAD), expectedAssets, 1e3); // IFIL should have devalued correctly
+
         assert(pool.totalBorrowed() == 0);
         assert(totalAssetsBefore - pool.totalAssets() == lostAssets);
 

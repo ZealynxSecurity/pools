@@ -357,4 +357,17 @@ contract EchidnaSetup is EchidnaConfig {
     function bound(uint256 random, uint256 low, uint256 high) internal pure returns (uint256) {
         return low + random % (high - low);
     }
+
+    function assertApproxEqAbs(uint256 a, uint256 b, uint256 maxDelta) internal {
+        uint256 delta = a > b ? a - b : b - a;
+
+        if (delta > maxDelta) {
+            Debugger.log("Error: a ~= b not satisfied [uint]");
+            Debugger.log("  Expected", b);
+            Debugger.log("    Actual", a);
+            Debugger.log(" Max Delta", maxDelta);
+            Debugger.log("     Delta", delta);
+            assert(false);
+        }
+    }
 }
