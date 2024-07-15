@@ -1017,4 +1017,226 @@ contract EchidnaAgent is EchidnaSetup {
 
         assert(filValOf1iFILBeforeLiquidation == pool.convertToAssets(WAD)); // IFILtoFIL should not change
     }
+
+    // //
+    // NEW TEST
+    // //
+
+    function echtest_interestRateChangeAdjustment(uint256 borrowAmount, uint256 newInterestRate) public {
+        borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
+        newInterestRate = bound(newInterestRate, 1e16, 1e18); // Bound new interest rate between 1% and 100%
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        // Simulate the agent borrowing the amount
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, scBorrow);
+
+        // Roll forward a year to accrue interest
+        hevm.roll(block.number + EPOCHS_IN_YEAR);
+
+        // Change the interest rate using startRateUpdate and continueRateUpdate
+        hevm.prank(SYSTEM_ADMIN);
+        pool.startRateUpdate(newInterestRate);
+        while (pool.rateUpdate().inProcess) {
+            hevm.prank(SYSTEM_ADMIN);
+            pool.continueRateUpdate();
+        }
+
+        // Roll forward another year with the new interest rate
+        hevm.roll(block.number + EPOCHS_IN_YEAR);
+
+        // Verify that the pool's total assets and borrowed amounts are consistent with the new interest rate
+        uint256 interestOwed = pool.getAgentInterestOwed(agentID);
+        uint256 expectedInterest = borrowAmount.mulWadUp(newInterestRate);
+        assertApproxEqAbs(interestOwed, expectedInterest, 1e3); // Verify interest accrued matches expected
+
+        uint256 totalAssets = pool.totalAssets();
+        uint256 expectedAssets = liquidationValue + expectedInterest;
+        assertApproxEqAbs(totalAssets, expectedAssets, 1e3); // Verify total assets match expected
+    }
+
+    function echtest_multipleAgentsHandling(uint256 borrowAmount1, uint256 borrowAmount2) public {
+        borrowAmount1 = bound(borrowAmount1, WAD + 1, MAX_FIL / 2);
+        borrowAmount2 = bound(borrowAmount2, WAD + 1, MAX_FIL / 2);
+
+        IAgent agent1 = _configureAgent(AGENT_OWNER);
+        uint256 agentID1 = agent1.id();
+
+        IAgent agent2 = _configureAgent(INVESTOR);
+        uint256 agentID2 = agent2.id();
+
+        // Simulate the first agent borrowing
+        uint256 liquidationValue1 = borrowAmount1 * 2;
+        hevm.deal(address(agent1), liquidationValue1);
+        SignedCredential memory scBorrow1 = _issueBorrowCred(agentID1, borrowAmount1, liquidationValue1);
+
+        hevm.prank(AGENT_OWNER);
+        agent1.borrow(poolID, scBorrow1);
+
+        // Simulate the second agent borrowing
+        uint256 liquidationValue2 = borrowAmount2 * 2;
+        hevm.deal(address(agent2), liquidationValue2);
+        SignedCredential memory scBorrow2 = _issueBorrowCred(agentID2, borrowAmount2, liquidationValue2);
+
+        hevm.prank(INVESTOR);
+        agent2.borrow(poolID, scBorrow2);
+
+        // Roll forward a year to accrue interest
+        hevm.roll(block.number + EPOCHS_IN_YEAR);
+
+        // Verify the pool's total assets and borrowed amounts are consistent with multiple agents
+        uint256 interestOwed1 = pool.getAgentInterestOwed(agentID1);
+        uint256 interestOwed2 = pool.getAgentInterestOwed(agentID2);
+        uint256 totalInterestOwed = interestOwed1 + interestOwed2;
+        uint256 totalBorrowed = pool.totalBorrowed();
+
+        assert(totalBorrowed == borrowAmount1 + borrowAmount2); // Verify total borrowed amount matches expected
+        assert(totalInterestOwed > 0); // Verify interest has accrued
+    }
+
+    function echtest_negativeInterestRateHandling(uint256 borrowAmount, int256 negativeInterestRate) public {
+        borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
+        negativeInterestRate = int256(bound(uint256(negativeInterestRate), 1e16, 1e18)) * -1; // Bound negative interest rate between -1% and -100%
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        // Simulate the agent borrowing the amount
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, scBorrow);
+
+        // Set the negative interest rate
+        hevm.prank(SYSTEM_ADMIN);
+        pool.startRateUpdate(uint256(negativeInterestRate));
+        while (pool.rateUpdate().inProcess) {
+            hevm.prank(SYSTEM_ADMIN);
+            pool.continueRateUpdate();
+        }
+
+        // Roll forward a year with the negative interest rate
+        hevm.roll(block.number + EPOCHS_IN_YEAR);
+
+        // Verify that the pool's total assets and borrowed amounts are consistent with the negative interest rate
+        uint256 interestOwed = pool.getAgentInterestOwed(agentID);
+        uint256 expectedInterest = borrowAmount.mulWadUp(uint256(negativeInterestRate));
+        assertApproxEqAbs(interestOwed, expectedInterest, 1e3); // Verify interest accrued matches expected (negative)
+
+        uint256 totalAssets = pool.totalAssets();
+        uint256 expectedAssets = liquidationValue + expectedInterest;
+        assertApproxEqAbs(totalAssets, expectedAssets, 1e3); // Verify total assets match expected
+    }
+
+    function echtest_minimumPaymentHandling(uint256 borrowAmount, uint256 paymentAmount) public {
+        borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
+        paymentAmount = bound(paymentAmount, WAD, borrowAmount / 10); // Payment amount is a fraction of borrow amount
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        // Simulate the agent borrowing the amount
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, scBorrow);
+
+        // Roll forward a year to accrue interest
+        hevm.roll(block.number + EPOCHS_IN_YEAR);
+
+        // Load the agent with sufficient funds to make the payment
+        hevm.deal(AGENT_OWNER, paymentAmount);
+        hevm.prank(AGENT_OWNER);
+        wFIL.deposit{value: paymentAmount}();
+        wFIL.approve(address(pool), paymentAmount);
+
+        // Make the payment
+        SignedCredential memory scPay = _issuePayCred(agentID, paymentAmount, liquidationValue, paymentAmount);
+        hevm.prank(AGENT_OWNER);
+        agent.pay(poolID, scPay);
+
+        // Verify the payment was processed correctly
+        Account memory updatedAccount = pool.getAccount(agentID);
+        assert(updatedAccount.principal == borrowAmount - paymentAmount); // Principal should be reduced by the payment amount
+        assert(pool.totalBorrowed() == borrowAmount - paymentAmount); // Total borrowed should be reduced by the payment amount
+    }
+
+    function echtest_liquidationNoRecovery(uint256 borrowAmount) public {
+        borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        // Simulate the agent borrowing the amount
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, scBorrow);
+
+        // Mark the agent as defaulted
+        Account memory account = pool.getAccount(agentID);
+        account.defaulted = true;
+
+        uint256 totalAssetsBefore = pool.totalAssets();
+
+        // Perform liquidation without recovery
+        hevm.prank(SYSTEM_ADMIN);
+        IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), 0);
+
+        uint256 totalAssetsAfter = pool.totalAssets();
+
+        // Verify the state after liquidation
+        assert(account.defaulted == true); // Agent should be marked as defaulted
+        assert(totalAssetsBefore == totalAssetsAfter); // Total assets should remain unchanged
+        assert(pool.totalBorrowed() == borrowAmount); // Total borrowed should remain unchanged
+        assert(wFIL.balanceOf(address(agentPolice)) == 0); // Agent police should not have funds
+    }
+
+    function echtest_fullPaymentWithInterest(uint256 borrowAmount, uint256 paymentAmount) public {
+        borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
+        paymentAmount = bound(paymentAmount, borrowAmount, borrowAmount * 2); // Payment amount covers principal and interest
+
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
+
+        // Simulate the agent borrowing the amount
+        uint256 liquidationValue = borrowAmount * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+
+        hevm.prank(AGENT_OWNER);
+        agent.borrow(poolID, scBorrow);
+
+        // Roll forward a year to accrue interest
+        hevm.roll(block.number + EPOCHS_IN_YEAR);
+
+        // Load the agent with sufficient funds to make the payment
+        hevm.deal(AGENT_OWNER, paymentAmount);
+        hevm.prank(AGENT_OWNER);
+        wFIL.deposit{value: paymentAmount}();
+        wFIL.approve(address(pool), paymentAmount);
+
+        // Make the payment
+        SignedCredential memory scPay = _issuePayCred(agentID, paymentAmount, liquidationValue, paymentAmount);
+        hevm.prank(AGENT_OWNER);
+        (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund) = agent.pay(poolID, scPay);
+
+        // Verify the payment was processed correctly
+        Account memory updatedAccount = pool.getAccount(agentID);
+        assert(updatedAccount.principal == 0); // Principal should be fully paid off
+        assert(pool.totalBorrowed() == 0); // Total borrowed should be zero
+        assert(refund == paymentAmount - borrowAmount); // Refund should be the difference between payment and borrow amount
+    }
 }
