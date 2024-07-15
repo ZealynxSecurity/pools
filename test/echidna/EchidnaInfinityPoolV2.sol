@@ -25,7 +25,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     // ==               DEPOSIT                  ==
     // ============================================
 
-    function test_deposit(uint256 stakeAmount) public {
+    function echtest_deposit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1e18, MAX_FIL / 2);
 
         // first make sure the investor is funded
@@ -54,7 +54,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         assert(iFIL.totalSupply() == iFILSupply + previewDeposit);
     }
 
-    function test_investorPoolBalanceAfterDeposit(uint256 stakeAmount) public {
+    function echtest_investorPoolBalanceAfterDeposit(uint256 stakeAmount) public {
         //@audit =>
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -78,7 +78,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         assert(sharesFirstDeposit == stakeAmount);
     }
 
-    function test_totalSupplyInvariantAfterBoundDeposit(uint256 stakeAmount) public {
+    function echtest_totalSupplyInvariantAfterBoundDeposit(uint256 stakeAmount) public {
         //@audit => Individuals do not fail
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -110,7 +110,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test that depositing zero amount reverts the transaction
-    function test_zeroDepositReverts() public {
+    function echtest_zeroDepositReverts() public {
         uint256 stakeAmount = 0;
 
         // Ensure the investor is funded
@@ -130,7 +130,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test that balances remain unchanged when attempting to deposit zero amount
-    function test_balancesUnchangedAfterZeroDeposit() public {
+    function echtest_balancesUnchangedAfterZeroDeposit() public {
         uint256 stakeAmount = 0;
 
         // Ensure the investor is funded
@@ -150,7 +150,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test that attempting to deposit more than balance reverts the transaction
-    function test_exceedingBalanceDepositReverts() public {
+    function echtest_exceedingBalanceDepositReverts() public {
         uint256 stakeAmount = 0;
 
         // Ensure the investor is funded
@@ -170,7 +170,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure correct shares are issued after deposit
-    function test_correctSharesAfterDeposit(uint256 stakeAmount) public {
+    function echtest_correctSharesAfterDeposit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded
@@ -197,7 +197,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure correct shares are issued after a second deposit
-    function test_correctSharesAfterSecondDeposit(uint256 stakeAmount) public {
+    function echtest_correctSharesAfterSecondDeposit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded
@@ -223,7 +223,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure wFIL balance invariant after deposit
-    function test_wFILBalanceInvariantAfterDeposit(uint256 stakeAmount) public {
+    function echtest_wFILBalanceInvariantAfterDeposit(uint256 stakeAmount) public {
         //@audit => No error in coverage
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -248,7 +248,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure approving an amount exceeding the balance reverts
-    function test_approveExceedingBalanceReverts(uint256 stakeAmount) public {
+    function echtest_approveExceedingBalanceReverts(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, MAX_FIL + 1, MAX_FIL * 2); // Force stakeAmount to more than the balance
 
         // Ensure the investor is funded
@@ -265,7 +265,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure shares are issued correctly after deposit
-    function test_sharesIssuedCorrectly(uint256 stakeAmount) public {
+    function echtest_sharesIssuedCorrectly(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded
@@ -289,7 +289,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify investor shares balance after multiple deposits
-    function test_investorSharesBalanceAfterDeposits(uint256 stakeAmount) public {
+    function echtest_investorSharesBalanceAfterDeposits(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         hevm.deal(INVESTOR, MAX_FIL * 3);
@@ -319,7 +319,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify preview deposit rounding error
-    function test_previewDepositRoundingError(uint256 stakeAmount) public {
+    function echtest_previewDepositRoundingError(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded
@@ -349,7 +349,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify asset transfer on deposit
-    function test_assetTransferOnDeposit(uint256 stakeAmount) public {
+    function echtest_assetTransferOnDeposit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded
@@ -373,7 +373,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify token minting on deposit
-    function test_tokenMintingOnDeposit(uint256 stakeAmount) public {
+    function echtest_okenMintingOnDeposit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded
@@ -397,7 +397,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure deposit reverts when the contract is paused
-    function test_depositRevertsWhenPaused(uint256 stakeAmount) public {
+    function echtest_depositRevertsWhenPaused(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Pause the contract
@@ -418,7 +418,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure deposit reverts with an invalid receiver
-    function test_depositRevertsWithInvalidReceiver(uint256 stakeAmount) public {
+    function echtest_depositRevertsWithInvalidReceiver(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded
@@ -435,7 +435,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify large deposit
-    function test_largeDeposit(uint256 stakeAmount) public {
+    function echtest_largeDeposit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, MAX_FIL / 2, MAX_FIL);
 
         // Ensure the investor is funded
@@ -461,7 +461,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify revert when msg.value is 0
-    function echidna_test_RevertOnZeroDeposit() public {
+    function echtest_RevertOnZeroDeposit() public {
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
 
@@ -470,7 +470,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test for partial deposits handling
-    function test_partialDeposits(uint256 stakeAmount) public {
+    function echtest_partialDeposits(uint256 stakeAmount) public {
         //@audit => revise
         stakeAmount = bound(stakeAmount, 1, MAX_FIL / 2);
 
@@ -514,7 +514,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test for handling multiple consecutive deposits
-    function test_multipleConsecutiveDeposits(uint256 stakeAmount) public {
+    function echtest_multipleConsecutiveDeposits(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL / 2);
 
         // Ensure the investor is funded
@@ -542,7 +542,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     // ============================================
 
     // Test to verify successful withdrawal of assets
-    function test_successfulWithdrawal(uint256 stakeAmount) public {
+    function echtest_successfulWithdrawal(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -571,7 +571,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify withdrawal with insufficient liquidity reverts
-    function test_withdrawRevertsOnInsufficientLiquidity(uint256 stakeAmount) public {
+    function echtest_withdrawRevertsOnInsufficientLiquidity(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -596,7 +596,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify withdrawal updates accounting correctly
-    function test_withdrawUpdatesAccounting(uint256 stakeAmount) public {
+    function echtest_withdrawUpdatesAccounting(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -623,7 +623,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify withdrawal with invalid receiver reverts
-    function test_withdrawRevertsWithInvalidReceiver(uint256 stakeAmount) public {
+    function echtest_withdrawRevertsWithInvalidReceiver(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -647,7 +647,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify partial withdrawal
-    function test_partialWithdrawal(uint256 stakeAmount) public {
+    function echtest_partialWithdrawal(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 2, MAX_FIL); // Ensure stakeAmount is at least 2 to allow partial withdrawal
 
         // Ensure the investor is funded and has deposited
@@ -687,7 +687,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify complete withdrawal
-    function test_completeWithdrawal(uint256 stakeAmount) public {
+    function echtest_completeWithdrawal(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -715,7 +715,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify multiple consecutive withdrawals
-    function test_multipleConsecutiveWithdrawals(uint256 stakeAmount) public {
+    function echtest_multipleConsecutiveWithdrawals(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL / 2); // Ensure enough for multiple withdrawals
 
         // Ensure the investor is funded and has deposited
@@ -745,7 +745,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify withdrawal with different owner and receiver
-    function test_withdrawDifferentOwnerReceiver(uint256 stakeAmount) public {
+    function echtest_withdrawDifferentOwnerReceiver(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -773,7 +773,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify withdrawal when contract is paused
-    function test_withdrawRevertsWhenPaused(uint256 stakeAmount) public {
+    function echtest_withdrawRevertsWhenPaused(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Pause the contract
@@ -801,7 +801,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify withdrawal with amount zero
-    // function test_withdrawZeroAmount() public {
+    // function echtest_withdrawZeroAmount() public {
     //     //@audit => Can a user withdraw 0?
     //     uint256 stakeAmount = 1; // Ensure there is at least some stake
 
@@ -829,7 +829,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     // ============================================
 
     // Test for partial withdrawals handling
-    function test_partialWithdrawals(uint256 stakeAmount) public {
+    function echtest_partialWithdrawals(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 2, MAX_FIL / 2); // Ensure stakeAmount is at least 2 to allow partial withdrawal
 
         // Ensure the investor is funded and has deposited
@@ -869,7 +869,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test for withdrawal reverts when paused
-    function test_withdrawFRevertsWhenPaused(uint256 stakeAmount) public {
+    function echtest_withdrawFRevertsWhenPaused(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Pause the contract
@@ -897,7 +897,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test for withdrawal reverts with invalid receiver
-    function test_withdrawFRevertsWithInvalidReceiver(uint256 stakeAmount) public {
+    function echtest_withdrawFRevertsWithInvalidReceiver(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -921,7 +921,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure correct balance transfer after withdraw with conversion
-    function test_withdrawFWithConversion(uint256 stakeAmount) public {
+    function echtest_withdrawFWithConversion(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -949,7 +949,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify InsufficientLiquidity revert
-    function test_insufficientLiquidityRevert(uint256 stakeAmount) public {
+    function echtest_insufficientLiquidityRevert(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -977,7 +977,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test for correct asset transfer during exit
-    function test_assetTransferOnExit(uint256 stakeAmount) public {
+    function echtest_assetTransferOnExit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
@@ -1008,7 +1008,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test for large withdrawals handling
-    function test_largeWithdrawals(uint256 stakeAmount) public {
+    function echtest_largeWithdrawals(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, MAX_FIL / 2, MAX_FIL);
 
         // Ensure the investor is funded and has deposited
