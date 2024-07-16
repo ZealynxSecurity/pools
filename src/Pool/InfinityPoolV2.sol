@@ -23,12 +23,13 @@ import {IWFIL} from "src/Types/Interfaces/IWFIL.sol";
 import {IERC20} from "src/Types/Interfaces/IERC20.sol";
 import {ICredentials} from "src/Types/Interfaces/ICredentials.sol";
 import {ILiquidityMineSP} from "src/Types/Interfaces/ILiquidityMineSP.sol";
+import {IPoolUpgrader} from "src/Types/Interfaces/IPoolUpgrader.sol";
 import {Account} from "src/Types/Structs/Account.sol";
 import {RateUpdate} from "src/Types/Structs/RateUpdate.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {EPOCHS_IN_DAY, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
-import {ROUTE_WFIL_TOKEN} from "src/Constants/Routes.sol";
+import {ROUTE_WFIL_TOKEN, ROUTE_POOL_UPGRADER} from "src/Constants/Routes.sol";
 
 uint256 constant WAD = 1e18;
 
@@ -958,8 +959,29 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         // set the lastAccountingUpdateEpoch, effectively starting the pool's accounting
         lastAccountingUpdateEpoch = block.number;
         totalBorrowed = amount;
-        // set the pool to unpause to start operations
-        _unpause();
+
+        uint256 totalAgents = _agentFactory.agentCount();
+        // agents are 1 indexed, so we start at 1, and add up any interest owed for each agent
+        Account memory account;
+        uint256 interestOwed;
+        uint256 accumulatedInterest = 0;
+        for (uint256 i = 1; i <= totalAgents; i++) {
+            account = _getAccount(i);
+            if (account.exists()) {
+                (interestOwed,) = FinMath.interestOwed(account, _rentalFeesOwedPerEpoch);
+                accumulatedInterest += interestOwed;
+            }
+        }
+
+        _lpRewards = _lpRewards.accrue(accumulatedInterest);
+
+        // ensure the pool's total assets increased by the interest amount
+        if (IPoolUpgrader(IRouter(_router).getRoute(ROUTE_POOL_UPGRADER)).verifyTotalAssets(accumulatedInterest)) {
+            // set the pool to unpause to start operations
+            _unpause();
+        } else {
+            revert InvalidState();
+        }
     }
 
     /**

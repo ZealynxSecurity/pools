@@ -51,16 +51,23 @@ import {MockMiner} from "test/helpers/MockMiner.sol";
 import {EPOCHS_IN_WEEK, EPOCHS_IN_DAY, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 import "test/helpers/Constants.sol";
 
+interface IPoolV2 {
+    function getAgentDebt(uint256 agentID) external view returns (uint256);
+}
+
 contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
     uint256 public constant DEFAULT_WINDOW = EPOCHS_IN_WEEK * 3;
 
     IPool oldPool;
     IOffRamp ramp;
     IAgentFactory agentFactory;
+    UpgradeToV2 upgrader;
 
     IAgent agent;
     address agentOwner = makeAddr("AGENT_OWNER");
     address investor = makeAddr("INVESTOR");
+    address agentPolice;
+    address pool;
 
     constructor() {
         vm.startPrank(systemAdmin);
@@ -135,52 +142,43 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
         vm.prank(agentOwner);
         agent.borrow(0, sc);
 
-        // move forward to generate some interest and make a payment
-        vm.roll(block.number + EPOCHS_IN_YEAR);
+        // deploy the new contracts
+        (agentPolice, pool) = _deployContracts();
 
-        sc = _issueGenericPayCred(agent.id(), 1e18);
-        vm.prank(agentOwner);
-        agent.pay(0, sc);
+        // deploy the upgrader
+        upgrader = new UpgradeToV2(router, systemAdmin);
 
-        uint256 iFILPrice = oldPool.convertToAssets(WAD);
-        assertGt(iFILPrice, 1e18, "Interest should have accrued");
+        // set up another 169 agents for testing to get more accurate gas stats
+        _configureManyAgents();
     }
 
     function testUpgradeV1ToV2() public {
-        (address agentPolice, address pool) = _deployContracts();
-        UpgradeToV2 upgrader = new UpgradeToV2(router, systemAdmin);
+        // move forward to generate some interest
+        vm.roll(block.number + EPOCHS_IN_YEAR);
 
-        vm.startPrank(systemAdmin);
+        uint256 interestOwedOnAccount = _agentInterest(agent, _getAdjustedRate());
+        assertGt(interestOwedOnAccount, 0, "Interest owed should be greater than 0");
 
-        assertTrue(agentPolice != address(0), "Agent police deploy failed");
-        assertTrue(pool != address(0), "Pool deploy failed");
+        // maintain a handle on the original pool registry and rate module because they get overwritten
+        (address poolRegistry, address rateModule) = _transferOwnershipOfContracts(address(upgrader));
 
-        address rateModule = address(IInfinityPool(address(oldPool)).rateModule());
-        address poolRegistry = address(GetRoute.poolRegistry(router));
-        // assign the pool registry, router, lst, and old pool ownership to this contract
-        IAuth(address(oldPool)).transferOwnership(address(upgrader));
-        IAuth(router).transferOwnership(address(upgrader));
-        IAuth(address(iFIL)).transferOwnership(address(upgrader));
-        IAuth(poolRegistry).transferOwnership(address(upgrader));
-        IAuth(rateModule).transferOwnership(address(upgrader));
+        vm.deal(systemAdmin, 1e18);
 
-        upgrader.upgrade(agentPolice, pool);
+        uint256 systemAdminBal = systemAdmin.balance;
 
-        vm.stopPrank();
+        vm.prank(systemAdmin);
+        upgrader.upgrade{value: 1e18}(agentPolice, pool);
+
+        assertEq(systemAdminBal, systemAdmin.balance, "System admin balance should not change after upgrade");
 
         _depositFundsIntoPool(1e18, investor);
         _withdrawFILFromPool(investor, pool, IPool(pool).maxWithdraw(investor));
 
         uint256 poolTotalAssets = IPool(pool).totalAssets();
 
-        // roll forward and make sure we're accruing interesting
-        vm.roll(block.number + EPOCHS_IN_YEAR);
-
-        uint256 poolTotalAssets2 = IPool(pool).totalAssets();
-        assertGt(poolTotalAssets2, poolTotalAssets, "Interest should have accrued");
-
-        // make a payment to make sure new agent police is working
-        SignedCredential memory sc = _issueGenericPayCred(agent.id(), 1e18);
+        // make a payment to make sure new agent police is working and pool accounting is working
+        // here we test a full exist to make sure there is no refund
+        SignedCredential memory sc = _issueGenericPayCred(agent.id(), IPoolV2(pool).getAgentDebt(agent.id()));
         vm.deal(address(agent), 1e18);
         vm.startPrank(agentOwner);
 
@@ -189,10 +187,10 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
         agent.pay(0, sc);
 
         agent.refreshRoutes();
-
         agent.pay(0, sc);
 
-        assertEq(IPool(pool).totalAssets(), poolTotalAssets2, "Total assets should not change after payment");
+        // making a payment should not change the total assets of the pool in v2
+        assertEq(IPool(pool).totalAssets(), poolTotalAssets, "Total assets should not change after payment");
 
         // make a random call to the new agent police that did not exist on hte old one to make sure the new one is deployed
         uint256 testVal = IAgentPolice(agentPolice).liquidationDTL();
@@ -205,13 +203,47 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
         agent.borrow(0, sc);
         vm.stopPrank();
 
-        vm.startPrank(systemAdmin);
-        IAuth(address(oldPool)).acceptOwnership();
-        IAuth(router).acceptOwnership();
-        IAuth(address(iFIL)).acceptOwnership();
-        IAuth(poolRegistry).acceptOwnership();
-        IAuth(rateModule).acceptOwnership();
-        vm.stopPrank();
+        _approveOwnershipOfContracts(poolRegistry, rateModule);
+    }
+
+    function testUpgradeManyAgents() public {
+        uint256 numAgents = 170;
+
+        vm.roll(block.number + EPOCHS_IN_YEAR);
+
+        uint256 interestOwedOnAccounts = _agentInterest(agent, _getAdjustedRate()) * numAgents;
+
+        uint256 totalAssetsOldPool = oldPool.totalAssets();
+        uint256 totalLiquid = oldPool.getLiquidAssets();
+
+        _transferOwnershipOfContracts(address(upgrader));
+
+        vm.prank(systemAdmin);
+        upgrader.upgrade(agentPolice, pool);
+
+        uint256 totalAssetsNewPool = IPool(pool).totalAssets();
+
+        assertEq(
+            totalAssetsOldPool + interestOwedOnAccounts,
+            totalAssetsNewPool,
+            "Total assets should increase by unpaid interest"
+        );
+        assertEq(totalLiquid, IPool(pool).getLiquidAssets(), "Liquid assets should remain the same after upgrade");
+    }
+
+    function _configureManyAgents() internal returns (uint256 numAgents) {
+        numAgents = 170;
+        // deposit enough funds to cover the borrow amounts of 170 agents
+        uint256 borrowAmount = 1e18;
+        _depositFundsIntoPool(borrowAmount * numAgents, investor);
+
+        // subract 1 from num agents to account for the agent we already have
+        for (uint256 i = 0; i < numAgents - 1; i++) {
+            (IAgent agent,) = configureAgent(agentOwner);
+            SignedCredential memory sc = _issueGenericBorrowCred(agent.id(), 1e18);
+            vm.prank(agentOwner);
+            agent.borrow(0, sc);
+        }
     }
 
     function _deployContracts() internal returns (address agentPolice, address pool) {
@@ -228,7 +260,36 @@ contract UpgradeTest is CoreTestHelper, PoolTestHelper, AgentTestHelper {
             )
         );
 
+        assertTrue(agentPolice != address(0), "Agent police deploy failed");
+        assertTrue(pool != address(0), "Pool deploy failed");
+
         return (agentPolice, pool);
+    }
+
+    function _transferOwnershipOfContracts(address upgrader)
+        internal
+        returns (address poolRegistry, address rateModule)
+    {
+        vm.startPrank(systemAdmin);
+        poolRegistry = address(GetRoute.poolRegistry(router));
+        rateModule = address(IInfinityPool(address(oldPool)).rateModule());
+        // assign the pool registry, router, lst, and old pool ownership to this contract
+        IAuth(address(oldPool)).transferOwnership(address(upgrader));
+        IAuth(router).transferOwnership(address(upgrader));
+        IAuth(address(iFIL)).transferOwnership(address(upgrader));
+        IAuth(poolRegistry).transferOwnership(address(upgrader));
+        IAuth(rateModule).transferOwnership(address(upgrader));
+        vm.stopPrank();
+    }
+
+    function _approveOwnershipOfContracts(address poolRegistry, address rateModule) internal {
+        vm.startPrank(systemAdmin);
+        IAuth(address(oldPool)).acceptOwnership();
+        IAuth(router).acceptOwnership();
+        IAuth(address(iFIL)).acceptOwnership();
+        IAuth(poolRegistry).acceptOwnership();
+        IAuth(rateModule).acceptOwnership();
+        vm.stopPrank();
     }
 
     function _withdrawFILFromPool(address _investor, address _pool, uint256 amount) internal {
