@@ -164,6 +164,9 @@ contract EchidnaSetup is EchidnaConfig {
     /////////////           WRAPPER FUNCTIONS          ////////////////
     ///////////////////////////////////////////////////////////////////
 
+    // ============================================
+    // ==               DEPOSIT                 ==
+    // ============================================
     function poolDepositNativeFil(uint256 stakeAmount, address receiver) internal {
         try pool.deposit{value: stakeAmount}(receiver) {
             Debugger.log("pool deposit successful");
@@ -171,7 +174,7 @@ contract EchidnaSetup is EchidnaConfig {
             Debugger.log("pool deposit failed");
             assert(false);
         }
-    } 
+    }
 
     function poolDeposit(uint256 stakeAmount, address receiver) internal {
         try pool.deposit(stakeAmount, receiver) {
@@ -191,6 +194,15 @@ contract EchidnaSetup is EchidnaConfig {
         }
     }
 
+    function poolDepositReverts(uint256 stakeAmount, address receiver) internal {
+        try pool.deposit(stakeAmount, receiver) {
+            Debugger.log("pool deposit didn't revert");
+            assert(false);
+        } catch {
+            Debugger.log("pool deposit successfully reverted");
+        }
+    }
+
     function wFilDeposit(uint256 stakeAmount) internal {
         try wFIL.deposit{value: stakeAmount}() {
             Debugger.log("wFil deposit successful");
@@ -199,6 +211,32 @@ contract EchidnaSetup is EchidnaConfig {
             assert(false);
         }
     }
+
+    // ============================================
+    // ==               WITHDRAW                 ==
+    // ============================================
+
+    function poolWithdraw(uint256 assets, address receiver, address owner) internal {
+        try pool.withdraw(assets, receiver, owner) {
+            Debugger.log("pool withdraw successful");
+        } catch {
+            Debugger.log("pool withdraw failed");
+            assert(false);
+        }
+    }
+
+    function poolWithdrawReverts(uint256 assets, address receiver, address owner) internal {
+        try pool.withdraw(assets, receiver, owner) {
+            Debugger.log("pool deposit didn't revert");
+            assert(false);
+        } catch {
+            Debugger.log("pool deposit successfully reverted");
+        }
+    }
+
+    // ============================================
+    // ==               HELPERS                 ==
+    // ============================================
 
     // Pool Helpers
     function createPool() internal returns (IPool) {

@@ -39,7 +39,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // here we split the stakeAmount into wFIL and FIL for testing purposes
         hevm.prank(INVESTOR);
         poolDepositNativeFil(stakeAmount, INVESTOR);
-        
+
         hevm.prank(INVESTOR);
         wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
@@ -161,17 +161,19 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure correct shares are issued after a second deposit
+    // @audit - coverage
     function echtest_correctSharesAfterSecondDeposit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         // Split the stakeAmount into wFIL and FIL for testing purposes
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
+
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
 
@@ -180,7 +182,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         uint256 sharesFirstDeposit = pool.deposit{value: stakeAmount}(INVESTOR);
 
         // Assert the correct shares are issued after the second deposit
-        uint256 sharesSecondDeposit = pool.deposit(stakeAmount, INVESTOR);
+        uint256 sharesSecondDeposit = pool.deposit(stakeAmount, INVESTOR); //@audit => modify
         assert(sharesSecondDeposit == stakeAmount);
         assert(sharesSecondDeposit + sharesFirstDeposit == iFIL.balanceOf(INVESTOR) - investorIFILBalStart);
     }
@@ -193,11 +195,11 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         // Split the stakeAmount into wFIL and FIL for testing purposes
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
 
@@ -223,8 +225,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        (bool success,) = address(pool).call(abi.encodeWithSignature("deposit(uint256)", stakeAmount));
-        assert(!success);
+        poolDepositNativeFilReverts(stakeAmount, INVESTOR);
     }
 
     // Test to ensure shares are issued correctly after deposit
@@ -234,17 +235,17 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded
         hevm.deal(INVESTOR, stakeAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         uint256 investorIFILBalStart = iFIL.balanceOf(INVESTOR);
 
         // Deposit wFIL
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        uint256 sharesReceived = pool.deposit{value: stakeAmount}(INVESTOR);
+        uint256 sharesReceived = pool.deposit{value: stakeAmount}(INVESTOR); //@audit => modify
 
         // Assert shares received and balance changes
         assert(sharesReceived == stakeAmount);
@@ -257,28 +258,26 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
 
         uint256 investorIFILBalStart = iFIL.balanceOf(INVESTOR);
 
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
-        hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        hevm.prank(INVESTOR); //@audit => revert due to the duplication ?
+        poolDeposit(stakeAmount, INVESTOR);
 
         uint256 investorIFILBalEnd = iFIL.balanceOf(INVESTOR);
 
         assert(pool.convertToAssets(investorIFILBalEnd) == (stakeAmount * 2) + investorIFILBalStart);
 
         assert(pool.convertToShares(stakeAmount * 2) == investorIFILBalEnd - investorIFILBalStart);
-
-        assertPegInTact();
     }
 
     // Test to verify preview deposit rounding error
@@ -288,11 +287,11 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         // Perform a deposit to initialize the pool
         hevm.prank(INVESTOR);
-        pool.deposit{value: 1 ether}(INVESTOR);
+        poolDepositNativeFil(1 ether, INVESTOR);
 
         // Get the total supply and total assets after the initial deposit
         uint256 totalSupply = pool.liquidStakingToken().totalSupply();
@@ -318,10 +317,10 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
 
@@ -329,7 +328,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         uint256 contractBalanceBefore = wFIL.balanceOf(address(pool));
 
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         // Assert balance transfer
         assert(wFIL.balanceOf(address(pool)) == contractBalanceBefore + stakeAmount);
@@ -342,10 +341,10 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
 
@@ -353,7 +352,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         uint256 tokenBalanceBefore = iFIL.balanceOf(INVESTOR);
 
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         // Assert token minting
         assert(iFIL.balanceOf(INVESTOR) == tokenBalanceBefore + stakeAmount);
@@ -370,14 +369,11 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         // Simulate and verify that depositing while paused reverts
         hevm.prank(INVESTOR);
-        (bool success,) = address(pool).call{value: stakeAmount}(
-            abi.encodeWithSignature("deposit(uint256,address)", stakeAmount, INVESTOR)
-        );
-        assert(!success);
+        poolDepositNativeFilReverts(stakeAmount, INVESTOR);
     }
 
     // Test to ensure deposit reverts with an invalid receiver
@@ -387,14 +383,16 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         // Simulate and verify that depositing to an invalid receiver reverts
         hevm.prank(INVESTOR);
-        (bool success,) = address(pool).call{value: stakeAmount}(
-            abi.encodeWithSignature("deposit(uint256,address)", stakeAmount, address(0))
-        );
-        assert(!success);
+        // (bool success,) = address(pool).call{value: stakeAmount}(
+        //     abi.encodeWithSignature("deposit(uint256,address)", stakeAmount, address(0))
+        // );
+        // assert(!success);
+
+        poolDepositReverts(stakeAmount, address(0)); //@audit => verify
     }
 
     // Test to verify large deposit
@@ -404,10 +402,10 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
 
@@ -416,7 +414,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         uint256 poolBalanceBefore = wFIL.balanceOf(address(pool));
 
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         // Assert balances after large deposit
         assert(wFIL.balanceOf(INVESTOR) == investorBalanceBefore - stakeAmount);
@@ -428,8 +426,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
 
-        (bool success,) = address(pool).call{value: 0}(abi.encodeWithSignature("deposit(address)", INVESTOR));
-        assert(!success);
+        poolDepositNativeFilReverts(0, INVESTOR);
     }
 
     // Test for partial deposits handling
@@ -442,7 +439,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
         // Perform initial deposit
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         // Track total assets before deposits
         uint256 totalAssetsBefore = pool.totalAssets();
@@ -451,7 +448,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
         // Perform first partial deposit
         hevm.prank(INVESTOR);
-        pool.deposit{value: stakeAmount}(INVESTOR);
+        poolDepositNativeFil(stakeAmount, INVESTOR);
 
         uint256 totalAssetsAfterFirstDeposit = pool.totalAssets();
 
@@ -459,7 +456,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
         // Perform second partial deposit
         hevm.prank(INVESTOR);
-        pool.deposit{value: stakeAmount}(INVESTOR);
+        poolDepositNativeFil(stakeAmount, INVESTOR);
 
         uint256 totalAssetsAfterSecondDeposit = pool.totalAssets();
 
@@ -485,7 +482,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
         // Perform initial deposit
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         // Track balance before deposits
         uint256 balanceBefore = pool.totalAssets();
@@ -493,7 +490,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Perform multiple consecutive deposits
         for (uint256 i = 0; i < 5; i++) {
             hevm.prank(INVESTOR);
-            pool.deposit{value: stakeAmount}(INVESTOR);
+            poolDepositNativeFil(StakeAmount, INVESTOR);
         }
 
         // Assert total balance is correct
@@ -511,14 +508,15 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded and has deposited
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(StakeAmount);
+
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         uint256 initialInvestorBalance = wFIL.balanceOf(INVESTOR);
         uint256 initialPoolBalance = wFIL.balanceOf(address(pool));
@@ -526,7 +524,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Withdraw assets
         uint256 withdrawAmount = stakeAmount / 2;
         hevm.prank(INVESTOR);
-        pool.withdraw(withdrawAmount, INVESTOR, INVESTOR);
+        poolWithdrawN(withdrawAmount, INVESTOR, INVESTOR);
 
         // Assert balances after withdrawal
         assert(wFIL.balanceOf(INVESTOR) == initialInvestorBalance - withdrawAmount);
@@ -540,22 +538,19 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded and has deposited
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         // Attempt to withdraw more assets than available
         uint256 withdrawAmount = pool.totalAssets() + 1;
         hevm.prank(INVESTOR);
-        (bool success,) = address(pool).call(
-            abi.encodeWithSignature("withdraw(uint256,address,address)", withdrawAmount, INVESTOR, INVESTOR)
-        );
-        assert(!success);
+        poolWithdrawReverts(withdrawAmount, INVESTOR, INVESTOR);
     }
 
     // Test to verify withdrawal updates accounting correctly
@@ -565,21 +560,22 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded and has deposited
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
+
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         uint256 initialTotalAssets = pool.totalAssets();
 
         // Withdraw assets
         uint256 withdrawAmount = stakeAmount / 2;
         hevm.prank(INVESTOR);
-        pool.withdraw(withdrawAmount, INVESTOR, INVESTOR);
+        poolWithdrawN(withdrawAmount, INVESTOR, INVESTOR);
 
         // Assert total assets after withdrawal
         assert(pool.totalAssets() == initialTotalAssets - withdrawAmount);
@@ -592,21 +588,18 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded and has deposited
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         // Attempt to withdraw to an invalid receiver
         hevm.prank(INVESTOR);
-        (bool success,) = address(pool).call(
-            abi.encodeWithSignature("withdraw(uint256,address,address)", stakeAmount, address(0), INVESTOR)
-        );
-        assert(!success);
+        poolWithdrawReverts(withdrawAmount, address(0), INVESTOR);
     }
 
     // Test to verify partial withdrawal
@@ -616,28 +609,28 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded and has deposited
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         uint256 initialInvestorBalance = wFIL.balanceOf(INVESTOR);
 
         // Withdraw first half of the assets
         uint256 firstWithdrawAmount = stakeAmount / 2;
         hevm.prank(INVESTOR);
-        pool.withdraw(firstWithdrawAmount, INVESTOR, INVESTOR);
+        poolWithdrawN(firstWithdrawAmount, INVESTOR, INVESTOR);
 
         uint256 investorBalanceAfterFirstWithdrawal = wFIL.balanceOf(INVESTOR);
 
         // Withdraw second half of the assets
         uint256 secondWithdrawAmount = stakeAmount / 2;
         hevm.prank(INVESTOR);
-        pool.withdraw(secondWithdrawAmount, INVESTOR, INVESTOR);
+        poolWithdrawN(secondWithdrawAmount, INVESTOR, INVESTOR);
 
         uint256 investorBalanceAfterSecondWithdrawal = wFIL.balanceOf(INVESTOR);
 
@@ -656,21 +649,21 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded and has deposited
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         uint256 initialInvestorBalance = wFIL.balanceOf(INVESTOR);
         uint256 initialPoolBalance = wFIL.balanceOf(address(pool));
 
         // Withdraw with conversion
         hevm.prank(INVESTOR);
-        pool.withdraw(stakeAmount, INVESTOR, INVESTOR);
+        poolWithdrawN(stakeAmount, INVESTOR, INVESTOR);
 
         // Assert balances after withdrawal with conversion
         assert(wFIL.balanceOf(INVESTOR) == initialInvestorBalance - stakeAmount);
@@ -684,24 +677,25 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded and has deposited
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount * 2}(); // Deposit twice the stakeAmount for multiple withdrawals
+        wFilDeposit(stakeAmount * 2);
+
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount * 2);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount * 2, INVESTOR);
+        poolDeposit(stakeAmount * 2, INVESTOR);
 
         uint256 initialInvestorBalance = wFIL.balanceOf(INVESTOR);
 
         // Withdraw first half
         hevm.prank(INVESTOR);
-        pool.withdraw(stakeAmount, INVESTOR, INVESTOR);
+        poolWithdrawN(stakeAmount, INVESTOR, INVESTOR);
 
         // Withdraw second half
         hevm.prank(INVESTOR);
-        pool.withdraw(stakeAmount, INVESTOR, INVESTOR);
+        poolWithdrawN(stakeAmount, INVESTOR, INVESTOR);
 
         // Assert balances after consecutive withdrawals
         assert(wFIL.balanceOf(INVESTOR) == initialInvestorBalance - stakeAmount * 2);
@@ -716,20 +710,21 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         hevm.deal(RECEIVER, MAX_FIL * 3); // Ensure receiver is funded for testing
 
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
+
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         uint256 initialReceiverBalance = wFIL.balanceOf(RECEIVER);
 
         // Withdraw with different owner and receiver
         hevm.prank(INVESTOR);
-        pool.withdraw(stakeAmount, RECEIVER, INVESTOR);
+        poolWithdrawN(stakeAmount, RECEIVER, INVESTOR);
 
         // Assert balances after withdrawal
         assert(wFIL.balanceOf(RECEIVER) == initialReceiverBalance + stakeAmount);
@@ -746,21 +741,18 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded and has deposited
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         // Attempt to withdraw while paused
         hevm.prank(INVESTOR);
-        (bool success,) = address(pool).call(
-            abi.encodeWithSignature("withdraw(uint256,address,address)", stakeAmount, INVESTOR, INVESTOR)
-        );
-        assert(!success);
+        poolWithdrawReverts(stakeAmount, INVESTOR, INVESTOR);
     }
 
     // Test to verify withdrawal with amount zero
@@ -798,28 +790,29 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         // Ensure the investor is funded and has deposited
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
+
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         uint256 initialInvestorBalance = INVESTOR.balance;
 
         // Perform first partial withdrawal
         uint256 firstWithdrawAmount = stakeAmount / 2;
         hevm.prank(INVESTOR);
-        pool.withdrawF(firstWithdrawAmount, INVESTOR, INVESTOR);
+        poolWithdrawF(firstWithdrawAmount, INVESTOR, INVESTOR);
 
         uint256 investorBalanceAfterFirstWithdrawal = INVESTOR.balance;
 
         // Perform second partial withdrawal
         uint256 secondWithdrawAmount = stakeAmount / 2;
         hevm.prank(INVESTOR);
-        pool.withdrawF(secondWithdrawAmount, INVESTOR, INVESTOR);
+        poolWithdrawF(secondWithdrawAmount, INVESTOR, INVESTOR);
 
         uint256 investorBalanceAfterSecondWithdrawal = INVESTOR.balance;
 
