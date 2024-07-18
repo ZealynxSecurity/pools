@@ -4,10 +4,10 @@ testMode: "assertion"
 coverage: true
 corpusDir: "corpus-echidna"
 
-workers: 3
+# workers: 3
 seqLen: 100
 testLimit: 100000
 
-balanceContract: 1e18
+balanceContract: 0xffffffffffffffffffffffffffffffffffffffffffffffff
 # codeSize: 0xfffffffffff # increase the code size
 # testMaxGas: 1250000000 # increases test max gas for future complex operations

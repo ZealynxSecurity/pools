@@ -82,7 +82,7 @@ contract EchidnaSetup is EchidnaConfig {
     // Declare agentPolice
     address internal agentPolice;
 
-    constructor() {
+    constructor() payable {
         rewardToken = new Token("GLIF", "GLF", address(this), address(this));
         lockToken = new PoolToken(address(this));
 
@@ -159,6 +159,46 @@ contract EchidnaSetup is EchidnaConfig {
         MAX_UINT256 / 2,
         MAX_UINT256
     ];
+
+    ///////////////////////////////////////////////////////////////////
+    /////////////           WRAPPER FUNCTIONS          ////////////////
+    ///////////////////////////////////////////////////////////////////
+
+    function poolDepositNativeFil(uint256 stakeAmount, address receiver) internal {
+        try pool.deposit{value: stakeAmount}(receiver) {
+            Debugger.log("pool deposit successful");
+        } catch {
+            Debugger.log("pool deposit failed");
+            assert(false);
+        }
+    } 
+
+    function poolDeposit(uint256 stakeAmount, address receiver) internal {
+        try pool.deposit(stakeAmount, receiver) {
+            Debugger.log("pool deposit successful");
+        } catch {
+            Debugger.log("pool deposit failed");
+            assert(false);
+        }
+    }
+
+    function poolDepositNativeFilReverts(uint256 stakeAmount, address receiver) internal {
+        try pool.deposit{value: stakeAmount}(receiver) {
+            Debugger.log("pool deposit didn't revert");
+            assert(false);
+        } catch {
+            Debugger.log("pool deposit successfully reverted");
+        }
+    }
+
+    function wFilDeposit(uint256 stakeAmount) internal {
+        try wFIL.deposit{value: stakeAmount}() {
+            Debugger.log("wFil deposit successful");
+        } catch {
+            Debugger.log("wFil deposit failed");
+            assert(false);
+        }
+    }
 
     // Pool Helpers
     function createPool() internal returns (IPool) {

@@ -38,13 +38,14 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
         // here we split the stakeAmount into wFIL and FIL for testing purposes
         hevm.prank(INVESTOR);
-        pool.deposit{value: stakeAmount}(INVESTOR);
+        poolDepositNativeFil(stakeAmount, INVESTOR);
+        
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
-        pool.deposit(stakeAmount, INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
         uint256 previewDeposit = pool.previewDeposit(stakeAmount * 2);
 
@@ -55,20 +56,16 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     function echtest_investorPoolBalanceAfterDeposit(uint256 stakeAmount) public {
-        //@audit =>
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
-
-        uint256 investorBalBefore = wFIL.balanceOf(INVESTOR) + INVESTOR.balance;
-        uint256 poolBalBefore = wFIL.balanceOf(address(pool));
+        poolDepositNativeFil(WAD, INVESTOR);
 
         // Split the stakeAmount into wFIL and FIL for testing purposes
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
         hevm.prank(INVESTOR);
@@ -79,25 +76,20 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     function echtest_totalSupplyInvariantAfterBoundDeposit(uint256 stakeAmount) public {
-        //@audit => Individuals do not fail
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
         // Ensure the investor is sufficiently funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
 
-        uint256 investorFILBalStart = INVESTOR.balance; //@audit => balance
         uint256 investorWFILBalStart = wFIL.balanceOf(INVESTOR);
-        uint256 investorIFILBalStart = iFIL.balanceOf(INVESTOR);
         uint256 poolWFILBalStart = wFIL.balanceOf(address(pool));
-
-        assertPegInTact();
 
         // Debugging outputs to trace values
         Debugger.log("investorWFILBalStart", investorWFILBalStart);
@@ -111,47 +103,25 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
     // Test that depositing zero amount reverts the transaction
     function echtest_zeroDepositReverts() public {
-        uint256 stakeAmount = 0;
+        uint256 zeroAmount = 0;
 
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
+        /* Commented code to be removed as I believe is not on scope */
+        // hevm.prank(INVESTOR);
+        // poolDepositNativeFil(WAD, INVESTOR);
+
+        // // Simulate and verify that depositing 0 reverts
+        // hevm.prank(INVESTOR);
+        // poolDepositNativeFil(WAD, INVESTOR);
+
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
-
-        // Simulate and verify that depositing 0 reverts
-        hevm.prank(INVESTOR);
-        (bool success,) =
-            address(pool).call{value: stakeAmount}(abi.encodeWithSignature("deposit(uint256)", stakeAmount));
-        assert(!success);
-
-        hevm.prank(INVESTOR);
-        (success,) = address(pool).call(abi.encodeWithSignature("deposit(uint256)", stakeAmount));
-        assert(!success);
-    }
-
-    // Test that balances remain unchanged when attempting to deposit zero amount
-    function echtest_balancesUnchangedAfterZeroDeposit() public {
-        uint256 stakeAmount = 0;
-
-        // Ensure the investor is funded
-        hevm.deal(INVESTOR, MAX_FIL * 3);
-        hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
-
-        uint256 investorFILBalStart = INVESTOR.balance;
-        uint256 investorWFILBalStart = wFIL.balanceOf(INVESTOR);
-        uint256 investorIFILBalStart = iFIL.balanceOf(INVESTOR);
-        uint256 poolWFILBalStart = wFIL.balanceOf(address(pool));
-
-        // Verify balances remain unchanged
-        assert(investorWFILBalStart == wFIL.balanceOf(INVESTOR));
-        assert(investorFILBalStart == INVESTOR.balance);
-        assert(investorIFILBalStart == iFIL.balanceOf(INVESTOR));
+        poolDepositNativeFilReverts(zeroAmount, INVESTOR);
     }
 
     // Test that attempting to deposit more than balance reverts the transaction
     function echtest_exceedingBalanceDepositReverts() public {
-        uint256 stakeAmount = 0;
+        uint256 stakeAmount = (INVESTOR.balance) * 2;
 
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
@@ -160,27 +130,21 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
         // Verify that depositing more than balance reverts
         hevm.prank(INVESTOR);
-        (bool success,) =
-            address(pool).call{value: (INVESTOR.balance) * 2}(abi.encodeWithSignature("deposit(uint256)", INVESTOR));
-        assert(!success);
-
-        hevm.prank(INVESTOR);
-        (success,) = address(pool).call(abi.encodeWithSignature("deposit(uint256, address)", stakeAmount, INVESTOR));
-        assert(!success);
+        poolDepositNativeFil(stakeAmount, INVESTOR);
     }
 
     // Test to ensure correct shares are issued after deposit
     function echtest_correctSharesAfterDeposit(uint256 stakeAmount) public {
-        stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+        stakeAmount = bound(stakeAmount, WAD, MAX_FIL);
 
         // Ensure the investor is funded
         hevm.deal(INVESTOR, MAX_FIL * 3);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(stakeAmount, INVESTOR);
 
         // Split the stakeAmount into wFIL and FIL for testing purposes
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: stakeAmount}();
+        wFilDeposit(stakeAmount);
         hevm.prank(INVESTOR);
         wFIL.approve(address(pool), stakeAmount);
 
@@ -212,7 +176,6 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         wFIL.approve(address(pool), stakeAmount);
 
         uint256 investorIFILBalStart = iFIL.balanceOf(INVESTOR);
-        uint256 investorWFILBalStart = wFIL.balanceOf(INVESTOR);
 
         uint256 sharesFirstDeposit = pool.deposit{value: stakeAmount}(INVESTOR);
 

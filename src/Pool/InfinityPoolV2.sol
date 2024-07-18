@@ -579,7 +579,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         isOpen
         whenNotPaused
         isValidReceiver(receiver)
-        returns (uint256 shares)
+        returns (uint256 shares) // @audit-info unneeded/confusing named return parameter
     {
         return _deposit(assets, receiver);
     }
@@ -595,7 +595,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         isOpen
         whenNotPaused
         isValidReceiver(receiver)
-        returns (uint256 shares)
+        returns (uint256 shares) // @audit-info unneeded/confusing named return parameter
     {
         return _depositFIL(receiver);
     }
