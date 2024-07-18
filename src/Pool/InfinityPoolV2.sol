@@ -1270,14 +1270,6 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
     //@audit => new
     ////////////
 
-    function getLpRewardsValues() external view returns (uint256, uint256, uint256) {
-        return (_lpRewards.accrued, _lpRewards.paid, _lpRewards.lost);
-    }
-
-    function getTreasuryRewardsValues() external view returns (uint256, uint256, uint256) {
-        return (_treasuryRewards.accrued, _treasuryRewards.paid, _treasuryRewards.lost);
-    }
-
     function paused() public view override(IPool, Pausable) returns (bool) {
         return super.paused();
     }

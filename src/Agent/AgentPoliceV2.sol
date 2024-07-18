@@ -24,6 +24,8 @@ import {Account} from "src/Types/Structs/Account.sol";
 import {EPOCHS_IN_DAY, EPOCHS_IN_WEEK} from "src/Constants/Epochs.sol";
 import {ROUTE_INFINITY_POOL, ROUTE_WFIL_TOKEN} from "src/Constants/Routes.sol";
 
+import "test/echidna/Debugger.sol";
+
 contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
     using AccountHelpers for Account;
     using FixedPointMathLib for uint256;
@@ -98,8 +100,9 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
      * @notice `agentApproved` checks with each pool to see if the agent's position is approved and reverts if any pool returns false
      * @param vc the VerifiableCredential of the agent
      */
-    function agentApproved(VerifiableCredential calldata vc) external view {
+    function agentApproved(VerifiableCredential calldata vc) external {
         _agentApproved(msg.sender, vc, _getAccount(vc.subject), _pool(), 0);
+        Debugger.log("After _agentApproved ");
     }
 
     /**
