@@ -30,6 +30,8 @@ import {SignedCredential, VerifiableCredential} from "src/Types/Structs/Credenti
 import {EPOCHS_IN_DAY, EPOCHS_IN_YEAR} from "src/Constants/Epochs.sol";
 import {ROUTE_WFIL_TOKEN} from "src/Constants/Routes.sol";
 
+import "test/echidna/Debugger.sol";
+
 uint256 constant WAD = 1e18;
 
 /**
@@ -373,9 +375,12 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         updateAccounting();
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
+        Debugger.log("AFETER InvalidParams");
+
         // can't borrow more than the pool has
         if (totalBorrowableAssets() < vc.value) revert InsufficientLiquidity();
         Account memory account = _getAccount(vc.subject);
+        Debugger.log("AFETER InsufficientLiquidity");
 
         // fresh account, set start epoch and epochsPaid to beginning of current window
         if (account.epochsPaid == 0) {
@@ -404,6 +409,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         }
 
         account.save(_router, vc.subject, id);
+        Debugger.log("AFETER save");
 
         totalBorrowed += vc.value;
 
@@ -411,6 +417,7 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
 
         // interact - here `msg.sender` must be the Agent bc of the `subjectIsAgentCaller` modifier
         asset.transfer(msg.sender, vc.value);
+        Debugger.log("AFETER transfer");
     }
 
     /**
@@ -579,7 +586,9 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         isOpen
         whenNotPaused
         isValidReceiver(receiver)
-        returns (uint256 shares) // @audit-info unneeded/confusing named return parameter
+        returns (
+            uint256 shares // @audit-info unneeded/confusing named return parameter
+        )
     {
         return _deposit(assets, receiver);
     }
@@ -595,7 +604,9 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         isOpen
         whenNotPaused
         isValidReceiver(receiver)
-        returns (uint256 shares) // @audit-info unneeded/confusing named return parameter
+        returns (
+            uint256 shares // @audit-info unneeded/confusing named return parameter
+        )
     {
         return _depositFIL(receiver);
     }

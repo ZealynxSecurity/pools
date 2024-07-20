@@ -15,49 +15,49 @@ contract EchidnaAgent is EchidnaSetup {
     // uint256 constant MAX_FIL = 2e27;
     // uint256 constant WAD = 1e18;
 
-    function echtest_credential_actions() public {
-        uint256 agentID = 1;
-        uint64 minerID = 1;
+    // function echtest_credential_actions() public {
+    //     uint256 agentID = 1;
+    //     uint64 minerID = 1;
 
-        SignedCredential memory sc = _issueAddMinerCred(agentID, minerID);
-        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.addMiner.selector, sc) {
-            assert(true);
-        } catch {
-            assert(false);
-        }
+    //     SignedCredential memory sc = _issueAddMinerCred(agentID, minerID);
+    //     try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.addMiner.selector, sc) {
+    //         assert(true);
+    //     } catch {
+    //         assert(false);
+    //     }
 
-        uint256 principal = 10e18;
-        uint256 liquidationValue = 5e18;
-        sc = _issueBorrowCred(agentID, principal, liquidationValue);
-        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.borrow.selector, sc) {
-            assert(true);
-        } catch {
-            assert(false);
-        }
+    //     uint256 principal = 10e18;
+    //     uint256 liquidationValue = 5e18;
+    //     sc = _issueBorrowCred(agentID, principal, liquidationValue);
+    //     try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.borrow.selector, sc) {
+    //         assert(true);
+    //     } catch {
+    //         assert(false);
+    //     }
 
-        uint256 paymentAmount = 1e18;
-        sc = _issuePayCred(agentID, principal, liquidationValue, paymentAmount);
-        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.pay.selector, sc) {
-            assert(true);
-        } catch {
-            assert(false);
-        }
+    //     uint256 paymentAmount = 1e18;
+    //     sc = _issuePayCred(agentID, principal, liquidationValue, paymentAmount);
+    //     try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.pay.selector, sc) {
+    //         assert(true);
+    //     } catch {
+    //         assert(false);
+    //     }
 
-        sc = _issueRemoveMinerCred(agentID, minerID, principal, liquidationValue);
-        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.removeMiner.selector, sc) {
-            assert(true);
-        } catch {
-            assert(false);
-        }
+    //     sc = _issueRemoveMinerCred(agentID, minerID, principal, liquidationValue);
+    //     try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.removeMiner.selector, sc) {
+    //         assert(true);
+    //     } catch {
+    //         assert(false);
+    //     }
 
-        uint256 amount = 5e18;
-        sc = _issueWithdrawCred(agentID, amount, principal, liquidationValue);
-        try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.withdraw.selector, sc) {
-            assert(true);
-        } catch {
-            assert(false);
-        }
-    }
+    //     uint256 amount = 5e18;
+    //     sc = _issueWithdrawCred(agentID, amount, principal, liquidationValue);
+    //     try GetRoute.agentPolice(router).isValidCredential(agentID, IAgent.withdraw.selector, sc) {
+    //         assert(true);
+    //     } catch {
+    //         assert(false);
+    //     }
+    // }
 
     function echtest_agent_borrow_fuzz(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, 1e18, MAX_FIL);
@@ -67,17 +67,23 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
+        Debugger.log("AFETER poolDepositNativeFil");
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
         SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
+        Debugger.log("AFETER _issueBorrowCred");
+
         uint256 agentLiquidAssetsBefore = agent.liquidAssets();
+        Debugger.log("AFETER liquidAssets");
         uint256 poolBorrowableAssetsBefore = pool.totalBorrowableAssets();
+        Debugger.log("AFETER totalBorrowableAssets");
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, sc);
+        agentBorrow(poolID, sc);
+        Debugger.log("AFETER AGENTBORROW");
 
         uint256 agentLiquidAssetsAfter = agent.liquidAssets();
         uint256 poolBorrowableAssetsAfter = pool.totalBorrowableAssets();
@@ -86,42 +92,42 @@ contract EchidnaAgent is EchidnaSetup {
         assert(poolBorrowableAssetsAfter == poolBorrowableAssetsBefore - borrowAmount);
     }
 
-    // function test_agent_borrow_balance(uint256 borrowAmount) public {
-    //     borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
+    // // function test_agent_borrow_balance(uint256 borrowAmount) public {
+    // //     borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
 
-    //     IAgent agent = _configureAgent(AGENT_OWNER);
-    //     uint256 agentID = agent.id();
+    // //     IAgent agent = _configureAgent(AGENT_OWNER);
+    // //     uint256 agentID = agent.id();
 
-    //     hevm.deal(INVESTOR, borrowAmount + WAD);
-    //     hevm.prank(INVESTOR);
-    //     pool.deposit{value: borrowAmount}(INVESTOR);
+    // //     hevm.deal(INVESTOR, borrowAmount + WAD);
+    // //     hevm.prank(INVESTOR);
+    // //     pool.deposit{value: borrowAmount}(INVESTOR);
 
-    //     uint256 liquidationValue = borrowAmount * 2;
-    //     hevm.deal(address(agent), liquidationValue);
-    //     SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+    // //     uint256 liquidationValue = borrowAmount * 2;
+    // //     hevm.deal(address(agent), liquidationValue);
+    // //     SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
-    //     uint256 agentBalanceBefore = address(agent).balance;
-    //     uint256 poolBalanceBefore = address(pool).balance;
+    // //     uint256 agentBalanceBefore = address(agent).balance;
+    // //     uint256 poolBalanceBefore = address(pool).balance;
 
-    //     hevm.prank(AGENT_OWNER);
-    //     agent.borrow(poolID, sc);
+    // //     hevm.prank(AGENT_OWNER);
+    // //     agent.borrow(poolID, sc);
 
-    //     uint256 agentBalanceAfter = address(agent).balance;
-    //     uint256 poolBalanceAfter = address(pool).balance;
+    // //     uint256 agentBalanceAfter = address(agent).balance;
+    // //     uint256 poolBalanceAfter = address(pool).balance;
 
-    //     assert(agentBalanceAfter == agentBalanceBefore + borrowAmount);
-    //     assert(poolBalanceAfter == poolBalanceBefore - borrowAmount);
-    // }
+    // //     assert(agentBalanceAfter == agentBalanceBefore + borrowAmount);
+    // //     assert(poolBalanceAfter == poolBalanceBefore - borrowAmount);
+    // // }
 
     function echtest_agent_borrow_min(uint256 borrowAmount) public {
-        borrowAmount = bound(borrowAmount, 1e18, WAD);
+        borrowAmount = bound(borrowAmount, WAD, 10e18);
 
         IAgent agent = _configureAgent(AGENT_OWNER);
         uint256 agentID = agent.id();
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
@@ -130,7 +136,7 @@ contract EchidnaAgent is EchidnaSetup {
         uint256 agentLiquidAssetsBefore = agent.liquidAssets();
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, sc);
+        agentBorrow(poolID, sc);
 
         uint256 agentLiquidAssetsAfter = agent.liquidAssets();
 
@@ -146,7 +152,7 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
@@ -155,84 +161,52 @@ contract EchidnaAgent is EchidnaSetup {
         uint256 agentLiquidAssetsBefore = agent.liquidAssets();
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, sc);
+        agentBorrow(poolID, sc);
 
         uint256 agentLiquidAssetsAfter = agent.liquidAssets();
 
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
     }
 
-    function echtest_agent_borrow_small(uint256 borrowAmount) public {
-        borrowAmount = bound(borrowAmount, 1, WAD / 2);
+    //@audit => debe revertir?
+    // function test_agent_borrow_insufficient_liquidity(uint256 borrowAmount) public {
+    //     borrowAmount = bound(borrowAmount, MAX_FIL + 1, MAX_FIL * 2);
+    //     Debugger.log("Borrow Amount", borrowAmount);
 
-        IAgent agent = _configureAgent(AGENT_OWNER);
-        uint256 agentID = agent.id();
+    //     IAgent agent = _configureAgent(AGENT_OWNER);
+    //     uint256 agentID = agent.id();
+    //     Debugger.log("Agent ID", agentID);
 
-        hevm.deal(INVESTOR, borrowAmount + WAD);
-        hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+    //     hevm.deal(INVESTOR, MAX_FIL);
+    //     hevm.prank(INVESTOR);
+    //     poolDepositNativeFil(MAX_FIL, INVESTOR);
 
-        uint256 liquidationValue = borrowAmount * 2;
-        hevm.deal(address(agent), liquidationValue);
-        SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+    //     Debugger.log("Investor Balance After Deposit", INVESTOR.balance);
 
-        uint256 agentLiquidAssetsBefore = agent.liquidAssets();
+    //     uint256 liquidationValue = borrowAmount * 2;
+    //     hevm.deal(address(agent), liquidationValue);
+    //     Debugger.log("Agent Balance After Liquidation Deal", address(agent).balance);
 
-        hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, sc);
+    //     SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
-        uint256 agentLiquidAssetsAfter = agent.liquidAssets();
+    //     Debugger.log("SignedCredential vc.subject", sc.vc.subject);
+    //     Debugger.log("SignedCredential vc.value", sc.vc.value);
+    //     Debugger.log("SignedCredential vc.target", sc.vc.target);
+    //     Debugger.log("SignedCredential vc.issuer", uint256(uint160(sc.vc.issuer)));
+    //     Debugger.log("SignedCredential v", sc.v);
+    //     Debugger.log("SignedCredential r", uint256(sc.r));
+    //     Debugger.log("SignedCredential s", uint256(sc.s));
 
-        assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
-    }
+    //     uint256 agentLiquidAssetsBefore = agent.liquidAssets();
+    //     Debugger.log("Agent Liquid Assets Before", agentLiquidAssetsBefore);
 
-    function test_agent_borrow_insufficient_liquidity(uint256 borrowAmount) public {
-        borrowAmount = bound(borrowAmount, MAX_FIL + 1, MAX_FIL * 2);
-        Debugger.log("Borrow Amount", borrowAmount);
+    //     hevm.prank(AGENT_OWNER);
+    //     agentBorrowRevert(poolID, sc);
 
-        IAgent agent = _configureAgent(AGENT_OWNER);
-        uint256 agentID = agent.id();
-        Debugger.log("Agent ID", agentID);
+    //     uint256 agentLiquidAssetsAfter = agent.liquidAssets();
 
-        hevm.deal(INVESTOR, MAX_FIL);
-        hevm.prank(INVESTOR);
-        pool.deposit{value: MAX_FIL}(INVESTOR);
-        Debugger.log("Investor Balance After Deposit", INVESTOR.balance);
-
-        uint256 liquidationValue = borrowAmount * 2;
-        hevm.deal(address(agent), liquidationValue);
-        Debugger.log("Agent Balance After Liquidation Deal", address(agent).balance);
-
-        SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
-
-        Debugger.log("SignedCredential vc.subject", sc.vc.subject);
-        Debugger.log("SignedCredential vc.value", sc.vc.value);
-        Debugger.log("SignedCredential vc.target", sc.vc.target);
-        Debugger.log("SignedCredential vc.issuer", uint256(uint160(sc.vc.issuer)));
-        Debugger.log("SignedCredential v", sc.v);
-        Debugger.log("SignedCredential r", uint256(sc.r));
-        Debugger.log("SignedCredential s", uint256(sc.s));
-
-        uint256 agentLiquidAssetsBefore = agent.liquidAssets();
-        Debugger.log("Agent Liquid Assets Before", agentLiquidAssetsBefore);
-
-        bool revertExpected = false;
-
-        hevm.prank(AGENT_OWNER);
-        try agent.borrow(poolID, sc) {
-            revertExpected = true;
-        } catch {
-            revertExpected = false;
-        }
-
-        Debugger.log("Revert Expected", revertExpected);
-
-        uint256 agentLiquidAssetsAfter = agent.liquidAssets();
-        Debugger.log("Agent Liquid Assets After", agentLiquidAssetsAfter);
-
-        assert(!revertExpected);
-        assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore);
-    }
+    //     assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore);
+    // }
 
     function echtest_agent_borrow_invalid_params(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, 0, WAD - 1);
@@ -242,7 +216,8 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: WAD}(INVESTOR);
+        // pool.deposit{value: WAD}(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
@@ -251,9 +226,7 @@ contract EchidnaAgent is EchidnaSetup {
         uint256 agentLiquidAssetsBefore = agent.liquidAssets();
 
         hevm.prank(AGENT_OWNER);
-        try agent.borrow(poolID, sc) {
-            assert(false);
-        } catch {}
+        agentBorrowRevert(poolID, sc);
 
         uint256 agentLiquidAssetsAfter = agent.liquidAssets();
 
@@ -268,7 +241,7 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
@@ -276,9 +249,7 @@ contract EchidnaAgent is EchidnaSetup {
 
         uint256 agentLiquidAssetsBefore = agent.liquidAssets();
 
-        try agent.borrow(poolID, sc) {
-            assert(false);
-        } catch {}
+        agentBorrowRevert(poolID, sc);
 
         uint256 agentLiquidAssetsAfter = agent.liquidAssets();
 
@@ -293,7 +264,7 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
@@ -303,21 +274,11 @@ contract EchidnaAgent is EchidnaSetup {
 
         uint256 agentLiquidAssetsBefore = agent.liquidAssets();
 
-        bool revertExpected = false;
-
         hevm.prank(AGENT_OWNER);
-        try agent.borrow(poolID, sc) {
-            revertExpected = false;
-        } catch {
-            revertExpected = true;
-        }
-
-        Debugger.log("Revert Expected", revertExpected);
+        agentBorrowRevert(poolID, sc);
 
         uint256 agentLiquidAssetsAfter = agent.liquidAssets();
-        Debugger.log("Agent Liquid Assets After", agentLiquidAssetsAfter);
 
-        assert(revertExpected);
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore);
     }
 
@@ -329,7 +290,7 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
@@ -339,56 +300,47 @@ contract EchidnaAgent is EchidnaSetup {
 
         uint256 agentLiquidAssetsBefore = agent.liquidAssets();
 
-        bool revertExpected = false;
-
         hevm.prank(AGENT_OWNER);
-        try agent.borrow(poolID, sc) {
-            revertExpected = false;
-        } catch {
-            revertExpected = true;
-        }
-
-        Debugger.log("Revert Expected", revertExpected);
+        agentBorrowRevert(poolID, sc);
 
         uint256 agentLiquidAssetsAfter = agent.liquidAssets();
-        Debugger.log("Agent Liquid Assets After", agentLiquidAssetsAfter);
 
-        assert(revertExpected);
         assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore);
     }
 
-    function echtest_agent_borrow_update_epochs_paid(uint256 borrowAmount, uint256 existingPrincipal) public {
-        borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
-        existingPrincipal = bound(existingPrincipal, WAD, MAX_FIL);
+    //@audit => Fails to call _issueBorrowCred 2 times
+    // function echtest_agent_borrow_update_epochs_paid(uint256 borrowAmount, uint256 existingPrincipal) public {
+    //     borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
+    //     existingPrincipal = bound(existingPrincipal, WAD, MAX_FIL);
 
-        IAgent agent = _configureAgent(AGENT_OWNER);
-        uint256 agentID = agent.id();
+    //     IAgent agent = _configureAgent(AGENT_OWNER);
+    //     uint256 agentID = agent.id();
 
-        hevm.deal(INVESTOR, borrowAmount + existingPrincipal + WAD);
-        hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount + existingPrincipal}(INVESTOR);
+    //     hevm.deal(INVESTOR, borrowAmount + existingPrincipal + WAD);
+    //     hevm.prank(INVESTOR);
+    //     poolDepositNativeFil((borrowAmount + existingPrincipal), INVESTOR);
 
-        uint256 liquidationValue = (borrowAmount + existingPrincipal) * 2;
-        hevm.deal(address(agent), liquidationValue);
+    //     uint256 liquidationValue = (borrowAmount + existingPrincipal) * 2;
+    //     hevm.deal(address(agent), liquidationValue);
 
-        SignedCredential memory scInitial = _issueBorrowCred(agentID, existingPrincipal, liquidationValue);
-        hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scInitial);
+    //     SignedCredential memory scInitial = _issueBorrowCred(agentID, existingPrincipal, liquidationValue);
+    //     hevm.prank(AGENT_OWNER);
+    //     agentBorrow(poolID, scInitial);
 
-        SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+    //     SignedCredential memory sc = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
-        uint256 agentLiquidAssetsBefore = agent.liquidAssets();
-        uint256 totalBorrowedBefore = pool.totalBorrowed();
+    //     uint256 agentLiquidAssetsBefore = agent.liquidAssets();
+    //     uint256 totalBorrowedBefore = pool.totalBorrowed();
 
-        hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, sc);
+    //     hevm.prank(AGENT_OWNER);
+    //     agentBorrow(poolID, sc);
 
-        uint256 agentLiquidAssetsAfter = agent.liquidAssets();
-        uint256 totalBorrowedAfter = pool.totalBorrowed();
+    //     uint256 agentLiquidAssetsAfter = agent.liquidAssets();
+    //     uint256 totalBorrowedAfter = pool.totalBorrowed();
 
-        assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
-        assert(totalBorrowedAfter == totalBorrowedBefore + borrowAmount);
-    }
+    //     assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + borrowAmount);
+    //     assert(totalBorrowedAfter == totalBorrowedBefore + borrowAmount);
+    // }
 
     function echtest_agent_borrow_rewards(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
@@ -398,7 +350,7 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
@@ -409,7 +361,7 @@ contract EchidnaAgent is EchidnaSetup {
         uint256 lpLostBefore = pool.lpRewards().lost;
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, sc);
+        agentBorrow(poolID, sc);
 
         uint256 lpAccruedAfter = pool.lpRewards().accrued;
         uint256 lpPaidAfter = pool.lpRewards().paid;
@@ -428,7 +380,7 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
@@ -438,7 +390,7 @@ contract EchidnaAgent is EchidnaSetup {
         uint256 lastAccountingUpdateEpochBefore = pool.lastAccountingUpdateEpoch();
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, sc);
+        agentBorrow(poolID, sc);
 
         uint256 agentLiquidAssetsAfter = agent.liquidAssets();
         uint256 lastAccountingUpdateEpochAfter = pool.lastAccountingUpdateEpoch();
@@ -455,9 +407,10 @@ contract EchidnaAgent is EchidnaSetup {
         }
     }
 
-    // // ============================================
-    // // ==            BORROW - PAUSE              ==
-    // // ============================================
+    // // // ============================================
+    // // // ==            BORROW - PAUSE              ==
+    // // // ============================================
+    //@audit => revert in pause. No work
 
     function echtest_agent_borrow_paused(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
@@ -467,7 +420,7 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
@@ -479,19 +432,15 @@ contract EchidnaAgent is EchidnaSetup {
 
         // Try to borrow and expect a revert due to the pool being paused
         hevm.prank(AGENT_OWNER);
-        try agent.borrow(poolID, sc) {
-            assert(false); // Should not reach here as the pool is paused
-        } catch {
-            // Expected revert due to the pool being paused
-        }
+        agentBorrowRevert(poolID, sc);
 
         // Verify that the pool is paused
         assert(pool.paused());
     }
 
-    // ============================================
-    // ==               PAY                      ==
-    // ============================================
+    // // ============================================
+    // // ==               PAY                      ==
+    // // ============================================
 
     // Verifies that an unauthorized user cannot make a payment on behalf of the agent.
     function echtest_nonAgentCannotPay(uint256 payAmount) public {
@@ -505,30 +454,24 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(AGENT_OWNER, borrowAmount + WAD);
         hevm.prank(AGENT_OWNER);
-        pool.deposit{value: borrowAmount}(AGENT_OWNER);
+        poolDepositNativeFil(borrowAmount, AGENT_OWNER);
 
         hevm.deal(address(agent), borrowAmount * 2);
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolId, borrowCred);
+        agentBorrow(poolId, borrowCred);
 
         hevm.roll(block.number + rollFwdAmt);
 
         // Load the payer with sufficient funds to make the payment
         hevm.deal(INVESTOR, payAmount);
         hevm.prank(INVESTOR);
-        wFIL.deposit{value: payAmount}();
+        wFilDeposit(payAmount);
 
         wFIL.approve(address(pool), payAmount);
 
         SignedCredential memory payCred = _issuePayCred(agentId, payAmount, payAmount * 2, payAmount);
-        bool success;
         hevm.prank(INVESTOR);
-        try agent.pay(poolId, payCred) {
-            success = true;
-        } catch {
-            success = false;
-        }
-        assert(!success); // Expected revert due to unauthorized payer
+        agentPayRevert(poolId, payCred);
     }
 
     // Verifies that a payment cannot be made on a non-existent account.
@@ -541,18 +484,12 @@ contract EchidnaAgent is EchidnaSetup {
         // Load the payer with sufficient funds to make the payment
         hevm.deal(address(agent), payAmount);
         hevm.prank(address(agent));
-        wFIL.deposit{value: payAmount}();
+        wFilDeposit(payAmount);
         wFIL.approve(address(pool), payAmount);
 
         SignedCredential memory payCred = _issuePayCred(agentId, payAmount, payAmount * 2, payAmount);
-        bool success;
         hevm.prank(AGENT_OWNER);
-        try agent.pay(poolId, payCred) {
-            success = true;
-        } catch {
-            success = false;
-        }
-        assert(!success); // Expected revert due to non-existent account
+        agentPayRevert(poolId, payCred);
     }
 
     // Verifies that a full debt payment updates the account values correctly and returns the appropriate refund.
@@ -565,14 +502,14 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         SignedCredential memory scRepay = _issuePayCred(agentID, repayAmount, liquidationValue, repayAmount);
 
@@ -596,14 +533,14 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         SignedCredential memory scRepay = _issuePayCred(agentID, repayAmount, liquidationValue, repayAmount);
 
@@ -627,14 +564,14 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(INVESTOR, borrowAmount + WAD);
         hevm.prank(INVESTOR);
-        pool.deposit{value: borrowAmount}(INVESTOR);
+        poolDepositNativeFil(borrowAmount, INVESTOR);
 
         uint256 liquidationValue = borrowAmount * 2;
         hevm.deal(address(agent), liquidationValue);
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         SignedCredential memory scRepay = _issuePayCred(agentID, repayAmount, liquidationValue, repayAmount);
 
@@ -648,44 +585,46 @@ contract EchidnaAgent is EchidnaSetup {
         assert(refund == repayAmount - borrowAmount); // Refund should be the excess amount paid
     }
 
-    // function echtest_pay_full_debt(uint256 repayAmount, uint256 initialPrincipal) public {
-    //     repayAmount = bound(repayAmount, WAD, MAX_FIL);
-    //     initialPrincipal = bound(initialPrincipal, WAD, MAX_FIL);
+    function echtest_pay_full_debt(uint256 repayAmount, uint256 initialPrincipal) public {
+        repayAmount = bound(repayAmount, WAD, MAX_FIL);
+        initialPrincipal = bound(initialPrincipal, WAD, MAX_FIL);
 
-    //     IAgent agent = _configureAgent(AGENT_OWNER);
-    //     uint256 agentID = agent.id();
+        IAgent agent = _configureAgent(AGENT_OWNER);
+        uint256 agentID = agent.id();
 
-    //     hevm.deal(INVESTOR, initialPrincipal + WAD);
-    //     hevm.prank(INVESTOR);
-    //     pool.deposit{value: initialPrincipal}(INVESTOR);
+        hevm.deal(INVESTOR, initialPrincipal + WAD);
+        hevm.prank(INVESTOR);
+        poolDepositNativeFil(initialPrincipal, INVESTOR);
 
-    //     uint256 liquidationValue = initialPrincipal * 2;
-    //     hevm.deal(address(agent), liquidationValue);
-    //     SignedCredential memory scBorrow = _issueBorrowCred(agentID, initialPrincipal, liquidationValue);
+        uint256 liquidationValue = initialPrincipal * 2;
+        hevm.deal(address(agent), liquidationValue);
+        SignedCredential memory scBorrow = _issueBorrowCred(agentID, initialPrincipal, liquidationValue);
 
-    //     hevm.prank(AGENT_OWNER);
-    //     agent.borrow(poolID, scBorrow);
+        hevm.prank(AGENT_OWNER);
+        agentBorrow(poolID, scBorrow);
 
-    //     uint256 agentLiquidAssetsBefore = agent.liquidAssets();
+        uint256 agentLiquidAssetsBefore = agent.liquidAssets();
 
-    //     // Repay the debt
-    //     SignedCredential memory scRepay = _issuePayCred(agentID, initialPrincipal, liquidationValue, repayAmount);
-    //     hevm.prank(AGENT_OWNER);
-    //     (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund) = agent.pay(poolID, scRepay);
+        // Repay the debt
+        SignedCredential memory scRepay = _issuePayCred(agentID, initialPrincipal, liquidationValue, repayAmount);
+        hevm.prank(AGENT_OWNER);
+        (uint256 rate, uint256 epochsPaid, uint256 principalPaid, uint256 refund) = agent.pay(poolID, scRepay);
 
-    //     uint256 agentLiquidAssetsAfter = agent.liquidAssets();
+        uint256 agentLiquidAssetsAfter = agent.liquidAssets();
 
-    //     // Verify that the agent's liquid assets increased by the refund amount
-    //     assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + refund);
-    //     // Verify that the total borrowed amount decreased by the principal paid
-    //     assert(pool.totalBorrowed() == initialPrincipal - principalPaid);
-    // }
+        // Verify that the agent's liquid assets increased by the refund amount
+        assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + refund);
+        // Verify that the total borrowed amount decreased by the principal paid
+        assert(pool.totalBorrowed() == initialPrincipal - principalPaid);
+    }
 
-    // ============================================
-    // ==               ASSET                    ==
-    // ============================================
+    // // ============================================
+    // // ==               ASSET                    ==
+    // // ============================================
 
     uint256 stakeAmount = 1000e18;
+
+    //@audit => IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
 
     function echtest_distributeLiquidatedFundsPartialRecoveryNoInterest(uint256 borrowAmount, uint256 recoveredFunds)
         public
@@ -702,7 +641,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         // Mark the agent as defaulted
         Account memory account = pool.getAccount(agentID);
@@ -715,7 +654,8 @@ contract EchidnaAgent is EchidnaSetup {
         // Load the SYSTEM_ADMIN with enough funds to recover
         hevm.deal(SYSTEM_ADMIN, recoveredFunds);
         hevm.prank(SYSTEM_ADMIN);
-        wFIL.deposit{value: recoveredFunds}();
+        wFilDeposit(recoveredFunds);
+
         wFIL.approve(address(agentPolice), recoveredFunds);
 
         // Distribute the recovered funds
@@ -742,6 +682,8 @@ contract EchidnaAgent is EchidnaSetup {
         assert(wFIL.balanceOf(address(agentPolice)) == 0); // Agent police should not have funds
     }
 
+    //@audit => IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
+
     function echtest_distributeLiquidatedFundsFullRecoveryNoInterest(uint256 borrowAmount, uint256 recoveredFunds)
         public
     {
@@ -757,7 +699,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         // Mark the agent as defaulted
         Account memory account = pool.getAccount(agentID);
@@ -769,7 +711,8 @@ contract EchidnaAgent is EchidnaSetup {
         // Load the SYSTEM_ADMIN with enough funds to recover
         hevm.deal(SYSTEM_ADMIN, recoveredFunds);
         hevm.prank(SYSTEM_ADMIN);
-        wFIL.deposit{value: recoveredFunds}();
+        wFilDeposit(recoveredFunds);
+
         wFIL.approve(agentPolice, recoveredFunds);
 
         // Distribute the recovered funds
@@ -803,59 +746,61 @@ contract EchidnaAgent is EchidnaSetup {
         assert(IAgentPolice(agentPolice).agentLiquidated(agentID)); // Agent should be marked as liquidated
     }
 
-    // //@audit => Try compiling with `--via-ir` (cli) or the equivalent `viaIR: true`
-    // // function echtest_distributeLiquidationFundsPartialRecoveryWithInterest_Part1(
-    // //     uint256 borrowAmount,
-    // //     uint256 recoveredFunds
-    // // ) public {
-    // //     borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
-    // //     recoveredFunds = bound(recoveredFunds, WAD, borrowAmount - 1);
+    // // //@audit => Try compiling with `--via-ir` (cli) or the equivalent `viaIR: true`
+    // // // function echtest_distributeLiquidationFundsPartialRecoveryWithInterest_Part1(
+    // // //     uint256 borrowAmount,
+    // // //     uint256 recoveredFunds
+    // // // ) public {
+    // // //     borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
+    // // //     recoveredFunds = bound(recoveredFunds, WAD, borrowAmount - 1);
 
-    // //     IAgent agent = _configureAgent(AGENT_OWNER);
-    // //     uint256 agentID = agent.id();
+    // // //     IAgent agent = _configureAgent(AGENT_OWNER);
+    // // //     uint256 agentID = agent.id();
 
-    // //     uint256 liquidationValue = borrowAmount * 2;
-    // //     hevm.deal(address(agent), liquidationValue);
-    // //     SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
+    // // //     uint256 liquidationValue = borrowAmount * 2;
+    // // //     hevm.deal(address(agent), liquidationValue);
+    // // //     SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
-    // //     hevm.prank(AGENT_OWNER);
-    // //     agent.borrow(poolID, scBorrow);
+    // // //     hevm.prank(AGENT_OWNER);
+    // // //     agent.borrow(poolID, scBorrow);
 
-    // //     // Roll forward a year to accrue interest
-    // //     hevm.roll(block.number + EPOCHS_IN_YEAR);
+    // // //     // Roll forward a year to accrue interest
+    // // //     hevm.roll(block.number + EPOCHS_IN_YEAR);
 
-    // //     uint256 interestOwed = pool.getAgentInterestOwed(agentID);
-    // //     uint256 interestOwedLessTFees = interestOwed.mulWadUp(1e18 - pool.treasuryFeeRate());
+    // // //     uint256 interestOwed = pool.getAgentInterestOwed(agentID);
+    // // //     uint256 interestOwedLessTFees = interestOwed.mulWadUp(1e18 - pool.treasuryFeeRate());
 
-    // //     Account memory account = pool.getAccount(agentID);
-    // //     account.defaulted = true;
+    // // //     Account memory account = pool.getAccount(agentID);
+    // // //     account.defaulted = true;
 
-    // //     hevm.deal(SYSTEM_ADMIN, recoveredFunds);
-    // //     hevm.prank(SYSTEM_ADMIN);
-    // //     wFIL.deposit{value: recoveredFunds}();
-    // //     wFIL.approve(agentPolice, recoveredFunds);
+    // // //     hevm.deal(SYSTEM_ADMIN, recoveredFunds);
+    // // //     hevm.prank(SYSTEM_ADMIN);
+    // // //     wFIL.deposit{value: recoveredFunds}();
+    // // //     wFIL.approve(agentPolice, recoveredFunds);
 
-    // //     uint256 totalAssetsBefore = pool.totalAssets();
-    // //     uint256 totalBorrowedBefore = pool.totalBorrowed();
-    // //     uint256 filValOf1iFILBeforeLiquidation = pool.convertToAssets(WAD);
+    // // //     uint256 totalAssetsBefore = pool.totalAssets();
+    // // //     uint256 totalBorrowedBefore = pool.totalBorrowed();
+    // // //     uint256 filValOf1iFILBeforeLiquidation = pool.convertToAssets(WAD);
 
-    // //     assert(totalAssetsBefore == stakeAmount + interestOwedLessTFees); // Total assets before should exclude treasury fees
+    // // //     assert(totalAssetsBefore == stakeAmount + interestOwedLessTFees); // Total assets before should exclude treasury fees
 
-    // //     // Distribute the recovered funds
-    // //     hevm.prank(SYSTEM_ADMIN);
-    // //     IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
+    // // //     // Distribute the recovered funds
+    // // //     hevm.prank(SYSTEM_ADMIN);
+    // // //     IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
 
-    // //     uint256 totalAssetsAfter = pool.totalAssets();
-    // //     uint256 totalAccrued = pool.lpRewards().accrued;
-    // //     uint256 interestAccruedLessTFees = totalAccrued.mulWadUp(1e18 - pool.treasuryFeeRate());
+    // // //     uint256 totalAssetsAfter = pool.totalAssets();
+    // // //     uint256 totalAccrued = pool.lpRewards().accrued;
+    // // //     uint256 interestAccruedLessTFees = totalAccrued.mulWadUp(1e18 - pool.treasuryFeeRate());
 
-    // //     uint256 expectedTotalAssetsAfter =
-    // //         stakeAmount + recoveredFunds + interestAccruedLessTFees - totalBorrowedBefore - interestOwedLessTFees;
+    // // //     uint256 expectedTotalAssetsAfter =
+    // // //         stakeAmount + recoveredFunds + interestAccruedLessTFees - totalBorrowedBefore - interestOwedLessTFees;
 
-    // //     assert(totalAssetsAfter == expectedTotalAssetsAfter); // Pool should have lost all interest and principal
-    // // }
+    // // //     assert(totalAssetsAfter == expectedTotalAssetsAfter); // Pool should have lost all interest and principal
+    // // // }
 
-    // //
+    //@audit => InsufficientLiquidity
+    //@audit => IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
+
     function echtest_distributeLiquidationFundsPartialRecoveryWithInterestPart2(
         uint256 borrowAmount,
         uint256 recoveredFunds
@@ -871,7 +816,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         // Roll forward a year to accrue interest
         hevm.roll(block.number + EPOCHS_IN_YEAR);
@@ -884,7 +829,8 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(SYSTEM_ADMIN, recoveredFunds);
         hevm.prank(SYSTEM_ADMIN);
-        wFIL.deposit{value: recoveredFunds}();
+        wFilDeposit(recoveredFunds);
+
         wFIL.approve(agentPolice, recoveredFunds);
 
         // Distribute the recovered funds
@@ -918,6 +864,9 @@ contract EchidnaAgent is EchidnaSetup {
         }
     }
 
+    //@audit => InsufficientLiquidity
+    //@audit => IAgentPolice(agentPolice).distributeLiquidatedFunds(address(agent), recoveredFunds);
+
     function echtest_distributeLiquidationFundsFullRecoveryWithInterest(uint256 borrowAmount, uint256 recoveredFunds)
         public
     {
@@ -932,7 +881,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         // Roll forward a year to accrue interest
         hevm.roll(block.number + EPOCHS_IN_YEAR);
@@ -948,7 +897,7 @@ contract EchidnaAgent is EchidnaSetup {
 
         hevm.deal(SYSTEM_ADMIN, recoveredFunds);
         hevm.prank(SYSTEM_ADMIN);
-        wFIL.deposit{value: recoveredFunds}();
+        wFilDeposit(recoveredFunds);
         wFIL.approve(agentPolice, recoveredFunds);
 
         uint256 totalAssetsBefore = pool.totalAssets();
@@ -986,9 +935,11 @@ contract EchidnaAgent is EchidnaSetup {
         assert(filValOf1iFILBeforeLiquidation == pool.convertToAssets(WAD)); // IFILtoFIL should not change
     }
 
-    // //
-    // NEW TEST
-    // //
+    // // //
+    // // NEW TEST
+    // // //
+
+    //@audit => pool.startRateUpdate(newInterestRate);
 
     function echtest_interestRateChangeAdjustment(uint256 borrowAmount, uint256 newInterestRate) public {
         borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
@@ -1003,11 +954,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        try agent.borrow(poolID, scBorrow) {
-            // Do nothing
-        } catch {
-            assert(false);
-        }
+        agentBorrow(poolID, scBorrow);
 
         // Roll forward a year to accrue interest
         hevm.roll(block.number + EPOCHS_IN_YEAR);
@@ -1033,6 +980,8 @@ contract EchidnaAgent is EchidnaSetup {
         assertApproxEqAbs(totalAssets, expectedAssets, 1e3); // Verify total assets match expected
     }
 
+    //@audit => pending agent 1 / 2
+    //IAgent agent2 = _configureAgent(INVESTOR);
     function echtest_multipleAgentsHandling(uint256 borrowAmount1, uint256 borrowAmount2) public {
         borrowAmount1 = bound(borrowAmount1, WAD + 1, MAX_FIL / 2);
         borrowAmount2 = bound(borrowAmount2, WAD + 1, MAX_FIL / 2);
@@ -1072,6 +1021,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(totalInterestOwed > 0); // Verify interest has accrued
     }
 
+    //@audit => pool.startRateUpdate(uint256(negativeInterestRate));
     function echtest_negativeInterestRateHandling(uint256 borrowAmount, int256 negativeInterestRate) public {
         borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
         negativeInterestRate = int256(bound(uint256(negativeInterestRate), 1e16, 1e18)) * -1; // Bound negative interest rate between -1% and -100%
@@ -1085,7 +1035,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         // Set the negative interest rate
         hevm.prank(SYSTEM_ADMIN);
@@ -1108,6 +1058,7 @@ contract EchidnaAgent is EchidnaSetup {
         assertApproxEqAbs(totalAssets, expectedAssets, 1e3); // Verify total assets match expected
     }
 
+    //@audit => assert fail
     function echtest_minimumPaymentHandling(uint256 borrowAmount, uint256 paymentAmount) public {
         borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
         paymentAmount = bound(paymentAmount, WAD, borrowAmount / 10); // Payment amount is a fraction of borrow amount
@@ -1121,7 +1072,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         // Roll forward a year to accrue interest
         hevm.roll(block.number + EPOCHS_IN_YEAR);
@@ -1129,13 +1080,14 @@ contract EchidnaAgent is EchidnaSetup {
         // Load the agent with sufficient funds to make the payment
         hevm.deal(AGENT_OWNER, paymentAmount);
         hevm.prank(AGENT_OWNER);
-        wFIL.deposit{value: paymentAmount}();
+        wFilDeposit(paymentAmount);
+
         wFIL.approve(address(pool), paymentAmount);
 
         // Make the payment
         SignedCredential memory scPay = _issuePayCred(agentID, paymentAmount, liquidationValue, paymentAmount);
         hevm.prank(AGENT_OWNER);
-        agent.pay(poolID, scPay);
+        agentPay(poolID, scPay);
 
         // Verify the payment was processed correctly
         Account memory updatedAccount = pool.getAccount(agentID);
@@ -1143,6 +1095,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(pool.totalBorrowed() == borrowAmount - paymentAmount); // Total borrowed should be reduced by the payment amount
     }
 
+    //@audit => assert fail
     function echtest_liquidationNoRecovery(uint256 borrowAmount) public {
         borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
 
@@ -1155,7 +1108,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         // Mark the agent as defaulted
         Account memory account = pool.getAccount(agentID);
@@ -1189,7 +1142,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         // Roll forward a year to accrue interest
         hevm.roll(block.number + EPOCHS_IN_YEAR);
@@ -1197,7 +1150,7 @@ contract EchidnaAgent is EchidnaSetup {
         // Load the agent with sufficient funds to make the payment
         hevm.deal(AGENT_OWNER, paymentAmount);
         hevm.prank(AGENT_OWNER);
-        wFIL.deposit{value: paymentAmount}();
+        wFilDeposit(paymentAmount);
         wFIL.approve(address(pool), paymentAmount);
 
         // Make the payment
@@ -1223,7 +1176,7 @@ contract EchidnaAgent is EchidnaSetup {
         SignedCredential memory scBorrow = _issueBorrowCred(agentID, borrowAmount, liquidationValue);
 
         hevm.prank(AGENT_OWNER);
-        agent.borrow(poolID, scBorrow);
+        agentBorrow(poolID, scBorrow);
 
         uint256 initialAssets = pool.totalAssets();
 

@@ -16,6 +16,7 @@ import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 import {Credentials, SignedCredential, VerifiableCredential} from "src/Types/Structs/Credentials.sol";
 import {MinerHelper} from "shim/MinerHelper.sol";
 import {FilAddress} from "shim/FilAddress.sol";
+import "test/echidna/Debugger.sol";
 
 /**
  * @title Agent
@@ -401,8 +402,11 @@ contract Agent is IAgent, Operatable {
         checkVersion
     {
         GetRoute.pool(poolRegistry, poolID).borrow(sc.vc);
+        Debugger.log("AFETER borrow Agent");
+
         // transaction will revert if any of the pool's accounts reject the new agent's state
         agentPolice.agentApproved(sc.vc);
+        Debugger.log("AFETER agentApproved");
     }
 
     /**

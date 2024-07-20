@@ -82,6 +82,8 @@ contract EchidnaSetup is EchidnaConfig {
     // Declare agentPolice
     address internal agentPolice;
 
+    IAgent internal agent;
+
     constructor() payable {
         rewardToken = new Token("GLIF", "GLF", address(this), address(this));
         lockToken = new PoolToken(address(this));
@@ -144,6 +146,8 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.deal(INVESTOR, WAD);
         hevm.prank(INVESTOR);
         IPool(address(pool)).deposit{value: WAD}(INVESTOR);
+        //@audit =>
+        _configureAgent(AGENT_OWNER);
     }
 
     uint256[10] levels = [
@@ -162,6 +166,12 @@ contract EchidnaSetup is EchidnaConfig {
 
     ///////////////////////////////////////////////////////////////////
     /////////////           WRAPPER FUNCTIONS          ////////////////
+    ///////////////////////////////////////////////////////////////////
+
+    ///////////////////////////////////////////////////////////////////
+
+    /////////////           INFINITYPOOLV2             ////////////////
+
     ///////////////////////////////////////////////////////////////////
 
     // ============================================
@@ -216,7 +226,7 @@ contract EchidnaSetup is EchidnaConfig {
     // ==               WITHDRAW                 ==
     // ============================================
 
-    function poolWithdraw(uint256 assets, address receiver, address owner) internal {
+    function poolWithdrawN(uint256 assets, address receiver, address owner) internal {
         try pool.withdraw(assets, receiver, owner) {
             Debugger.log("pool withdraw successful");
         } catch {
@@ -227,13 +237,84 @@ contract EchidnaSetup is EchidnaConfig {
 
     function poolWithdrawReverts(uint256 assets, address receiver, address owner) internal {
         try pool.withdraw(assets, receiver, owner) {
-            Debugger.log("pool deposit didn't revert");
+            Debugger.log("pool withdraw didn't revert");
             assert(false);
         } catch {
-            Debugger.log("pool deposit successfully reverted");
+            Debugger.log("pool withdraw successfully reverted");
         }
     }
 
+    // ============================================
+    // ==               WITHDRAWF                 ==
+    // ============================================
+
+    function poolWithdrawF(uint256 assets, address receiver, address owner) internal {
+        try pool.withdrawF(assets, receiver, owner) {
+            Debugger.log("pool withdrawF successful");
+        } catch {
+            Debugger.log("pool withdrawF failed");
+            assert(false);
+        }
+    }
+
+    function poolWithdrawFReverts(uint256 assets, address receiver, address owner) internal {
+        try pool.withdrawF(assets, receiver, owner) {
+            Debugger.log("pool withdrawF didn't revert");
+            assert(false);
+        } catch {
+            Debugger.log("pool withdrawF successfully reverted");
+        }
+    }
+
+    ///////////////////////////////////////////////////////////////////
+
+    /////////////              AGENT                   ////////////////
+
+    ///////////////////////////////////////////////////////////////////
+
+    // ============================================
+    // ==               BORROW                   ==
+    // ============================================
+
+    function agentBorrow(uint256 poolid, SignedCredential memory sc) internal {
+        try agent.borrow(poolid, sc) {
+            Debugger.log("pool borrow successful");
+        } catch {
+            Debugger.log("pool borrow failed");
+            assert(false);
+        }
+    }
+
+    function agentBorrowRevert(uint256 poolid, SignedCredential memory sc) internal {
+        try agent.borrow(poolid, sc) {
+            Debugger.log("pool borrow didn't revert");
+            assert(false);
+        } catch {
+            Debugger.log("pool borrow successfully reverted");
+        }
+    }
+
+    // ============================================
+    // ==               PAY                      ==
+    // ============================================
+
+    function agentPayRevert(uint256 poolid, SignedCredential memory payCred) internal {
+        try agent.pay(poolid, payCred) {
+            Debugger.log("pool pay didn't revert");
+            assert(false);
+        } catch {
+            Debugger.log("pool pay successfully reverted");
+        }
+    }
+
+    function agentPay(uint256 poolid, SignedCredential memory payCred) internal {
+        try agent.pay(poolid, payCred) {
+            Debugger.log("pool pay successful");
+        } catch {
+            Debugger.log("pool pay failed");
+            assert(false);
+        }
+    }
     // ============================================
     // ==               HELPERS                 ==
     // ============================================
@@ -270,7 +351,7 @@ contract EchidnaSetup is EchidnaConfig {
     function _configureAgent(address agentOwner) internal returns (IAgent) {
         IMinerRegistry registry = IMinerRegistry(IRouter(router).getRoute(ROUTE_MINER_REGISTRY));
         IAgentFactory agentFactory = IAgentFactory(GetRoute.agentFactory(router));
-        IAgent agent = IAgent(agentFactory.create(agentOwner, agentOwner, address(0)));
+        agent = IAgent(agentFactory.create(agentOwner, agentOwner, address(0)));
 
         hevm.prank(AGENT_OWNER);
         MockMiner miner = new MockMiner(AGENT_OWNER);
@@ -376,7 +457,7 @@ contract EchidnaSetup is EchidnaConfig {
         return _signCred(vc);
     }
 
-    function _issueBorrowCred(uint256 agent, uint256 principal, uint256 liquidationValue)
+    function _issueBorrowCred(uint256 _agent, uint256 principal, uint256 liquidationValue)
         internal
         returns (SignedCredential memory)
     {
@@ -389,7 +470,7 @@ contract EchidnaSetup is EchidnaConfig {
 
         VerifiableCredential memory vc = VerifiableCredential(
             vcIssuer,
-            agent,
+            _agent,
             block.number,
             block.number + 100,
             principal,

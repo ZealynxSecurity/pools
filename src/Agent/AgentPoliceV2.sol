@@ -220,8 +220,8 @@ contract AgentPoliceV2 is IAgentPolice, VCVerifier, Operatable, Pausable {
     function isValidCredential(uint256 agent, bytes4 action, SignedCredential calldata sc) external view {
         // reverts if the credential isn't valid
         validateCred(agent, action, sc);
-
         // check to see if this credential has been used for
+
         if (credentialUsed(sc.vc) > 0) revert InvalidCredential();
 
         // due to current restrictions in Agent.sol, we have to enforce the max miners per agent here
