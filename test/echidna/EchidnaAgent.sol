@@ -524,6 +524,7 @@ contract EchidnaAgent is EchidnaSetup {
     }
 
     // Verifies that a partial debt payment correctly reduces the account principal.
+    //@audit => Fail in bound repayAmount
     function echtest_payPartialDebt(uint256 borrowAmount, uint256 repayAmount) public {
         borrowAmount = bound(borrowAmount, WAD, MAX_FIL);
         repayAmount = bound(repayAmount, WAD, borrowAmount - 1);
@@ -585,6 +586,7 @@ contract EchidnaAgent is EchidnaSetup {
         assert(refund == repayAmount - borrowAmount); // Refund should be the excess amount paid
     }
 
+    //@audit => fail in  assert(agentLiquidAssetsAfter == agentLiquidAssetsBefore + refund);
     function echtest_pay_full_debt(uint256 repayAmount, uint256 initialPrincipal) public {
         repayAmount = bound(repayAmount, WAD, MAX_FIL);
         initialPrincipal = bound(initialPrincipal, WAD, MAX_FIL);
@@ -940,6 +942,7 @@ contract EchidnaAgent is EchidnaSetup {
     // // //
 
     //@audit => pool.startRateUpdate(newInterestRate);
+    //while
 
     function echtest_interestRateChangeAdjustment(uint256 borrowAmount, uint256 newInterestRate) public {
         borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
@@ -1022,6 +1025,7 @@ contract EchidnaAgent is EchidnaSetup {
     }
 
     //@audit => pool.startRateUpdate(uint256(negativeInterestRate));
+    //while
     function echtest_negativeInterestRateHandling(uint256 borrowAmount, int256 negativeInterestRate) public {
         borrowAmount = bound(borrowAmount, WAD + 1, MAX_FIL);
         negativeInterestRate = int256(bound(uint256(negativeInterestRate), 1e16, 1e18)) * -1; // Bound negative interest rate between -1% and -100%

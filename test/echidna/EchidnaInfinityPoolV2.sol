@@ -162,6 +162,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
     // Test to ensure correct shares are issued after a second deposit
     // @audit - coverage
+    //@audit =>  uint256 sharesSecondDeposit = pool.deposit(stakeAmount, INVESTOR);
     function echtest_correctSharesAfterSecondDeposit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -229,6 +230,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure shares are issued correctly after deposit
+    //@audit => uint256 sharesReceived = pool.deposit{value: stakeAmount}(INVESTOR);
     function echtest_sharesIssuedCorrectly(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -253,6 +255,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify investor shares balance after multiple deposits
+    //@audit => poolDeposit(stakeAmount, INVESTOR);
     function echtest_investorSharesBalanceAfterDeposits(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -603,6 +606,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify partial withdrawal
+    //@audit =>  poolWithdrawN(firstWithdrawAmount, INVESTOR, INVESTOR);
     function echtest_partialWithdrawal(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 2, MAX_FIL); // Ensure stakeAmount is at least 2 to allow partial withdrawal
 
@@ -643,6 +647,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify complete withdrawal
+    //@audit => poolWithdrawN(stakeAmount, INVESTOR, INVESTOR);
     function echtest_completeWithdrawal(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -671,6 +676,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify multiple consecutive withdrawals
+    //@audit =>  poolWithdrawN(stakeAmount, INVESTOR, INVESTOR);
     function echtest_multipleConsecutiveWithdrawals(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL / 2); // Ensure enough for multiple withdrawals
 
@@ -702,6 +708,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify withdrawal with different owner and receiver
+
     function echtest_withdrawDifferentOwnerReceiver(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -731,6 +738,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify withdrawal when contract is paused
+    //@audit => poolDepositNativeFil(WAD, INVESTOR);
     function echtest_withdrawRevertsWhenPaused(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -784,6 +792,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     // ============================================
 
     // Test for partial withdrawals handling
+    //@audit => poolWithdrawF(firstWithdrawAmount, INVESTOR, INVESTOR);
     function echtest_partialWithdrawals(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 2, MAX_FIL / 2); // Ensure stakeAmount is at least 2 to allow partial withdrawal
 
@@ -825,6 +834,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test for withdrawal reverts when paused
+    //@audit => poolDepositNativeFil(WAD, INVESTOR);
     function echtest_withdrawFRevertsWhenPaused(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -873,6 +883,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to ensure correct balance transfer after withdraw with conversion
+    //@audit => poolWithdrawF(stakeAmount, INVESTOR, INVESTOR);
     function echtest_withdrawFWithConversion(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -902,6 +913,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test to verify InsufficientLiquidity revert
+    //@audit => poolWithdrawF(stakeAmount, INVESTOR, INVESTOR);
     function echtest_insufficientLiquidityRevert(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -927,6 +939,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test for correct asset transfer during exit
+    //@audit =>  poolWithdrawF(stakeAmount, INVESTOR, INVESTOR);
     function echtest_assetTransferOnExit(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, 1, MAX_FIL);
 
@@ -958,6 +971,7 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     }
 
     // Test for large withdrawals handling
+    //@audit =>  stakeAmount = bound(stakeAmount, MAX_FIL / 2, MAX_FIL);
     function echtest_largeWithdrawals(uint256 stakeAmount) public {
         stakeAmount = bound(stakeAmount, MAX_FIL / 2, MAX_FIL);
 
