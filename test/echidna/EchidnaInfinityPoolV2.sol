@@ -227,35 +227,27 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
     // // ==               WITHDRAW                 ==
     // // ============================================
 
-    // // Test to verify successful withdrawal of assets
-    // function echtest_successfulWithdrawal(uint256 stakeAmount) public {
-    //     stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+    // Test to verify successful withdrawal of assets
+    function echtest_successfulWithdrawal(uint256 stakeAmount, uint256 withdrawAmount) public {
+        if (stakeAmount < WAD || stakeAmount > MAX_FIL / 2) return;
+        if (withdrawAmount > stakeAmount) return;
 
-    //     // Ensure the investor is funded and has deposited
-    //     hevm.deal(INVESTOR, MAX_FIL * 3);
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(WAD, INVESTOR);
+        hevm.deal(INVESTOR, MAX_FIL + WAD);
+        hevm.prank(INVESTOR);
+        poolDepositNativeFil(WAD, INVESTOR);
 
-    //     hevm.prank(INVESTOR);
-    //     wFilDeposit(stakeAmount);
+        uint256 iFILSupply = iFIL.totalSupply();
+        uint256 sharesToBurn = pool.previewWithdraw(withdrawAmount);
 
-    //     hevm.prank(INVESTOR);
-    //     wFIL.approve(address(pool), stakeAmount);
-    //     hevm.prank(INVESTOR);
-    //     poolDeposit(stakeAmount, INVESTOR);
+        hevm.prank(INVESTOR);
+        iFIL.approve(address(pool), sharesToBurn);
 
-    //     uint256 initialInvestorBalance = wFIL.balanceOf(INVESTOR);
-    //     uint256 initialPoolBalance = wFIL.balanceOf(address(pool));
+        hevm.prank(INVESTOR);
+        uint256 sharesBurned = pool.withdraw(withdrawAmount, INVESTOR, INVESTOR);
 
-    //     // Withdraw assets
-    //     uint256 withdrawAmount = stakeAmount / 2;
-    //     hevm.prank(INVESTOR);
-    //     poolWithdrawN(withdrawAmount, INVESTOR, INVESTOR);
-
-    //     // Assert balances after withdrawal
-    //     assert(wFIL.balanceOf(INVESTOR) == initialInvestorBalance - withdrawAmount);
-    //     assert(wFIL.balanceOf(address(pool)) == initialPoolBalance + withdrawAmount);
-    // }
+        assert(iFILSupply - iFIL.totalSupply() == sharesToBurn);
+        assert(sharesBurned == sharesToBurn);
+    }
 
     // // Test to verify withdrawal with insufficient liquidity reverts
     // function echtest_withdrawRevertsOnInsufficientLiquidity(uint256 stakeAmount) public {
