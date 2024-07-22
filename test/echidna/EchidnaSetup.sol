@@ -142,10 +142,10 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.roll(block.number + EPOCHS_IN_WEEK);
         pool = createPool();
 
-        // deposit 1 FIL in pool to stop donation attacks
-        hevm.deal(INVESTOR, WAD);
-        hevm.prank(INVESTOR);
-        IPool(address(pool)).deposit{value: WAD}(INVESTOR);
+        // // deposit 1 FIL in pool to stop donation attacks
+        // hevm.deal(INVESTOR, WAD);
+        // hevm.prank(INVESTOR);
+        // IPool(address(pool)).deposit{value: WAD}(INVESTOR);
         //@audit =>
         _configureAgent(AGENT_OWNER);
     }
@@ -321,6 +321,7 @@ contract EchidnaSetup is EchidnaConfig {
 
     // Pool Helpers
     function createPool() internal returns (IPool) {
+        Debugger.log("Creating pool");
         iFIL = IPoolToken(address(new PoolToken(SYSTEM_ADMIN)));
         IPool _pool = IPool(
             new InfinityPoolV2(
@@ -344,8 +345,17 @@ contract EchidnaSetup is EchidnaConfig {
         IRouter(router).pushRoute(ROUTE_POOL_REGISTRY, address(_pool));
         hevm.prank(SYSTEM_ADMIN);
         IRouter(router).pushRoute(ROUTE_INFINITY_POOL, address(_pool));
+        Debugger.log("Pool created");
 
         return _pool;
+    }
+
+    function _loadApproveWFIL(uint256 amount, address investor) internal {
+        hevm.deal(investor, amount);
+        hevm.prank(investor);
+        wFIL.deposit{value: amount}();
+        hevm.prank(investor);
+        wFIL.approve(address(pool), amount);
     }
 
     function _configureAgent(address agentOwner) internal returns (IAgent) {
