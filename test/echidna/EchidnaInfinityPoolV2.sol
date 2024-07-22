@@ -11,16 +11,6 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
 
     constructor() payable {}
 
-    // // CoreTestHelper assertions
-    // function assertPegInTact() internal view {
-    //     IMiniPool _pool = IMiniPool(address(GetRoute.pool(GetRoute.poolRegistry(router), 0)));
-    //     uint256 FILtoIFIL = _pool.convertToShares(WAD);
-    //     uint256 IFILtoFIL = _pool.convertToAssets(WAD);
-    //     assert(FILtoIFIL == IFILtoFIL);
-    //     assert(FILtoIFIL == WAD);
-    //     assert(IFILtoFIL == WAD);
-    // }
-
     // ============================================
     // ==               DEPOSIT                  ==
     // ============================================
@@ -110,59 +100,23 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         assert(sharesSecondDeposit == stakeAmount);
     }
 
-    // // Test to ensure wFIL balance invariant after deposit
-    // function echtest_wFILBalanceInvariantAfterDeposit(uint256 stakeAmount) public {
-    //     //@audit => No error in coverage
-    //     stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+    // Test to verify investor shares balance after multiple deposits
+    function echtest_investorSharesBalanceAfterDeposits(uint256 stakeAmount) public {
+        if (stakeAmount < WAD || stakeAmount > MAX_FIL / 2) return;
+        
+        hevm.deal(INVESTOR, MAX_FIL * 3);
+        _loadApproveWFIL(stakeAmount, INVESTOR);
 
-    //     // Ensure the investor is funded
-    //     hevm.deal(INVESTOR, MAX_FIL * 3);
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(WAD, INVESTOR);
+        uint256 investorIFILBalStart = iFIL.balanceOf(INVESTOR);
 
-    //     // Split the stakeAmount into wFIL and FIL for testing purposes
-    //     hevm.prank(INVESTOR);
-    //     wFilDeposit(stakeAmount);
-    //     hevm.prank(INVESTOR);
-    //     wFIL.approve(address(pool), stakeAmount);
+        hevm.prank(INVESTOR);
+        poolDeposit(stakeAmount, INVESTOR);
 
-    //     uint256 investorWFILBalStart = wFIL.balanceOf(INVESTOR);
-    //     uint256 poolWFILBalStart = wFIL.balanceOf(address(pool));
+        uint256 investorIFILBalEnd = iFIL.balanceOf(INVESTOR);
 
-    //     // should have withdrawn wFIL now
-    //     // assert(investorWFILBalStart - stakeAmount == wFIL.balanceOf(INVESTOR));
-    //     assert(wFIL.totalSupply() == wFIL.balanceOf(address(pool)) + wFIL.balanceOf(INVESTOR));
-    //     assert(wFIL.balanceOf(address(pool)) - poolWFILBalStart == stakeAmount * 2);
-    // }
-
-    // // Test to verify investor shares balance after multiple deposits
-    // //@audit => poolDeposit(stakeAmount, INVESTOR);
-    // function echtest_investorSharesBalanceAfterDeposits(uint256 stakeAmount) public {
-    //     stakeAmount = bound(stakeAmount, 1, MAX_FIL);
-
-    //     hevm.deal(INVESTOR, MAX_FIL * 3);
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(WAD, INVESTOR);
-
-    //     hevm.prank(INVESTOR);
-    //     wFilDeposit(stakeAmount);
-    //     hevm.prank(INVESTOR);
-    //     wFIL.approve(address(pool), stakeAmount);
-
-    //     uint256 investorIFILBalStart = iFIL.balanceOf(INVESTOR);
-
-    //     hevm.prank(INVESTOR);
-    //     poolDeposit(stakeAmount, INVESTOR);
-
-    //     hevm.prank(INVESTOR); //@audit => revert due to the duplication ?
-    //     poolDeposit(stakeAmount, INVESTOR);
-
-    //     uint256 investorIFILBalEnd = iFIL.balanceOf(INVESTOR);
-
-    //     assert(pool.convertToAssets(investorIFILBalEnd) == (stakeAmount * 2) + investorIFILBalStart);
-
-    //     assert(pool.convertToShares(stakeAmount * 2) == investorIFILBalEnd - investorIFILBalStart);
-    // }
+        assert(pool.convertToAssets(investorIFILBalEnd) == stakeAmount + investorIFILBalStart);
+        assert(pool.convertToShares(stakeAmount) == investorIFILBalEnd - investorIFILBalStart);
+    }
 
     // Test to verify preview deposit rounding error
     function echtest_previewDepositRoundingError(uint256 stakeAmount) public {
@@ -218,144 +172,56 @@ contract EchidnaInfinityPoolV2 is EchidnaSetup {
         assert(iFIL.balanceOf(INVESTOR) == tokenBalanceBefore + stakeAmount);
     }
 
-    // // Test to ensure deposit reverts when the contract is paused
-    // function echtest_depositRevertsWhenPaused(uint256 stakeAmount) public {
-    //     stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+    // Test to ensure deposit reverts when the contract is paused
+    function echtest_depositRevertsWhenPaused(uint256 stakeAmount) public {
+        if (stakeAmount < WAD || stakeAmount > MAX_FIL / 2) return;
 
-    //     // Pause the contract
-    //     hevm.prank(SYSTEM_ADMIN);
-    //     pool.pause();
+        // Pause the contract
+        hevm.prank(SYSTEM_ADMIN);
+        IPausable(address(pool)).pause();
 
-    //     // Ensure the investor is funded
-    //     hevm.deal(INVESTOR, MAX_FIL * 3);
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(WAD, INVESTOR);
+        // Ensure the investor is funded
+        hevm.deal(INVESTOR, stakeAmount + WAD);
 
-    //     // Simulate and verify that depositing while paused reverts
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFilReverts(stakeAmount, INVESTOR);
-    // }
+        // Verify that depositing while paused reverts
+        hevm.prank(INVESTOR);
+        poolDepositNativeFilReverts(stakeAmount, INVESTOR);
 
-    // // Test to ensure deposit reverts with an invalid receiver
-    // function echtest_depositRevertsWithInvalidReceiver(uint256 stakeAmount) public {
-    //     stakeAmount = bound(stakeAmount, 1, MAX_FIL);
+        // Needed to reset the state to not affect the rest of the tests
+        IPausable(address(pool)).unpause();
+    }
 
-    //     // Ensure the investor is funded
-    //     hevm.deal(INVESTOR, MAX_FIL * 3);
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(WAD, INVESTOR);
+    // Test to ensure deposit reverts with an invalid receiver
+    function echtest_depositRevertsWithInvalidReceiver(uint256 stakeAmount) public {
+        if (stakeAmount < WAD || stakeAmount > MAX_FIL / 2) return;
 
-    //     // Simulate and verify that depositing to an invalid receiver reverts
-    //     hevm.prank(INVESTOR);
-    //     // (bool success,) = address(pool).call{value: stakeAmount}(
-    //     //     abi.encodeWithSignature("deposit(uint256,address)", stakeAmount, address(0))
-    //     // );
-    //     // assert(!success);
+        // Ensure the investor is funded
+        hevm.deal(INVESTOR, stakeAmount + WAD);
 
-    //     poolDepositReverts(stakeAmount, address(0)); //@audit => verify
-    // }
+        // Verify that depositing to an invalid receiver reverts
+        hevm.prank(INVESTOR);
+        poolDepositReverts(stakeAmount, address(0));
+    }
 
-    // // Test to verify large deposit
-    // function echtest_largeDeposit(uint256 stakeAmount) public {
-    //     stakeAmount = bound(stakeAmount, MAX_FIL / 2, MAX_FIL);
+    // Test for handling multiple consecutive deposits
+    function echtest_multipleConsecutiveDeposits(uint256 stakeAmount) public {
+        if (stakeAmount < WAD || stakeAmount > MAX_FIL / 2) return;
 
-    //     // Ensure the investor is funded
-    //     hevm.deal(INVESTOR, MAX_FIL * 3);
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(WAD, INVESTOR);
+        // Ensure the investor is funded
+        hevm.deal(INVESTOR, MAX_FIL * 3);
 
-    //     hevm.prank(INVESTOR);
-    //     wFilDeposit(stakeAmount);
-    //     hevm.prank(INVESTOR);
-    //     wFIL.approve(address(pool), stakeAmount);
+        // Track balance before deposits
+        uint256 balanceBefore = pool.totalAssets();
 
-    //     // Track balances before deposit
-    //     uint256 investorBalanceBefore = wFIL.balanceOf(INVESTOR);
-    //     uint256 poolBalanceBefore = wFIL.balanceOf(address(pool));
+        // Perform multiple consecutive deposits
+        for (uint256 i; i < 5; i++) {
+            hevm.prank(INVESTOR);
+            poolDepositNativeFil(stakeAmount, INVESTOR);
+        }
 
-    //     hevm.prank(INVESTOR);
-    //     poolDeposit(stakeAmount, INVESTOR);
-
-    //     // Assert balances after large deposit
-    //     assert(wFIL.balanceOf(INVESTOR) == investorBalanceBefore - stakeAmount);
-    //     assert(wFIL.balanceOf(address(pool)) == poolBalanceBefore + stakeAmount);
-    // }
-
-    // // Test to verify revert when msg.value is 0
-    // function echtest_RevertOnZeroDeposit() public {
-    //     hevm.deal(INVESTOR, MAX_FIL * 3);
-    //     hevm.prank(INVESTOR);
-
-    //     poolDepositNativeFilReverts(0, INVESTOR);
-    // }
-
-    // // Test for partial deposits handling
-    // function echtest_partialDeposits(uint256 stakeAmount) public { // @audit what does partial deposit mean???
-    //     //@audit => revise
-    //     stakeAmount = bound(stakeAmount, WAD, MAX_FIL / 2); // @audit WAD is the minimum!!!!!!!!!
-
-    //     // Ensure the investor is funded
-    //     hevm.deal(INVESTOR, MAX_FIL * 3);
-
-    //     // Perform initial deposit
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(WAD, INVESTOR);
-
-    //     // Track total assets before deposits
-    //     uint256 totalAssetsBefore = pool.totalAssets();
-
-    //     Debugger.log("totalAssetsBefore", totalAssetsBefore);
-
-    //     // Perform first partial deposit
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(stakeAmount, INVESTOR);
-
-    //     uint256 totalAssetsAfterFirstDeposit = pool.totalAssets();
-
-    //     Debugger.log("totalAssetsAfterFirstDeposit", totalAssetsAfterFirstDeposit);
-
-    //     // Perform second partial deposit
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(stakeAmount, INVESTOR);
-
-    //     uint256 totalAssetsAfterSecondDeposit = pool.totalAssets();
-
-    //     Debugger.log("totalAssetsAfterSecondDeposit", totalAssetsAfterSecondDeposit);
-
-    //     // Calculate the total deposited amount
-    //     uint256 totalDeposited = WAD + (stakeAmount * 2);
-
-    //     Debugger.log("totalDeposited", totalDeposited);
-    //     Debugger.log("totalAssets", pool.totalAssets());
-    //     Debugger.log("totalAssetsBefore + totalDeposited", totalAssetsBefore + totalDeposited);
-
-    //     // Assert total assets is correct
-    //     assert(totalAssetsAfterSecondDeposit == totalAssetsBefore + totalDeposited);
-    // }
-
-    // // Test for handling multiple consecutive deposits
-    // function echtest_multipleConsecutiveDeposits(uint256 stakeAmount) public {
-    //     stakeAmount = bound(stakeAmount, 1, MAX_FIL / 2);
-
-    //     // Ensure the investor is funded
-    //     hevm.deal(INVESTOR, MAX_FIL * 3);
-
-    //     // Perform initial deposit
-    //     hevm.prank(INVESTOR);
-    //     poolDepositNativeFil(WAD, INVESTOR);
-
-    //     // Track balance before deposits
-    //     uint256 balanceBefore = pool.totalAssets();
-
-    //     // Perform multiple consecutive deposits
-    //     for (uint256 i = 0; i < 5; i++) {
-    //         hevm.prank(INVESTOR);
-    //         poolDepositNativeFil(stakeAmount, INVESTOR);
-    //     }
-
-    //     // Assert total balance is correct
-    //     assert(pool.totalAssets() == balanceBefore + (stakeAmount * 5));
-    // }
+        // Assert total balance is correct
+        assert(pool.totalAssets() == balanceBefore + (stakeAmount * 5));
+    }
 
     // // ============================================
     // // ==               WITHDRAW                 ==

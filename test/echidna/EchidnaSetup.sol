@@ -353,7 +353,7 @@ contract EchidnaSetup is EchidnaConfig {
     function _loadApproveWFIL(uint256 amount, address investor) internal {
         hevm.deal(investor, amount);
         hevm.prank(investor);
-        wFIL.deposit{value: amount}();
+        wFilDeposit(amount);
         hevm.prank(investor);
         wFIL.approve(address(pool), amount);
     }
