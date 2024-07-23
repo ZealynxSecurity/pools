@@ -358,6 +358,16 @@ contract EchidnaSetup is EchidnaConfig {
         wFIL.approve(address(pool), amount);
     }
 
+    function simulateEarnings(uint256 earnAmount) internal {
+        address donator = USER1;
+        hevm.deal(donator, earnAmount);
+        hevm.prank(donator);
+        wFilDeposit(earnAmount);
+        hevm.prank(donator);
+        wFIL.transfer(address(pool), earnAmount);
+
+    }
+
     function _configureAgent(address agentOwner) internal returns (IAgent) {
         IMinerRegistry registry = IMinerRegistry(IRouter(router).getRoute(ROUTE_MINER_REGISTRY));
         IAgentFactory agentFactory = IAgentFactory(GetRoute.agentFactory(router));
