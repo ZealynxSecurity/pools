@@ -1,12 +1,15 @@
 allContracts: false
+cryticArgs: ["--foundry-compile-all"]
+# symExec: true
 
 testMode: "assertion"
 coverage: true
 corpusDir: "corpus-echidna"
 
 # workers: 3
-seqLen: 100
+# seqLen: 100
 testLimit: 100000
+shrinkLimit: 1000
 
 balanceContract: 0xffffffffffffffffffffffffffffffffffffffffffffffff
 # codeSize: 0xfffffffffff # increase the code size
