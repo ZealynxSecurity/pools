@@ -13,13 +13,18 @@ import {IPool} from "src/Types/Interfaces/IPool.sol";
 import {IPoolToken} from "src/Types/Interfaces/IPoolToken.sol";
 import {IPoolRegistry} from "src/Types/Interfaces/IPoolRegistry.sol";
 import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
-import {ROUTE_AGENT_POLICE, ROUTE_INFINITY_POOL, ROUTE_POOL_REGISTRY} from "src/Constants/Routes.sol";
+import {IPoolUpgrader} from "src/Types/Interfaces/IPoolUpgrader.sol";
+import {IInfinityPool} from "v0/Types/Interfaces/IInfinityPool.sol";
+import {IRateModule} from "v0/Types/Interfaces/IRateModule.sol";
+import {
+    ROUTE_AGENT_POLICE, ROUTE_INFINITY_POOL, ROUTE_POOL_REGISTRY, ROUTE_POOL_UPGRADER
+} from "src/Constants/Routes.sol";
 
 interface IWithRateModule {
     function rateModule() external view returns (IRateModule);
 }
 
-contract UpgradeToV2 is Ownable {
+contract UpgradeToV2 is IPoolUpgrader, Ownable {
     using PoolSnapshot for IPool;
     using FilAddress for address;
     using FilAddress for address payable;
@@ -29,22 +34,31 @@ contract UpgradeToV2 is Ownable {
     string constant VERIFIED_NAME = "glif.io";
     string constant VERIFIED_VERSION = "1";
 
-    event DeployedContracts(address indexed agentPolice, address indexed pool);
+    uint256 oldPoolTotalAssets;
 
     error OldPoolNotShutDownProperly(uint256 oldPoolBalance);
+    error PoolVarMismatch(string varName, uint256 a, uint256 b);
 
     constructor(address _router, address _owner) Ownable(_owner) {
         router = _router;
     }
 
+    fallback() external payable {}
+
+    receive() external payable {}
+
     function upgrade(address agentPolice, address pool) external payable onlyOwner {
         address poolRegistry = address(GetRoute.poolRegistry(router));
         address oldPool = address(GetRoute.pool(IPoolRegistry(poolRegistry), 0));
 
-        address rateModule = address(IWithRateModule(oldPool).rateModule());
+        // harvest fees from pool so that assertion checks are accurate
+        IPool(oldPool).harvestFees(IInfinityPool(oldPool).feesCollected());
 
+        // get a handle on oldPoolTotalAssets before it gets shut down to compare with in verifyTotalAssets
+        oldPoolTotalAssets = IPool(oldPool).totalAssets();
         PoolSnapshot.PoolState memory oldPoolState = IPool(oldPool).snapshot();
 
+        address rateModule = address(IWithRateModule(oldPool).rateModule());
         address lst = address(IPool(oldPool).liquidStakingToken());
 
         address oldPoolOwner = IAuth(oldPool).owner();
@@ -60,7 +74,11 @@ contract UpgradeToV2 is Ownable {
         IAuth(lst).acceptOwnership();
         IAuth(rateModule).acceptOwnership();
 
-        // set max DTL to max uint256 to effectively halt this pool from working
+        // set this pool upgrader route in the router
+        IRouter(router).pushRoute(ROUTE_POOL_UPGRADER, address(this));
+
+        // remove the rate module from the pool, effectively halting the pool from working
+        IInfinityPool(oldPool).setRateModule(IRateModule(address(0)));
 
         // shut down the pool
         IPool(oldPool).shutDown();
@@ -103,6 +121,11 @@ contract UpgradeToV2 is Ownable {
         if (oldPoolBalance > 0) {
             revert OldPoolNotShutDownProperly(oldPoolBalance);
         }
+    }
+
+    function verifyTotalAssets(uint256 newInterestAccrued) external view returns (bool) {
+        // here msg.sender is the new pool, so we should be able to make a test assertion that total assets are now correct
+        return oldPoolTotalAssets + newInterestAccrued == IPool(msg.sender).totalAssets();
     }
 
     function refreshProtocolRoutes(address[] calldata agents) external {

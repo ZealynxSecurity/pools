@@ -1237,18 +1237,6 @@ contract PoolAdminTests is ProtocolTest {
         (agent,) = configureAgent(systemAdmin);
     }
 
-    function testJumpStartTotalBorrowed() public {
-        uint256 amount = WAD;
-        // make sure the pool is paused, as this is how its setup in prod
-        if (!IPausable(address(pool)).paused()) {
-            vm.prank(systemAdmin);
-            IPausable(address(pool)).pause();
-        }
-        vm.prank(address(GetRoute.poolRegistry(router)));
-        pool.jumpStartTotalBorrowed(amount);
-        assertEq(pool.totalBorrowed(), amount);
-    }
-
     function testJumpStartAccount(uint256 jumpStartAmount) public {
         jumpStartAmount = bound(jumpStartAmount, WAD, MAX_FIL);
         address receiver = makeAddr("receiver");
