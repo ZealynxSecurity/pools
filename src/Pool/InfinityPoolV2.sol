@@ -375,12 +375,10 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         updateAccounting();
         // 1e18 => 1 FIL, can't borrow less than 1 FIL
         if (vc.value < WAD) revert InvalidParams();
-        Debugger.log("AFETER InvalidParams");
 
         // can't borrow more than the pool has
         if (totalBorrowableAssets() < vc.value) revert InsufficientLiquidity();
         Account memory account = _getAccount(vc.subject);
-        Debugger.log("AFETER InsufficientLiquidity");
 
         // fresh account, set start epoch and epochsPaid to beginning of current window
         if (account.epochsPaid == 0) {
@@ -409,7 +407,6 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
         }
 
         account.save(_router, vc.subject, id);
-        Debugger.log("AFETER save");
 
         totalBorrowed += vc.value;
 
@@ -417,7 +414,6 @@ contract InfinityPoolV2 is IPool, Ownable, Pausable {
 
         // interact - here `msg.sender` must be the Agent bc of the `subjectIsAgentCaller` modifier
         asset.transfer(msg.sender, vc.value);
-        Debugger.log("AFETER transfer");
     }
 
     /**

@@ -17,12 +17,12 @@ import {IPausable} from "src/Types/Interfaces/IPausable.sol";
 import {IMinerRegistry} from "src/Types/Interfaces/IMinerRegistry.sol";
 
 // Types Structs
+import "src/Types/Structs/Credentials.sol";
+import {CredParser} from "src/Credentials/CredParser.sol";
 import {Credentials} from "src/Types/Structs/Credentials.sol";
 import {Account} from "src/Types/Structs/Account.sol";
-import {AgentData, VerifiableCredential, SignedCredential} from "src/Types/Structs/Credentials.sol";
 
 import {WFIL} from "shim/WFIL.sol";
-import {CredParser} from "src/Credentials/CredParser.sol";
 import {Router} from "src/Router/Router.sol";
 import {GetRoute} from "src/Router/GetRoute.sol";
 // Constants
@@ -45,6 +45,8 @@ import {MockMiner} from "test/helpers/MockMiner.sol";
 import "test/helpers/Constants.sol";
 
 import {IAuth} from "src/Types/Interfaces/IAuth.sol";
+import {IERC4626} from "src/Types/Interfaces/IERC4626.sol";
+import {FinMath} from "src/Pool/FinMath.sol";
 
 contract EchidnaSetup is EchidnaConfig {
     using FixedPointMathLib for uint256;
@@ -365,7 +367,365 @@ contract EchidnaSetup is EchidnaConfig {
         wFilDeposit(earnAmount);
         hevm.prank(donator);
         wFIL.transfer(address(pool), earnAmount);
+    }
 
+    function issueGenericSetDefaultCred(uint256 agent, uint256 principal) internal returns (SignedCredential memory) {
+        // roll forward so we don't get an identical credential that's already been used
+        hevm.roll(block.number + 1);
+
+        // create a cred where DTL >100%
+        uint256 collateralValue = 0;
+
+        AgentData memory ad = AgentData(
+            1e18,
+            collateralValue,
+            // expectedDailyFaultPenalties
+            0,
+            0,
+            0,
+            // qaPower hardcoded
+            0,
+            principal,
+            // faulty sectors
+            0,
+            // live sectors
+            0,
+            // Green Score
+            0
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agent,
+            block.number,
+            block.number + 100,
+            0,
+            IAgentPolice.setAgentDefaultDTL.selector,
+            // minerID irrelevant for setDefault action
+            0,
+            abi.encode(ad)
+        );
+
+        return signCred(vc);
+    }
+
+    function signCred(VerifiableCredential memory vc) public returns (SignedCredential memory) {
+        bytes32 digest = GetRoute.vcVerifier(router).digest(vc);
+        (uint8 v, bytes32 r, bytes32 s) = hevm.sign(vcIssuerPk, digest);
+        return SignedCredential(vc, v, r, s);
+    }
+
+    function _depositFundsIntoPool(uint256 amount, address investor) internal {
+        hevm.deal(investor, amount);
+        address _pool = address(GetRoute.pool(GetRoute.poolRegistry(router), 0));
+        IERC4626 pool4626 = IERC4626(address(_pool));
+        
+        // `investor` stakes `amount` FIL
+        hevm.prank(investor);
+        wFIL.deposit{value: amount}();
+        hevm.prank(investor);
+        wFIL.approve(address(_pool), amount);
+        hevm.prank(investor);
+        pool4626.deposit(amount, investor);
+    }
+
+    // this is a helper function to allow us to issue a borrow cred without rolling forward
+    function _issueGenericBorrowCred(uint256 _agent, uint256 amount) internal returns (SignedCredential memory) {
+        AgentData memory agentData = createAgentData(
+            // collateralValue => 2x the borrowAmount
+            amount * 2
+        );
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            _agent,
+            block.number,
+            block.number + 100,
+            amount,
+            IAgent.borrow.selector,
+            // minerID irrelevant for borrow action
+            0,
+            abi.encode(agentData)
+        );
+
+        return signCred(vc);
+    }
+
+    function createAgentData(uint256 collateralValue) internal pure returns (AgentData memory) {
+        // lockedFunds = collateralValue * 1.67 (such that CV = 60% of locked funds)
+        uint256 lockedFunds = collateralValue * 167 / 100;
+        // agent value = lockedFunds * 1.2 (such that locked funds = 83% of locked funds)
+        uint256 agentValue = lockedFunds * 120 / 100;
+        return AgentData(
+            agentValue,
+            collateralValue,
+            // expectedDailyFaultPenalties
+            0,
+            // edr
+            0,
+            // GCRED DEPRECATED
+            100,
+            // qaPower hardcoded
+            10e18,
+            // principal
+            0,
+            // faulty sectors
+            0,
+            // live sectors
+            0,
+            // Green Score
+            0
+        );
+    }
+
+    function calculateInterestOwed(uint256 borrowAmount, uint256 rollFwdAmt, uint256 perEpochRate)
+        internal
+        pure
+        returns (uint256 interestOwed, uint256 interestOwedPerEpoch)
+    {
+        // note we add 1 more bock of interest owed to account for the roll forward of 1 epoch inside agentBorrow helper
+        // since borrowAmount is also WAD based, the _interestOwedPerEpoch is also WAD based (e18 * e18 / e18)
+        uint256 _interestOwedPerEpoch = borrowAmount.mulWadUp(perEpochRate);
+        // _interestOwedPerEpoch is mulWadUp by epochs (not WAD based), which cancels the WAD out for interestOwed
+        interestOwed = (_interestOwedPerEpoch.mulWadUp(rollFwdAmt));
+        // when setting the interestOwedPerEpoch, we div out the WAD manually here
+        // we'd rather use the more precise _interestOwedPerEpoch to compute interestOwed above
+        interestOwedPerEpoch = _interestOwedPerEpoch / WAD;
+    }
+
+    function _issuePayCred(uint256 agentID, uint256 collateralValue, uint256 paymentAmount)
+        internal
+        returns (SignedCredential memory)
+    {
+        AgentData memory agentData = createAgentData(collateralValue);
+
+        VerifiableCredential memory vc = VerifiableCredential(
+            vcIssuer,
+            agentID,
+            block.number,
+            block.number + 100,
+            paymentAmount,
+            IAgent.pay.selector,
+            // minerID irrelevant for pay action
+            0,
+            abi.encode(agentData)
+        );
+
+        return signCred(vc);
+    }
+
+    function _issueGenericPayCred(uint256 agent, uint256 amount) internal returns (SignedCredential memory) {
+        return _issuePayCred(agent, amount * 2, amount);
+    }
+
+    function _agentOwner(IAgent agent) internal view returns (address) {
+        return IAuth(address(agent)).owner();
+    }
+
+    function agentBorrowLogic(IAgent agent, SignedCredential memory sc) internal {
+        _fundAgentsMiners(agent, sc.vc);
+
+        uint256 poolID = 0;
+        IMiniPool pool = IMiniPool(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
+        uint256 preTotalBorrowed = pool.totalBorrowed();
+
+        hevm.prank(_agentOwner(agent));
+        // Establsh the state before the borrow
+        StateSnapshot memory preBorrowState = _snapshot(address(agent), poolID);
+        hevm.prank(_agentOwner(agent));
+        Account memory account = AccountHelpers.getAccount(router, address(agent), poolID);
+        uint256 borrowBlock = block.number;
+        hevm.prank(_agentOwner(agent));
+        agent.borrow(poolID, sc);
+
+        // Check the state after the borrow
+        uint256 currentAgentBal = wFIL.balanceOf(address(agent));
+        uint256 currentPoolBal = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
+        assert(currentAgentBal == preBorrowState.agentBalanceWFIL + sc.vc.value);
+        assert(currentPoolBal == preBorrowState.poolBalanceWFIL - sc.vc.value);
+
+        account = AccountHelpers.getAccount(router, address(agent), poolID);
+
+        // first time borrowing, check the startEpoch
+        if (preBorrowState.agentBorrowed == 0) {
+            assert(account.startEpoch == borrowBlock);
+            assert(account.epochsPaid == borrowBlock);
+        }
+
+        if (!account.defaulted) {
+            assert(
+                account.principal == preBorrowState.agentBorrowed + sc.vc.value
+            );
+            assert(
+                pool.getAgentBorrowed(agent.id()) - preBorrowState.agentBorrowed ==
+                currentAgentBal - preBorrowState.agentBalanceWFIL
+            );
+            assert(
+                pool.totalBorrowed() ==
+                preTotalBorrowed + currentAgentBal - preBorrowState.agentBalanceWFIL
+            );
+        }
+    }
+
+    function _fundAgentsMiners(IAgent agent, VerifiableCredential memory vc) internal {
+        // when we borrow or remove equity, we need to make sure we put enough funds on the agent to match the agent total value or else the borrow will fail
+        // to not interfere with other calls, we put the funds on the agent's first miner
+        uint256 agentTotalValue = MAX_FIL / 4; // vc.getCollateralValue(credParser);
+        uint256 minerID = GetRoute.minerRegistry(router).getMiner(vc.subject, 0);
+        // fund this miner with the required agent's total value
+        if (agentTotalValue > agent.liquidAssets()) {
+            // deal some balance to the miner
+            address miner = address(bytes20(abi.encodePacked(hex"ff0000000000000000000000", uint64(minerID))));
+            hevm.deal(miner, agentTotalValue - agent.liquidAssets());
+        }
+    }
+
+    function borrowRollFwdAndPay(
+        IAgent _agent,
+        SignedCredential memory borrowCred,
+        uint256 payAmount,
+        uint256 rollFwdAmt
+    ) internal returns (StateSnapshot memory) {
+        uint256 agentID = _agent.id();
+        agentBorrowLogic(_agent, borrowCred);
+
+        hevm.roll(block.number + rollFwdAmt);
+
+        (, uint256 principalPaid, uint256 refund, StateSnapshot memory prePayState) =
+            _agentPay(_agent, _issueGenericPayCred(agentID, payAmount),  _getAdjustedRate());
+
+        assertPmtSuccess(_agent, prePayState, payAmount, principalPaid, refund);
+
+        return prePayState;
+    }
+
+    function _agentPay(IAgent _agent, SignedCredential memory sc, uint256 perEpochRate)
+        internal
+        returns (uint256 epochsPaid, uint256 principalPaid, uint256 refund, StateSnapshot memory prePayState)
+    {
+        IMiniPool pool = IMiniPool(address(GetRoute.pool(GetRoute.poolRegistry(router), 0)));
+
+        hevm.prank(address(_agent));
+        hevm.deal(address(_agent), sc.vc.value);
+        hevm.prank(address(_agent));
+        wFIL.deposit{value: sc.vc.value}();
+        hevm.prank(address(_agent));
+        wFIL.approve(address(pool), sc.vc.value);
+
+        hevm.prank(_agentOperator(_agent));
+        uint256 prePayEpochsPaid = AccountHelpers.getAccount(router, address(_agent), 0).epochsPaid;
+
+        hevm.prank(_agentOperator(agent));
+        prePayState = _snapshot(address(_agent), 0);
+
+        hevm.prank(_agentOperator(_agent));
+        uint256 totalDebt = _agentDebt(_agent, perEpochRate);
+        hevm.prank(_agentOperator(_agent));
+        (, epochsPaid, principalPaid, refund) = _agent.pay(0, sc);
+
+        Account memory account = AccountHelpers.getAccount(router, address(_agent), 0);
+
+        if (sc.vc.value >= totalDebt) {
+            assert(
+                account.epochsPaid == 0
+            );
+            assert(
+                account.principal == 0
+            );
+        } else {
+            assert(account.principal > 0);
+            assert(account.epochsPaid > prePayEpochsPaid);
+        }
+    }
+
+    function _agentDebt(IAgent agent, uint256 perEpochRate) internal view returns (uint256) {
+        return _agentDebt(agent.id(), perEpochRate);
+    }
+
+    function _agentDebt(uint256 agentID, uint256 perEpochRate) internal view returns (uint256) {
+        return FinMath.computeDebt(AccountHelpers.getAccount(router, agentID, 0), perEpochRate);
+    }
+
+    function _agentOperator(IAgent agent) internal view returns (address) {
+        return IAuth(address(agent)).operator();
+    }
+
+    function _snapshot(address agent, uint256 poolID) internal view returns (StateSnapshot memory snapshot) {
+        Account memory account = AccountHelpers.getAccount(router, agent, poolID);
+        snapshot.agentBalanceWFIL = wFIL.balanceOf(agent);
+        snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
+        snapshot.agentBorrowed = account.principal;
+        snapshot.accountEpochsPaid = account.epochsPaid;
+    }
+
+    function assertPmtSuccess(
+        IAgent newAgent,
+        StateSnapshot memory prePayState,
+        uint256 payAmount,
+        uint256 principalPaid,
+        uint256 refund
+    ) internal {
+        assert(
+            prePayState.poolBalanceWFIL + payAmount == wFIL.balanceOf(address(pool))
+        );
+        assert(
+            prePayState.agentBalanceWFIL - payAmount == wFIL.balanceOf(address(newAgent))
+        );
+
+        Account memory postPaymentAccount = AccountHelpers.getAccount(router, newAgent.id(), pool.id());
+
+        // full exit
+        if (principalPaid >= prePayState.agentBorrowed) {
+            // refund should be greater than 0 if too much principal was paid
+            if (principalPaid > prePayState.agentBorrowed) {
+                assert(principalPaid - refund == prePayState.agentBorrowed);
+            }
+
+            assert(postPaymentAccount.principal == 0);
+            assert(postPaymentAccount.epochsPaid == 0);
+            assert(postPaymentAccount.startEpoch == 0);
+        } else {
+            // partial exit or interest only payment
+            assert(
+                postPaymentAccount.epochsPaid > prePayState.accountEpochsPaid
+            );
+            Debugger.log("assertPmtSuccess");
+            Debugger.log("postPaymentAccount.epochsPaid", postPaymentAccount.epochsPaid);
+            Debugger.log("block.number", block.number);
+            Debugger.log("Difference: ", block.number - postPaymentAccount.epochsPaid); // the difference is zero
+            assert(postPaymentAccount.epochsPaid < block.number);
+        }
+    }
+
+    function _setAgentDefaulted(IAgent agent, uint256 principal) internal {
+        IAgentPolice police = GetRoute.agentPolice(router);
+        uint256 agentID = agent.id();
+        SignedCredential memory defaultCred = issueGenericSetDefaultCred(agentID, principal);
+
+        hevm.prank(IAuth(address(police)).owner());
+        police.setAgentDefaultDTL(address(agent), defaultCred);
+
+        assert(agent.defaulted());
+    }
+
+    function _setAgentDefaulted(IAgent agent, uint256 principal, uint256 liquidationValue) internal {
+        IAgentPolice police = GetRoute.agentPolice(router);
+        uint256 agentID = agent.id();
+        SignedCredential memory defaultCred = issueGenericSetDefaultCred(agentID, principal);
+
+        SignedCredential memory borrowCred = _issueBorrowCred(agentID, principal, liquidationValue);
+
+        Debugger.log("Before agentBorrow");
+
+        hevm.prank(AGENT_OWNER);
+        agentBorrow(poolID, borrowCred);
+
+        Debugger.log("After agentBorrow");
+
+        hevm.prank(IAuth(address(police)).owner());
+        police.setAgentDefaultDTL(address(agent), defaultCred);
+
+        assert(agent.defaulted());
     }
 
     function _configureAgent(address agentOwner) internal returns (IAgent) {
@@ -534,7 +894,20 @@ contract EchidnaSetup is EchidnaConfig {
     }
 
     function bound(uint256 random, uint256 low, uint256 high) internal pure returns (uint256) {
-        return low + random % (high - low);
+        require(low < high, "Invalid range");
+
+        if (low == high - 1) {
+            return low;
+        }
+
+        uint256 range = high - low;
+        uint256 result = low + (random % range);
+
+        if (low > 0 && result == 0) {
+            result = low;
+        }
+
+        return result;
     }
 
     function assertApproxEqAbs(uint256 a, uint256 b, uint256 maxDelta) internal {
