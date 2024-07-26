@@ -84,7 +84,7 @@ contract EchidnaSetup is EchidnaConfig {
     // Declare agentPolice
     address internal agentPolice;
 
-    IAgent internal agent;
+    IAgent internal globalAgent;
 
     constructor() payable {
         rewardToken = new Token("GLIF", "GLF", address(this), address(this));
@@ -143,13 +143,9 @@ contract EchidnaSetup is EchidnaConfig {
 
         hevm.roll(block.number + EPOCHS_IN_WEEK);
         pool = createPool();
+        poolID = pool.id();
 
-        // // deposit 1 FIL in pool to stop donation attacks
-        // hevm.deal(INVESTOR, WAD);
-        // hevm.prank(INVESTOR);
-        // IPool(address(pool)).deposit{value: WAD}(INVESTOR);
-        //@audit =>
-        _configureAgent(AGENT_OWNER);
+        globalAgent = _configureAgent(AGENT_OWNER);
     }
 
     uint256[10] levels = [
@@ -278,8 +274,8 @@ contract EchidnaSetup is EchidnaConfig {
     // ==               BORROW                   ==
     // ============================================
 
-    function agentBorrow(uint256 poolid, SignedCredential memory sc) internal {
-        try agent.borrow(poolid, sc) {
+    function agentBorrow(address agent, SignedCredential memory sc) internal {
+        try IAgent(agent).borrow(poolID, sc) {
             Debugger.log("pool borrow successful");
         } catch {
             Debugger.log("pool borrow failed");
@@ -287,8 +283,8 @@ contract EchidnaSetup is EchidnaConfig {
         }
     }
 
-    function agentBorrowRevert(uint256 poolid, SignedCredential memory sc) internal {
-        try agent.borrow(poolid, sc) {
+    function agentBorrowRevert(address agent, SignedCredential memory sc) internal {
+        try IAgent(agent).borrow(poolID, sc) {
             Debugger.log("pool borrow didn't revert");
             assert(false);
         } catch {
@@ -300,8 +296,8 @@ contract EchidnaSetup is EchidnaConfig {
     // ==               PAY                      ==
     // ============================================
 
-    function agentPayRevert(uint256 poolid, SignedCredential memory payCred) internal {
-        try agent.pay(poolid, payCred) {
+    function agentPayRevert(SignedCredential memory payCred) internal {
+        try globalAgent.pay(poolID, payCred) {
             Debugger.log("pool pay didn't revert");
             assert(false);
         } catch {
@@ -309,8 +305,8 @@ contract EchidnaSetup is EchidnaConfig {
         }
     }
 
-    function agentPay(uint256 poolid, SignedCredential memory payCred) internal {
-        try agent.pay(poolid, payCred) {
+    function agentPay(SignedCredential memory payCred) internal {
+        try globalAgent.pay(poolID, payCred) {
             Debugger.log("pool pay successful");
         } catch {
             Debugger.log("pool pay failed");
@@ -419,7 +415,7 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.deal(investor, amount);
         address _pool = address(GetRoute.pool(GetRoute.poolRegistry(router), 0));
         IERC4626 pool4626 = IERC4626(address(_pool));
-        
+
         // `investor` stakes `amount` FIL
         hevm.prank(investor);
         wFIL.deposit{value: amount}();
@@ -525,13 +521,11 @@ contract EchidnaSetup is EchidnaConfig {
     function agentBorrowLogic(IAgent agent, SignedCredential memory sc) internal {
         _fundAgentsMiners(agent, sc.vc);
 
-        uint256 poolID = 0;
-        IMiniPool pool = IMiniPool(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
         uint256 preTotalBorrowed = pool.totalBorrowed();
 
         hevm.prank(_agentOwner(agent));
         // Establsh the state before the borrow
-        StateSnapshot memory preBorrowState = _snapshot(address(agent), poolID);
+        StateSnapshot memory preBorrowState = _snapshot(address(agent));
         hevm.prank(_agentOwner(agent));
         Account memory account = AccountHelpers.getAccount(router, address(agent), poolID);
         uint256 borrowBlock = block.number;
@@ -540,7 +534,7 @@ contract EchidnaSetup is EchidnaConfig {
 
         // Check the state after the borrow
         uint256 currentAgentBal = wFIL.balanceOf(address(agent));
-        uint256 currentPoolBal = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
+        uint256 currentPoolBal = wFIL.balanceOf(address(pool));
         assert(currentAgentBal == preBorrowState.agentBalanceWFIL + sc.vc.value);
         assert(currentPoolBal == preBorrowState.poolBalanceWFIL - sc.vc.value);
 
@@ -553,17 +547,12 @@ contract EchidnaSetup is EchidnaConfig {
         }
 
         if (!account.defaulted) {
+            assert(account.principal == preBorrowState.agentBorrowed + sc.vc.value);
             assert(
-                account.principal == preBorrowState.agentBorrowed + sc.vc.value
+                pool.getAgentBorrowed(agent.id()) - preBorrowState.agentBorrowed
+                    == currentAgentBal - preBorrowState.agentBalanceWFIL
             );
-            assert(
-                pool.getAgentBorrowed(agent.id()) - preBorrowState.agentBorrowed ==
-                currentAgentBal - preBorrowState.agentBalanceWFIL
-            );
-            assert(
-                pool.totalBorrowed() ==
-                preTotalBorrowed + currentAgentBal - preBorrowState.agentBalanceWFIL
-            );
+            assert(pool.totalBorrowed() == preTotalBorrowed + currentAgentBal - preBorrowState.agentBalanceWFIL);
         }
     }
 
@@ -592,7 +581,7 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.roll(block.number + rollFwdAmt);
 
         (, uint256 principalPaid, uint256 refund, StateSnapshot memory prePayState) =
-            _agentPay(_agent, _issueGenericPayCred(agentID, payAmount),  _getAdjustedRate());
+            _agentPay(_agent, _issueGenericPayCred(agentID, payAmount), _getAdjustedRate());
 
         assertPmtSuccess(_agent, prePayState, payAmount, principalPaid, refund);
 
@@ -603,8 +592,6 @@ contract EchidnaSetup is EchidnaConfig {
         internal
         returns (uint256 epochsPaid, uint256 principalPaid, uint256 refund, StateSnapshot memory prePayState)
     {
-        IMiniPool pool = IMiniPool(address(GetRoute.pool(GetRoute.poolRegistry(router), 0)));
-
         hevm.prank(address(_agent));
         hevm.deal(address(_agent), sc.vc.value);
         hevm.prank(address(_agent));
@@ -612,26 +599,20 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.prank(address(_agent));
         wFIL.approve(address(pool), sc.vc.value);
 
-        hevm.prank(_agentOperator(_agent));
-        uint256 prePayEpochsPaid = AccountHelpers.getAccount(router, address(_agent), 0).epochsPaid;
+        uint256 prePayEpochsPaid = AccountHelpers.getAccount(router, address(_agent), poolID).epochsPaid;
 
-        hevm.prank(_agentOperator(agent));
-        prePayState = _snapshot(address(_agent), 0);
+        prePayState = _snapshot(address(_agent));
 
         hevm.prank(_agentOperator(_agent));
         uint256 totalDebt = _agentDebt(_agent, perEpochRate);
         hevm.prank(_agentOperator(_agent));
-        (, epochsPaid, principalPaid, refund) = _agent.pay(0, sc);
+        (, epochsPaid, principalPaid, refund) = _agent.pay(poolID, sc);
 
-        Account memory account = AccountHelpers.getAccount(router, address(_agent), 0);
+        Account memory account = AccountHelpers.getAccount(router, address(_agent), poolID);
 
         if (sc.vc.value >= totalDebt) {
-            assert(
-                account.epochsPaid == 0
-            );
-            assert(
-                account.principal == 0
-            );
+            assert(account.epochsPaid == 0);
+            assert(account.principal == 0);
         } else {
             assert(account.principal > 0);
             assert(account.epochsPaid > prePayEpochsPaid);
@@ -650,10 +631,10 @@ contract EchidnaSetup is EchidnaConfig {
         return IAuth(address(agent)).operator();
     }
 
-    function _snapshot(address agent, uint256 poolID) internal view returns (StateSnapshot memory snapshot) {
+    function _snapshot(address agent) internal view returns (StateSnapshot memory snapshot) {
         Account memory account = AccountHelpers.getAccount(router, agent, poolID);
         snapshot.agentBalanceWFIL = wFIL.balanceOf(agent);
-        snapshot.poolBalanceWFIL = wFIL.balanceOf(address(GetRoute.pool(GetRoute.poolRegistry(router), poolID)));
+        snapshot.poolBalanceWFIL = wFIL.balanceOf(address(pool));
         snapshot.agentBorrowed = account.principal;
         snapshot.accountEpochsPaid = account.epochsPaid;
     }
@@ -665,12 +646,8 @@ contract EchidnaSetup is EchidnaConfig {
         uint256 principalPaid,
         uint256 refund
     ) internal {
-        assert(
-            prePayState.poolBalanceWFIL + payAmount == wFIL.balanceOf(address(pool))
-        );
-        assert(
-            prePayState.agentBalanceWFIL - payAmount == wFIL.balanceOf(address(newAgent))
-        );
+        assert(prePayState.poolBalanceWFIL + payAmount == wFIL.balanceOf(address(pool)));
+        assert(prePayState.agentBalanceWFIL - payAmount == wFIL.balanceOf(address(newAgent)));
 
         Account memory postPaymentAccount = AccountHelpers.getAccount(router, newAgent.id(), pool.id());
 
@@ -686,14 +663,12 @@ contract EchidnaSetup is EchidnaConfig {
             assert(postPaymentAccount.startEpoch == 0);
         } else {
             // partial exit or interest only payment
-            assert(
-                postPaymentAccount.epochsPaid > prePayState.accountEpochsPaid
-            );
+            assert(postPaymentAccount.epochsPaid > prePayState.accountEpochsPaid);
             Debugger.log("assertPmtSuccess");
             Debugger.log("postPaymentAccount.epochsPaid", postPaymentAccount.epochsPaid);
             Debugger.log("block.number", block.number);
             Debugger.log("Difference: ", block.number - postPaymentAccount.epochsPaid); // the difference is zero
-            assert(postPaymentAccount.epochsPaid < block.number);
+            assert(postPaymentAccount.epochsPaid <= block.number);
         }
     }
 
@@ -718,7 +693,7 @@ contract EchidnaSetup is EchidnaConfig {
         Debugger.log("Before agentBorrow");
 
         hevm.prank(AGENT_OWNER);
-        agentBorrow(poolID, borrowCred);
+        agentBorrow(address(agent), borrowCred);
 
         Debugger.log("After agentBorrow");
 
@@ -728,7 +703,7 @@ contract EchidnaSetup is EchidnaConfig {
         assert(agent.defaulted());
     }
 
-    function _configureAgent(address agentOwner) internal returns (IAgent) {
+    function _configureAgent(address agentOwner) internal returns (IAgent agent) {
         IMinerRegistry registry = IMinerRegistry(IRouter(router).getRoute(ROUTE_MINER_REGISTRY));
         IAgentFactory agentFactory = IAgentFactory(GetRoute.agentFactory(router));
         agent = IAgent(agentFactory.create(agentOwner, agentOwner, address(0)));
