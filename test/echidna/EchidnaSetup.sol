@@ -84,7 +84,6 @@ contract EchidnaSetup is EchidnaConfig {
     // Declare agentPolice
     address internal agentPolice;
 
-    IAgent internal globalAgent;
 
     constructor() payable {
         rewardToken = new Token("GLIF", "GLF", address(this), address(this));
@@ -144,8 +143,6 @@ contract EchidnaSetup is EchidnaConfig {
         hevm.roll(block.number + EPOCHS_IN_WEEK);
         pool = createPool();
         poolID = pool.id();
-
-        globalAgent = _configureAgent(AGENT_OWNER);
     }
 
     uint256[10] levels = [
@@ -296,23 +293,7 @@ contract EchidnaSetup is EchidnaConfig {
     // ==               PAY                      ==
     // ============================================
 
-    function agentPayRevert(SignedCredential memory payCred) internal {
-        try globalAgent.pay(poolID, payCred) {
-            Debugger.log("pool pay didn't revert");
-            assert(false);
-        } catch {
-            Debugger.log("pool pay successfully reverted");
-        }
-    }
 
-    function agentPay(SignedCredential memory payCred) internal {
-        try globalAgent.pay(poolID, payCred) {
-            Debugger.log("pool pay successful");
-        } catch {
-            Debugger.log("pool pay failed");
-            assert(false);
-        }
-    }
     // ============================================
     // ==               HELPERS                 ==
     // ============================================
@@ -405,7 +386,7 @@ contract EchidnaSetup is EchidnaConfig {
         return signCred(vc);
     }
 
-    function signCred(VerifiableCredential memory vc) public returns (SignedCredential memory) {
+    function signCred(VerifiableCredential memory vc) internal returns (SignedCredential memory) {
         bytes32 digest = GetRoute.vcVerifier(router).digest(vc);
         (uint8 v, bytes32 r, bytes32 s) = hevm.sign(vcIssuerPk, digest);
         return SignedCredential(vc, v, r, s);
@@ -664,10 +645,6 @@ contract EchidnaSetup is EchidnaConfig {
         } else {
             // partial exit or interest only payment
             assert(postPaymentAccount.epochsPaid > prePayState.accountEpochsPaid);
-            Debugger.log("assertPmtSuccess");
-            Debugger.log("postPaymentAccount.epochsPaid", postPaymentAccount.epochsPaid);
-            Debugger.log("block.number", block.number);
-            Debugger.log("Difference: ", block.number - postPaymentAccount.epochsPaid); // the difference is zero
             assert(postPaymentAccount.epochsPaid <= block.number);
         }
     }
